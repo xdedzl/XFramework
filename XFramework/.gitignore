@@ -1,0 +1,16 @@
+Library
+Temp
+obj
+Logs
+UnityPackageManager
+xdedzl.csproj
+xdedzl.Editor.csproj
+xdedzl.sln
+.vs
+*.csproj
+Assets/XFrameworkTest
+Assets/XFrameworkTest.meta
+Assets/ResourcesAB/NotCommit
+Assets/ResourcesAB/NotCommit.meta
+Assets/StreamingAssets/AssetBundles
+Assets/StreamingAssets/AssetBundles.meta
