@@ -62,6 +62,8 @@ MonoBehaviour:
   m_ChildForceExpandHeight: 1
   m_ChildControlWidth: 0
   m_ChildControlHeight: 0
+  m_ChildScaleWidth: 0
+  m_ChildScaleHeight: 0
 --- !u!1 &1875724604350589583
 GameObject:
   m_ObjectHideFlags: 0
@@ -75,7 +77,7 @@ GameObject:
   - component: {fileID: 7241904920190160508}
   - component: {fileID: 8896092832456650057}
   m_Layer: 5
-  m_Name: Two_CreatePanel
+  m_Name: CreatePanel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -253,8 +255,8 @@ GameObject:
   - component: {fileID: 710538302499401767}
   - component: {fileID: 8813134000396527143}
   - component: {fileID: 1403117424193410780}
-  - component: {fileID: 7121449861641903496}
-  - component: {fileID: 511963139}
+  - component: {fileID: 2286347741371017740}
+  - component: {fileID: 3372539395483516021}
   m_Layer: 5
   m_Name: GroupBtn
   m_TagString: Untagged
@@ -318,7 +320,7 @@ MonoBehaviour:
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
---- !u!114 &7121449861641903496
+--- !u!114 &2286347741371017740
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -327,11 +329,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 3270025110889026512}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a87a7f0b01b61ee4ab7c6c0379baa0e5, type: 3}
+  m_Script: {fileID: 1392445389, guid: f70555f144d8491a825f0804e09c671c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   m_Navigation:
-    m_Mode: 0
+    m_Mode: 3
     m_SelectOnUp: {fileID: 0}
     m_SelectOnDown: {fileID: 0}
     m_SelectOnLeft: {fileID: 0}
@@ -341,17 +343,20 @@ MonoBehaviour:
     m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
     m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
     m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
+    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
     m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
     m_ColorMultiplier: 1
     m_FadeDuration: 0.1
   m_SpriteState:
     m_HighlightedSprite: {fileID: 0}
     m_PressedSprite: {fileID: 0}
+    m_SelectedSprite: {fileID: 0}
     m_DisabledSprite: {fileID: 0}
   m_AnimationTriggers:
     m_NormalTrigger: Normal
     m_HighlightedTrigger: Highlighted
     m_PressedTrigger: Pressed
+    m_SelectedTrigger: Selected
     m_DisabledTrigger: Disabled
   m_Interactable: 1
   m_TargetGraphic: {fileID: 1403117424193410780}
@@ -360,8 +365,7 @@ MonoBehaviour:
       m_Calls: []
     m_TypeName: UnityEngine.UI.Button+ButtonClickedEvent, UnityEngine.UI, Version=1.0.0.0,
       Culture=neutral, PublicKeyToken=null
-  isChangeSize: 1
---- !u!114 &511963139
+--- !u!114 &3372539395483516021
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -373,7 +377,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b9aa568e89e892b4583e3784ebab0bb2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  button: {fileID: 7121449861641903496}
+  button: {fileID: 2286347741371017740}
 --- !u!1 &5641934911798500043
 GameObject:
   m_ObjectHideFlags: 0
@@ -385,8 +389,8 @@ GameObject:
   - component: {fileID: 2718484694179592911}
   - component: {fileID: 2815171607055739714}
   - component: {fileID: 4435621960304566224}
-  - component: {fileID: 4239237915656217487}
-  - component: {fileID: 511963138}
+  - component: {fileID: 8707592202662473253}
+  - component: {fileID: 8931741544350567683}
   m_Layer: 5
   m_Name: TeamBtn
   m_TagString: Untagged
@@ -450,7 +454,7 @@ MonoBehaviour:
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
---- !u!114 &4239237915656217487
+--- !u!114 &8707592202662473253
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -459,11 +463,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 5641934911798500043}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a87a7f0b01b61ee4ab7c6c0379baa0e5, type: 3}
+  m_Script: {fileID: 1392445389, guid: f70555f144d8491a825f0804e09c671c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   m_Navigation:
-    m_Mode: 0
+    m_Mode: 3
     m_SelectOnUp: {fileID: 0}
     m_SelectOnDown: {fileID: 0}
     m_SelectOnLeft: {fileID: 0}
@@ -473,17 +477,20 @@ MonoBehaviour:
     m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
     m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
     m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
+    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
     m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
     m_ColorMultiplier: 1
     m_FadeDuration: 0.1
   m_SpriteState:
     m_HighlightedSprite: {fileID: 0}
     m_PressedSprite: {fileID: 0}
+    m_SelectedSprite: {fileID: 0}
     m_DisabledSprite: {fileID: 0}
   m_AnimationTriggers:
     m_NormalTrigger: Normal
     m_HighlightedTrigger: Highlighted
     m_PressedTrigger: Pressed
+    m_SelectedTrigger: Selected
     m_DisabledTrigger: Disabled
   m_Interactable: 1
   m_TargetGraphic: {fileID: 4435621960304566224}
@@ -492,8 +499,7 @@ MonoBehaviour:
       m_Calls: []
     m_TypeName: UnityEngine.UI.Button+ButtonClickedEvent, UnityEngine.UI, Version=1.0.0.0,
       Culture=neutral, PublicKeyToken=null
-  isChangeSize: 1
---- !u!114 &511963138
+--- !u!114 &8931741544350567683
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -505,7 +511,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b9aa568e89e892b4583e3784ebab0bb2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  button: {fileID: 4239237915656217487}
+  button: {fileID: 8707592202662473253}
 --- !u!1 &6651568719205469956
 GameObject:
   m_ObjectHideFlags: 0
@@ -517,8 +523,8 @@ GameObject:
   - component: {fileID: 4325876975805370213}
   - component: {fileID: 1369137077322760033}
   - component: {fileID: 2123000829280339245}
-  - component: {fileID: 1030231179187251347}
-  - component: {fileID: 511963137}
+  - component: {fileID: 8946812654635968083}
+  - component: {fileID: 7151789004502330891}
   m_Layer: 5
   m_Name: CommandPostBtn
   m_TagString: Untagged
@@ -582,7 +588,7 @@ MonoBehaviour:
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
---- !u!114 &1030231179187251347
+--- !u!114 &8946812654635968083
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -591,11 +597,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 6651568719205469956}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a87a7f0b01b61ee4ab7c6c0379baa0e5, type: 3}
+  m_Script: {fileID: 1392445389, guid: f70555f144d8491a825f0804e09c671c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   m_Navigation:
-    m_Mode: 0
+    m_Mode: 3
     m_SelectOnUp: {fileID: 0}
     m_SelectOnDown: {fileID: 0}
     m_SelectOnLeft: {fileID: 0}
@@ -605,17 +611,20 @@ MonoBehaviour:
     m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
     m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
     m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
+    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
     m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
     m_ColorMultiplier: 1
     m_FadeDuration: 0.1
   m_SpriteState:
     m_HighlightedSprite: {fileID: 0}
     m_PressedSprite: {fileID: 0}
+    m_SelectedSprite: {fileID: 0}
     m_DisabledSprite: {fileID: 0}
   m_AnimationTriggers:
     m_NormalTrigger: Normal
     m_HighlightedTrigger: Highlighted
     m_PressedTrigger: Pressed
+    m_SelectedTrigger: Selected
     m_DisabledTrigger: Disabled
   m_Interactable: 1
   m_TargetGraphic: {fileID: 2123000829280339245}
@@ -624,8 +633,7 @@ MonoBehaviour:
       m_Calls: []
     m_TypeName: UnityEngine.UI.Button+ButtonClickedEvent, UnityEngine.UI, Version=1.0.0.0,
       Culture=neutral, PublicKeyToken=null
-  isChangeSize: 1
---- !u!114 &511963137
+--- !u!114 &7151789004502330891
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -637,4 +645,4 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b9aa568e89e892b4583e3784ebab0bb2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  button: {fileID: 1030231179187251347}
+  button: {fileID: 8946812654635968083}
