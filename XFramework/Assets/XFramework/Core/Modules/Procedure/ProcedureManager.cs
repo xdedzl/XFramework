@@ -44,6 +44,15 @@ namespace XFramework
             m_Fsm.ChangeState<TProcedure>();
         }
 
+        /// <summary>
+        /// 获取当前流程
+        /// </summary>
+        /// <returns></returns>
+        public ProcedureBase GetCurrentProcedure()
+        {
+            return m_Fsm.GetCurrentState() as ProcedureBase;
+        } 
+
         public int Priority { get { return 1; } }
 
         public void Update(float elapseSeconds, float realElapseSeconds)

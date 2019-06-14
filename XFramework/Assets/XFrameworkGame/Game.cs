@@ -27,16 +27,26 @@ public class Game : MonoBehaviour
 
     // 初始流程
     public string TypeName;
+    public ProcedureBase startPrcedureTemplate;
 
     void Awake()
     {
+        if (GameObject.FindObjectsOfType<Game>().Length > 1)
+        {
+            DestroyImmediate(this);
+            return;
+        }
+        
         InitAllModel();
         Refresh();
 
         // 设置运行形后第一个进入的流程
         System.Type type = System.Type.GetType(TypeName);
         if (type != null)
+        {
             ProcedureModule.StartProcedure(type);
+            Debug.Log(ProcedureModule.GetCurrentProcedure().GetType().Name);
+        }
         else
             Debug.LogError("当前工程还没有任何流程");
 

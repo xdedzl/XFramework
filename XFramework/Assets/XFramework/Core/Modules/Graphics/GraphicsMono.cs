@@ -25,6 +25,7 @@ namespace XFramework
         private void Start()
         {
             m_Painters = new List<IDraw>();
+            m_IsActive = true;
         }
 
         private void OnPostRender()
