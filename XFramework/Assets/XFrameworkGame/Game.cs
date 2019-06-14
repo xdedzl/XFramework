@@ -30,6 +30,12 @@ public class Game : MonoBehaviour
 
     void Awake()
     {
+        if (GameObject.FindObjectsOfType<Game>().Length > 1)
+        {
+            DestroyImmediate(this);
+            return;
+        }
+        
         InitAllModel();
         Refresh();
 
