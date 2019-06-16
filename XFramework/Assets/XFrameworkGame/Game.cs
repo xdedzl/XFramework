@@ -27,10 +27,11 @@ public class Game : MonoBehaviour
 
     // 初始流程
     public string TypeName;
-    public ProcedureBase startPrcedureTemplate;
+    public GraphicsTest startPrcedureTemplate;
 
     void Awake()
     {
+        Debug.Log("Game:" + this.GetHashCode());
         if (GameObject.FindObjectsOfType<Game>().Length > 1)
         {
             DestroyImmediate(this);
@@ -45,7 +46,14 @@ public class Game : MonoBehaviour
         if (type != null)
         {
             ProcedureModule.StartProcedure(type);
-            Debug.Log(ProcedureModule.GetCurrentProcedure().GetType().Name);
+            Debug.Log(startPrcedureTemplate);
+
+            ProcedureBase procedure = ProcedureModule.GetCurrentProcedure();
+
+            foreach (var field in type.GetFields())
+            {
+                field.SetValue(procedure, field.GetValue(startPrcedureTemplate));
+            }
         }
         else
             Debug.LogError("当前工程还没有任何流程");

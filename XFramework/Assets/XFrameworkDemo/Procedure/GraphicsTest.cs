@@ -53,6 +53,6 @@ public class GraphicsTest : ProcedureBase
 
     public override void OnUpdate()
     {
-        Debug.Log(activeDrawMesh);
+        Debug.Log(activeDrawMesh); 
     }
 }

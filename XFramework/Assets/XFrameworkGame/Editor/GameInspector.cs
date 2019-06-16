@@ -13,8 +13,13 @@ public class GameInspector : Editor
 
     private Game game;
 
+    private SerializedProperty startPrcedureTemplate;
+
     private void Awake()
     {
+        startPrcedureTemplate = serializedObject.FindProperty("startPrcedureTemplate");
+        Debug.Log(startPrcedureTemplate);
+
         typeNames = typeof(ProcedureBase).GetSonNames();
         if (typeNames.Length == 0)
             return;
@@ -22,9 +27,12 @@ public class GameInspector : Editor
         entranceProcedureIndex = EditorPrefs.GetInt("index", 0);
         if (entranceProcedureIndex > typeNames.Length - 1)
             entranceProcedureIndex = 0;
-
+        
         game = target as Game;
-        //game.startPrcedureTemplate = Utility.Reflection.CreateInstance<ProcedureBase>(GetType(typeNames[entranceProcedureIndex]));
+        game.TypeName = typeNames[entranceProcedureIndex];
+        game.startPrcedureTemplate = game.startPrcedureTemplate??Utility.Reflection.CreateInstance<GraphicsTest>(GetType(typeNames[entranceProcedureIndex]));
+
+        Debug.Log(game.GetHashCode());
     }
 
     public override void OnInspectorGUI()
@@ -45,19 +53,23 @@ public class GameInspector : Editor
         if(lastIndex != entranceProcedureIndex)
         {
             game.TypeName = typeNames[entranceProcedureIndex];
-            //game.startPrcedureTemplate = Utility.Reflection.CreateInstance<ProcedureBase>(GetType(typeNames[entranceProcedureIndex]));
         }
 
-        //if (!Application.isPlaying)
-        //{
-        //    XEditorUtility.SerializableObj(game.startPrcedureTemplate);
-        //}
-        //else
-        //{
-        //    XEditorUtility.SerializableObj(Game.ProcedureModule.GetCurrentProcedure());
-        //}
+        game.startPrcedureTemplate = game.startPrcedureTemplate ?? Utility.Reflection.CreateInstance<GraphicsTest>(GetType(typeNames[entranceProcedureIndex]));
+
+        if (!Application.isPlaying)
+        {
+            //XEditorUtility.SerializableObj(game.startPrcedureTemplate);
+            EditorGUILayout.PropertyField(startPrcedureTemplate, true);
+        }
+        else
+        {
+            XEditorUtility.SerializableObj(Game.ProcedureModule.GetCurrentProcedure());
+        }
 
         GUILayout.EndVertical();
+
+        serializedObject.ApplyModifiedProperties();
     }
 
     private void OnDestroy()

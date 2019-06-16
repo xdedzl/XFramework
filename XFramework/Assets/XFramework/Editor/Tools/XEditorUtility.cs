@@ -11,6 +11,8 @@ namespace XFramework.Editor
     {
         public static void SerializableObj(object obj)
         {
+            if (obj == null)
+                return;
             Type type = obj.GetType();
             FieldInfo[] fieldInfos = type.GetFields();
 
