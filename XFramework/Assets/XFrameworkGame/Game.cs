@@ -27,7 +27,6 @@ public class Game : MonoBehaviour
 
     // 初始流程
     public string TypeName;
-    public GraphicsTest startPrcedureTemplate;
 
     void Awake()
     {
@@ -46,14 +45,9 @@ public class Game : MonoBehaviour
         if (type != null)
         {
             ProcedureModule.StartProcedure(type);
-            Debug.Log(startPrcedureTemplate);
 
             ProcedureBase procedure = ProcedureModule.GetCurrentProcedure();
-
-            foreach (var field in type.GetFields())
-            {
-                field.SetValue(procedure, field.GetValue(startPrcedureTemplate));
-            }
+            DeSerialize(procedure);
         }
         else
             Debug.LogError("当前工程还没有任何流程");
@@ -112,5 +106,75 @@ public class Game : MonoBehaviour
     public static void StartModule<T>() where T : IGameModule
     {
         GameEntry.AddMoudle<T>();
+    }
+
+    /// <summary>
+    /// 根据存储的byte数值给流程赋值
+    /// </summary>
+    /// <param name="procedure"></param>
+    public void DeSerialize(ProcedureBase procedure)
+    {
+        string path = Application.persistentDataPath + "/" + UnityEngine.SceneManagement.SceneManager.GetActiveScene().name + "Procedure";
+        if (!System.IO.File.Exists(path))
+            return;
+
+        ProtocolBytes p = new ProtocolBytes(System.IO.File.ReadAllBytes(path));
+        System.Type type = procedure.GetType();
+        if(p.GetString() != type.Name)
+        {
+            Debug.LogError("类型不匹配");
+            return;
+        }
+
+        foreach (var field in type.GetFields())
+        {
+            object arg = null;
+            switch (field.FieldType.ToString())
+            {
+                case "System.Int32":
+                    field.SetValue(procedure, arg);
+                    break;
+                case "System.Single":
+                    arg = p.GetFloat();
+                    field.SetValue(procedure, arg);
+                    break;
+                case "System.Double":
+                    arg = p.GetDouble();
+                    field.SetValue(procedure, arg);
+                    break;
+                case "System.Boolean":
+                    arg = p.GetBoolen();
+                    field.SetValue(procedure, arg);
+                    break;
+                case "System.String":
+                    arg = p.GetString();
+                    field.SetValue(procedure, arg);
+                    break;
+                case "System.Enum":
+                    arg = (p.GetInt32());
+                    field.SetValue(procedure, arg);
+                    break;
+                case "UnityEngine.Vector3":
+                    arg = p.GetVector3();
+                    field.SetValue(procedure, arg);
+                    break;
+                case "UnityEngine.Vector2":
+                    arg = p.GetVector2();
+                    field.SetValue(procedure, arg);
+                    break;
+                case "UnityEngine.GameObject":
+                    string objStr = p.GetString();
+                    if (string.IsNullOrEmpty(objStr))
+                        continue;
+                    field.SetValue(procedure, GameObject.Find(objStr));
+                    break;
+                case "UnityEngine.Transform":
+                    string tranStr = p.GetString();
+                    if (string.IsNullOrEmpty(tranStr))
+                        continue;
+                    field.SetValue(procedure, GameObject.Find(tranStr).transform);
+                    break;
+            }
+        }
     }
 }

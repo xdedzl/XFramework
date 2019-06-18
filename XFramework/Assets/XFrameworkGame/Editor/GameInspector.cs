@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
@@ -12,27 +13,30 @@ public class GameInspector : Editor
     private int entranceProcedureIndex = 0;
 
     private Game game;
-
-    private SerializedProperty startPrcedureTemplate;
+    private Type currentType;
+    private ProcedureBase startPrcedureTemplate;
+    private ProtocolBytes p = new ProtocolBytes();
+    private string savePath;
 
     private void Awake()
     {
-        startPrcedureTemplate = serializedObject.FindProperty("startPrcedureTemplate");
-        Debug.Log(startPrcedureTemplate);
+        entranceProcedureIndex = EditorPrefs.GetInt("index", 0);
 
         typeNames = typeof(ProcedureBase).GetSonNames();
         if (typeNames.Length == 0)
             return;
 
-        entranceProcedureIndex = EditorPrefs.GetInt("index", 0);
         if (entranceProcedureIndex > typeNames.Length - 1)
             entranceProcedureIndex = 0;
         
         game = target as Game;
         game.TypeName = typeNames[entranceProcedureIndex];
-        game.startPrcedureTemplate = game.startPrcedureTemplate??Utility.Reflection.CreateInstance<GraphicsTest>(GetType(typeNames[entranceProcedureIndex]));
 
-        Debug.Log(game.GetHashCode());
+        startPrcedureTemplate = Utility.Reflection.CreateInstance<ProcedureBase>(GetType(typeNames[entranceProcedureIndex]));
+        game.DeSerialize(startPrcedureTemplate);
+
+        savePath = Application.persistentDataPath + "/" + UnityEngine.SceneManagement.SceneManager.GetActiveScene().name + "Procedure";
+        Debug.Log(savePath);
     }
 
     public override void OnInspectorGUI()
@@ -40,12 +44,13 @@ public class GameInspector : Editor
         typeNames = typeof(ProcedureBase).GetSonNames();
         if (typeNames.Length == 0)
             return;
+        
+        if (entranceProcedureIndex > typeNames.Length - 1)
+            entranceProcedureIndex = 0;
+
         GUI.backgroundColor = new Color32(0, 170, 255, 30);
         GUILayout.BeginVertical("Box");
         GUI.backgroundColor = Color.white;
-
-        if (entranceProcedureIndex > typeNames.Length - 1)
-            entranceProcedureIndex = 0;
 
         int lastIndex = entranceProcedureIndex;
         entranceProcedureIndex = EditorGUILayout.Popup("Entrance Procedure", entranceProcedureIndex, typeNames);
@@ -53,14 +58,17 @@ public class GameInspector : Editor
         if(lastIndex != entranceProcedureIndex)
         {
             game.TypeName = typeNames[entranceProcedureIndex];
+            startPrcedureTemplate = Utility.Reflection.CreateInstance<ProcedureBase>(GetType(typeNames[entranceProcedureIndex]));
+            currentType = GetType(typeNames[entranceProcedureIndex]);
         }
 
-        game.startPrcedureTemplate = game.startPrcedureTemplate ?? Utility.Reflection.CreateInstance<GraphicsTest>(GetType(typeNames[entranceProcedureIndex]));
+        currentType = currentType ?? GetType(typeNames[entranceProcedureIndex]);
+        startPrcedureTemplate = startPrcedureTemplate ?? Utility.Reflection.CreateInstance<ProcedureBase>(GetType(typeNames[entranceProcedureIndex]));
 
         if (!Application.isPlaying)
         {
-            //XEditorUtility.SerializableObj(game.startPrcedureTemplate);
-            EditorGUILayout.PropertyField(startPrcedureTemplate, true);
+            XEditorUtility.SerializableObj(startPrcedureTemplate);
+            Serialize();
         }
         else
         {
@@ -68,8 +76,6 @@ public class GameInspector : Editor
         }
 
         GUILayout.EndVertical();
-
-        serializedObject.ApplyModifiedProperties();
     }
 
     private void OnDestroy()
@@ -88,5 +94,88 @@ public class GameInspector : Editor
                 return type;
         }
         return null;
-    } 
+    }
+
+    private void Serialize()
+    {
+        p.Clear();
+        p.AddString(currentType.Name);
+        foreach (var field in currentType.GetFields())
+        {
+            var arg = currentType.GetField(field.Name).GetValue(startPrcedureTemplate);
+            switch (field.FieldType.ToString())
+            {
+                case "System.Int32":
+                    p.AddInt32((int)arg);
+                    break;
+                case "System.Single":
+                    p.AddFloat((float)arg);
+                    break;
+                case "System.Double":
+                    p.AddDouble((double)arg);
+                    break;
+                case "System.Boolean":
+                    p.AddBoolen((bool)arg);
+                    break;
+                case "System.String":
+                    arg = arg ?? "";
+                    p.AddString((string)arg);
+                    break;
+                case "System.Enum":
+                    p.AddInt32(Convert.ToInt32(arg));
+                    break;
+                case "UnityEngine.Vector3":
+                    p.AddVector3((Vector3)arg);
+                    break;
+                case "UnityEngine.Vector2":
+                    p.AddVector2((Vector2)arg);
+                    break;
+                case "UnityEngine.GameObject":
+                    GameObject obj = (GameObject)arg;
+                    if (obj)
+                    {
+                        if (!string.IsNullOrEmpty(AssetDatabase.GetAssetPath(obj)))
+                        {
+                            Debug.LogError("暂不支持给流程添加Assets下的GameObject,请直接拖拽场景中的GameObject");
+                            continue;
+                        }
+                        Transform trans = obj.transform;
+                        string path = obj.name;
+                        while (trans.parent != null)
+                        {
+                            trans = trans.parent;
+                            path = trans.name + "/" + path;
+                        }
+                        p.AddString(path);
+                    }
+                    else
+                    {
+                        p.AddString("");
+                    }
+                    break;
+                case "UnityEngine.Transform":
+                    Transform transform = (Transform)arg;
+                    if (transform)
+                    {
+                        string path = transform.name;
+                        while (transform.parent != null)
+                        {
+                            transform = transform.parent;
+                            path = transform.name + "/" + path;
+                        }
+                        p.AddString(path);
+                    }
+                    else
+                    {
+                        p.AddString("");
+                    }
+                    break;
+                default:
+                    Debug.LogError("流程暂不支持在面板上修改" + field.FieldType.Name);
+                    break;
+            }
+        }
+
+        File.WriteAllBytes(savePath, p.Encode());
+    }
 }
