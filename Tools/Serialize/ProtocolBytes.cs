@@ -66,9 +66,9 @@ namespace XFramework
         /// <param name="str">要添加的字符串</param>
         public void AddString(string str)
         {
-            Int32 len = str.Length;
-            byte[] lenBytes = BitConverter.GetBytes(len);
             byte[] strBytes = Encoding.UTF8.GetBytes(str);
+            Int32 len = strBytes.Length;
+            byte[] lenBytes = BitConverter.GetBytes(len);
             bufferList.AddRange(lenBytes);
             bufferList.AddRange(strBytes);
         }
@@ -152,6 +152,42 @@ namespace XFramework
             return *((float*)&temp);
         }
 
+        /// <summary>
+        /// 将double转化成字节数组加入字节流
+        /// </summary>
+        /// <param name="num">要转化的double</param>
+        public unsafe void AddDouble(double num)
+        {
+            ulong temp = *(ulong*)&num;
+            bufferList.Add((byte)temp);
+            bufferList.Add((byte)(temp >> 8));
+            bufferList.Add((byte)(temp >> 16));
+            bufferList.Add((byte)(temp >> 24));
+            bufferList.Add((byte)(temp >> 32));
+            bufferList.Add((byte)(temp >> 40));
+            bufferList.Add((byte)(temp >> 48));
+            bufferList.Add((byte)(temp >> 56));
+        }
+
+        /// <summary>
+        /// 将字节数组转化成double
+        /// </summary>
+        public unsafe double GetDouble()
+        {
+            if (buffer == null)
+                return -1;
+            if (buffer.Length < index + sizeof(float))
+                return -1;
+
+            //UInt64 temp = (UInt64)(buffer[index++] | buffer[index++] << 8 | buffer[index++] << 16 | buffer[index++] << 24 | buffer[index++] << 32 | buffer[index++] << 40 | buffer[index++] << 48 | buffer[index++] << 56);
+
+            uint lo = (uint)(buffer[index++] | buffer[index++] << 8 | buffer[index++] << 16 | buffer[index++] << 24);
+            uint hi = (uint)(buffer[index++] | buffer[index++] << 8 | buffer[index++] << 16 | buffer[index++] << 24);
+            ulong temp = ((ulong)hi) << 32 | lo;
+
+            return *((double*)&temp);
+        }
+
         #endregion
 
         #region 添加获取布尔值
@@ -168,7 +204,7 @@ namespace XFramework
 
         #endregion
 
-        #region 添加获取Vector3
+        #region 添加获取Vector
 
         public void AddVector3(Vector3 v)
         {
@@ -183,6 +219,19 @@ namespace XFramework
             float y = GetFloat();
             float z = GetFloat();
             return new Vector3(x, y, z);
+        }
+
+        public void AddVector2(Vector2 v)
+        {
+            AddFloat(v.x);
+            AddFloat(v.y);
+        }
+
+        public Vector2 GetVector2()
+        {
+            float x = GetFloat();
+            float y = GetFloat();
+            return new Vector2(x, y);
         }
 
         #endregion
@@ -389,5 +438,10 @@ namespace XFramework
         }
 
         #endregion
+
+        public void Clear()
+        {
+            bufferList.Clear();
+        }
     }
 }
