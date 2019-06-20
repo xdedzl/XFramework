@@ -35,8 +35,7 @@ public class GameInspector : Editor
         startPrcedureTemplate = Utility.Reflection.CreateInstance<ProcedureBase>(GetType(typeNames[entranceProcedureIndex]));
         game.DeSerialize(startPrcedureTemplate);
 
-        savePath = Application.persistentDataPath + "/" + UnityEngine.SceneManagement.SceneManager.GetActiveScene().name + "Procedure";
-        Debug.Log(savePath);
+        savePath = Application.persistentDataPath + "/" + UnityEngine.SceneManagement.SceneManager.GetActiveScene().name + "Procedure/";
     }
 
     public override void OnInspectorGUI()
@@ -176,6 +175,6 @@ public class GameInspector : Editor
             }
         }
 
-        File.WriteAllBytes(savePath, p.Encode());
+        File.WriteAllBytes(savePath + currentType.Name, p.Encode());
     }
 }

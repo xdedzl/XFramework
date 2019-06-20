@@ -114,12 +114,13 @@ public class Game : MonoBehaviour
     /// <param name="procedure"></param>
     public void DeSerialize(ProcedureBase procedure)
     {
-        string path = Application.persistentDataPath + "/" + UnityEngine.SceneManagement.SceneManager.GetActiveScene().name + "Procedure";
+        System.Type type = procedure.GetType();
+        string path = Application.persistentDataPath + "/" + UnityEngine.SceneManagement.SceneManager.GetActiveScene().name + "Procedure/" + type.Name;
         if (!System.IO.File.Exists(path))
             return;
 
         ProtocolBytes p = new ProtocolBytes(System.IO.File.ReadAllBytes(path));
-        System.Type type = procedure.GetType();
+
         if(p.GetString() != type.Name)
         {
             Debug.LogError("类型不匹配");

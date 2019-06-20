@@ -1,6 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEditor;
 using System;
 using System.Reflection;
@@ -25,7 +23,6 @@ namespace XFramework.Editor
                 {
                     case "System.Int32":
                         field.SetValue(obj, EditorGUILayout.IntField(field.Name.AddSpace(), (int)field.GetValue(obj)));
-                        Debug.Log((int)field.GetValue(obj));
                         break;
                     case "System.Single":
                         field.SetValue(obj, EditorGUILayout.FloatField(field.Name.AddSpace(), (float)field.GetValue(obj)));
@@ -42,14 +39,17 @@ namespace XFramework.Editor
                     case "System.Enum":
                         field.SetValue(obj, EditorGUILayout.EnumPopup(field.Name.AddSpace(), (Enum)field.GetValue(obj)));
                         break;
-                    case "UnityEngine.Transform":
-                        field.SetValue(obj, EditorGUILayout.ObjectField(field.Name.AddSpace(), (Transform)field.GetValue(obj), typeof(Transform), true) as Transform);
-                        break;
                     case "UnityEngine.Vector3":
                         field.SetValue(obj, EditorGUILayout.Vector3Field(field.Name.AddSpace(), (Vector3)field.GetValue(obj)));
                         break;
                     case "UnityEngine.Vector2":
                         field.SetValue(obj, EditorGUILayout.Vector2Field(field.Name, (Vector3)field.GetValue(obj)));
+                        break;
+                    case "UnityEngine.Transform":
+                        field.SetValue(obj, EditorGUILayout.ObjectField(field.Name.AddSpace(), (Transform)field.GetValue(obj), typeof(Transform), true) as Transform);
+                        break;
+                    case "UnityEngine.GameObject":
+                        field.SetValue(obj, EditorGUILayout.ObjectField(field.Name.AddSpace(), (GameObject)field.GetValue(obj), typeof(GameObject), true) as GameObject);
                         break;
                 }
             }
