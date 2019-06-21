@@ -30,7 +30,6 @@ public class Game : MonoBehaviour
 
     void Awake()
     {
-        Debug.Log("Game:" + this.GetHashCode());
         if (GameObject.FindObjectsOfType<Game>().Length > 1)
         {
             DestroyImmediate(this);
