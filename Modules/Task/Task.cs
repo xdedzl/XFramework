@@ -79,6 +79,9 @@ namespace XFramework.Tasks
         }
     }
 
+    /// <summary>
+    /// 单个任务
+    /// </summary>
     public class SingleTask : BaseTask
     {
         private Func<bool> action;
@@ -97,6 +100,9 @@ namespace XFramework.Tasks
         }
     }
 
+    /// <summary>
+    /// 任务组（组内任一任务完成就算完成）
+    /// </summary>
     public class RaceTask : BaseTask
     {
         /// <summary>
@@ -126,6 +132,9 @@ namespace XFramework.Tasks
         }
     }
 
+    /// <summary>
+    /// 任务组（组内所有任务完成算完成）
+    /// </summary>
     public class AllTask : BaseTask
     {
         /// <summary>
