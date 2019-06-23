@@ -7,17 +7,17 @@ namespace XFramework
     /// </summary>
     public class ColorInt32
     {
-        public static int cyan { get { return 16777215; } }
-        public static int clear { get { return 0; } }
-        public static int grey { get { return 2139062271; } }
-        public static int gray { get { return 2139062271; } }
-        public static int magenta { get { return -16711681; } }
-        public static int red { get { return -16776961; } }
-        public static int yellow { get { return -1374977; } }
-        public static int black { get { return 255; } }
-        public static int white { get { return -1; } }
-        public static int green { get { return 16711935; } }
-        public static int blue { get { return 65535; } }
+        public const int cyan = 16777215;
+        public const int clear = 0;
+        public const int grey = 2139062271;
+        public const int gray = 2139062271;
+        public const int magenta = -16711681;
+        public const int red = -16776961;
+        public const int yellow = -1374977;
+        public const int black = 255;
+        public const int white = -1;
+        public const int green = 16711935;
+        public const int blue = 65535;
 
         public static Color32 Int2Color(int i)
         {
