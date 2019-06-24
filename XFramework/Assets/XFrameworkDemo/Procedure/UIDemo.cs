@@ -31,4 +31,27 @@ public class UIDemo : ProcedureBase
             Game.UIModule.Open(UIName.Setting);
         }
     }
+
+    public override void OnEnter()
+    {
+        MonoEvent.Instance.ONGUI += OnGUI;
+    }
+
+    public override void OnExit()
+    {
+        MonoEvent.Instance.ONGUI -= OnGUI;
+    }
+
+    public void OnGUI()
+    {
+        GUIStyle style = new GUIStyle
+        {
+            padding = new RectOffset(10, 10, 10, 10),
+            fontSize = 15,
+            fontStyle = FontStyle.Normal,
+        };
+        GUI.Label(new Rect(500, 0, 200, 80),
+            "UI面板示例\n" +
+            "Esc 弹出设置面板", style);
+    }
 }

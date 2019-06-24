@@ -21,8 +21,8 @@ public class Game : MonoBehaviour
     public static TaskManager TaskModule { get; private set; }
     public static NetManager NetModule { get; private set; }
 
-
-    // 业务模块
+    // 框架扩展模块
+    public static MeshManager MeshModule { get; private set; }
     public static UIHelper UIModule { get; private set; }
 
     // 初始流程
@@ -75,6 +75,7 @@ public class Game : MonoBehaviour
         TaskModule = GameEntry.AddMoudle<TaskManager>();
         NetModule = GameEntry.AddMoudle<NetManager>();
 
+        MeshModule = GameEntry.AddMoudle<MeshManager>();
         UIModule = GameEntry.AddMoudle<UIHelper>();
     }
 
@@ -94,6 +95,7 @@ public class Game : MonoBehaviour
         TaskModule = GameEntry.GetModule<TaskManager>();
         NetModule = GameEntry.GetModule<NetManager>();
 
+        MeshModule = GameEntry.GetModule<MeshManager>();
         UIModule = GameEntry.GetModule<UIHelper>();
     }
 
@@ -120,61 +122,12 @@ public class Game : MonoBehaviour
 
         ProtocolBytes p = new ProtocolBytes(System.IO.File.ReadAllBytes(path));
 
-        if(p.GetString() != type.Name)
+        if (p.GetString() != type.Name)
         {
             Debug.LogError("类型不匹配");
             return;
         }
 
-        foreach (var field in type.GetFields())
-        {
-            object arg = null;
-            switch (field.FieldType.ToString())
-            {
-                case "System.Int32":
-                    field.SetValue(procedure, arg);
-                    break;
-                case "System.Single":
-                    arg = p.GetFloat();
-                    field.SetValue(procedure, arg);
-                    break;
-                case "System.Double":
-                    arg = p.GetDouble();
-                    field.SetValue(procedure, arg);
-                    break;
-                case "System.Boolean":
-                    arg = p.GetBoolen();
-                    field.SetValue(procedure, arg);
-                    break;
-                case "System.String":
-                    arg = p.GetString();
-                    field.SetValue(procedure, arg);
-                    break;
-                case "System.Enum":
-                    arg = (p.GetInt32());
-                    field.SetValue(procedure, arg);
-                    break;
-                case "UnityEngine.Vector3":
-                    arg = p.GetVector3();
-                    field.SetValue(procedure, arg);
-                    break;
-                case "UnityEngine.Vector2":
-                    arg = p.GetVector2();
-                    field.SetValue(procedure, arg);
-                    break;
-                case "UnityEngine.GameObject":
-                    string objStr = p.GetString();
-                    if (string.IsNullOrEmpty(objStr))
-                        continue;
-                    field.SetValue(procedure, GameObject.Find(objStr));
-                    break;
-                case "UnityEngine.Transform":
-                    string tranStr = p.GetString();
-                    if (string.IsNullOrEmpty(tranStr))
-                        continue;
-                    field.SetValue(procedure, GameObject.Find(tranStr).transform);
-                    break;
-            }
-        }
+        p.DeSerialize(procedure);
     }
 }

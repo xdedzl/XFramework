@@ -131,11 +131,16 @@ public class RoadTest : ProcedureBase
     {
         GUIStyle style = new GUIStyle
         {
-            border = new RectOffset(10, 10, 10, 10),
-            fontSize = 20,
+            padding = new RectOffset(10, 10, 10, 10),
+            fontSize = 15,
             fontStyle = FontStyle.Normal,
         };
-        GUI.Label(new Rect(0, 0, 200, 80), "1.鼠标左键点击设置路径点\n2.C:清空之前的操作\n3.K 创建路面Mesh\n4.白色Cube为设置的关键点\n5.红色球为曲线算法得出的路径点", style);
+        GUI.Label(new Rect(0, 0, 200, 80), 
+            "1.鼠标左键点击设置路径点\n" +
+            "2.C:清空之前的操作\n" +
+            "3.K 创建路面Mesh\n" +
+            "4.白色Cube为设置的关键点\n" +
+            "5.红色球为曲线算法得出的路径点", style);
     }
 
     private void MouseLeft()

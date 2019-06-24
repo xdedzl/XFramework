@@ -19,36 +19,40 @@ namespace XFramework.Editor
             GUI.backgroundColor = Color.white;
             foreach (var field in fieldInfos)
             {
-                switch (field.FieldType.ToString())
+                switch (field.FieldType.Name)
                 {
-                    case "System.Int32":
+                    case "Int32":
                         field.SetValue(obj, EditorGUILayout.IntField(field.Name.AddSpace(), (int)field.GetValue(obj)));
                         break;
-                    case "System.Single":
+                    case "Single":
                         field.SetValue(obj, EditorGUILayout.FloatField(field.Name.AddSpace(), (float)field.GetValue(obj)));
                         break;
-                    case "System.Double":
+                    case "Double":
                         field.SetValue(obj, EditorGUILayout.DoubleField(field.Name.AddSpace(), (double)field.GetValue(obj)));
                         break;
-                    case "System.Boolean":
+                    case "Boolean":
                         field.SetValue(obj, EditorGUILayout.Toggle(field.Name.AddSpace(), (bool)field.GetValue(obj)));
                         break;
-                    case "System.String":
+                    case "String":
                         field.SetValue(obj, EditorGUILayout.TextField(field.Name.AddSpace(), (string)field.GetValue(obj)));
                         break;
-                    case "System.Enum":
+                    case "Enum":
                         field.SetValue(obj, EditorGUILayout.EnumPopup(field.Name.AddSpace(), (Enum)field.GetValue(obj)));
                         break;
-                    case "UnityEngine.Vector3":
+                    case "Vector3":
                         field.SetValue(obj, EditorGUILayout.Vector3Field(field.Name.AddSpace(), (Vector3)field.GetValue(obj)));
                         break;
-                    case "UnityEngine.Vector2":
+                    case "Vector2":
                         field.SetValue(obj, EditorGUILayout.Vector2Field(field.Name, (Vector3)field.GetValue(obj)));
                         break;
-                    case "UnityEngine.Transform":
+                    case "Color":
+                    case "Color32":
+                        field.SetValue(obj, EditorGUILayout.ColorField(field.Name, (Color)field.GetValue(obj)));
+                        break;
+                    case "Transform":
                         field.SetValue(obj, EditorGUILayout.ObjectField(field.Name.AddSpace(), (Transform)field.GetValue(obj), typeof(Transform), true) as Transform);
                         break;
-                    case "UnityEngine.GameObject":
+                    case "GameObject":
                         field.SetValue(obj, EditorGUILayout.ObjectField(field.Name.AddSpace(), (GameObject)field.GetValue(obj), typeof(GameObject), true) as GameObject);
                         break;
                 }

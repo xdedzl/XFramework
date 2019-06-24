@@ -1,8 +1,8 @@
-﻿	
+﻿
 Shader "RunTimeHandles/Shape" {
 	Properties
 	{
-		_Color("Color", Color) = (1,1,1,0.1)
+		_Color("Color", Color) = (1,1,1,1)
 		_ZWrite("ZWrite", Float) = 0.0
 		_ZTest("ZTest", Float) = 0.0
 		_Cull("Cull", Float) = 0.0

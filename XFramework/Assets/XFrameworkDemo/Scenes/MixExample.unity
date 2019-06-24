@@ -229,7 +229,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f8f9c960653038b4c9f657cb4437353c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  TypeName: GraphicsTest
+  TypeName: MeshTest
 --- !u!1 &741181218
 GameObject:
   m_ObjectHideFlags: 0
@@ -332,6 +332,7 @@ GameObject:
   - component: {fileID: 912059143}
   - component: {fileID: 912059142}
   - component: {fileID: 912059141}
+  - component: {fileID: 912059144}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -371,7 +372,7 @@ Camera:
     width: 1
     height: 1
   near clip plane: 0.3
-  far clip plane: 1000
+  far clip plane: 100000000
   field of view: 60
   orthographic: 0
   orthographic size: 5
@@ -404,6 +405,20 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &912059144
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 912059140}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 029f6136d739beb4ab2f7682d26525d8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  rotateSpeed: 200
+  moveSpeed: 50
 --- !u!1 &2078507124
 GameObject:
   m_ObjectHideFlags: 0

@@ -6,6 +6,7 @@
 // ==========================================
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Text;
 using UnityEngine;
 
@@ -236,6 +237,36 @@ namespace XFramework
 
         #endregion
 
+        #region 添加获取Color
+
+        public void AddColor(Color c)
+        {
+            AddFloat(c.r);
+            AddFloat(c.g);
+            AddFloat(c.b);
+            AddFloat(c.a);
+        }
+
+        public Color GetColor()
+        {
+            return new Color(GetFloat(), GetFloat(), GetFloat(), GetFloat());
+        }
+
+        public void AddColor32(Color32 c)
+        {
+            bufferList.Add(c.r);
+            bufferList.Add(c.g);
+            bufferList.Add(c.b);
+            bufferList.Add(c.a);
+        }
+
+        public Color32 GetColor32()
+        {
+            return new Color(buffer[index++], buffer[index++], buffer[index++], buffer[index++]);
+        }
+
+        #endregion
+
         #region 添加获取数组
 
         public void AddFloatArray1(float[] array)
@@ -439,9 +470,171 @@ namespace XFramework
 
         #endregion
 
+        /// <summary>
+        /// 序列化
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <param name="bindingAttr"></param>
+        public void Serialize(object obj, BindingFlags bindingAttr = BindingFlags.Default)
+        {
+            Type type = obj.GetType();
+            foreach (var field in obj.GetType().GetFields())
+            {
+                var arg = type.GetField(field.Name).GetValue(obj);
+                switch (field.FieldType.Name)
+                {
+                    case "Int32":
+                        this.AddInt32((int)arg);
+                        break;
+                    case "Single":
+                        this.AddFloat((float)arg);
+                        break;
+                    case "Double":
+                        this.AddDouble((double)arg);
+                        break;
+                    case "Boolean":
+                        this.AddBoolen((bool)arg);
+                        break;
+                    case "String":
+                        arg = arg ?? "";
+                        this.AddString((string)arg);
+                        break;
+                    case "Enum":
+                        this.AddInt32(Convert.ToInt32(arg));
+                        break;
+                    case "Vector3":
+                        this.AddVector3((Vector3)arg);
+                        break;
+                    case "Vector2":
+                        this.AddVector2((Vector2)arg);
+                        break;
+                    case "Color":
+                        this.AddColor((Color)arg);
+                        break;
+                    case "Color32":
+                        this.AddColor32((Color32)arg);
+                        break;
+                    case "GameObject":
+                        GameObject gameObj = (GameObject)arg;
+                        if (gameObj)
+                        {
+                            Transform trans = gameObj.transform;
+                            if (trans == null)
+                            {
+                                Debug.LogError("只能序列化场景中的GameObject");
+                                continue;
+                            }
+                            string path = gameObj.name;
+                            while (trans.parent != null)
+                            {
+                                trans = trans.parent;
+                                path = trans.name + "/" + path;
+                            }
+                            this.AddString(path);
+                        }
+                        else
+                        {
+                            this.AddString("");
+                        }
+                        break;
+                    case "Transform":
+                        Transform transform = (Transform)arg;
+                        if (transform)
+                        {
+                            string path = transform.name;
+                            while (transform.parent != null)
+                            {
+                                transform = transform.parent;
+                                path = transform.name + "/" + path;
+                            }
+                            this.AddString(path);
+                        }
+                        else
+                        {
+                            this.AddString("");
+                        }
+                        break;
+                    default:
+                        Debug.LogError("暂不支持序列化" + field.FieldType.Name);
+                        break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 反序列化
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <param name="bindingAttr"></param>
+        public void DeSerialize(object obj, BindingFlags bindingAttr = BindingFlags.Default)
+        {
+            Type type = obj.GetType();
+
+            foreach (var field in type.GetFields())
+            {
+                object arg = null;
+                switch (field.FieldType.Name)
+                {
+                    case "Int32":
+                        arg = this.GetInt32();
+                        field.SetValue(obj, arg);
+                        break;
+                    case "Single":
+                        arg = this.GetFloat();
+                        field.SetValue(obj, arg);
+                        break;
+                    case "Double":
+                        arg = this.GetDouble();
+                        field.SetValue(obj, arg);
+                        break;
+                    case "Boolean":
+                        arg = this.GetBoolen();
+                        field.SetValue(obj, arg);
+                        break;
+                    case "String":
+                        arg = this.GetString();
+                        field.SetValue(obj, arg);
+                        break;
+                    case "Enum":
+                        arg = (this.GetInt32());
+                        field.SetValue(obj, arg);
+                        break;
+                    case "Vector3":
+                        arg = this.GetVector3();
+                        field.SetValue(obj, arg);
+                        break;
+                    case "Vector2":
+                        arg = this.GetVector2();
+                        field.SetValue(obj, arg);
+                        break;
+                    case "Color":
+                        arg = this.GetColor();
+                        field.SetValue(obj, arg);
+                        break;
+                    case "Color32":
+                        arg = this.GetColor32();
+                        field.SetValue(obj, arg);
+                        break;
+                    case "GameObject":
+                        string objStr = this.GetString();
+                        if (string.IsNullOrEmpty(objStr))
+                            continue;
+                        field.SetValue(obj, GameObject.Find(objStr));
+                        break;
+                    case "Transform":
+                        string tranStr = this.GetString();
+                        if (string.IsNullOrEmpty(tranStr))
+                            continue;
+                        field.SetValue(obj, GameObject.Find(tranStr).transform);
+                        break;
+                }
+            }
+        }
+
         public void Clear()
         {
             bufferList.Clear();
+            index = 0;
         }
     }
 }

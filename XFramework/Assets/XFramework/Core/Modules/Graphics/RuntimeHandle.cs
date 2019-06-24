@@ -60,6 +60,12 @@ namespace XFramework
 
             camera = GetComponent<Camera>();
             m_CurrentHandle = m_PositionHandle;
+
+            // 测试用
+            if (testTarget)
+            {
+                SetTarget(testTarget);
+            }
         }
 
         private void Update()
@@ -336,14 +342,14 @@ namespace XFramework
             Vector3 euler = target.eulerAngles;
             // 画坐标轴的小方块
             m_ShapesMaterial.SetPass(0);
-            Mesh meshX = GLDraw.CreateCubeMesh(m_SelectedAxis == RuntimeHandleAxis.X ? m_SelectedColor : Color.red, Vector3.zero, m_CubeScale * m_ScreenScale);
+            Mesh meshX = GLDraw.CreateCube(m_SelectedAxis == RuntimeHandleAxis.X ? m_SelectedColor : Color.red, Vector3.zero, m_CubeScale * m_ScreenScale);
             Graphics.DrawMeshNow(meshX, position + target.right * m_HandleScale * m_ScreenScale, target.rotation * Quaternion.Euler(0, 0, -90));
-            Mesh meshY = GLDraw.CreateCubeMesh(m_SelectedAxis == RuntimeHandleAxis.Y ? m_SelectedColor : Color.green, Vector3.zero, m_CubeScale * m_ScreenScale);
+            Mesh meshY = GLDraw.CreateCube(m_SelectedAxis == RuntimeHandleAxis.Y ? m_SelectedColor : Color.green, Vector3.zero, m_CubeScale * m_ScreenScale);
             Graphics.DrawMeshNow(meshY, position + target.up * m_HandleScale * m_ScreenScale, target.rotation);
-            Mesh meshZ = GLDraw.CreateCubeMesh(m_SelectedAxis == RuntimeHandleAxis.Z ? m_SelectedColor : Color.blue, Vector3.zero, m_CubeScale * m_ScreenScale);
+            Mesh meshZ = GLDraw.CreateCube(m_SelectedAxis == RuntimeHandleAxis.Z ? m_SelectedColor : Color.blue, Vector3.zero, m_CubeScale * m_ScreenScale);
             Graphics.DrawMeshNow(meshZ, position + target.forward * m_HandleScale * m_ScreenScale, target.rotation * Quaternion.Euler(90, 0, 0));
 
-            Mesh meshO = GLDraw.CreateCubeMesh(m_SelectedAxis == RuntimeHandleAxis.XYZ ? m_SelectedColor : Color.white, Vector3.zero, m_CubeScale * m_ScreenScale);
+            Mesh meshO = GLDraw.CreateCube(m_SelectedAxis == RuntimeHandleAxis.XYZ ? m_SelectedColor : Color.white, Vector3.zero, m_CubeScale * m_ScreenScale);
             Graphics.DrawMeshNow(meshO, position, target.rotation);
         }
 

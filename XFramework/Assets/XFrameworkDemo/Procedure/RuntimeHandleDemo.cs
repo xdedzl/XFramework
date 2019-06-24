@@ -20,4 +20,26 @@ public class RuntimeHandleDemo : ProcedureBase
         camera.AddComponent<RuntimeHandle>();
         RuntimeHandle.SetTarget(obj.transform);
     }
+
+    public override void OnEnter()
+    {
+        MonoEvent.Instance.ONGUI += OnGUI;
+    }
+
+    public override void OnExit()
+    {
+        MonoEvent.Instance.ONGUI -= OnGUI;
+    }
+
+    public void OnGUI()
+    {
+        GUIStyle style = new GUIStyle
+        {
+            padding = new RectOffset(10, 10, 10, 10),
+            fontSize = 15,
+            fontStyle = FontStyle.Normal,
+        };
+        GUI.Label(new Rect(0, 0, 200, 80),
+            "运行时手柄,操作和编辑器手柄类似", style);
+    }
 }

@@ -5,7 +5,7 @@ namespace XFramework
     /// <summary>
     /// 此类是为了解决传参类型为Color时不能设置默认值的问题
     /// </summary>
-    public class ColorInt32
+    public static class ColorInt32
     {
         public const int cyan = 16777215;
         public const int clear = 0;
@@ -37,6 +37,21 @@ namespace XFramework
             result[2] = color.b;
             result[3] = color.a;
             return (int)(result[0] << 24 | result[1] << 16 | result[2] << 8 | result[3]);
+        }
+
+        public static int Int32(this Color32 color)
+        {
+            return Color2Int(color);
+        }
+
+        public static int Int32(this Color color)
+        {
+            return Color2Int(color);
+        }
+
+        public static Color32 Color(this int intColor)
+        {
+            return Int2Color(intColor);
         }
     }
 }
