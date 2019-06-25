@@ -120,12 +120,7 @@ namespace XFramework.UI
                 GameObject instPanel = GameObject.Instantiate(Resources.Load(path)) as GameObject;
 
                 // UICore与派生类不一定在一个程序集类，所以不能直接用Type.GetType  TODO : 根据不同平台规定路径
-                Assembly asmb;
-#if UNITY_EDITOR
-                asmb = Assembly.LoadFrom(System.Environment.CurrentDirectory + @"\Library\ScriptAssemblies\Assembly-CSharp.dll");
-#else
-            asmb = Assembly.LoadFrom(Application.dataPath + "/Managed/Assembly-CSharp.dll");
-#endif
+                Assembly asmb = Assembly.Load("Assembly-CSharp");
                 Type type = asmb.GetType(uiname);
                 BasePanel basePanel = (BasePanel)Activator.CreateInstance(type);
                 basePanel.Init(instPanel, uiname);

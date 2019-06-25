@@ -14,48 +14,6 @@ namespace XFramework
         /// </summary>
         private Dictionary<Camera, GraphicsMono> m_GraphicsDic;
 
-        /// <summary>
-        /// 用于画线的材质
-        /// </summary>
-        public Material LineMaterial
-        {
-            get
-            {
-                if (m_LineMaterial == null)
-                    m_LineMaterial = new Material(Shader.Find("RunTimeHandles/VertexColor"));
-                return m_LineMaterial;
-            }
-        }
-        private Material m_LineMaterial;
-
-        /// <summary>
-        /// 用于面片的材质
-        /// </summary>
-        public Material QuadeMaterial
-        {
-            get
-            {
-                if (m_QuadeMaterial == null)
-                    m_QuadeMaterial = new Material(Shader.Find("RunTimeHandles/VertexColor"));
-                return m_QuadeMaterial;
-            }
-        }
-        private Material m_QuadeMaterial;
-
-        /// <summary>
-        /// 用于画三维物体的材质
-        /// </summary>
-        public Material ShapeMaterial
-        {
-            get
-            {
-                if (m_ShapeMaterial == null)
-                    m_ShapeMaterial = new Material(Shader.Find("RunTimeHandles/Shape"));
-                return m_ShapeMaterial;
-            }
-        }
-        private Material m_ShapeMaterial;
-
         public GraphicsManager()
         {
             m_GraphicsDic = new Dictionary<Camera, GraphicsMono>();
@@ -167,9 +125,6 @@ namespace XFramework
         public void Shutdown()
         {
             m_GraphicsDic.Clear();
-            m_LineMaterial = null;
-            m_QuadeMaterial = null;
-            m_ShapeMaterial = null;
         }
 
         public void Update(float elapseSeconds, float realElapseSeconds)

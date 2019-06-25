@@ -14,6 +14,48 @@ using UnityEngine;
 public class MeshManager : IGameModule
 {
     /// <summary>
+    /// 用于画线的材质
+    /// </summary>
+    public Material LineMaterial
+    {
+        get
+        {
+            if (m_LineMaterial == null)
+                m_LineMaterial = new Material(Shader.Find("RunTimeHandles/VertexColor"));
+            return m_LineMaterial;
+        }
+    }
+    private Material m_LineMaterial;
+
+    /// <summary>
+    /// 用于面片的材质
+    /// </summary>
+    public Material QuadeMaterial
+    {
+        get
+        {
+            if (m_QuadeMaterial == null)
+                m_QuadeMaterial = new Material(Shader.Find("RunTimeHandles/VertexColor"));
+            return m_QuadeMaterial;
+        }
+    }
+    private Material m_QuadeMaterial;
+
+    /// <summary>
+    /// 用于画三维物体的材质
+    /// </summary>
+    public Material ShapeMaterial
+    {
+        get
+        {
+            if (m_ShapeMaterial == null)
+                m_ShapeMaterial = new Material(Shader.Find("RunTimeHandles/Shape"));
+            return m_ShapeMaterial;
+        }
+    }
+    private Material m_ShapeMaterial;
+
+    /// <summary>
     /// 创建圆柱形区域
     /// </summary>
     /// <param name="id"> 命令ID,用作字典key </param>
@@ -27,7 +69,7 @@ public class MeshManager : IGameModule
 
         Game.GraphicsModule.AddGraphics(Camera.main, () =>
         {
-            Game.GraphicsModule.ShapeMaterial.SetPass(0);
+            ShapeMaterial.SetPass(0);
             Graphics.DrawMeshNow(mesh, Matrix4x4.identity);
         });
     }
@@ -51,7 +93,7 @@ public class MeshManager : IGameModule
 
         Game.GraphicsModule.AddGraphics(Camera.main, () =>
         {
-            Game.GraphicsModule.ShapeMaterial.SetPass(0);
+            ShapeMaterial.SetPass(0);
             Graphics.DrawMeshNow(meshUp, Matrix4x4.identity);
             Graphics.DrawMeshNow(meshDown, Matrix4x4.identity);
         });
@@ -70,7 +112,7 @@ public class MeshManager : IGameModule
 
         Game.GraphicsModule.AddGraphics(Camera.main, () =>
         {
-            Game.GraphicsModule.ShapeMaterial.SetPass(0);
+            ShapeMaterial.SetPass(0);
             Graphics.DrawMeshNow(mesh, Matrix4x4.identity);
         });
     }
@@ -91,7 +133,7 @@ public class MeshManager : IGameModule
 
         Game.GraphicsModule.AddGraphics(Camera.main, () =>
         {
-            Game.GraphicsModule.ShapeMaterial.SetPass(0);
+            ShapeMaterial.SetPass(0);
             Graphics.DrawMeshNow(mesh, Matrix4x4.identity);
         });
     }
@@ -111,7 +153,7 @@ public class MeshManager : IGameModule
 
         Game.GraphicsModule.AddGraphics(Camera.main, () =>
         {
-            Game.GraphicsModule.ShapeMaterial.SetPass(0);
+            ShapeMaterial.SetPass(0);
             Graphics.DrawMeshNow(mesh, Matrix4x4.identity);
         });
     }
@@ -141,7 +183,7 @@ public class MeshManager : IGameModule
 
         Game.GraphicsModule.AddGraphics(Camera.main, () =>
         {
-            Game.GraphicsModule.ShapeMaterial.SetPass(0);
+            ShapeMaterial.SetPass(0);
             Graphics.DrawMeshNow(mesh0, Matrix4x4.identity);
             Graphics.DrawMeshNow(mesh1, Matrix4x4.identity);
         });
@@ -170,7 +212,7 @@ public class MeshManager : IGameModule
 
         Game.GraphicsModule.AddGraphics(Camera.main, () =>
         {
-            Game.GraphicsModule.ShapeMaterial.SetPass(0);
+            ShapeMaterial.SetPass(0);
             Graphics.DrawMeshNow(mesh, Matrix4x4.identity);
         });
     }
@@ -183,5 +225,8 @@ public class MeshManager : IGameModule
 
     public void Shutdown()
     {
+        m_LineMaterial = null;
+        m_QuadeMaterial = null;
+        m_ShapeMaterial = null;
     }
 }

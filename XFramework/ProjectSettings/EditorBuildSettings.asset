@@ -5,10 +5,7 @@ EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
   m_Scenes:
-  - enabled: 0
-    path: Assets/XFrameworkDemo/Scenes/UIFrameworkDemo.unity
-    guid: aec93bd7fb01d9b4fb31c74c87db5f9f
   - enabled: 1
-    path: Assets/Scenes/Test.unity
-    guid: 511cca66adfca834d8dc61e626aaa7ea
+    path: Assets/XFrameworkDemo/Scenes/MixExample.unity
+    guid: 0e13c96e1431d6545a3c92d82e336c8b
   m_configObjects: {}

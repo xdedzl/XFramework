@@ -29,7 +29,7 @@ public class GraphicsTest : ProcedureBase
             Mesh mesh = GameObject.CreatePrimitive(PrimitiveType.Cube).GetComponent<MeshFilter>().mesh;
             Game.GraphicsModule.AddGraphics(Camera.main, () =>
             {
-                Game.GraphicsModule.LineMaterial.SetPass(0);
+                Game.MeshModule.LineMaterial.SetPass(0);
                 GL.Begin(GL.LINES);
                 GL.Color(Color.red);
                 GL.Vertex(Vector3.zero);

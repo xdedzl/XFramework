@@ -3,11 +3,9 @@ Temp
 obj
 Logs
 UnityPackageManager
-xdedzl.csproj
-xdedzl.Editor.csproj
-xdedzl.sln
 .vs
 *.csproj
+*.sln
 Assets/XFrameworkTest
 Assets/XFrameworkTest.meta
 Assets/ResourcesAB/NotCommit
