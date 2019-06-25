@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System;
 using XFramework.UI;
 
-namespace Quick.Code
+namespace XFramework.Editor
 {
     public class GenerateCodeWindow : EditorWindow
     {

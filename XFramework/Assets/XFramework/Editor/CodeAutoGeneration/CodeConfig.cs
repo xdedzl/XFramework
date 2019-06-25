@@ -2,7 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 
-namespace Quick.Code
+namespace XFramework.Editor
 {
     public class CodeConfig
     {
