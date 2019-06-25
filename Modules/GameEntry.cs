@@ -46,7 +46,7 @@ namespace XFramework
             {
                 if (module.GetType() == moduleType)
                 {
-                    UnityEngine.Debug.LogError($"[{moduleType.Name}]模块已存在，请勿重复添加");
+                    UnityEngine.Debug.LogWarning($"[{moduleType.Name}]模块已存在，请勿重复添加");
                     return (T)module;
                 }
             }
