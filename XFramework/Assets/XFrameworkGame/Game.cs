@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using XFramework;
 using XFramework.Pool;
 using XFramework.Tasks;
@@ -10,20 +10,24 @@ using XFramework.Net;
 public class Game : MonoBehaviour
 {
     // 框架模块
-    public static ProcedureManager ProcedureModule { get; private set; }
+    // Start0
     public static FsmManager FsmModule { get; private set; }
-    public static ObjectPoolManager PoolModule { get; private set; }
-    public static GameObjectPoolManager GameObjPoolMoudle { get; private set; }
-    public static ResourceManager ResModule { get; private set; }
     public static GraphicsManager GraphicsModule { get; private set; }
+    public static MessengerManager MessengerModule { get; private set; }
     public static DataSubjectManager ObserverModule { get; private set; }
-    public static Messenger MessengerModule { get; private set; }
+    public static ProcedureManager ProcedureModule { get; private set; }
+    public static ResourceManager ResModule { get; private set; }
     public static TaskManager TaskModule { get; private set; }
+    public static GameObjectPoolManager GameObjectPool { get; private set; }
+    public static ObjectPoolManager ObjectPool { get; private set; }
     public static NetManager NetModule { get; private set; }
+    // End0
 
     // 框架扩展模块
+    // Start1
     public static MeshManager MeshModule { get; private set; }
     public static UIHelper UIModule { get; private set; }
+    // End1
 
     // 初始流程
     public string TypeName;
@@ -35,7 +39,7 @@ public class Game : MonoBehaviour
             DestroyImmediate(this);
             return;
         }
-        
+
         InitAllModel();
         Refresh();
 
@@ -64,19 +68,20 @@ public class Game : MonoBehaviour
     /// </summary>
     public void InitAllModel()
     {
-        FsmModule = GameEntry.AddMoudle<FsmManager>();
-        ProcedureModule = GameEntry.AddMoudle<ProcedureManager>();
-        PoolModule = GameEntry.AddMoudle<ObjectPoolManager>();
-        GameObjPoolMoudle = GameEntry.AddMoudle<GameObjectPoolManager>();
-        ResModule = GameEntry.AddMoudle<ResourceManager>();
-        GraphicsModule = GameEntry.AddMoudle<GraphicsManager>();
-        ObserverModule = GameEntry.AddMoudle<DataSubjectManager>();
-        MessengerModule = GameEntry.AddMoudle<Messenger>();
-        TaskModule = GameEntry.AddMoudle<TaskManager>();
-        NetModule = GameEntry.AddMoudle<NetManager>();
-
-        MeshModule = GameEntry.AddMoudle<MeshManager>();
-        UIModule = GameEntry.AddMoudle<UIHelper>();
+        // Start2
+        FsmModule = GameEntry.AddModule<FsmManager>();
+        GraphicsModule = GameEntry.AddModule<GraphicsManager>();
+        MessengerModule = GameEntry.AddModule<MessengerManager>();
+        ObserverModule = GameEntry.AddModule<DataSubjectManager>();
+        ProcedureModule = GameEntry.AddModule<ProcedureManager>();
+        ResModule = GameEntry.AddModule<ResourceManager>();
+        TaskModule = GameEntry.AddModule<TaskManager>();
+        GameObjectPool = GameEntry.AddModule<GameObjectPoolManager>();
+        ObjectPool = GameEntry.AddModule<ObjectPoolManager>();
+        NetModule = GameEntry.AddModule<NetManager>();
+        MeshModule = GameEntry.AddModule<MeshManager>();
+        UIModule = GameEntry.AddModule<UIHelper>();
+        // End2
     }
 
     /// <summary>
@@ -84,19 +89,20 @@ public class Game : MonoBehaviour
     /// </summary>
     public void Refresh()
     {
+        // Start3
         FsmModule = GameEntry.GetModule<FsmManager>();
-        ProcedureModule = GameEntry.GetModule<ProcedureManager>();
-        PoolModule = GameEntry.GetModule<ObjectPoolManager>();
-        GameObjPoolMoudle = GameEntry.GetModule<GameObjectPoolManager>();
-        ResModule = GameEntry.GetModule<ResourceManager>();
         GraphicsModule = GameEntry.GetModule<GraphicsManager>();
+        MessengerModule = GameEntry.GetModule<MessengerManager>();
         ObserverModule = GameEntry.GetModule<DataSubjectManager>();
-        MessengerModule = GameEntry.GetModule<Messenger>();
+        ProcedureModule = GameEntry.GetModule<ProcedureManager>();
+        ResModule = GameEntry.GetModule<ResourceManager>();
         TaskModule = GameEntry.GetModule<TaskManager>();
+        GameObjectPool = GameEntry.GetModule<GameObjectPoolManager>();
+        ObjectPool = GameEntry.GetModule<ObjectPoolManager>();
         NetModule = GameEntry.GetModule<NetManager>();
-
         MeshModule = GameEntry.GetModule<MeshManager>();
         UIModule = GameEntry.GetModule<UIHelper>();
+        // End3
     }
 
     public static void ShutdownModule<T>() where T : IGameModule
@@ -106,7 +112,7 @@ public class Game : MonoBehaviour
 
     public static void StartModule<T>() where T : IGameModule
     {
-        GameEntry.AddMoudle<T>();
+        GameEntry.AddModule<T>();
     }
 
     /// <summary>

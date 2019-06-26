@@ -229,7 +229,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f8f9c960653038b4c9f657cb4437353c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  TypeName: MeshTest
+  TypeName: EmptyTest
 --- !u!1 &741181218
 GameObject:
   m_ObjectHideFlags: 0
