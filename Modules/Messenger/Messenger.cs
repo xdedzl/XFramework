@@ -8,7 +8,7 @@ namespace XFramework
     /// 消息类 全局类消息
     /// </summary>
     //=====================================================================================.
-    public class Messenger : IGameModule
+    public class MessengerManager : IGameModule
     {
         public delegate void Callback();
 

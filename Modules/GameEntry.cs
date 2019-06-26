@@ -39,7 +39,7 @@ namespace XFramework
             return null;
         }
 
-        public static T AddMoudle<T>() where T : IGameModule
+        public static T AddModule<T>() where T : IGameModule
         {
             Type moduleType = typeof(T);
             foreach (var module in m_GameModules)
