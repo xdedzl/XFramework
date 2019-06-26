@@ -6,6 +6,7 @@ using XFramework.Net;
 
 /// <summary>
 /// 这个类挂在初始场景中,是整个游戏的入口
+/// StartX和EndX为刷新代码时的标志位
 /// </summary>
 public class Game : MonoBehaviour
 {

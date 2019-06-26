@@ -14,12 +14,13 @@ using XFramework.Pool;
 /// </summary>
 public class GenerateGame
 {
-    string script = "";
+    // 需要忽略的模块
     public static Type[] ingoreTypes = new Type[] {
         typeof(UIMgrDicType),
         typeof(UIMgrStackType),
     };
 
+    // 自定义模块属性名
     public static Dictionary<Type, string> filedNames = new Dictionary<Type, string>()
     {
         { typeof(DataSubjectManager), "ObserverModule" },
@@ -28,6 +29,7 @@ public class GenerateGame
         { typeof(GameObjectPoolManager), "GameObjectPool" },
     };
 
+    // 被添加的模块类型
     public static List<Type> modules = new List<Type>();
 
     [MenuItem("XFramework/RefreshGameScripts")]
@@ -40,7 +42,7 @@ public class GenerateGame
             Debug.LogWarning("文件夹名被修改");
             return;
         }
-        string script = null;
+
         string scriptPath = null;
         foreach (var item in info.GetFiles("*.cs", SearchOption.AllDirectories))
         {
@@ -52,7 +54,7 @@ public class GenerateGame
 
         if (string.IsNullOrEmpty(scriptPath))
             Debug.LogWarning("没有Game脚本或不在指定位置");
-        script = File.ReadAllText(scriptPath);
+        string script = File.ReadAllText(scriptPath);
 
         // 替换框架模块的属性定义
         script = Replace(script, "// Start0", "// End0", "\n" + GenerateAttribute(Assembly.Load("XFrameworkRuntime")) + "\t");
@@ -85,6 +87,7 @@ public class GenerateGame
         Debug.Log("更新成功");
     }
 
+    // 替换字符串
     private static string Replace(string target, string startFlag, string endFlag, string newValue)
     {
         string searchPattern = startFlag;
@@ -100,6 +103,7 @@ public class GenerateGame
         return target.Insert(startIndex, newValue);
     }
 
+    // 生成属性
     private static string GenerateAttribute(Assembly assm)
     {
         string attributes = "";
