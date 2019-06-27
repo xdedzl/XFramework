@@ -1,5 +1,4 @@
 ﻿using UnityEngine;
-using DG.Tweening;
 using XFramework.UI;
 public class AdjustPanel : BasePanel {
     protected CanvasGroup canvasGroup;
@@ -16,7 +15,7 @@ public class AdjustPanel : BasePanel {
     {
         if (canvasGroup == null)
             canvasGroup = transform.GetComponent<CanvasGroup>();
-        rect.DOScaleY(1.0f, 0.1f);
+        gameObject.SetActive(true);
         canvasGroup.interactable = true;
         transform.SetAsLastSibling();
     }
@@ -26,7 +25,7 @@ public class AdjustPanel : BasePanel {
     /// </summary>
     public override void OnClose()
     {
-        rect.DOScaleY(0, 0.1f);
+        gameObject.SetActive(false);
         canvasGroup.interactable = false;
     }
 }

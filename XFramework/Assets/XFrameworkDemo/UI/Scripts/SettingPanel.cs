@@ -1,5 +1,4 @@
 ﻿using UnityEngine;
-using DG.Tweening;
 using XFramework.UI;
 using System.Text.RegularExpressions;
 
@@ -45,11 +44,11 @@ public class SettingPanel : BasePanel {
 
     public override void OnOpen()
     {
-        rect.DOScaleY(1.0f, 0.1f);
+        gameObject.SetActive(true);
     }
 
     public override void OnClose()
     {
-        rect.DOScaleY(0.0f, 0.1f);
+        gameObject.SetActive(false);
     }
 }

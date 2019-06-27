@@ -1,5 +1,4 @@
 ﻿using UnityEngine;
-using DG.Tweening;
 using System.Threading.Tasks;
 using System;
 using XFramework.UI;
@@ -41,7 +40,7 @@ public class CreatePanel : BasePanel {
     {
         if (canvasGroup == null)
             canvasGroup = transform.GetComponent<CanvasGroup>();
-        rect.DOScaleY(1.0f, 0.1f);
+        gameObject.SetActive(true);
         canvasGroup.interactable = true;
         transform.SetAsLastSibling();
     }
@@ -51,7 +50,7 @@ public class CreatePanel : BasePanel {
     /// </summary>
     public override void OnClose()
     {
-        rect.DOScaleY(0, 0.1f);
+        gameObject.SetActive(false);
         canvasGroup.interactable = false;
     }
 

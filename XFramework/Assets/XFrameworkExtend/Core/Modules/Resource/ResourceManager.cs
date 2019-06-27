@@ -219,6 +219,9 @@ namespace XFramework
 
 #if !AB
 
+        /// <summary>
+        /// 利用AssetDataBase加载资源
+        /// </summary>
         private T LoadWithADB<T>(string path) where T : Object
         {
             string suffix = ""; // 后缀
@@ -231,11 +234,11 @@ namespace XFramework
                     suffix = ".mat";
                     break;
                 case "Texture":
-                    return LoadTexture<T>("Assets/ResourcesAB/" + path);
+                    return LoadTexture<T>(path);
                 case "Texture2D":
-                    return LoadTexture<T>("Assets/ResourcesAB/" + path);
+                    return LoadTexture<T>(path);
             }
-            return AssetDatabase.LoadAssetAtPath<T>("Assets/ResourcesAB/" + path + suffix);
+            return AssetDatabase.LoadAssetAtPath<T>(path + suffix);
         }
 
         /// <summary>
@@ -252,9 +255,14 @@ namespace XFramework
             return texture;
         }
 
+        /// <summary>
+        /// 加载一个文件夹下的所有资源
+        /// </summary>
         private T[] LoadAllWithADB<T>(string path) where T : Object
         {
-            return AssetDatabase.LoadAllAssetsAtPath(path).Convert<T>();
+            Debug.LogError("暂时不能使用AssetDataBase加载一个文件下的所有资源");
+            return null;
+            //return AssetDatabase.LoadAllAssetsAtPath(path).Convert<T>();
         }
 
 #endif

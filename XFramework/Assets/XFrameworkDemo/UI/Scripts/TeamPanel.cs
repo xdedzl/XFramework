@@ -1,5 +1,4 @@
 ﻿using UnityEngine;
-using DG.Tweening;
 using XFramework.UI;
 
 /// <summary>
@@ -28,13 +27,13 @@ public class TeamPanel : BasePanel {
         transform.SetSiblingIndex(createPanel.teamBtn.transform.GetSiblingIndex() + 1);
         if (canvasGroup == null)
             canvasGroup = transform.GetComponent<CanvasGroup>();
-        rect.DOSizeDelta(rectSize, 0.3f); // 进场动画
+        gameObject.SetActive(true);
         canvasGroup.interactable = true;
     }
 
     public override void OnClose()
     {
-        rect.DOSizeDelta(new Vector2(rectSize.x, 1.5f), 0.3f); // 退出动画
+        gameObject.SetActive(false);
         canvasGroup.interactable = false;
     }
 }

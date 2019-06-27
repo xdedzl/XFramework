@@ -6,7 +6,6 @@
 // ==========================================
 using System.Collections.Generic;
 using UnityEngine;
-using DG.Tweening;
 using UnityEngine.UI;
 using UnityEngine.Events;
 using XFramework.UI;
@@ -52,7 +51,7 @@ public class ButtonListPanel : BasePanel {
     {
         if (canvasGroup == null)
             canvasGroup = transform.GetComponent<CanvasGroup>();
-        rect.DOScaleY(1.0f, 0.1f);
+        gameObject.SetActive(true);
         canvasGroup.interactable = true;
         transform.SetAsLastSibling();
     }
