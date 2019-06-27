@@ -13,10 +13,6 @@ public class FreeCamera : MonoBehaviour
     /// </summary>
     public float moveSpeed = 50;
     /// <summary>
-    /// 是否发生移动
-    /// </summary>
-    private bool isMove = false;
-    /// <summary>
     /// 按住Shift加速倍数
     /// </summary>
     private int shiftRate;
