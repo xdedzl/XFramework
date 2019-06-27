@@ -150,7 +150,7 @@ namespace XFramework
                 if (!m_ABDic.ContainsKey(key))
                 {
                     AssetBundle dependAb = GetAssetBundle(key);
-                    m_ABDic.Add(key, dependAb);
+                    //m_ABDic.Add(key, dependAb);
                 }
             }
 
