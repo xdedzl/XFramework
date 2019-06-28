@@ -136,6 +136,15 @@ namespace XFramework
 
         #endregion
 
+        #region Color
+
+        public static Color Alpha(this Color color, float a)
+        {
+            return new Color(color.r, color.g, color.b, a);
+        }
+
+        #endregion
+
         #region UI
 
         /// <summary>

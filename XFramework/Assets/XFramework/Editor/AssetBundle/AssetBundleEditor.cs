@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.UIElements;
+using UnityEditor.UIElements;
 
 /// <summary>
 /// 打包 AssetBundle
@@ -16,63 +18,65 @@ public class AssetBundleEditor : EditorWindow
         AllDirectiony,  // 所有子文件夹单独打包
     }
 
+    public struct PackInfo
+    {
+        public string path;
+        public PackOption option;
+    }
+
     [MenuItem("XFramework/ABWindiow")]
     static void BuildAssetBundle()
     {
         GetWindow(typeof(AssetBundleEditor)).Show();
     }
 
+    private List<PackInfo> m_PackInfos;
 
-    private List<string> m_Paths;
-    private List<PackOption> m_Options;
     private string OutPutPath;
 
-    private void Awake()
+    private VisualElement m_RootContainter;
+    private ScrollView ABItemList;
+
+    private void OnEnable()
     {
-        m_Paths = new List<string>();
-        m_Options = new List<PackOption>();
+        m_PackInfos = new List<PackInfo>();
         OutPutPath = Application.streamingAssetsPath + "/AssetBundles";
-    }
 
-    private void OnGUI()
-    {
-        using (new EditorGUILayout.VerticalScope()) 
+        rootVisualElement.Add(m_RootContainter = new VisualElement
         {
-            using (new EditorGUILayout.HorizontalScope())
+            style =
             {
-                // 菜单栏
-                MenuBar();
-            }
+                flexDirection = FlexDirection.Column,
 
-            using (new EditorGUILayout.VerticalScope())
-            {
-                for (int i = 0; i < m_Paths.Count; i++)
-                {
-                    using (new EditorGUILayout.HorizontalScope())
-                    {
-                        m_Paths[i] = EditorGUILayout.TextField("", m_Paths[i]);
-                        m_Options[i] = (PackOption)EditorGUILayout.EnumPopup(m_Options[i]);
-                        if (GUILayout.Button("删除"))
-                        {
-                            m_Paths.RemoveAt(i);
-                            m_Options.RemoveAt(i);
-                        }
-                    }
-                }
-            }
+                backgroundColor = Color.blue,
+                opacity = 0.2f,
 
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                // 底边栏
-                BottomMenu();
+                paddingBottom = 5,
+                paddingLeft = 5,
+                paddingRight = 5,
+                paddingTop = 5,
+                fontSize = 13,
             }
-        }
+        });
+
+        m_RootContainter.Add(MenuBar());
+        m_RootContainter.Add(ABItemList = new ScrollView());
+        m_RootContainter.Add(BottomMenu());
+
     }
 
     // 菜单栏
-    private void MenuBar()
+    private VisualElement MenuBar()
     {
-        if (GUILayout.Button("添加AB包"))
+        VisualElement menuBar = new VisualElement
+        {
+            style =
+            {
+                flexDirection = FlexDirection.Row,
+            }
+        };
+
+        Button addAB = new Button(() =>
         {
             foreach (var item in AssetDatabase.LoadAllAssetsAtPath("Assets/Terrains"))
             {
@@ -83,21 +87,78 @@ public class AssetBundleEditor : EditorWindow
             {
                 foreach (var item in Selection.objects)
                 {
-                    m_Paths.Add(AssetDatabase.GetAssetPath(item));
-                    m_Options.Add(PackOption.AllFiles);
+                    PackInfo packInfo = new PackInfo
+                    {
+                        path = AssetDatabase.GetAssetPath(item),
+                        option = PackOption.AllFiles,
+                    };
+                    m_PackInfos.Add(packInfo);
+
+                    // 添加一个AB包条目
+                    VisualElement abitem = new VisualElement
+                    {
+                        style =
+                        {
+                            flexDirection = FlexDirection.Row,
+                        }
+                    };
+
+                    // 路径
+                    TextElement textElement = new TextElement();
+                    textElement.text = packInfo.path;
+                    textElement.style.color = Color.blue;
+                    textElement.style.width = 1000;
+
+                    // 打包方式
+                    EnumField enumField = new EnumField(packInfo.option);
+                    enumField.RegisterValueChangedCallback((value) =>
+                    {
+                        packInfo.option = (PackOption)value.newValue;
+                    });
+                    enumField.style.marginLeft = 10;
+                    enumField.style.width = 100;
+
+                    // 删除路径
+                    Button deleteBtn = new Button(() =>
+                    {
+                        m_PackInfos.Remove(packInfo);
+                        ABItemList.Remove(abitem);
+                    });
+                    deleteBtn.text = "删除";
+                    deleteBtn.style.marginLeft = 5;
+
+                    abitem.Add(textElement);
+                    abitem.Add(enumField);
+                    abitem.Add(deleteBtn);
+
+                    ABItemList.Add(abitem);
                 }
             }
             else
             {
                 Debug.LogWarning("请选择要添加的文件夹");
             }
-        }
+
+        });
+        addAB.text = "添加AB包";
+
+        menuBar.Add(addAB);
+
+        return menuBar;
     }
 
     // 底边栏
-    private void BottomMenu()
+    private VisualElement BottomMenu()
     {
-        if (GUILayout.Button("删除AB包"))
+        VisualElement bottomMenu = new VisualElement
+        {
+            style =
+            {
+                flexDirection = FlexDirection.Row,
+            }
+        };
+
+        Button deleteBtn = new Button(() =>
         {
             if (!Directory.Exists(OutPutPath))
             {
@@ -108,9 +169,11 @@ public class AssetBundleEditor : EditorWindow
                     f.Delete();
                 }
             }
-        }
+        });
+        deleteBtn.text = "删除AB包";
 
-        if (GUILayout.Button("标记"))
+        // 标记
+        Button markBtn = new Button(() =>
         {
             // 强制删除所有AssetBundle名称  
             string[] abNames = AssetDatabase.GetAllAssetBundleNames();
@@ -119,14 +182,16 @@ public class AssetBundleEditor : EditorWindow
                 AssetDatabase.RemoveAssetBundleName(abNames[i], true);
             }
 
-            for (int i = 0; i < m_Paths.Count; i++)
+            foreach (var item in m_PackInfos)
             {
-                DirectoryInfo info = new DirectoryInfo(Application.dataPath.Replace("Assets", "/") + m_Paths[i]);
-                MarkDirectory(info, m_Options[i]);
+                DirectoryInfo info = new DirectoryInfo(Application.dataPath.Replace("Assets", "/") + item.path);
+                MarkDirectory(info, item.option);
             }
-        }
+        });
+        markBtn.text = "标记";
+        markBtn.style.marginLeft = 5;
 
-        if (GUILayout.Button("打包"))
+        Button packBtn = new Button(() =>
         {
             if (!Directory.Exists(OutPutPath))
             {
@@ -135,7 +200,15 @@ public class AssetBundleEditor : EditorWindow
             BuildPipeline.BuildAssetBundles(OutPutPath, BuildAssetBundleOptions.None, EditorUserBuildSettings.activeBuildTarget);
             AssetDatabase.Refresh();
             Debug.Log("BuildAssetBundles Complete");
-        }
+        });
+        packBtn.text = "打包";
+        packBtn.style.marginLeft = 5;
+
+        bottomMenu.Add(deleteBtn);
+        bottomMenu.Add(markBtn);
+        bottomMenu.Add(packBtn);
+
+        return bottomMenu;
     }
 
     /// <summary>
@@ -169,8 +242,6 @@ public class AssetBundleEditor : EditorWindow
                 }
                 break;
         }
-
-
 
         // 标记
         int total = files.Length;
