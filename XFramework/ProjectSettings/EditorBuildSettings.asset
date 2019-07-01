@@ -6,6 +6,6 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/XFrameworkDemo/Scenes/MixExample.unity
+    path: Assets/XFramework/Demo/Scenes/MixExample.unity
     guid: 0e13c96e1431d6545a3c92d82e336c8b
   m_configObjects: {}
