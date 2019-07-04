@@ -124,6 +124,28 @@ namespace XFramework
             return GetContainer(entityName)?.GetEntities();
         }
 
+        /// <summary>
+        /// 清除未在使用的实体
+        /// </summary>
+        /// <param name="deleteUselessContainer">是否删除不含实体的容器</param>
+        public void Clean(bool deleteUselessContainer = false)
+        {
+            List<string> keys = new List<string>();
+            foreach (var item in m_EntityContainerDic.Values)
+            {
+                item.Clean();
+                if (item.Count <= 0 && deleteUselessContainer)
+                    keys.Add(item.name);
+            }
+            if (deleteUselessContainer)
+            {
+                foreach (var item in keys)
+                {
+                    m_EntityContainerDic.Remove(item);
+                }
+            }
+        }
+
         #region 接口实现
 
         public int Priority => 10000;

@@ -12,6 +12,7 @@ public class Game : MonoBehaviour
 {
     // 框架模块
     // Start0
+    public static EntityManager EntityModule { get; private set; }
     public static FsmManager FsmModule { get; private set; }
     public static GraphicsManager GraphicsModule { get; private set; }
     public static MessengerManager MessengerModule { get; private set; }
@@ -70,6 +71,7 @@ public class Game : MonoBehaviour
     public void InitAllModel()
     {
         // Start2
+        EntityModule = GameEntry.AddModule<EntityManager>();
         FsmModule = GameEntry.AddModule<FsmManager>();
         GraphicsModule = GameEntry.AddModule<GraphicsManager>();
         MessengerModule = GameEntry.AddModule<MessengerManager>();
@@ -91,6 +93,7 @@ public class Game : MonoBehaviour
     public void Refresh()
     {
         // Start3
+        EntityModule = GameEntry.GetModule<EntityManager>();
         FsmModule = GameEntry.GetModule<FsmManager>();
         GraphicsModule = GameEntry.GetModule<GraphicsManager>();
         MessengerModule = GameEntry.GetModule<MessengerManager>();
