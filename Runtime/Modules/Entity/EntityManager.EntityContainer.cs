@@ -15,23 +15,22 @@ namespace XFramework
             /// <summary>
             /// 容器名
             /// </summary>
-            private string m_Name;
+            public readonly string name;
             /// <summary>
             /// 容器类型
             /// </summary>
-            private Type m_Type;
+            public readonly Type type;
+
             /// <summary>
             /// 实体列表
             /// </summary>
             private List<Entity> m_Entities;
             /// <summary>
-            /// 模板
-            /// </summary>
-            //private GameObject m_Template;
-            /// <summary>
             /// 对象池
             /// </summary>
-            private GameObjectPool m_Pool;
+            private GameObject m_Template;
+
+            public int Count { get { return m_Entities.Count; } }
 
             public EntityContainer(Type type, GameObject template)
             {
@@ -40,10 +39,9 @@ namespace XFramework
                     throw new Exception("类型传入错误，必须是Entity的子类");
                 }
 
-                m_Type = type;
+                this.type = type;
+                m_Template = template;
                 m_Entities = new List<Entity>();
-                //m_Template = template;
-                m_Pool = new GameObjectPool(template, 0);
             }
 
             /// <summary>
@@ -54,12 +52,11 @@ namespace XFramework
             /// <returns></returns>
             public Entity Instantiate(int id, Vector3 pos, Quaternion quaternion)
             {
-                GameObject gameObject = m_Pool.Allocate().obj;
-                gameObject.transform.position = pos;
-                gameObject.transform.rotation = quaternion;
+                GameObject gameObject = UnityEngine.Object.Instantiate(m_Template, pos, quaternion);
+                //gameObject.transform.position = pos;
+                //gameObject.transform.rotation = quaternion;
 
-                //Entity entity = Activator.CreateInstance(m_Type, (object)gameObject) as Entity;
-                Entity entity = gameObject.AddComponent(m_Type) as Entity;
+                Entity entity = gameObject.AddComponent(type) as Entity;
                 entity.Id = id;
                 entity.OnInit();
                 m_Entities.Add(entity);
@@ -74,6 +71,17 @@ namespace XFramework
                 return m_Entities.ToArray();
             }
 
+            public void Clean()
+            {
+
+                
+            }
+
+            /// <summary>
+            /// 轮询
+            /// </summary>
+            /// <param name="elapseSeconds">逻辑运行时间</param>
+            /// <param name="realElapseSeconds">实际运行时间</param>
             public void OnUpdate(float elapseSeconds, float realElapseSeconds)
             {
                 foreach (var item in m_Entities)

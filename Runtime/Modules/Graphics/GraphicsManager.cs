@@ -14,6 +14,46 @@ namespace XFramework
         /// </summary>
         private Dictionary<Camera, GraphicsMono> m_GraphicsDic;
 
+        private Material m_InternalColoredMat;
+        /// <summary>
+        /// 内置shader，可用于画线
+        /// </summary>
+        public Material InternalColoredMat
+        {
+            get
+            {
+                m_InternalColoredMat = m_InternalColoredMat ?? new Material(Shader.Find("Hidden/Internal-Colored"));
+                return m_InternalColoredMat;
+            }
+        }
+
+        private Material m_InternalClearMat;
+        /// <summary>
+        /// 内置shader
+        /// </summary>
+        public Material InternalClearMat
+        {
+            get
+            {
+                m_InternalClearMat = m_InternalClearMat ?? new Material(Shader.Find("Hidden/InternalClear"));
+                return m_InternalClearMat;
+            }
+        }
+
+        private Material m_InternalErrorMat;
+        /// <summary>
+        /// 内置shader
+        /// </summary>
+        public Material InternalErrorMat
+        {
+            get
+            {
+                m_InternalErrorMat = m_InternalErrorMat ?? new Material(Shader.Find("Hidden/InternalErrorShader"));
+                return m_InternalErrorMat;
+            }
+        }
+
+
         public GraphicsManager()
         {
             m_GraphicsDic = new Dictionary<Camera, GraphicsMono>();

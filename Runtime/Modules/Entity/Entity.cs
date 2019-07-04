@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using XFramework.Pool;
 
 namespace XFramework
 {
@@ -8,6 +9,7 @@ namespace XFramework
     public abstract class Entity : MonoBehaviour, IEntity
     {
         public int Id;
+
         /// <summary>
         /// 初始化
         /// </summary>
@@ -20,10 +22,6 @@ namespace XFramework
         /// 隐藏
         /// </summary>
         public virtual void OnHide() { }
-        /// <summary>
-        /// 被回收
-        /// </summary>
-        public virtual void OnRecycle() { }
         /// <summary>
         /// 附加子实体
         /// </summary>
