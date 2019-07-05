@@ -51,7 +51,7 @@ namespace XFramework
         /// 连接两个数组的第一维返回一个新数组
         /// </summary>
         /// <typeparam name="T"></typeparam>
-        public static T[,] Concat0<T>(this T[,] array_0, T[,] array_1)
+        public static T[,] Concat1<T>(this T[,] array_0, T[,] array_1)
         {
             if (array_0.GetLength(0) != array_1.GetLength(0))
             {
@@ -78,7 +78,7 @@ namespace XFramework
         /// <summary>
         /// 连接两个数组的第二位返回一个新数组
         /// </summary>
-        public static T[,] Concat1<T>(this T[,] array_0, T[,] array_1)
+        public static T[,] Concat0<T>(this T[,] array_0, T[,] array_1)
         {
             if (array_0.GetLength(1) != array_1.GetLength(1))
             {
@@ -123,6 +123,139 @@ namespace XFramework
                 for (int j = 0; j < length_1; j++)
                 {
                     ret[i, j] = array[i + base_0, j + base_1];
+                }
+            }
+            return ret;
+        }
+
+        /// <summary>
+        /// 拼接三维数组
+        /// </summary>
+        public static T[,,] Concat0<T>(this T[,,] array_0, T[,,] array_1)
+        {
+            if (array_0.GetLength(1) != array_1.GetLength(1) || array_0.GetLength(2) != array_1.GetLength(2))
+            {
+                throw new System.Exception("两个数组二三维的长度要相等");
+            }
+
+            T[,,] ret = new T[array_0.GetLength(0) + array_1.GetLength(0), array_0.GetLength(1), array_1.GetLength(2)];
+            for (int i = 0; i < array_0.GetLength(0); i++)
+            {
+                for (int j = 0; j < array_0.GetLength(1); j++)
+                {
+                    for (int k = 0; k < array_0.GetLength(2); k++)
+                    {
+                        ret[i, j, k] = array_0[i, j, k];
+                    }
+                }
+            }
+            for (int i = 0; i < array_1.GetLength(0); i++)
+            {
+                for (int j = 0; j < array_1.GetLength(1); j++)
+                {
+                    for (int k = 0; k < array_0.GetLength(2); k++)
+                    {
+                        ret[i + array_0.GetLength(0), j, k] = array_1[i, j, k];
+                    }
+                }
+            }
+            return ret;
+        }
+
+        /// <summary>
+        /// 拼接三维数组
+        /// </summary>
+        public static T[,,] Concat1<T>(this T[,,] array_0, T[,,] array_1)
+        {
+            if (array_0.GetLength(0) != array_1.GetLength(0) || array_0.GetLength(2) != array_1.GetLength(2))
+            {
+                throw new System.Exception("两个数组一三维的长度要相等");
+            }
+
+            T[,,] ret = new T[array_0.GetLength(0), array_0.GetLength(1) + array_1.GetLength(1), array_1.GetLength(2)];
+            for (int i = 0; i < array_0.GetLength(0); i++)
+            {
+                for (int j = 0; j < array_0.GetLength(1); j++)
+                {
+                    for (int k = 0; k < array_0.GetLength(2); k++)
+                    {
+                        ret[i, j, k] = array_0[i, j, k];
+                    }
+                }
+            }
+            for (int i = 0; i < array_1.GetLength(0); i++)
+            {
+                for (int j = 0; j < array_1.GetLength(1); j++)
+                {
+                    for (int k = 0; k < array_0.GetLength(2); k++)
+                    {
+                        ret[i, j + array_0.GetLength(1), k] = array_1[i, j, k];
+                    }
+                }
+            }
+            return ret;
+        }
+
+        /// <summary>
+        /// 拼接三维数组
+        /// </summary>
+        public static T[,,] Concat2<T>(this T[,,] array_0, T[,,] array_1)
+        {
+            if (array_0.GetLength(0) != array_1.GetLength(0) || array_0.GetLength(1) != array_1.GetLength(1))
+            {
+                throw new System.Exception("两个数组一二维的长度要相等");
+            }
+
+            T[,,] ret = new T[array_0.GetLength(0), array_0.GetLength(1), array_1.GetLength(1) + array_1.GetLength(2)];
+            for (int i = 0; i < array_0.GetLength(0); i++)
+            {
+                for (int j = 0; j < array_0.GetLength(1); j++)
+                {
+                    for (int k = 0; k < array_0.GetLength(2); k++)
+                    {
+                        ret[i, j, k] = array_0[i, j, k];
+                    }
+                }
+            }
+            for (int i = 0; i < array_1.GetLength(0); i++)
+            {
+                for (int j = 0; j < array_1.GetLength(1); j++)
+                {
+                    for (int k = 0; k < array_0.GetLength(2); k++)
+                    {
+                        ret[i, j, k + array_0.GetLength(2)] = array_1[i, j, k];
+                    }
+                }
+            }
+            return ret;
+        }
+
+        /// <summary>
+        /// 获取一个二维数组的某一部分并返回
+        /// </summary>
+        /// <param name="array">目标数组</param>
+        /// <param name="base_0">第一维的起始索引</param>
+        /// <param name="base_1">第二维的起始索引</param>
+        /// <param name="base_2">第三维的起始索引</param>
+        /// <param name="length_0">第一维要获取的数据长度</param>
+        /// <param name="length_1">第二维要获取的数据长度</param>
+        /// <param name="length_2">第三维要获取的数据长度</param>
+        /// <returns></returns>
+        public static T[,,] GetPart<T>(this T[,,] array, int base_0, int base_1, int base_2, int length_0, int length_1, int length_2)
+        {
+            if (base_0 + length_0 > array.GetLength(0) || base_1 + length_1 > array.GetLength(1) || base_2 + length_2 > array.GetLength(2))
+            {
+                throw new System.Exception("索引超出范围");
+            }
+            T[,,] ret = new T[length_0, length_1, length_2];
+            for (int i = 0; i < length_0; i++)
+            {
+                for (int j = 0; j < length_1; j++)
+                {
+                    for (int k = 0; k < length_2; k++)
+                    {
+                        ret[i, j, k] = array[i + base_0, j + base_1, k + base_2];
+                    }
                 }
             }
             return ret;
