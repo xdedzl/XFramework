@@ -9,7 +9,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-namespace SFramework.Mathematics
+namespace XFramework.Mathematics
 {
     /// <summary>
     /// 所有物理数学相关计算方法

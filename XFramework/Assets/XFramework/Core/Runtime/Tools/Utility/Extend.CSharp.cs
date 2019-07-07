@@ -48,7 +48,43 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 连接两个数组的第一维返回一个新数组
+        /// 拼接二维数组的第一维
+        /// </summary>
+        public static T[,] Concat0<T>(this T[,] array_0, T[,] array_1)
+        {
+            if (array_0.GetLength(1) != array_1.GetLength(1))
+            {
+                throw new System.Exception("两个数组第二维不一致");
+            }
+            T[,] ret = new T[array_0.GetLength(0) + array_1.GetLength(0), array_0.GetLength(1)];
+            for (int i = 0; i < array_0.GetLength(0); i++)
+            {
+                for (int j = 0; j < array_0.GetLength(1); j++)
+                {
+                    ret[i, j] = array_0[i, j];
+                }
+            }
+            for (int i = 0; i < array_1.GetLength(0); i++)
+            {
+                for (int j = 0; j < array_1.GetLength(1); j++)
+                {
+                    ret[i + array_0.GetLength(0), j] = array_1[i, j];
+                }
+            }
+
+            //int array0_Length0 = array_0.GetLength(0);
+            //int array1_Length0 = array_1.GetLength(0);
+            //int retLength0 = ret.GetLength(0);
+            //for (int i = 0; i < ret.GetLength(1); i++)
+            //{
+            //    Array.Copy(array_0, array0_Length0 * i, ret, retLength0 * i, array0_Length0);
+            //    Array.Copy(array_1, array1_Length0 * i, ret, retLength0 * i + array0_Length0, array1_Length0);
+            //}
+            return ret;
+        }
+
+        /// <summary>
+        /// 拼接二维数组的第二维
         /// </summary>
         /// <typeparam name="T"></typeparam>
         public static T[,] Concat1<T>(this T[,] array_0, T[,] array_1)
@@ -70,33 +106,6 @@ namespace XFramework
                 for (int j = 0; j < array_1.GetLength(1); j++)
                 {
                     ret[i, j + array_0.GetLength(1)] = array_1[i, j];
-                }
-            }
-            return ret;
-        }
-
-        /// <summary>
-        /// 连接两个数组的第二位返回一个新数组
-        /// </summary>
-        public static T[,] Concat0<T>(this T[,] array_0, T[,] array_1)
-        {
-            if (array_0.GetLength(1) != array_1.GetLength(1))
-            {
-                throw new System.Exception("两个数组第二维不一致");
-            }
-            T[,] ret = new T[array_0.GetLength(0) + array_1.GetLength(0), array_0.GetLength(1)];
-            for (int i = 0; i < array_0.GetLength(0); i++)
-            {
-                for (int j = 0; j < array_0.GetLength(1); j++)
-                {
-                    ret[i, j] = array_0[i, j];
-                }
-            }
-            for (int i = 0; i < array_1.GetLength(0); i++)
-            {
-                for (int j = 0; j < array_1.GetLength(1); j++)
-                {
-                    ret[i + array_0.GetLength(0), j] = array_1[i, j];
                 }
             }
             return ret;

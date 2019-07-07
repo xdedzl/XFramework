@@ -5,7 +5,7 @@
 // 版本： V 1.0
 // ==========================================
 using System.Collections.Generic;
-using SFramework.Mathematics;
+using XFramework.Mathematics;
 using UnityEngine;
 
 namespace XFramework
