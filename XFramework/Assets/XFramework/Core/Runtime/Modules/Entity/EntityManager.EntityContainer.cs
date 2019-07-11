@@ -50,7 +50,7 @@ namespace XFramework
             /// <param name="pos">位置</param>
             /// <param name="quaternion">角度</param>
             /// <returns></returns>
-            public Entity Instantiate(int id, Vector3 pos, Quaternion quaternion)
+            public Entity Instantiate(int id, Vector3 pos, Quaternion quaternion, EntityData entityData)
             {
                 GameObject gameObject = UnityEngine.Object.Instantiate(m_Template, pos, quaternion);
                 //gameObject.transform.position = pos;
@@ -59,6 +59,7 @@ namespace XFramework
                 Entity entity = gameObject.AddComponent(type) as Entity;
                 entity.Id = id;
                 entity.OnInit();
+                entity.OnShow(entityData);
                 m_Entities.Add(entity);
                 return entity;
             }

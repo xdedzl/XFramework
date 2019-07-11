@@ -62,10 +62,30 @@ namespace XFramework
         /// <summary>
         /// 实例化实体
         /// </summary>
-        /// <returns></returns>
-        public T Instantiate<T>(Vector3 pos = default, Quaternion quaternion = default) where T : Entity
+        public T Instantiate<T>(EntityData entityData, Vector3 pos = default, Quaternion quaternion = default) where T : Entity
         {
             string key = typeof(T).Name;
+            return Instantiate(key, entityData, pos, quaternion) as T;
+        }
+
+        /// <summary>
+        /// 实例化实体
+        /// </summary>
+        public T Instantiate<T>(string key, EntityData entityData, Vector3 pos = default, Quaternion quaternion = default) where T : Entity
+        {
+            return Instantiate(key, entityData, pos, quaternion) as T;
+        }
+
+        /// <summary>
+        /// 实例化实体
+        /// </summary>
+        /// <param name="key">键值</param>
+        /// <param name="entityData">实体信息</param>
+        /// <param name="pos">位置</param>
+        /// <param name="quaternion">角度</param>
+        /// <returns></returns>
+        public Entity Instantiate(string key, EntityData entityData, Vector3 pos = default, Quaternion quaternion = default)
+        {
             if (!m_EntityContainerDic.ContainsKey(key))
             {
                 Debug.LogWarning("没有对应的实体容器");
@@ -73,9 +93,9 @@ namespace XFramework
             }
             else
             {
-                var entity = m_EntityContainerDic[key].Instantiate(m_Id++, pos, quaternion);
+                var entity = m_EntityContainerDic[key].Instantiate(m_Id++, pos, quaternion, entityData);
                 m_EntityDic.Add(entity.Id, entity);
-                return entity as T;
+                return entity;
             }
         }
 

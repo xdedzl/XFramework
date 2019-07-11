@@ -16,7 +16,7 @@ namespace XFramework
 {
     public partial class ResourceManager : IGameModule
     {
-        private readonly string ABPath = Application.streamingAssetsPath + "/AssetBundles";
+        public readonly string ABPath = Application.streamingAssetsPath + "/AssetBundles";
 
         /// <summary>
         /// AB包的缓存
@@ -27,11 +27,11 @@ namespace XFramework
         /// </summary>
         private AssetBundleManifest m_Mainfest;
 
-        private TaskPool m_TaskPool;
+        //private TaskPool m_TaskPool;
 
         public ResourceManager()
         {
-            m_TaskPool = new TaskPool();
+            //m_TaskPool = new TaskPool();
 #if AB
             m_ABDic = new Dictionary<string, AssetBundle>();
 
@@ -106,7 +106,7 @@ namespace XFramework
                 // experiment
                 SingleTask task = new SingleTask(() =>
                 {
-                    return request.asset != null;
+                    return request.isDone;
                 });
                 task.Then(() =>
                 {
@@ -134,7 +134,7 @@ namespace XFramework
                 GetAssetBundleAsync(temp[0], (ab) =>
                 {
                     var request = ab.LoadAssetAsync(temp[1]);
-                    SingleTask task = new SingleTask(() => { return request.asset; });
+                    SingleTask task = new SingleTask(() => { return request.isDone; });
                     task.Then(() => { callBack(request.asset as T); return true; });
                     GameEntry.GetModule<TaskManager>().StartTask(task);
                 });
@@ -191,10 +191,10 @@ namespace XFramework
         /// <param name="path"></param>
         public void GetAssetBundleAsync(string path, System.Action<AssetBundle> callBack)
         {
+            path = Path2Key(path);
             m_ABDic.TryGetValue(path, out AssetBundle ab);
             if (ab == null)
             {
-                path = path.ToLower();
                 string abName = string.IsNullOrEmpty(path) ? "" : "/" + path;
 
                 AssetBundleCreateRequest mainRequest = AssetBundle.LoadFromFileAsync(ABPath + abName + ".ab");
@@ -213,10 +213,10 @@ namespace XFramework
                 }
 
                 // Legacy
-                //LoadDependenciesTask task = new LoadDependenciesTask(requests, (a)=> 
+                //LoadDependenciesTask task = new LoadDependenciesTask(requests, (a) =>
                 //{
                 //    m_ABDic.Add(Name2Key(a.name), a);
-                //},callBack);
+                //}, callBack);
 
                 //m_TaskPool.Add(task);
 
@@ -227,10 +227,15 @@ namespace XFramework
                 for (int i = 0; i < tasks.Length; i++)
                 {
                     int index = i;
-                    tasks[index] = new SingleTask(() => 
+                    tasks[index] = new SingleTask(() =>
                     {
-                        return requests[index].assetBundle;
+                        return requests[index].isDone;
                     });
+                    tasks[index].Then(new SingleTask(() =>
+                    {
+                        m_ABDic.Add(Name2Key(requests[index].assetBundle.name), requests[index].assetBundle);
+                        return true;
+                    }));
                 }
 
                 AllTask abTask = new AllTask(tasks);
@@ -287,10 +292,13 @@ namespace XFramework
                 case "Material":
                     suffix = ".mat";
                     break;
+                case "TerrainLayer":
+                    suffix = ".terrainlayer";
+                    break;
                 case "Texture":
-                    return LoadTexture<T>(path);
                 case "Texture2D":
-                    return LoadTexture<T>(path);
+                case "Sprite":
+                    return LoadPicture<T>(path);
             }
             return AssetDatabase.LoadAssetAtPath<T>(path + suffix);
         }
@@ -299,13 +307,16 @@ namespace XFramework
         /// 在没有后缀的情况下加载贴图
         /// </summary>
         /// <typeparam name="T">Texture,Texture2D</typeparam>
-        private T LoadTexture<T>(string path) where T : Object
+        private T LoadPicture<T>(string path) where T : Object
         {
             T texture;
             texture = AssetDatabase.LoadAssetAtPath<T>(path + ".png");
             if (!texture)
-                texture = AssetDatabase.LoadAssetAtPath<T>(path + "jpg");
-
+                texture = AssetDatabase.LoadAssetAtPath<T>(path + ".jpg");
+            if (!texture)
+                texture = AssetDatabase.LoadAssetAtPath<T>(path + ".tga");
+            if (!texture)
+                texture = AssetDatabase.LoadAssetAtPath<T>(path + ".psd");
             return texture;
         }
 
@@ -314,9 +325,16 @@ namespace XFramework
         /// </summary>
         private T[] LoadAllWithADB<T>(string path) where T : Object
         {
-            Debug.LogError("暂时不能使用AssetDataBase加载一个文件下的所有资源");
-            return null;
-            //return AssetDatabase.LoadAllAssetsAtPath(path).Convert<T>();
+            List<T> objs = new List<T>();
+            System.IO.DirectoryInfo info = new System.IO.DirectoryInfo(Application.dataPath.Replace("Assets", "/") + path);
+            foreach (var item in info.GetFiles("*",System.IO.SearchOption.TopDirectoryOnly))
+            {
+                if (item.Name.EndsWith(".meta"))
+                    continue;
+                string assetPath = path + "/" + item.Name.Split('.')[0];
+                objs.Add(LoadWithADB<T>(assetPath));
+            }
+            return objs.ToArray();
         }
 
 #endif
@@ -327,13 +345,14 @@ namespace XFramework
 
         public void Update(float elapseSeconds, float realElapseSeconds)
         {
-            m_TaskPool.Update();
+            //m_TaskPool.Update();
         }
 
         public void Shutdown()
         {
             m_ABDic?.Clear();
             m_Mainfest = null;
+            AssetBundle.UnloadAllAssetBundles(true);
         }
 
         #endregion
