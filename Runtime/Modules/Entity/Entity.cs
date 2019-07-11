@@ -17,7 +17,7 @@ namespace XFramework
         /// <summary>
         /// 显示
         /// </summary>
-        public virtual void OnShow() { }
+        public virtual void OnShow(EntityData entityData) { }
         /// <summary>
         /// 隐藏
         /// </summary>

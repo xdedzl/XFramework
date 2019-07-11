@@ -19,64 +19,6 @@ namespace XFramework.Tasks
         /// 任务完成前每帧执行
         /// </summary>
         public virtual void Update() { }
-
-        /// <summary>
-        /// 创建一个所有任务执行完才会继续执行下一个任务的队列任务
-        /// </summary>
-        /// <param name="tasks"></param>
-        /// <returns></returns>
-        public ITask All(params ITask[] tasks)
-        {
-            Next = new AllTask(tasks);
-            return Next;
-        }
-        public ITask All(params Func<bool>[] funcs)
-        {
-            ITask[] tasks = new ITask[funcs.Length];
-            for (int i = 0; i < funcs.Length; i++)
-            {
-                tasks[i] = new SingleTask(funcs[i]);
-            }
-            Next = new AllTask(tasks);
-            return Next;
-        }
-
-        /// <summary>
-        /// 创建一个任一任务执行完就会继续执行下一个任务的队列任务
-        /// </summary>
-        /// <param name="tasks"></param>
-        /// <returns></returns>
-        public ITask Race(params ITask[] tasks)
-        {
-            Next = new RaceTask(tasks);
-            return Next;
-        }
-        public ITask Race(params Func<bool>[] funcs)
-        {
-            ITask[] tasks = new ITask[funcs.Length];
-            for (int i = 0; i < funcs.Length; i++)
-            {
-                tasks[i] = new SingleTask(funcs[i]);
-            }
-            Next = new RaceTask(tasks);
-            return Next;
-        }
-
-        /// <summary>
-        /// 创建一个后续任务
-        /// </summary>
-        /// <param name="task"></param>
-        /// <returns></returns>
-        public ITask Then(ITask task)
-        {
-            Next = task;
-            return Next;
-        }
-        public ITask Then(Func<bool> func)
-        {
-            Next = new SingleTask(func);
-            return Next;
-        }
     }
 
     /// <summary>
@@ -119,13 +61,21 @@ namespace XFramework.Tasks
         {
             if (!IsDone)
             {
-                foreach (var item in m_Tasks)
+                for (int i = 0; i < m_Tasks.Length; i++)
                 {
-                    item.Update();
-                    if (item.IsDone)
+                    m_Tasks[i].Update();
+                    if (m_Tasks[i].IsDone)
                     {
-                        IsDone = true;
-                        return;
+                        if (m_Tasks[i].Next != null)
+                        {
+                            m_Tasks[i] = m_Tasks[i].Next;
+                            continue;
+                        }
+                        else
+                        {
+                            IsDone = true;
+                            return;
+                        }
                     }
                 }
             }
@@ -152,11 +102,16 @@ namespace XFramework.Tasks
             if (!IsDone)
             {
                 bool isDone = true;
-                foreach (var item in m_Tasks)
+                for (int i = 0; i < m_Tasks.Length; i++)
                 {
-                    if (!item.IsDone)
+                    if (!m_Tasks[i].IsDone)
                     {
-                        item.Update();
+                        m_Tasks[i].Update();
+                        isDone = false;
+                    }
+                    else if(m_Tasks[i].Next != null)
+                    {
+                        m_Tasks[i] = m_Tasks[i].Next;
                         isDone = false;
                     }
                 }

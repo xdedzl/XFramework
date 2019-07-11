@@ -1496,8 +1496,7 @@ namespace XFramework.Mathematics
         /// </summary>
         public static bool IsApproximately(double a, double b, double dvalue = 0)
         {
-            double delta = a - b;
-            return delta >= -dvalue && delta <= dvalue;
+            return Math.Abs(a - b) <= dvalue;
         }
     }
 }
