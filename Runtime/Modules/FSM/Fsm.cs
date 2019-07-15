@@ -131,6 +131,10 @@ namespace XFramework
                     m_CurrentState.OnEnter();
                 }
             }
+            else
+            {
+                StartFsm(type);
+            }
         }
     }
 }

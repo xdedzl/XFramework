@@ -45,7 +45,7 @@ namespace XFramework.UI
         /// <summary>
         /// 打开面板
         /// </summary>
-        public void OpenPanel(string uiname)
+        public void OpenPanel(string uiname, object arg)
         {
             BasePanel panel = GetPanel(uiname);
             if (null == panel)
@@ -70,7 +70,7 @@ namespace XFramework.UI
                 m_OnDisplayPanelDic[panel.Level - 1].End().OnPause();
             }
 
-            panel.OnOpen();
+            panel.OnOpen(arg);
         }
 
         /// <summary>
