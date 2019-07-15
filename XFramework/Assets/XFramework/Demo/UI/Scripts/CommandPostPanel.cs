@@ -17,7 +17,7 @@ public class CommandPostPanel : BasePanel {
         rect.sizeDelta = size;
     }
 
-    public override void OnOpen()
+    public override void OnOpen(object arg)
     {
         CreatePanel createPanel = (CreatePanel)Game.UIModule.GetPanel(UIName.Create);
         // 设父物体以及自己在子物体中的顺序

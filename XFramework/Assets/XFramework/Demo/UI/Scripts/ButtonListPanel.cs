@@ -47,7 +47,7 @@ public class ButtonListPanel : BasePanel {
         btnList = new List<Transform>();
     }
 
-    public override void OnOpen()
+    public override void OnOpen(object arg)
     {
         if (canvasGroup == null)
             canvasGroup = transform.GetComponent<CanvasGroup>();

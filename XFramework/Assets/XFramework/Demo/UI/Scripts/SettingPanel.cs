@@ -42,7 +42,7 @@ public class SettingPanel : BasePanel {
         });
     }
 
-    public override void OnOpen()
+    public override void OnOpen(object arg)
     {
         gameObject.SetActive(true);
     }

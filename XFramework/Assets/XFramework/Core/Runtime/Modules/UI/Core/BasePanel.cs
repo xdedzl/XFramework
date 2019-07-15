@@ -51,7 +51,7 @@ namespace XFramework.UI
         /// <summary>
         /// 界面显示
         /// </summary>
-        public virtual void OnOpen()
+        public virtual void OnOpen(object arg)
         {
             gameObject.SetActive(true);
             transform.SetAsLastSibling();

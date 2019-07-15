@@ -11,7 +11,7 @@ public class ShowPowerPanel : BasePanel {
     /// <summary>
     /// 界面被显示出来
     /// </summary>
-    public override void OnOpen()
+    public override void OnOpen(object arg)
     {
         if (canvasGroup == null)
             canvasGroup = transform.GetComponent<CanvasGroup>();

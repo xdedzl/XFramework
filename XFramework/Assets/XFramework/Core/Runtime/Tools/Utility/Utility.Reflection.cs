@@ -43,13 +43,14 @@ namespace XFramework
                 return instance;
             }
 
-            public static List<Type> GetInterfaceSon(Type typeBase, string assemblyName = "Assembly-CSharp")
+            /// <summary>
+            /// 获取一个类型的所有派生类
+            /// </summary>
+            /// <param name="typeBase">基类型</param>
+            /// <param name="assemblyName">程序集</param>
+            /// <returns></returns>
+            public static List<Type> GetSonClass(Type typeBase, string assemblyName = "Assembly-CSharp")
             {
-                if (!typeBase.IsInterface)
-                {
-                    throw new System.Exception("参数错误，应为接口");
-                }
-
                 List<Type> types = new List<Type>();
                 Assembly assembly = Assembly.Load(assemblyName);
                 if (assembly == null)

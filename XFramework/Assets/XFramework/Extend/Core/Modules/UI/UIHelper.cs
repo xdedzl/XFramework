@@ -55,9 +55,9 @@ public class UIHelper : IGameModule
     /// <summary>
     /// 打开面板
     /// </summary>
-    public void Open(string name)
+    public void Open(string name, object arg = null)
     {
-        UImanager.OpenPanel(name);
+        UImanager.OpenPanel(name, arg);
     }
 
     /// <summary>

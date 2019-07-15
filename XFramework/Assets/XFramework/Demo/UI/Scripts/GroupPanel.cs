@@ -23,7 +23,7 @@ public class GroupPanel : BasePanel {
     /// <summary>
     /// 进入该按钮状态
     /// </summary>
-    public override void OnOpen()
+    public override void OnOpen(object arg)
     {
         CreatePanel createPanel = (CreatePanel)Game.UIModule.GetPanel(UIName.Create);
         // 设父物体以及自己在子物体中的顺序
