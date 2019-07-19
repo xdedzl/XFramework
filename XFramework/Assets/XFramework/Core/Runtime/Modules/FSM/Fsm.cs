@@ -44,11 +44,15 @@ namespace XFramework
             return GetState(typeof(T));
         }
 
+        /// <summary>
+        /// 获取一个状态
+        /// </summary>
+        /// <typeparam name="T">状态类型</typeparam>
         protected FsmState GetState(Type type)
         {
             m_StateDic.TryGetValue(type.Name, out FsmState state);
 
-            if(state == null)
+            if (state == null)
             {
                 state = CreateState(type);
                 m_StateDic.Add(type.Name, state);
@@ -65,6 +69,10 @@ namespace XFramework
             return CreateState(typeof(T));
         }
 
+        /// <summary>
+        /// 创建一个状态
+        /// </summary>
+        /// <param name="type">状态类型</param>
         protected FsmState CreateState(Type type)
         {
             FsmState state = Utility.Reflection.CreateInstance<FsmState>(type);
@@ -79,12 +87,14 @@ namespace XFramework
         /// <summary>
         /// 获取当前状态
         /// </summary>
-        /// <returns></returns>
         public FsmState GetCurrentState()
         {
             return CurrentState;
         }
 
+        /// <summary>
+        /// 获取当前状态
+        /// </summary>
         public T GetCurrentState<T>() where T : TState
         {
             return CurrentState as T;
@@ -112,12 +122,16 @@ namespace XFramework
         /// <summary>
         /// 状态切换
         /// </summary>
-        /// <typeparam name="KState"></typeparam>
+        /// <typeparam name="KState">目标状态</typeparam>
         public void ChangeState<KState>() where KState : FsmState
         {
             ChangeState(typeof(KState));
         }
 
+        /// <summary>
+        /// 状态切换
+        /// </summary>
+        /// <param name="type">目标状态</param>
         public void ChangeState(Type type)
         {
             if (IsActive)
@@ -135,6 +149,12 @@ namespace XFramework
             {
                 StartFsm(type);
             }
+        }
+
+        public void OnDestroy()
+        {
+            m_CurrentState = null;
+            m_StateDic.Clear();
         }
     }
 }

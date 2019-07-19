@@ -1,6 +1,7 @@
 ﻿using UnityEngine.UI;
 using UnityEngine;
 using UnityEngine.Events;
+using System.Collections.Generic;
 
 namespace XFramework.UI
 {
@@ -13,29 +14,31 @@ namespace XFramework.UI
         /// 实体模板
         /// </summary>
         private GameObject m_EntityTemplate;
+        private Transform m_PoolParnet;
+        /// <summary>
+        /// 实体池
+        /// </summary>
+        private Stack<GameObject> m_EntityPool;
 
         /// <summary>
         /// 实体回收事件
         /// </summary>
-        public EntityEvent onEntityRecycle;
+        [HideInInspector] public EntityEvent onEntityRecycle;
         /// <summary>
         /// 实体创建事件
         /// </summary>
-        public EntityEvent onEntityCreate;
+        [HideInInspector] public EntityEvent onEntityCreate;
         /// <summary>
         /// 实体添加事件
         /// </summary>
-        public EntityEvent onEntityAdd;
-        /// <summary>
-        /// 内容模板
-        /// </summary>
+        [HideInInspector] public EntityEvent onEntityAdd;
 
-        private void Start()
+        private void Awake()
         {
-            //entityRecycle.AddListener((entity) =>
-            //{
-            //    Destroy(entity);
-            //});
+            onEntityRecycle = new EntityEvent();
+            onEntityCreate = new EntityEvent();
+            onEntityAdd = new EntityEvent();
+            m_EntityPool = new Stack<GameObject>();
         }
 
         private void Reset()
@@ -48,10 +51,14 @@ namespace XFramework.UI
         /// </summary>
         public GameObject AddEntity()
         {
-            // TODO之后可能是从对象池种获取
-            GameObject obj = CreateEntity();
-            onEntityAdd.Invoke(obj);
+            GameObject obj = GetEntity();
+            onEntityAdd.Invoke(obj);        // 触发添加事件
             return obj;
+        }
+
+        public GameObject AddEntity(int index)
+        {
+            return null;
         }
 
         /// <summary>
@@ -60,6 +67,8 @@ namespace XFramework.UI
         public void RemoveEntity(GameObject gameObject)
         {
             onEntityRecycle.Invoke(gameObject);
+            m_EntityPool.Push(gameObject);
+            gameObject.transform.SetParent(m_PoolParnet);
         }
 
         /// <summary>
@@ -90,15 +99,31 @@ namespace XFramework.UI
                 for (int i = 0; i < -differ; i++)
                 {
                     // 暂时写销毁，后期改为对象池回收
-                    GameObject.Destroy(transform.GetChild(transform.childCount - 1));
+                    RemoveEntity(transform.childCount - 1);
                 }
             }
         }
 
         /// <summary>
-        /// 创建一个实体并返回，后期改为从对象池中获取
+        /// 获取一个实体并返回
         /// </summary>
-        public GameObject CreateEntity()
+        private GameObject GetEntity()
+        {
+            if (m_EntityPool.Count > 0)
+            {
+                GameObject obj = m_EntityPool.Pop();
+                obj.transform.SetParent(this.transform);
+                return obj;
+            }
+
+            return CreateEntity();
+        }
+
+        /// <summary>
+        /// 新创建一个实体并返回
+        /// </summary>
+        /// <returns></returns>
+        private GameObject CreateEntity()
         {
             GameObject obj = Instantiate(m_EntityTemplate, transform);
             onEntityCreate.Invoke(obj);
@@ -124,6 +149,7 @@ namespace XFramework.UI
         {
             m_EntityTemplate = template;
             m_EntityTemplate.transform.position = Vector3.up * 100000;
+            m_PoolParnet = new GameObject("Layout" + template.name).transform;
         }
 
         public class EntityEvent : UnityEvent<GameObject> { }

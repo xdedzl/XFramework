@@ -7,6 +7,8 @@ namespace XFramework
     {
         private static LinkedList<IGameModule> m_GameModules = new LinkedList<IGameModule>();
 
+        private static LinkedListNode<IGameModule> m_CurrentModule;
+
         /// <summary>
         /// 每帧运行
         /// </summary>
@@ -14,9 +16,16 @@ namespace XFramework
         /// <param name="realElapseSeconds">真实运行时间</param>
         public static void ModuleUpdate(float elapseSeconds, float realElapseSeconds)
         {
-            foreach (var module in m_GameModules)
+            //foreach (var module in m_GameModules)
+            //{
+            //    module.Update(elapseSeconds, realElapseSeconds);
+            //}
+            m_CurrentModule = m_GameModules.First;
+            m_CurrentModule.Value.Update(elapseSeconds, realElapseSeconds);
+            while (m_CurrentModule.Next != null)
             {
-                module.Update(elapseSeconds, realElapseSeconds);
+                m_CurrentModule = m_CurrentModule.Next;
+                m_CurrentModule.Value.Update(elapseSeconds, realElapseSeconds);
             }
         }
 
@@ -30,7 +39,7 @@ namespace XFramework
             Type moduleType = typeof(T);
             foreach (var module in m_GameModules)
             {
-                if(module.GetType() == moduleType)
+                if (module.GetType() == moduleType)
                 {
                     return (T)module;
                 }
@@ -46,7 +55,7 @@ namespace XFramework
             {
                 if (module.GetType() == moduleType)
                 {
-                    UnityEngine.Debug.LogWarning($"[{moduleType.Name}]模块已存在，请勿重复添加");
+                    //UnityEngine.Debug.LogError($"[{moduleType.Name}]模块已存在，请勿重复添加");
                     return (T)module;
                 }
             }
@@ -111,6 +120,14 @@ namespace XFramework
             }
 
             return module;
+        }
+
+        public static void CleraAllModule()
+        {
+            foreach (var item in m_GameModules)
+            {
+                item.Shutdown();
+            }
         }
     }
 }

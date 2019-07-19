@@ -2,7 +2,7 @@
 using UnityEngine;
 using System;
 
-namespace XFramework
+namespace XFramework.Draw
 {
     /// <summary>
     /// 用于在屏幕上绘制图形
@@ -22,7 +22,7 @@ namespace XFramework
         /// </summary>
         private Action m_Action;
 
-        private void Start()
+        private void Awake()
         {
             m_Painters = new List<IDraw>();
             m_IsActive = true;

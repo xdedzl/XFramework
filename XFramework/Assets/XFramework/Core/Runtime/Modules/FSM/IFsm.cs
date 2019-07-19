@@ -33,5 +33,7 @@ namespace XFramework
         /// </summary>
         void ChangeState<T>() where T : FsmState;
         void ChangeState(Type type);
+
+        void OnDestroy();
     }
 }

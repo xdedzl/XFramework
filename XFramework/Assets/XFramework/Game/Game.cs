@@ -3,6 +3,8 @@ using XFramework;
 using XFramework.Pool;
 using XFramework.Tasks;
 using XFramework.Net;
+using XFramework.Entity;
+using XFramework.Draw;
 
 /// <summary>
 /// 这个类挂在初始场景中,是整个游戏的入口

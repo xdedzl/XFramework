@@ -1,4 +1,4 @@
-﻿namespace XFramework
+﻿namespace XFramework.Draw
 {
     public interface IDraw
     {

@@ -5,11 +5,10 @@
 // 版本： V 1.0
 // ==========================================
 using System.Collections.Generic;
-using XFramework;
-using UnityEngine;
 using XFramework.Mathematics;
+using UnityEngine;
 
-namespace XFramework
+namespace XFramework.Draw
 {
     /// <summary>
     /// 所有的MeshPrefab 的管理类, 单例

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using XFramework;
+using XFramework.Draw;
 
 public class RuntimeHandleDemo : ProcedureBase
 {
@@ -17,8 +18,7 @@ public class RuntimeHandleDemo : ProcedureBase
         GameObject camera = Camera.main.gameObject;
         camera.transform.position = new Vector3(-2, 6, -5);
         camera.transform.eulerAngles = new Vector3(56, 25, 0);
-        camera.AddComponent<RuntimeHandle>();
-        RuntimeHandle.SetTarget(obj.transform);
+        obj.AddComponent<RuntimeHandle>();
     }
 
     public override void OnEnter()

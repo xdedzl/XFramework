@@ -1,4 +1,4 @@
-﻿namespace XFramework
+﻿namespace XFramework.Entity
 {
     public interface IEntity
     {

@@ -92,16 +92,6 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 开启一个状态机
-        /// </summary>
-        /// <typeparam name="TFsm"></typeparam>
-        /// <typeparam name="KState"></typeparam>
-        public void StartFsm<TFsm, KState>() where TFsm : class, IFsm where KState : FsmState
-        {
-            GetFsm<TFsm>()?.StartFsm<KState>();
-        }
-
-        /// <summary>
         /// 切换对应状态机到对应状态
         /// </summary>
         /// <typeparam name="TFsm">状态机类型</typeparam>
@@ -130,9 +120,46 @@ namespace XFramework
         /// <summary>
         /// 根据类型创建一个状态机
         /// </summary>
-        public void CreateFsm<T>() where T : class, IFsm
+        public T CreateFsm<T>() where T : class, IFsm
         {
-            m_FsmDic.Add(typeof(T).Name, Utility.Reflection.CreateInstance<T>());
+            return CreateFsm(typeof(T)) as T;
+        }
+
+        /// <summary>
+        /// 创建一个状态机
+        /// </summary>
+        /// <param name="type">状态机类型</param>
+        /// <returns>状态机</returns>
+        public IFsm CreateFsm(Type type)
+        {
+            if (type.IsSubclassOf(type.GetType()))
+            {
+                throw new Exception($"{type.Name}不继承IFsm");
+            }
+            IFsm fsm = Activator.CreateInstance(type) as IFsm;
+            m_FsmDic.Add(type.Name, fsm);
+            return fsm;
+        }
+
+        /// <summary>
+        /// 删除一个状态机
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        public void DestroyFsm<T>() where T : class, IFsm
+        {
+            DestroyFsm(typeof(T));
+        }
+
+        /// <summary>
+        /// 删除一个状态机
+        /// </summary>
+        /// <param name="type">状态机类型</param>
+        public void DestroyFsm(Type type)
+        {
+            if (HasFsm(type))
+            {
+                m_FsmDic.Remove(type.Name);
+            }
         }
 
         #region 接口实现

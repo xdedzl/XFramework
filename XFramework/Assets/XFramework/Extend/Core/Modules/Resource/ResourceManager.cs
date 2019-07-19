@@ -1,4 +1,4 @@
-﻿#define ABTest
+﻿#define ABTests
 #if!UNITY_EDITOR || ABTest
 #define AB
 #endif
@@ -14,6 +14,9 @@ using UnityEditor;
 
 namespace XFramework
 {
+    /// <summary>
+    /// 资源管理器
+    /// </summary>
     public partial class ResourceManager : IGameModule
     {
         public readonly string ABPath = Application.streamingAssetsPath + "/AssetBundles";
@@ -27,17 +30,23 @@ namespace XFramework
         /// </summary>
         private AssetBundleManifest m_Mainfest;
 
-        //private TaskPool m_TaskPool;
+        /// <summary>
+        /// 资源加载方式
+        /// </summary>
+        private ResMode m_ResMode;
+        public ResMode ResMode { get { return m_ResMode; } }
 
         public ResourceManager()
         {
-            //m_TaskPool = new TaskPool();
-#if AB
             m_ABDic = new Dictionary<string, AssetBundle>();
+#if AB
+            m_ResMode = ResMode.AssetBundle;
 
             AssetBundle m_MainfestAB = AssetBundle.LoadFromFile(ABPath + "/AssetBundles");
             if (m_MainfestAB != null)
                 m_Mainfest = m_MainfestAB.LoadAsset<AssetBundleManifest>("AssetBundleManifest");
+# else
+            m_ResMode = ResMode.AssetDataBase;
 #endif
         }
 
@@ -92,16 +101,12 @@ namespace XFramework
         /// <param name="path"></param>
         /// <param name="name"></param>
         /// <param name="callBack"></param>
-        public void LoadAsync<T>(string path, System.Action<T> callBack) where T : Object
+        public IProgress LoadAsync<T>(string path, System.Action<T> callBack) where T : Object
         {
             if (path.Substring(0, 4) == "Res/")
             {
                 path = path.Substring(4, path.Length - 4);
                 var request = Resources.LoadAsync(path);
-
-                // Legacy
-                //ResLoadTask<T> resTask = new ResLoadTask<T>(request, callBack);
-                //m_TaskPool.Add(resTask);
 
                 // experiment
                 SingleTask task = new SingleTask(() =>
@@ -114,6 +119,7 @@ namespace XFramework
                     return true;
                 });
                 GameEntry.GetModule<TaskManager>().StartTask(task);
+                return null;
             }
 
             else
@@ -121,17 +127,8 @@ namespace XFramework
 #if AB
                 var temp = Utility.Text.SplitPathName(path);
 
-                // 异步加载AB包
-
-                // Legacy
-                //GetAssetBundleAsync(temp[0], (ab) =>
-                //{
-                //    ABLoadTask<T> abTask = new ABLoadTask<T>(ab.LoadAssetAsync(temp[1]), callBack);
-                //    m_TaskPool.Add(abTask);
-                //});
-
                 // experiment
-                GetAssetBundleAsync(temp[0], (ab) =>
+                return GetAssetBundleAsync(temp[0], (ab) =>
                 {
                     var request = ab.LoadAssetAsync(temp[1]);
                     SingleTask task = new SingleTask(() => { return request.isDone; });
@@ -139,16 +136,17 @@ namespace XFramework
                     GameEntry.GetModule<TaskManager>().StartTask(task);
                 });
 #else
-            T obj = LoadWithADB<T>(path);
-            callBack(obj);
+                T obj = LoadWithADB<T>(path);
+                callBack(obj);
+                return null;
 #endif
             }
 
         }
 
-        #endregion
+#endregion
 
-        #region AB包加载
+#region AB包加载
 
         /// <summary>
         /// 获取一个AB包文件
@@ -178,7 +176,7 @@ namespace XFramework
                 if (!m_ABDic.ContainsKey(key))
                 {
                     AssetBundle dependAb = GetAssetBundle(key);
-                    //m_ABDic.Add(key, dependAb);
+                    m_ABDic.Add(key, dependAb);
                 }
             }
 
@@ -189,7 +187,7 @@ namespace XFramework
         /// 异步获取AB包
         /// </summary>
         /// <param name="path"></param>
-        public void GetAssetBundleAsync(string path, System.Action<AssetBundle> callBack)
+        public IProgress GetAssetBundleAsync(string path, System.Action<AssetBundle> callBack)
         {
             path = Path2Key(path);
             m_ABDic.TryGetValue(path, out AssetBundle ab);
@@ -211,15 +209,6 @@ namespace XFramework
                         continue;
                     requests.Add(AssetBundle.LoadFromFileAsync(ABPath + "/" + name));
                 }
-
-                // Legacy
-                //LoadDependenciesTask task = new LoadDependenciesTask(requests, (a) =>
-                //{
-                //    m_ABDic.Add(Name2Key(a.name), a);
-                //}, callBack);
-
-                //m_TaskPool.Add(task);
-
 
                 // experiment
                 Tasks.ITask[] tasks = new Tasks.ITask[requests.Count];
@@ -245,10 +234,13 @@ namespace XFramework
                     return true;
                 }));
                 GameEntry.GetModule<TaskManager>().StartTask(abTask);
+
+                return new ResProgress(requests.ToArray());
             }
             else
             {
                 callBack(ab);
+                return null;
             }
         }
 
@@ -263,7 +255,7 @@ namespace XFramework
             m_ABDic.Remove(path);
         }
 
-        #endregion
+#endregion
 
         private string Name2Key(string abName)
         {
@@ -326,7 +318,7 @@ namespace XFramework
         private T[] LoadAllWithADB<T>(string path) where T : Object
         {
             List<T> objs = new List<T>();
-            System.IO.DirectoryInfo info = new System.IO.DirectoryInfo(Application.dataPath.Replace("Assets", "/") + path);
+            System.IO.DirectoryInfo info = new System.IO.DirectoryInfo(Application.dataPath.Replace("Assets", "") + path);
             foreach (var item in info.GetFiles("*",System.IO.SearchOption.TopDirectoryOnly))
             {
                 if (item.Name.EndsWith(".meta"))
@@ -339,7 +331,7 @@ namespace XFramework
 
 #endif
 
-        #region 接口实现
+#region 接口实现
 
         public int Priority { get { return 100; } }
 
@@ -350,11 +342,17 @@ namespace XFramework
 
         public void Shutdown()
         {
-            m_ABDic?.Clear();
+            m_ABDic.Clear();
             m_Mainfest = null;
             AssetBundle.UnloadAllAssetBundles(true);
         }
 
-        #endregion
+#endregion
+    }
+
+    public enum ResMode
+    {
+        AssetBundle,
+        AssetDataBase,
     }
 }

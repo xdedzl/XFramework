@@ -1,7 +1,8 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
 
-namespace XFramework
+namespace XFramework.Entity
 {
     /// <summary>
     /// 实体管理器
@@ -19,10 +20,27 @@ namespace XFramework
         private Dictionary<string, EntityContainer> m_EntityContainerDic;
         private Dictionary<int, Entity> m_EntityDic;
 
+        public void A<T>(object p, Vector3 vector3)
+        {
+            throw new NotImplementedException();
+        }
+
         public EntityManager()
         {
             m_EntityContainerDic = new Dictionary<string, EntityContainer>();
             m_EntityDic = new Dictionary<int, Entity>();
+        }
+
+        private int NextId
+        {
+            get
+            {
+                m_Id++;
+                if (m_EntityDic.ContainsKey(m_Id))
+                    return NextId;
+                else
+                    return m_Id;
+            }
         }
 
         /// <summary>
@@ -47,44 +65,74 @@ namespace XFramework
         /// <param name="key">key</param>
         /// <param name="type">类型</param>
         /// <param name="template">模板</param>
-        private void AddTemplate(string key, System.Type type, GameObject template)
+        public void AddTemplate(string key, System.Type type, GameObject template)
         {
             if (m_EntityContainerDic.ContainsKey(key))
             {
                 Debug.LogWarning("请勿重复添加");
                 return;
             }
-            EntityContainer container = new EntityContainer(type, template);
+            EntityContainer container = new EntityContainer(type, key, template);
 
             m_EntityContainerDic.Add(key, container);
         }
 
         /// <summary>
-        /// 实例化实体
+        /// 分配实体
         /// </summary>
-        public T Instantiate<T>(EntityData entityData, Vector3 pos = default, Quaternion quaternion = default) where T : Entity
+        /// <typeparam name="T">实体子类型</typeparam>
+        /// <param name="pos">位置</param>
+        /// <param name="quaternion">朝向</param>
+        /// <returns></returns>
+        public T Allocate<T>(Vector3 pos = default, Quaternion quaternion = default) where T : Entity
+        {
+            return Allocate(typeof(T).Name, NextId, null, pos, quaternion) as T;
+        }
+
+        /// <summary>
+        /// 分配实体
+        /// </summary>
+        /// <typeparam name="T">实体子类型</typeparam>
+        /// <param name="entityData">实体数据</param>
+        /// <param name="pos">位置</param>
+        /// <param name="quaternion">朝向</param>
+        /// <returns>实体</returns>
+        public T Allocate<T>(EntityData entityData, Vector3 pos = default, Quaternion quaternion = default) where T : Entity
         {
             string key = typeof(T).Name;
-            return Instantiate(key, entityData, pos, quaternion) as T;
+            return Allocate(key, NextId, entityData, pos, quaternion) as T;
         }
 
         /// <summary>
-        /// 实例化实体
+        /// 分配实体
         /// </summary>
-        public T Instantiate<T>(string key, EntityData entityData, Vector3 pos = default, Quaternion quaternion = default) where T : Entity
+        public T Allocate<T>(string key, EntityData entityData, Vector3 pos = default, Quaternion quaternion = default) where T : Entity
         {
-            return Instantiate(key, entityData, pos, quaternion) as T;
+            return Allocate(key, NextId, entityData, pos, quaternion) as T;
         }
 
         /// <summary>
-        /// 实例化实体
+        /// 分配实体
         /// </summary>
         /// <param name="key">键值</param>
+        /// <param name="pos">位置</param>
+        /// <param name="quaternion">朝向</param>
+        /// <returns>实体</returns>
+        public Entity Allocate(string key, Vector3 pos = default, Quaternion quaternion = default)
+        {
+            return Allocate(key, NextId, null, pos, quaternion);
+        }
+
+        /// <summary>
+        /// 分配实体
+        /// </summary>
+        /// <param name="key">键值</param>
+        /// <param name="id">实体Id</param>
         /// <param name="entityData">实体信息</param>
         /// <param name="pos">位置</param>
         /// <param name="quaternion">角度</param>
         /// <returns></returns>
-        public Entity Instantiate(string key, EntityData entityData, Vector3 pos = default, Quaternion quaternion = default)
+        public Entity Allocate(string key, int id, EntityData entityData, Vector3 pos, Quaternion quaternion)
         {
             if (!m_EntityContainerDic.ContainsKey(key))
             {
@@ -93,10 +141,39 @@ namespace XFramework
             }
             else
             {
-                var entity = m_EntityContainerDic[key].Instantiate(m_Id++, pos, quaternion, entityData);
+                var entity = m_EntityContainerDic[key].Allocate(id, pos, quaternion, entityData);
                 m_EntityDic.Add(entity.Id, entity);
                 return entity;
             }
+        }
+
+        /// <summary>
+        /// 回收实体
+        /// </summary>
+        /// <param name="entity">目标实体</param>
+        public bool Recycle(Entity entity)
+        {
+            EntityContainer container = GetContainer(entity.ContainerName);
+            if (container != null)
+            {
+                m_EntityDic.Remove(entity.Id);
+                return container.Recycle(entity);
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 回收实体
+        /// </summary>
+        /// <param name="id">目标实体Id</param>
+        public bool Recycle(int id)
+        {
+            Entity entity = GetEntity(id);
+            if(entity != null)
+            {
+                return Recycle(entity);
+            }
+            return false;
         }
 
         /// <summary>
@@ -172,6 +249,8 @@ namespace XFramework
 
         public void Shutdown()
         {
+            m_EntityContainerDic = null;
+            m_EntityDic = null;
         }
 
         public void Update(float elapseSeconds, float realElapseSeconds)
