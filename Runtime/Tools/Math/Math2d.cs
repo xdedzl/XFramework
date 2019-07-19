@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -325,4 +326,53 @@ public static class Math2d
             }
         }
     }
+
+    #region 多边形相关
+
+    /// <summary>
+    /// 判断点是否在多边形区域内
+    /// </summary>
+    /// <param name="p">待判断的点，格式：{ x: X坐标, y: Y坐标 }</param>
+    /// <param name="poly">多边形顶点，数组成员的格式同</param>
+    /// <returns>true:在多边形内，凹点   false：在多边形外，凸点</returns>
+    public static bool IsPointInsidePolygon(Vector2 p, Vector2[] poly, bool containEdge = true)
+    {
+        float px = p.x;
+        float py = p.y;
+        double sum = 0;
+
+        for (int i = 0, j = poly.Length - 1; i < poly.Length; j = i, i++)
+        {
+            float sx = poly[i].x;
+            float sy = poly[i].y;
+            float tx = poly[j].x;
+            float ty = poly[j].y;
+
+            // 点与多边形顶点重合或在多边形的边上(这个判断有些情况不需要)
+            if ((sx - px) * (px - tx) >= 0 && (sy - py) * (py - ty) >= 0 && (px - sx) * (ty - sy) == (py - sy) * (tx - sx))
+            {
+                return containEdge;
+            }
+
+            // 点与相邻顶点连线的夹角
+            var angle = Mathf.Atan2(sy - py, sx - px) - Math.Atan2(ty - py, tx - px);
+
+            // 确保夹角不超出取值范围（-π 到 π）
+            if (angle >= Mathf.PI)
+            {
+                angle = angle - Mathf.PI * 2;
+            }
+            else if (angle <= -Mathf.PI)
+            {
+                angle = angle + Mathf.PI * 2;
+            }
+
+            sum += angle;
+        }
+
+        // 计算回转数并判断点和多边形的几何关系
+        return Mathf.RoundToInt((float)(sum / Math.PI)) == 0 ? false : true;
+    }
+
+    #endregion
 }

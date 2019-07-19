@@ -1,27 +1,37 @@
 ﻿using UnityEngine;
-using XFramework.Pool;
 
-namespace XFramework
+namespace XFramework.Entity
 {
     /// <summary>
     /// 单位实体
     /// </summary>
     public abstract class Entity : MonoBehaviour, IEntity
     {
-        public int Id;
+        public int Id { get; private set; }
+
+        /// <summary>
+        /// 所属容器名
+        /// </summary>
+        public string ContainerName { get; private set; }
+
+        public void PreInit(int id, string containerName)
+        {
+            Id = id;
+            ContainerName = containerName;
+        }
 
         /// <summary>
         /// 初始化
         /// </summary>
         public virtual void OnInit() { }
         /// <summary>
-        /// 显示
+        /// 被分配
         /// </summary>
-        public virtual void OnShow(EntityData entityData) { }
+        public virtual void OnAllocate(EntityData entityData) { }
         /// <summary>
-        /// 隐藏
+        /// 被回收
         /// </summary>
-        public virtual void OnHide() { }
+        public virtual void OnRecycle() { }
         /// <summary>
         /// 附加子实体
         /// </summary>

@@ -3,7 +3,7 @@ using System.Linq;
 using XFramework.Mathematics;
 using UnityEngine;
 
-namespace XFramework
+namespace XFramework.Draw
 {
     /// <summary>
     /// 用于构造几何体Mesh
