@@ -1,11 +1,8 @@
-///<summary>
-///主题 有多少个basedata类型 就会有多少主题
-///<summary>
-namespace XFramework
-{
-    using System;
-    using System.Collections.Generic;
+using System;
+using System.Collections.Generic;
 
+namespace XFramework.Event
+{
     /// <summary>
     /// 数据主题管理类
     /// </summary>

@@ -1,4 +1,5 @@
 ﻿using System;
+using XFramework.Fsm;
 
 namespace XFramework
 {

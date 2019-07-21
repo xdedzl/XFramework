@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using XFramework;
+using XFramework.Fsm;
 
 public class State1 : MouseState
 {

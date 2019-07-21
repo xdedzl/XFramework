@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using XFramework;
+using XFramework.Event;
 
 /*
  * 以战斗系统为例

@@ -1,10 +1,12 @@
 using UnityEngine;
 using XFramework;
+using XFramework.Draw;
+using XFramework.Entity;
+using XFramework.Event;
+using XFramework.Fsm;
+using XFramework.Net;
 using XFramework.Pool;
 using XFramework.Tasks;
-using XFramework.Net;
-using XFramework.Entity;
-using XFramework.Draw;
 
 /// <summary>
 /// 这个类挂在初始场景中,是整个游戏的入口
@@ -21,7 +23,6 @@ public class Game : MonoBehaviour
     public static DataSubjectManager ObserverModule { get; private set; }
     public static ProcedureManager ProcedureModule { get; private set; }
     public static TaskManager TaskModule { get; private set; }
-    public static GameObjectPoolManager GameObjectPool { get; private set; }
     public static ObjectPoolManager ObjectPool { get; private set; }
     public static NetManager NetModule { get; private set; }
     // End0
@@ -80,7 +81,6 @@ public class Game : MonoBehaviour
         ObserverModule = GameEntry.AddModule<DataSubjectManager>();
         ProcedureModule = GameEntry.AddModule<ProcedureManager>();
         TaskModule = GameEntry.AddModule<TaskManager>();
-        GameObjectPool = GameEntry.AddModule<GameObjectPoolManager>();
         ObjectPool = GameEntry.AddModule<ObjectPoolManager>();
         NetModule = GameEntry.AddModule<NetManager>();
         UIModule = GameEntry.AddModule<UIHelper>();
@@ -102,7 +102,6 @@ public class Game : MonoBehaviour
         ObserverModule = GameEntry.GetModule<DataSubjectManager>();
         ProcedureModule = GameEntry.GetModule<ProcedureManager>();
         TaskModule = GameEntry.GetModule<TaskManager>();
-        GameObjectPool = GameEntry.GetModule<GameObjectPoolManager>();
         ObjectPool = GameEntry.GetModule<ObjectPoolManager>();
         NetModule = GameEntry.GetModule<NetManager>();
         UIModule = GameEntry.GetModule<UIHelper>();

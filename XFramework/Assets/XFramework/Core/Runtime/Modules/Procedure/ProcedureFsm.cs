@@ -1,4 +1,6 @@
 ﻿
+using XFramework.Fsm;
+
 namespace XFramework
 {
     /// <summary>

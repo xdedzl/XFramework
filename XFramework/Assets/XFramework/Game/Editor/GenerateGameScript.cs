@@ -8,6 +8,7 @@ using XFramework.UI;
 using System.IO;
 using System.Text.RegularExpressions;
 using XFramework.Pool;
+using XFramework.Event;
 
 /// <summary>
 /// Game脚本的刷新
@@ -26,7 +27,6 @@ public class GenerateGame
         { typeof(DataSubjectManager), "ObserverModule" },
         { typeof(ResourceManager), "ResModule" },
         { typeof(ObjectPoolManager), "ObjectPool" },
-        { typeof(GameObjectPoolManager), "GameObjectPool" },
     };
 
     // 被添加的模块类型
