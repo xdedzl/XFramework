@@ -3,7 +3,7 @@ using System;
 ///<summary>
 ///观察主题模板 任何数据类都可以成为主题
 ///<summary>
-namespace XFramework
+namespace XFramework.Event
 {
     public abstract class ObservableSubjectTemplate<T1, T2, T3>
     {

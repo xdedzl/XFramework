@@ -1,4 +1,4 @@
-namespace XFramework
+namespace XFramework.Event
 {
     /// <summary>
     /// 观察者数据基类

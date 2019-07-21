@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace XFramework
+namespace XFramework.Event
 {
     //=====================================================================================/
     /// <summary>

@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace XFramework
+namespace XFramework.Fsm
 {
     /// <summary>
     /// 状态机接口
