@@ -115,10 +115,18 @@ namespace XFramework.Entity
                 return m_Entities.ToArray();
             }
 
-            public void Clean()
+            /// <summary>
+            /// 清理实体池
+            /// </summary>
+            /// <param name="count">清理后实体池的最大数量</param>
+            /// <param name="callBack"></param>
+            internal void Clean(int count, Action<int> callBack)
             {
-
-                
+                while(count < m_Pool.Count)
+                {
+                    Entity entity = m_Pool.Pop();
+                    callBack?.Invoke(entity.Id);
+                }
             }
 
             /// <summary>
@@ -126,7 +134,7 @@ namespace XFramework.Entity
             /// </summary>
             /// <param name="elapseSeconds">逻辑运行时间</param>
             /// <param name="realElapseSeconds">实际运行时间</param>
-            public void OnUpdate(float elapseSeconds, float realElapseSeconds)
+            internal void OnUpdate(float elapseSeconds, float realElapseSeconds)
             {
                 foreach (var item in m_Entities)
                 {

@@ -410,8 +410,8 @@ namespace XFramework.Draw
             }
 
             //获取底面和顶面的三角形排序
-            List<int> trianglesDown = PhysicsMath.DrawPolygon(verticesDown, false);
-            List<int> trianglesUp = PhysicsMath.DrawPolygon(verticesUp, true);
+            List<int> trianglesDown = GetPolygonSort(verticesDown, false);
+            List<int> trianglesUp = GetPolygonSort(verticesUp, true);
 
             for (int i = 0; i < trianglesDown.Count; i++)
             {
@@ -485,146 +485,42 @@ namespace XFramework.Draw
         /// <summary>
         /// 凹/凸多边形空域
         /// </summary>
-        /// <param name="positions"></param>
-        /// <param name="height"></param>
-        public static Mesh CreatePolygon(Vector3[] positions, float height, int colorInt = ColorInt32.white)
+        /// <param name="pointsDown">下表面点集</param>
+        /// <param name="height">空域高度</param>
+        /// <param name="colorInt">颜色</param>
+        public static Mesh CreatePolygon(Vector3[] pointsDown, float height, int colorInt = ColorInt32.white, bool isClockwise = true)
         {
-            List<Vector3> verticesDown = new List<Vector3>();
-            List<Vector3> verticesUp = new List<Vector3>();
-            List<Vector3> vertices = new List<Vector3>();
+            Vector3[] pointsUp = new Vector3[pointsDown.Length];
 
-            List<int> triangles = new List<int>();
-            //上下面坐标赋值 数组转List
-            for (int i = 0; i < positions.Length; i++)
+            for (int i = 0; i < pointsDown.Length; i++)
             {
-                verticesDown.Add(positions[i]);
-            }
-            for (int i = 0; i < positions.Length; i++)
-            {
-                verticesUp.Add(positions[i] + new Vector3(0, height, 0));
-            }
-            //计算一个平面的点数量
-            int count = verticesDown.Count;
-
-            //将上下平面点合并
-            for (int i = 0; i < verticesDown.Count; i++)
-            {
-                vertices.Add(verticesDown[i]);
-            }
-            for (int i = 0; i < verticesUp.Count; i++)
-            {
-                vertices.Add(verticesUp[i]);
+                pointsUp[i] = pointsDown[i] + new Vector3(0, height, 0);
             }
 
-            //获取底面和顶面的三角形排序
-            List<int> trianglesDown = PhysicsMath.DrawPolygon(verticesDown, false);
-            List<int> trianglesUp = PhysicsMath.DrawPolygon(verticesUp, true);
-
-            for (int i = 0; i < trianglesDown.Count; i++)
-            {
-                trianglesUp[i] += count;
-            }
-
-            //合并底面顶面三角形排序
-            for (int i = 0; i < trianglesDown.Count; i++)
-            {
-                triangles.Add(trianglesDown[i]);
-            }
-            for (int i = 0; i < trianglesUp.Count; i++)
-            {
-                triangles.Add(trianglesUp[i]);
-            }
-
-            //侧面三角形排序
-            for (int i = 0; i < count - 1; i++)
-            {
-                // 加上侧面的点集
-                vertices.Add(vertices[i]);
-                vertices.Add(vertices[i + 1]);
-                vertices.Add(vertices[i + count + 1]);
-                vertices.Add(vertices[i + count]);
-
-                // 侧面三角形排序
-                triangles.Add(2 * count + 1 + i * 4);
-                triangles.Add(2 * count + 0 + i * 4);
-                triangles.Add(2 * count + 3 + i * 4);
-                triangles.Add(2 * count + 1 + i * 4);
-                triangles.Add(2 * count + 3 + i * 4);
-                triangles.Add(2 * count + 2 + i * 4);
-            }
-
-            // 加上最后一个侧面的点集
-            vertices.Add(vertices[count - 1]);
-            vertices.Add(vertices[0]);
-            vertices.Add(vertices[count]);
-            vertices.Add(vertices[2 * count - 1]);
-
-            // 加上最后一个侧面的三角形排序
-            triangles.Add(vertices.Count - 3);
-            triangles.Add(vertices.Count - 4);
-            triangles.Add(vertices.Count - 1);
-            triangles.Add(vertices.Count - 3);
-            triangles.Add(vertices.Count - 1);
-            triangles.Add(vertices.Count - 2);
-
-            Color[] colors = new Color[vertices.Count];
-            Color color = colorInt.Color();
-            for (int i = 0; i < colors.Length; ++i)
-            {
-                colors[i] = color;
-            }
-
-            Mesh mesh = new Mesh
-            {
-                name = "Polygon",
-                vertices = vertices.ToArray(),
-                triangles = triangles.ToArray(),
-                colors = colors,
-            };
-
-            mesh.RecalculateBounds();     // 重置范围
-            mesh.RecalculateNormals();    // 重置法线
-            mesh.RecalculateTangents();    // 重置切线
-
-            return mesh;
+            return CreatePolygon(pointsDown.Concat(pointsUp).ToArray(), colorInt, isClockwise);
         }
 
         /// <summary>
         /// 凹/凸多边形空域 每个点高度不一样时 可以用来画扇形区域
         /// </summary>
-        /// <param name="positions"></param>
-        public static Mesh CreatePolygon(Vector3[] positions, int colorInt = ColorInt32.white)
+        /// <param name="positions">下表面点集 + 上表面点集</param>
+        /// <param name="colorInt">颜色</param>
+        /// <returns></returns>
+        public static Mesh CreatePolygon(Vector3[] positions, int colorInt = ColorInt32.white, bool isClockwise = true)
         {
-            List<Vector3> verticesDown = new List<Vector3>();
-            List<Vector3> verticesUp = new List<Vector3>();
-            List<Vector3> vertices = new List<Vector3>();
+            if (positions.Length % 2 != 0)
+            {
+                throw new System.Exception("[CreatePolyon] 传入点集错误，应为下底面加上底面的集合");
+            }
 
+            int count = positions.Length / 2;                   // 一个平面的点数量
+
+            List<Vector3> vertices = new List<Vector3>(positions);
             List<int> triangles = new List<int>();
-            //上下面坐标赋值 数组转List
-            for (int i = 0; i < positions.Length / 2; i++)
-            {
-                verticesDown.Add(positions[i]);
-            }
-            for (int i = positions.Length / 2; i < positions.Length; i++)
-            {
-                verticesUp.Add(positions[i]);
-            }
-            //计算一个平面的点数量
-            int count = verticesDown.Count;
-
-            //将上下平面点合并
-            for (int i = 0; i < verticesDown.Count; i++)
-            {
-                vertices.Add(verticesDown[i]);
-            }
-            for (int i = 0; i < verticesUp.Count; i++)
-            {
-                vertices.Add(verticesUp[i]);
-            }
 
             //获取底面和顶面的三角形排序
-            List<int> trianglesDown = PhysicsMath.DrawPolygon(verticesDown, false);
-            List<int> trianglesUp = PhysicsMath.DrawPolygon(verticesUp, true);
+            List<int> trianglesDown = GetPolygonSort(positions.Take(count).ToList(), !(false ^ isClockwise));
+            List<int> trianglesUp = GetPolygonSort(positions.Take(count - 1, count).ToList(), true & isClockwise);
 
             for (int i = 0; i < trianglesDown.Count; i++)
             {
@@ -651,12 +547,8 @@ namespace XFramework.Draw
                 vertices.Add(vertices[i + count]);
 
                 // 侧面三角形排序
-                triangles.Add(2 * count + 1 + i * 4);
-                triangles.Add(2 * count + 0 + i * 4);
-                triangles.Add(2 * count + 3 + i * 4);
-                triangles.Add(2 * count + 1 + i * 4);
-                triangles.Add(2 * count + 3 + i * 4);
-                triangles.Add(2 * count + 2 + i * 4);
+                triangles.AddTriangles(2 * count + 0 + i * 4, 2 * count + 1 + i * 4, 2 * count + 3 + i * 4, !isClockwise);
+                triangles.AddTriangles(2 * count + 1 + i * 4, 2 * count + 2 + i * 4, 2 * count + 3 + i * 4, !isClockwise);
             }
 
             // 加上最后一个侧面的点集
@@ -666,12 +558,8 @@ namespace XFramework.Draw
             vertices.Add(vertices[2 * count - 1]);
 
             // 加上最后一个侧面的三角形排序
-            triangles.Add(vertices.Count - 3);
-            triangles.Add(vertices.Count - 4);
-            triangles.Add(vertices.Count - 1);
-            triangles.Add(vertices.Count - 3);
-            triangles.Add(vertices.Count - 1);
-            triangles.Add(vertices.Count - 2);
+            triangles.AddTriangles(vertices.Count - 4, vertices.Count - 3, vertices.Count - 1, !isClockwise);
+            triangles.AddTriangles(vertices.Count - 3, vertices.Count - 2, vertices.Count - 1, !isClockwise);
 
             Color[] colors = new Color[vertices.Count];
             Color color = colorInt.Color();
@@ -696,89 +584,89 @@ namespace XFramework.Draw
         }
 
         /// <summary>
-        /// 立体线，可用于画空中走廊
+        /// 获取凹多边形平面排序
         /// </summary>
-        /// <param name="positions">空中走廊所有顶点</param>
-        public static Mesh CreateLineMesh_Old(Vector3[] vertexs, float width, float height, int colorInt = ColorInt32.white)
+        /// <param name="points"> 关键点集合 </param>
+        /// <returns></returns>
+        public static List<int> GetPolygonSort(List<Vector3> points, bool isUp)
         {
-            Vector3[] positions = PhysicsMath.GetAirCorridorSpace(vertexs.ToList(), width, height);       // 获取点集
-
-            List<Vector3> vertices = new List<Vector3>();
-            List<int> trangles = new List<int>();
-            int count = positions.Length - 4;
-
-            // 左侧面
-            vertices.Add(positions[0]);
-            vertices.Add(positions[1]);
-            vertices.Add(positions[2]);
-            vertices.Add(positions[3]);
-            trangles.Add(3);
-            trangles.Add(1);
-            trangles.Add(0);
-            trangles.Add(3);
-            trangles.Add(2);
-            trangles.Add(1);
-
-
-
-            // 走廊框体
-            for (int i = 0; i < count; i++)
+            List<int> indexs = new List<int>();
+            for (int i = 0; i < points.Count; i++)
             {
-                if (i % 4 == 3)
+                indexs.Add(i);
+            }
+
+            List<int> triangles = new List<int>();
+
+            //创建一个除去自身前一点的 多边形，判断前一点是否为内点（凹点）
+            int index = points.Count - 1;
+            int next;
+            int prev;
+
+            int maxCount = indexs.Count + 1;
+            int count = 0;
+            // 切分到无法切割三角形为止
+            while (indexs.Count > 2)
+            {
+                if (maxCount > indexs.Count) // 正确
                 {
-                    vertices.Add(positions[i]);
-                    vertices.Add(positions[i - 3]);
-                    vertices.Add(positions[i + 1]);
-                    vertices.Add(positions[i + 4]);
+                    maxCount = indexs.Count;
+                    count = 0;
                 }
                 else
                 {
-                    vertices.Add(positions[i]);
-                    vertices.Add(positions[i + 1]);
-                    vertices.Add(positions[i + 5]);
-                    vertices.Add(positions[i + 4]);
+                    if (count > maxCount)
+                    {
+                        throw new System.Exception("当前有" + (count - 1).ToString() + "个数据死在循环中");
+                    }
+                    count++;
                 }
 
-                trangles.Add((i + 1) * 4);
-                trangles.Add((i + 1) * 4 + 2);
-                trangles.Add((i + 1) * 4 + 3);
-                trangles.Add((i + 1) * 4);
-                trangles.Add((i + 1) * 4 + 1);
-                trangles.Add((i + 1) * 4 + 2);
+                // 判断要判断是否切割的三角形的三个点是否在同一位置
+                next = (index == indexs.Count - 1) ? 0 : index + 1;
+                prev = (index == 0) ? indexs.Count - 1 : index - 1;
+                if (points[index] == points[prev] && points[index] == points[next])
+                {
+                    throw new System.Exception("[DrawPolygon data error]三个点的个位置两两相等");
+                }
+
+                List<Vector3> polygon = new List<Vector3>(points.ToArray());
+                polygon.RemoveAt(index);
+
+                //是否是凹点
+                if (!PhysicsMath.IsPointInsidePolygon(points[index], polygon))
+                {
+                    // 是否是可划分顶点:新的多边形没有顶点在被分割的三角形内
+                    if (PhysicsMath.IsFragementIndex(points, index))
+                    {
+                        //可划分，剖分三角形
+                        next = (index == indexs.Count - 1) ? 0 : index + 1;
+                        prev = (index == 0) ? indexs.Count - 1 : index - 1;
+                        if (isUp)
+                        {
+                            triangles.Add(indexs[next]);
+                            triangles.Add(indexs[prev]);
+                            triangles.Add(indexs[index]);
+                        }
+                        else
+                        {
+                            triangles.Add(indexs[index]);
+                            triangles.Add(indexs[prev]);
+                            triangles.Add(indexs[next]);
+                        }
+
+                        indexs.RemoveAt(index);
+                        points.RemoveAt(index);
+
+                        index = (index + indexs.Count - 1) % indexs.Count;       // 防止出现index超出值域,类似于i--
+
+                        continue;
+                    }
+                }
+                index = (index + 1) % indexs.Count;
             }
 
-            // 右侧面
-            vertices.Add(positions[count]);
-            vertices.Add(positions[count + 1]);
-            vertices.Add(positions[count + 2]);
-            vertices.Add(positions[count + 3]);
-            trangles.Add(vertices.Count - 4);
-            trangles.Add(vertices.Count - 2);
-            trangles.Add(vertices.Count - 1);
-            trangles.Add(vertices.Count - 4);
-            trangles.Add(vertices.Count - 3);
-            trangles.Add(vertices.Count - 2);
-
-            Color[] colors = new Color[vertices.Count];
-            Color color = colorInt.Color();
-            for (int i = 0; i < colors.Length; ++i)
-            {
-                colors[i] = color;
-            }
-
-            Mesh mesh = new Mesh
-            {
-                name = "Line",
-                vertices = vertices.ToArray(),
-                triangles = trangles.ToArray(),
-                colors = colors,
-            };
-
-            mesh.RecalculateBounds();     // 重置范围
-            mesh.RecalculateNormals();    // 重置法线
-            mesh.RecalculateTangents();    // 重置切线
-
-            return mesh;
+            return triangles;
         }
 
         /// <summary>
@@ -1065,6 +953,22 @@ namespace XFramework.Draw
             mesh.RecalculateTangents();    // 重置切线
 
             return mesh;
+        }
+
+        private static void AddTriangles(this List<int> triangles, int a, int b, int c, bool isReverse = false)
+        {
+            if (!isReverse)
+            {
+                triangles.Add(a);
+                triangles.Add(b);
+                triangles.Add(c);
+            }
+            else
+            {
+                triangles.Add(c);
+                triangles.Add(b);
+                triangles.Add(a);
+            }
         }
     }
 }

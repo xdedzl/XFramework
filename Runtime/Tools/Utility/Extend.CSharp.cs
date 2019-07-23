@@ -8,6 +8,28 @@ namespace XFramework
         #region Collection
 
         /// <summary>
+        /// 获取一个集合从start开始的length个
+        /// </summary>
+        /// <typeparam name="T">数组类型</typeparam>
+        /// <param name="value">目标</param>
+        /// <param name="start">开始索引</param>
+        /// <param name="length">目标长度</param>
+        /// <returns></returns>
+        public static T[] Take<T>(this IList<T> value, int start, int length)
+        {
+            if (start + length > value.Count)
+            {
+                throw new Exception("[IList]超出索引范围");
+            }
+            T[] temp = new T[length];
+            for (int i = 0; i < length; i++)
+            {
+                temp[i] = value[start + i];
+            }
+            return temp;
+        }
+
+        /// <summary>
         /// 对枚举器的所以数据进行某种操作
         /// </summary>
         /// <typeparam name="T">目标对象</typeparam>
@@ -42,8 +64,7 @@ namespace XFramework
         /// </summary>
         public static Value GetValue<Key, Value>(this Dictionary<Key, Value> dic, Key key)
         {
-            Value value;
-            dic.TryGetValue(key, out value);
+            dic.TryGetValue(key, out Value value);
             return value;
         }
 

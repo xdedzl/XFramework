@@ -1,8 +1,17 @@
-﻿using UnityEngine;
-using UnityEngine.UI;
+﻿using System.Collections.Generic;
+using UnityEngine;
 
 namespace XFramework
 {
+    public enum VectorType
+    {
+        LocalPos,
+        Pos,
+        LocalAngle,
+        Angle,
+        LocalScale
+    }
+
     /// <summary>
     /// 这个类管理一系列的拓展函数
     /// 以后把System和UnityEngine的扩展分开
@@ -10,6 +19,7 @@ namespace XFramework
     public static partial class Extend
     {
         #region Vector相关
+
         public static Vector3 WithX(this Vector3 v, float x)
         {
             return new Vector3(x, v.y, v.z);
@@ -92,6 +102,129 @@ namespace XFramework
             }
             return null;
         }
+
+        /// <summary>
+        /// 获取Transform的所有子物体
+        /// </summary>
+        public static Transform[] GetChilds(this Transform transform)
+        {
+            int count = transform.childCount;
+            Transform[] childs = new Transform[count];
+            for (int i = 0; i < count; i++)
+            {
+                childs[i] = transform.GetChild(i);
+            }
+            return childs;
+        }
+
+        /// <summary>
+        /// 获取Transform的所有 名为 _name 的 子物体
+        /// </summary>
+        public static Transform[] GetChilds(this Transform _transform, string _name)
+        {
+            int count = _transform.childCount;
+            List<Transform> childs = new List<Transform>();
+            for (int i = 0; i < count; i++)
+            {
+                Transform tmpChild = _transform.GetChild(i);
+                if (tmpChild.name == _name)
+                {
+                    childs.Add(tmpChild);
+                }
+                childs.AddRange(tmpChild.GetChilds(_name));
+            }
+            return childs.ToArray();
+        }
+
+        /// <summary>
+        /// 获取Transform的所有子物体的GameObject
+        /// </summary>
+        public static GameObject[] GetChildsObj(this Transform transform)
+        {
+            int count = transform.childCount;
+            GameObject[] childs = new GameObject[count];
+            for (int i = 0; i < count; i++)
+            {
+                childs[i] = transform.GetChild(i).gameObject;
+            }
+            return childs;
+        }
+
+        /// <summary>
+        /// 设置某个矢量x的值
+        /// </summary>
+        public static void SetX(this Transform transform, float x, VectorType type = VectorType.Pos)
+        {
+            switch (type)
+            {
+                case VectorType.LocalPos:
+                    transform.localPosition = new Vector3(x, transform.position.y, transform.position.z);
+                    break;
+                case VectorType.Pos:
+                    transform.position = new Vector3(x, transform.position.y, transform.position.z);
+                    break;
+                case VectorType.LocalAngle:
+                    transform.localEulerAngles = new Vector3(x, transform.position.y, transform.position.z);
+                    break;
+                case VectorType.Angle:
+                    transform.eulerAngles = new Vector3(x, transform.position.y, transform.position.z);
+                    break;
+                case VectorType.LocalScale:
+                    transform.localScale = new Vector3(x, transform.position.y, transform.position.z);
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// 设置某个矢量y的值
+        /// </summary>
+        public static void SetY(this Transform transform, float y, VectorType type = VectorType.Pos)
+        {
+            switch (type)
+            {
+                case VectorType.LocalPos:
+                    transform.localPosition = new Vector3(transform.position.x, y, transform.position.z);
+                    break;
+                case VectorType.Pos:
+                    transform.position = new Vector3(transform.position.x, y, transform.position.z);
+                    break;
+                case VectorType.LocalAngle:
+                    transform.localEulerAngles = new Vector3(transform.position.x, y, transform.position.z);
+                    break;
+                case VectorType.Angle:
+                    transform.eulerAngles = new Vector3(transform.position.x, y, transform.position.z);
+                    break;
+                case VectorType.LocalScale:
+                    transform.localScale = new Vector3(transform.position.x, y, transform.position.z);
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// 设置某个矢量z的值
+        /// </summary>
+        public static void SetZ(this Transform transform, float z, VectorType type = VectorType.Pos)
+        {
+            switch (type)
+            {
+                case VectorType.LocalPos:
+                    transform.localPosition = new Vector3(transform.position.x, transform.position.y, z);
+                    break;
+                case VectorType.Pos:
+                    transform.position = new Vector3(transform.position.x, transform.position.y, z);
+                    break;
+                case VectorType.LocalAngle:
+                    transform.localEulerAngles = new Vector3(transform.position.x, transform.position.y, z);
+                    break;
+                case VectorType.Angle:
+                    transform.eulerAngles = new Vector3(transform.position.x, transform.position.y, z);
+                    break;
+                case VectorType.LocalScale:
+                    transform.localScale = new Vector3(transform.position.x, transform.position.y, z);
+                    break;
+            }
+        }
+
         #endregion
 
         #region Rigibogy
@@ -141,92 +274,6 @@ namespace XFramework
         public static Color Alpha(this Color color, float a)
         {
             return new Color(color.r, color.g, color.b, a);
-        }
-
-        #endregion
-
-        #region UI
-
-        /// <summary>
-        /// 给Toggle添加受控制的物体
-        /// </summary>
-        /// <param name="toggle"></param>
-        /// <param name="panel"></param>
-        public static void AddCotroledPanel(this Toggle toggle, GameObject panel)
-        {
-            toggle.onValueChanged.AddListener((a) => panel.SetActive(a));
-        }
-
-        #endregion
-
-        #region Terrain
-
-        /// <summary>
-        /// 右边的地形块
-        /// </summary>
-        /// <param name="terrain"></param>
-        /// <returns></returns>
-        public static Terrain Right(this Terrain terrain)
-        {
-#if UNITY_2018_3_OR_NEWER
-            return terrain.rightNeighbor;
-#else
-        Vector3 rayStart = terrain.GetPosition() + new Vector3(terrain.terrainData.size.x * 1.5f, 10000, terrain.terrainData.size.z * 0.5f);
-        RaycastHit hitInfo;
-        Physics.Raycast(rayStart, Vector3.down, out hitInfo, float.MaxValue, LayerMask.GetMask("Terrain"));
-        return hitInfo.collider?.GetComponent<Terrain>();
-#endif
-        }
-
-        /// <summary>
-        /// 上边的地形块
-        /// </summary>
-        /// <param name="terrain"></param>
-        /// <returns></returns>
-        public static Terrain Top(this Terrain terrain)
-        {
-#if UNITY_2018_3_OR_NEWER
-            return terrain.topNeighbor;
-#else
-        Vector3 rayStart = terrain.GetPosition() + new Vector3(terrain.terrainData.size.x * 0.5f, 10000, terrain.terrainData.size.z * 1.5f);
-        RaycastHit hitInfo;
-        Physics.Raycast(rayStart, Vector3.down, out hitInfo, float.MaxValue, LayerMask.GetMask("Terrain"));
-        return hitInfo.collider?.GetComponent<Terrain>();
-#endif
-        }
-
-        /// <summary>
-        /// 左边的地形块
-        /// </summary>
-        /// <param name="terrain"></param>
-        /// <returns></returns>
-        public static Terrain Left(this Terrain terrain)
-        {
-#if UNITY_2018_3_OR_NEWER
-            return terrain.leftNeighbor;
-#else
-        Vector3 rayStart = terrain.GetPosition() + new Vector3(-terrain.terrainData.size.x * 0.5f, 10000, terrain.terrainData.size.z * 0.5f);
-        RaycastHit hitInfo;
-        Physics.Raycast(rayStart, Vector3.down, out hitInfo, float.MaxValue, LayerMask.GetMask("Terrain"));
-        return hitInfo.collider?.GetComponent<Terrain>();
-#endif
-        }
-
-        /// <summary>
-        /// 下边的地形块
-        /// </summary>
-        /// <param name="terrain"></param>
-        /// <returns></returns>
-        public static Terrain Bottom(this Terrain terrain)
-        {
-#if UNITY_2018_3_OR_NEWER
-            return terrain.bottomNeighbor;
-#else
-        Vector3 rayStart = terrain.GetPosition() + new Vector3(terrain.terrainData.size.x * 0.5f, 10000, -terrain.terrainData.size.z * 0.5f);
-        RaycastHit hitInfo;
-        Physics.Raycast(rayStart, Vector3.down, out hitInfo, float.MaxValue, LayerMask.GetMask("Terrain"));
-        return hitInfo.collider?.GetComponent<Terrain>();
-#endif
         }
 
         #endregion
