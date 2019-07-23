@@ -1,3 +1,9 @@
+// ==========================================
+// 描述： 
+// 作者： HAK
+// 时间： 2018-10-18 15:30:33
+// 版本： V 1.0
+// ==========================================
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,28 +19,42 @@ namespace XFramework.Mathematics
         #region 公式类计算
         // 大小比较
         private const double epsilon = 1e-7;
-        // 小与
-        private bool FloatLess(float value, float other)
+        /// <summary>
+        /// 判断a是否小于b
+        /// </summary>
+        private bool Less(float a, float b)
         {
-            return (other - value) > epsilon;
+            return (b - a) > epsilon;
         }
-        // 大于
-        private bool FloatGreat(float value, float other)
+        /// <summary>
+        /// 判断a是否大于b
+        /// </summary>
+        private bool Great(float a, float b)
         {
-            return (value - other) > epsilon;
+            return (a - b) > epsilon;
         }
-        // float等于
-        public static bool FloatEqual(float value, float other)
+        /// <summary>
+        /// 判断a是否等于b
+        /// </summary>
+        public static bool FloatEqual(float a, float b)
         {
-            return Mathf.Abs(value - other) < epsilon;
+            return Mathf.Abs(a - b) < epsilon;
         }
-        // Vector等于
+        /// <summary>
+        /// 判断a是否等于b
+        /// </summary>
         public static bool Vector3Equal(Vector3 a, Vector3 b)
         {
             return FloatEqual(a.x, b.x) && FloatEqual(a.y, b.y) && FloatEqual(a.z, b.z);
         }
 
-        //获取平方根 一元二次方程求根公式 x = (-b+(b^2-4ac)^1/2)/2a
+        /// <summary>
+        /// 获取平方根 一元二次方程求根公式 x = (-b+(b^2-4ac)^1/2)/2a
+        /// </summary>
+        /// <param name="a"></param>
+        /// <param name="b"></param>
+        /// <param name="d"></param>
+        /// <returns></returns>
         public static float GetSqrtOfMath(float a, float b, float d)
         {
             float a1 = (-b + Mathf.Sqrt(d)) / (2 * a);
@@ -85,40 +105,65 @@ namespace XFramework.Mathematics
             return new Vector3(x, y, z);
         }
 
-        // 排序所给点为顺时针方向
-        public static Vector3[] CheckVector(List<Vector3> points)
+        /// <summary>
+        /// 检查所给点集是否为顺时针排序(向量叉乘的法线朝向)
+        /// </summary>
+        /// <returns></returns>
+        public static bool CheckVector(List<Vector3> points)
         {
-            // 创建一个除去自身前一点的 多边形，判断前一点是否为内点（凹点）
+            // 创建一个除去自身的 多边形，判断是否为内点（凹点）
             List<Vector3> polygon = new List<Vector3>(points);
             polygon.RemoveAt(0);
 
             Vector3 vector3_1 = points[0] - points[1];
             Vector3 vector3_2 = points[points.Count - 1] - points[0];
 
-            Vector3 nom = Vector3.Cross(vector3_1, vector3_2);  // 算出法线方向
+            Vector3 nom = Vector3.Cross(vector3_1, vector3_2);  // 算出法线方向。Unity为左手坐标系, 使用左手定则
 
             //是否是凹点
             if (IsPointInsidePolygon(points[0], polygon))
             {
-                // 法线方向朝上。即逆时针排序，需要反转
-                if (nom.y > 0)
+                // 法线方向朝下。即逆时针排序，需要反转
+                if (nom.y < 0)
                 {
-                    points.Reverse();
+                    return false;
                 }
             }
             else   // 凸点
             {
                 // 法线方向朝上。即逆时针排序，需要反转
-                if (nom.y < 0)
+                if (nom.y > 0)
                 {
-                    points.Reverse();
+                    return false;
                 }
             }
-
-            return points.ToArray();
+            return true;
         }
 
-        // 获取扇形弧边中点
+        /// <summary>
+        /// 检查所给点集是否为顺时针排序(向量叉乘的法线朝向)
+        /// </summary>
+        /// <param name="points"></param>
+        /// <param name="outPoints"></param>
+        /// <returns></returns>
+        public static bool CheckVector(List<Vector3> points, out List<Vector3> outPoints)
+        {
+            outPoints = new List<Vector3>(points);
+            if (!CheckVector(points))
+            {
+                outPoints.Reverse();
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 获取扇形弧边中点
+        /// </summary>
+        /// <param name="origin"></param>
+        /// <param name="leftPoint"></param>
+        /// <param name="rightPoint"></param>
+        /// <returns></returns>
         public static Vector3 GetSectorOutPoint(Vector3 origin, Vector3 leftPoint, Vector3 rightPoint)
         {
             Vector3 leftVector = leftPoint - origin;                // 左向量
@@ -132,13 +177,19 @@ namespace XFramework.Mathematics
 
         #region 点线面之间的关系
 
-        // y为0的伯努利方程,angle为弧度
-        public static Vector3 GetBernoulli(int a, float angle, float y)
+        /// <summary>
+        /// y为0的伯努利方程
+        /// </summary>
+        /// <param name="a"></param>
+        /// <param name="radian">弧度</param>
+        /// <param name="y"></param>
+        /// <returns></returns>
+        public static Vector3 GetBernoulli(int a, float radian, float y)
         {
-            float p = Mathf.Sqrt(a * a * Mathf.Cos(2 * angle));
-            float x = p * Mathf.Cos(angle);
-            float z = p * Mathf.Sin(angle);
-            if ((0.75) * Mathf.PI < angle && angle < (1.25) * Mathf.PI)
+            float p = Mathf.Sqrt(a * a * Mathf.Cos(2 * radian));
+            float x = p * Mathf.Cos(radian);
+            float z = p * Mathf.Sin(radian);
+            if ((0.75) * Mathf.PI < radian && radian < (1.25) * Mathf.PI)
             {
                 return new Vector3(x, y, -z);
             }
@@ -608,40 +659,39 @@ namespace XFramework.Mathematics
 
             int halfAlpha = (int)(alpha / 2);
 
-            Vector3 startVector_1 = tarPoint - origin;                                    //获取底面中间向量
+            Vector3 startVector_1 = tarPoint - origin;                                    // 获取底面中间向量
 
-            float tempHeight = Mathf.Tan(theta * Mathf.Deg2Rad) * startVector_1.magnitude;//扇形区域最边缘高度          
-            Vector3 startVector_2 = startVector_1 + Vector3.up * tempHeight;              //获取顶边中间向量
+            float tempHeight = Mathf.Tan(theta * Mathf.Deg2Rad) * startVector_1.magnitude;// 扇形区域最边缘高度          
 
-            float radius_1 = (tarPoint - origin).magnitude;                //获得扇形底面半径
-            float radius_2 = radius_1 / Mathf.Cos(theta * Mathf.Deg2Rad);  //获得扇形顶面半径
+            // 获取扇形下表面和下表面的半径
+            float radiusDown = (tarPoint - origin).magnitude;
+            float radiusUp = radiusDown / Mathf.Cos(theta * Mathf.Deg2Rad);  // 获得扇形顶面半径
 
-            float tempWidth = radius_1 / Mathf.Cos(halfAlpha);             //圆心点 到底面中间半径线和地面弧边两个端点连接线的交点 的长度
+            // 获取扇形弧边所有点的方向向量
+            List<Vector3> dirsDown = new List<Vector3>();
+            List<Vector3> dirsUp = new List<Vector3>();
 
-            List<Vector3> dirs_1 = new List<Vector3>();//底边方向向量集合
-            List<Vector3> dirs_2 = new List<Vector3>();//顶边方向向量集合 
-                                                       //获取扇形弧边所有点的方向向量
             for (int i = -halfAlpha, j = 0; i <= halfAlpha; i += 3, j++)
             {
-                //获取下弧边的方向向量
+                // 获取下弧边的方向向量
                 Vector2 temp = GetTargetVector(new Vector2(startVector_1.x, startVector_1.z), i);
-                dirs_1.Add(new Vector3(temp.x, 0, temp.y));
+                dirsDown.Add(new Vector3(temp.x, 0, temp.y));
 
-                //获取上弧边的方向向量
-                Vector3 targetDir = temp.magnitude / Mathf.Cos(i * Mathf.Deg2Rad) * dirs_1[j].normalized + Vector3.up * tempHeight;
-                dirs_2.Add(targetDir);
+                // 获取上弧边的方向向量
+                Vector3 targetDir = temp.magnitude / Mathf.Cos(i * Mathf.Deg2Rad) * dirsDown[j].normalized + Vector3.up * tempHeight;
+                dirsUp.Add(targetDir);
             }
 
-            //获取扇形所有点
+            // 获取扇形所有点
             points.Add(origin);
-            for (int i = 0; i < dirs_1.Count; i++)
+            for (int i = 0; i < dirsDown.Count; i++)
             {
-                points.Add(dirs_1[i].normalized * radius_1 + origin);
+                points.Add(dirsDown[i].normalized * radiusDown + origin);
             }
             points.Add(origin);
-            for (int i = 0; i < dirs_2.Count; i++)
+            for (int i = 0; i < dirsUp.Count; i++)
             {
-                points.Add(dirs_2[i].normalized * radius_2 + origin);
+                points.Add(dirsUp[i].normalized * radiusUp + origin);
             }
 
             return points.ToArray();
@@ -666,83 +716,9 @@ namespace XFramework.Mathematics
         }
 
         /// <summary>
-        /// 获取凹多边形平面排序
+        /// 以index点和前后两个点构造一个三角形,判断点集内的其余点是否全部在这个三角形外部
         /// </summary>
-        /// <param name="points"> 关键点集合 </param>
-        /// <returns></returns>
-        public static List<int> DrawPolygon(List<Vector3> points, bool isUp)
-        {
-            List<int> indexs = new List<int>();
-            for (int i = 0; i < points.Count; i++)
-            {
-                indexs.Add(i);
-            }
-
-            List<int> triangles = new List<int>();
-
-            //创建一个除去自身前一点的 多边形，判断前一点是否为内点（凹点）
-            int index = points.Count - 1;
-            int next;
-            int prev;
-            while (indexs.Count > 3)
-            {
-                List<Vector3> polygon = new List<Vector3>(points.ToArray());
-                polygon.RemoveAt(index);
-
-                //是否是凹点
-                if (!IsPointInsidePolygon(points[index], polygon))
-                {
-                    // 是否是可划分顶点:新的多边形没有顶点在分割的三角形内
-                    if (IsFragementIndex(index, points))
-                    {
-                        //可划分，剖分三角形
-                        next = (index == indexs.Count - 1) ? 0 : index + 1;
-                        prev = (index == 0) ? indexs.Count - 1 : index - 1;
-                        if (isUp)
-                        {
-                            triangles.Add(indexs[index]);
-                            triangles.Add(indexs[prev]);
-                            triangles.Add(indexs[next]);
-                        }
-                        else
-                        {
-                            triangles.Add(indexs[next]);
-                            triangles.Add(indexs[prev]);
-                            triangles.Add(indexs[index]);
-                        }
-
-                        indexs.RemoveAt(index);
-                        points.RemoveAt(index);
-
-                        index = (index + indexs.Count - 1) % indexs.Count;       // 防止出现index超出值域
-
-                        continue;
-                    }
-                }
-                index = (index + 1) % indexs.Count;
-            }
-            next = (index == indexs.Count - 1) ? 0 : index + 1;
-            prev = (index == 0) ? indexs.Count - 1 : index - 1;
-            if (isUp)
-            {
-                triangles.Add(indexs[prev]);
-                triangles.Add(indexs[next]);
-                triangles.Add(indexs[index]);
-            }
-            else
-            {
-                triangles.Add(indexs[index]);
-                triangles.Add(indexs[next]);
-                triangles.Add(indexs[prev]);
-            }
-
-            return triangles;
-        }
-
-        /// <summary>
-        /// 是否是可划分顶点:新的多边形没有顶点在分割的三角形内
-        /// </summary>
-        public static bool IsFragementIndex(int index, List<Vector3> verts, bool containEdge = true)
+        public static bool IsFragementIndex(List<Vector3> verts, int index, bool containEdge = true)
         {
             int len = verts.Count;
             List<Vector3> triangleVert = new List<Vector3>();
@@ -795,11 +771,11 @@ namespace XFramework.Mathematics
                 // 确保夹角不超出取值范围（-π 到 π）
                 if (angle >= Mathf.PI)
                 {
-                    angle = angle - Mathf.PI * 2;
+                    angle -= Mathf.PI * 2;
                 }
                 else if (angle <= -Mathf.PI)
                 {
-                    angle = angle + Mathf.PI * 2;
+                    angle += Mathf.PI * 2;
                 }
 
                 sum += angle;
@@ -815,7 +791,7 @@ namespace XFramework.Mathematics
         /// <param name="point"> 待判断的点 </param>
         /// <param name="mPoints"> 多边形 </param>
         /// <returns></returns>
-        public static bool IsPointInsidePolygon001(Vector3 point, List<Vector3> mPoints)
+        public static bool IsPointInsidePolygon(Vector3 point, List<Vector3> mPoints)
         {
             int nCross = 0;
 
@@ -863,9 +839,10 @@ namespace XFramework.Mathematics
         /// <param name="point"> 待判断的点 </param>
         /// <param name="mPoints"> 多边形 </param>
         /// <returns></returns>
-        public static bool IsPointInsidePolygon001(Vector3 point, List<Vector3> mPoints, List<Vector3> crossPoints = null)
+        public static bool IsPointInsidePolygon(Vector3 point, List<Vector3> mPoints, out List<Vector3> crossPoints)
         {
             int nCross = 0;
+            crossPoints = new List<Vector3>();
 
             for (int i = 0; i < mPoints.Count; i++)
             {
@@ -912,9 +889,10 @@ namespace XFramework.Mathematics
             // 单边交点为奇数，点在多边形之内
             return (nCross % 2 == 1);
         }
-        public static bool IsPointInsidePolygon001(Vector2 point, Vector2[] mPoints, List<Vector2> crossPoints = null)
+        public static bool IsPointInsidePolygon(Vector2 point, Vector2[] mPoints, out List<Vector2> crossPoints)
         {
             int nCross = 0;
+            crossPoints = new List<Vector2>();
 
             for (int i = 0; i < 3; i++)
             {
@@ -974,56 +952,56 @@ namespace XFramework.Mathematics
             return (nCross % 2 == 1);
         }
 
-        /// <summary>
-        /// 将一个多边形转化为多个三角形
-        /// </summary>
-        /// <param name="points"></param>
-        /// <returns></returns>
-        public static List<Vector3[]> PolygonToTriangles(List<Vector3> points)
-        {
-            if (points.Count < 3)
-            {
-                return null;
-            }
-            List<Vector3[]> triangles = new List<Vector3[]>();
-            int index = points.Count - 1;
-            int next;
-            int prev;
+        ///// <summary>
+        ///// 将一个多边形转化为多个三角形
+        ///// </summary>
+        ///// <param name="points"></param>
+        ///// <returns></returns>
+        //public static List<Vector3[]> PolygonToTriangles(List<Vector3> points)
+        //{
+        //    if (points.Count < 3)
+        //    {
+        //        return null;
+        //    }
+        //    List<Vector3[]> triangles = new List<Vector3[]>();
+        //    int index = points.Count - 1;
+        //    int next;
+        //    int prev;
 
-            while (points.Count > 3)
-            {
-                List<Vector3> polygon = new List<Vector3>(points);
-                polygon.RemoveAt(index);
+        //    while (points.Count > 3)
+        //    {
+        //        List<Vector3> polygon = new List<Vector3>(points);
+        //        polygon.RemoveAt(index);
 
-                //是否是凹点
-                if (!IsPointInsidePolygon(points[index], polygon, false))
-                {
-                    // 是否是可划分顶点:新的多边形没有顶点在分割的三角形内
-                    if (IsFragementIndex(index, points.ToList(), false))
-                    {
-                        //可划分，剖分三角形
-                        next = (index == points.Count - 1) ? 0 : index + 1;
-                        prev = (index == 0) ? points.Count - 1 : index - 1;
+        //        //是否是凹点
+        //        if (!IsPointInsidePolygon(points[index], polygon, false))
+        //        {
+        //            // 是否是可划分顶点:新的多边形没有顶点在分割的三角形内
+        //            if (IsFragementIndex(index, points.ToList(), false))
+        //            {
+        //                //可划分，剖分三角形
+        //                next = (index == points.Count - 1) ? 0 : index + 1;
+        //                prev = (index == 0) ? points.Count - 1 : index - 1;
 
-                        triangles.Add(new Vector3[]
-                        {
-                        points[index],
-                        points[prev],
-                        points[next]
-                        });
+        //                triangles.Add(new Vector3[]
+        //                {
+        //                points[index],
+        //                points[prev],
+        //                points[next]
+        //                });
 
-                        points.RemoveAt(index);
+        //                points.RemoveAt(index);
 
-                        index = (index + points.Count - 1) % points.Count;       // 防止出现index超出值域
-                        continue;
-                    }
-                }
-                index = (index + 1) % points.Count;
-            }
-            triangles.Add(new Vector3[] { points[1], points[0], points[2] });
+        //                index = (index + points.Count - 1) % points.Count;       // 防止出现index超出值域
+        //                continue;
+        //            }
+        //        }
+        //        index = (index + 1) % points.Count;
+        //    }
+        //    triangles.Add(new Vector3[] { points[1], points[0], points[2] });
 
-            return triangles;
-        }
+        //    return triangles;
+        //}
 
         /// <summary>
         /// 返回三角形的内部(整数)顶点
@@ -1045,7 +1023,7 @@ namespace XFramework.Mathematics
             for (int z = (int)zMin, iLength = (int)zMax + 1; z < iLength; z++)
             {
                 pointTmp.Set(xMin, 0, z);       // 设置临时点(固定x，将z递增)
-                PhysicsMath.IsPointInsidePolygon001(pointTmp, trianglePoints, crossPoints);     // 获取z轴平行线与三角形的交点
+                PhysicsMath.IsPointInsidePolygon(pointTmp, trianglePoints, out crossPoints);     // 获取z轴平行线与三角形的交点
 
                 // 循环添加两个交点之间的网格点
                 for (int x = (int)crossPoints[0].x, length = (int)crossPoints[crossPoints.Count - 1].x + 1; x < length; x++)
@@ -1092,7 +1070,7 @@ namespace XFramework.Mathematics
             {
                 pointTmp.Set(xMin, 0, z);       // 设置临时点(固定x，将z递增)
 
-                IsPointInsidePolygon001(pointTmp, trianglePoints.ToList(), crossPoints);     // 获取z轴平行线与三角形的交点
+                IsPointInsidePolygon(pointTmp, trianglePoints.ToList(), out crossPoints);     // 获取z轴平行线与三角形的交点
 
                 if (crossPoints.Count == 2)
                 {

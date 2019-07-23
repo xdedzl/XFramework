@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 namespace XFramework.Entity
@@ -18,17 +17,20 @@ namespace XFramework.Entity
         /// 存储对应实体容器的字典
         /// </summary>
         private Dictionary<string, EntityContainer> m_EntityContainerDic;
+        /// <summary>
+        /// 存储所有在使用的实体字典
+        /// </summary>
         private Dictionary<int, Entity> m_EntityDic;
-
-        public void A<T>(object p, Vector3 vector3)
-        {
-            throw new NotImplementedException();
-        }
+        /// <summary>
+        /// 存储所有实体（在使用的，被回收在池中的）
+        /// </summary>
+        private Dictionary<int, EntityInfo> m_EntityInfoDic;
 
         public EntityManager()
         {
             m_EntityContainerDic = new Dictionary<string, EntityContainer>();
             m_EntityDic = new Dictionary<int, Entity>();
+            m_EntityInfoDic = new Dictionary<int, EntityInfo>();
         }
 
         private int NextId
@@ -153,11 +155,18 @@ namespace XFramework.Entity
         /// <param name="entity">目标实体</param>
         public bool Recycle(Entity entity)
         {
-            EntityContainer container = GetContainer(entity.ContainerName);
-            if (container != null)
+            if(entity != null)
             {
-                m_EntityDic.Remove(entity.Id);
-                return container.Recycle(entity);
+                EntityContainer container = GetContainer(entity.ContainerName);
+                if (container != null)
+                {
+                    m_EntityDic.Remove(entity.Id);
+                    return container.Recycle(entity);
+                }
+                else
+                {
+                    throw new FrameworkExecption("[Entity] this entity is not created by manager");
+                }
             }
             return false;
         }
@@ -177,12 +186,46 @@ namespace XFramework.Entity
         }
 
         /// <summary>
+        /// 附加实体，将child附加到parent上
+        /// </summary>
+        /// <param name="child"></param>
+        /// <param name="parent"></param>
+        public void Attach(Entity child, Entity parent)
+        {
+            EntityInfo childInfo = GetEntityInfo(child);
+            EntityInfo parendInfo = GetEntityInfo(parent);
+
+            childInfo.Parent = parent;
+            parendInfo.AddChild(child);
+
+            child.OnAttachTo(parent);
+            parent.OnAttached(child);
+        }
+
+        /// <summary>
+        /// 移除实体，将child从它的父物体上移除
+        /// </summary>
+        /// <param name="child"></param>
+        /// <param name="parent"></param>
+        public void Detach(Entity child)
+        {
+            EntityInfo childInfo = GetEntityInfo(child);
+
+            if(childInfo.Parent != null)
+            {
+                childInfo.Parent.OnDetached(child);
+                child.OnDetachFrom(childInfo.Parent);
+                childInfo.Parent = null;
+            }
+        }
+
+        /// <summary>
         /// 获取实体容器
         /// </summary>
-        /// <param name="entityName">实体名</param>
-        public EntityContainer GetContainer(string entityName)
+        /// <param name="containerName">实体名</param>
+        public EntityContainer GetContainer(string containerName)
         {
-            m_EntityContainerDic.TryGetValue(entityName, out EntityContainer entityContainer);
+            m_EntityContainerDic.TryGetValue(containerName, out EntityContainer entityContainer);
             return entityContainer;
         }
 
@@ -222,25 +265,58 @@ namespace XFramework.Entity
         }
 
         /// <summary>
-        /// 清除未在使用的实体
+        /// 获取一个实体的父子关系
         /// </summary>
-        /// <param name="deleteUselessContainer">是否删除不含实体的容器</param>
-        public void Clean(bool deleteUselessContainer = false)
+        /// <param name="entity"></param>
+        /// <returns></returns>
+        private EntityInfo GetEntityInfo(Entity entity)
+        {
+            if (m_EntityInfoDic.TryGetValue(entity.Id, out EntityInfo entityInfo))
+            {
+                return entityInfo;
+            }
+            else
+            {
+                EntityInfo info = new EntityInfo(entity);
+                m_EntityInfoDic.Add(entity.Id, info);
+                return info;
+            }
+        }
+
+        /// <summary>
+        /// 清理实体池
+        /// </summary>
+        /// <param name="count">容器实体池的最大保留量</param>
+        public void Clean(int count = 0)
         {
             List<string> keys = new List<string>();
             foreach (var item in m_EntityContainerDic.Values)
             {
-                item.Clean();
-                if (item.Count <= 0 && deleteUselessContainer)
-                    keys.Add(item.name);
+                InternalClean(item, count);
             }
-            if (deleteUselessContainer)
+        }
+
+        /// <summary>
+        /// 清理某个容器实体池
+        /// </summary>
+        /// <param name="containerName">容器名</param>
+        /// <param name="count">容器实体池的最大保留量</param>
+        public void Clean(string containerName, int count)
+        {
+            EntityContainer container = GetContainer(containerName);
+            if(container != null)
             {
-                foreach (var item in keys)
-                {
-                    m_EntityContainerDic.Remove(item);
-                }
+                InternalClean(container, count);
             }
+            else
+            {
+                throw new FrameworkExecption("[EntityContainer] null container");
+            }
+        }
+
+        private void InternalClean(EntityContainer entityContainer, int count)
+        {
+             entityContainer.Clean(count, (id) => { m_EntityInfoDic.Remove(id); });
         }
 
         #region 接口实现
@@ -251,6 +327,7 @@ namespace XFramework.Entity
         {
             m_EntityContainerDic = null;
             m_EntityDic = null;
+            m_EntityInfoDic = null;
         }
 
         public void Update(float elapseSeconds, float realElapseSeconds)
