@@ -12,7 +12,7 @@ public class UIHelper : IGameModule
     /// <summary>
     /// UI管理器
     /// </summary>
-    private IUIManager UImanager;
+    private readonly UIMgrDicType m_UIManager;
 
     private Transform canvasTransform;
     private Transform CanvasTransform
@@ -48,7 +48,7 @@ public class UIHelper : IGameModule
 
     public UIHelper()
     {
-        UImanager = new UIMgrDicType();
+        m_UIManager = new UIMgrDicType();
         InitTip();
     }
 
@@ -57,7 +57,7 @@ public class UIHelper : IGameModule
     /// </summary>
     public void Open(string name, object arg = null)
     {
-        UImanager.OpenPanel(name, arg);
+        m_UIManager.OpenPanel(name, arg);
     }
 
     /// <summary>
@@ -66,7 +66,7 @@ public class UIHelper : IGameModule
     /// <param name="name"></param>
     public void Close(string name)
     {
-        UImanager.ClosePanel(name);
+        m_UIManager.ClosePanel(name);
     }
 
     /// <summary>
@@ -74,7 +74,7 @@ public class UIHelper : IGameModule
     /// </summary>
     public BasePanel GetPanel(string name)
     {
-        return UImanager.GetPanel(name);
+        return m_UIManager.GetPanel(name);
     }
 
     /// <summary>
@@ -82,7 +82,7 @@ public class UIHelper : IGameModule
     /// </summary>
     public void CloseTopPanel()
     {
-        UImanager.CloseTopPanel();
+        m_UIManager.CloseTopPanel();
     }
 
     /// <summary>
@@ -129,15 +129,15 @@ public class UIHelper : IGameModule
         Open(UIName.Verify);
     }
 
-    public int Priority { get { return UImanager.Priority; } }
+    public int Priority { get { return m_UIManager.Priority; } }
 
     public void Update(float elapseSeconds, float realElapseSeconds)
     {
-        UImanager.Update(elapseSeconds, realElapseSeconds);
+        m_UIManager.Update(elapseSeconds, realElapseSeconds);
     }
 
     public void Shutdown()
     {
-        UImanager.Shutdown();
+        m_UIManager.Shutdown();
     }
 }

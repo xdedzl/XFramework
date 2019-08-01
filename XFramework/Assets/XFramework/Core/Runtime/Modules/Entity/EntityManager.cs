@@ -165,7 +165,7 @@ namespace XFramework.Entity
                 }
                 else
                 {
-                    throw new FrameworkExecption("[Entity] this entity is not created by manager");
+                    throw new FrameworkException("[Entity] this entity is not created by manager");
                 }
             }
             return false;
@@ -310,7 +310,7 @@ namespace XFramework.Entity
             }
             else
             {
-                throw new FrameworkExecption("[EntityContainer] null container");
+                throw new FrameworkException("[EntityContainer] null container");
             }
         }
 

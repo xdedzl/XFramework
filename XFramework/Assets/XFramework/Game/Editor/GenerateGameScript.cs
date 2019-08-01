@@ -9,6 +9,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 using XFramework.Pool;
 using XFramework.Event;
+using System.Resources;
 
 /// <summary>
 /// Game脚本的刷新

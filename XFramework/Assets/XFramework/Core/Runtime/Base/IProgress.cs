@@ -8,4 +8,11 @@
         bool IsDone { get; }
         float Progress { get; }
     }
+
+    public class DefaultProgress : IProgress
+    {
+        public bool IsDone => true;
+
+        public float Progress => 1;
+    }
 }

@@ -2,10 +2,10 @@
 
 namespace XFramework
 {
-    public class FrameworkExecption : Exception
+    public class FrameworkException : Exception
     {
-        public FrameworkExecption() : base() { }
+        public FrameworkException() : base() { }
 
-        public FrameworkExecption(string message) : base(message) { }
+        public FrameworkException(string message) : base(message) { }
     }
 }

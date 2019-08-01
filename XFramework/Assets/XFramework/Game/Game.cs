@@ -6,6 +6,7 @@ using XFramework.Event;
 using XFramework.Fsm;
 using XFramework.Net;
 using XFramework.Pool;
+using XFramework.Resource;
 using XFramework.Tasks;
 
 /// <summary>
@@ -85,7 +86,7 @@ public class Game : MonoBehaviour
         NetModule = GameEntry.AddModule<NetManager>();
         UIModule = GameEntry.AddModule<UIHelper>();
         MeshModule = GameEntry.AddModule<MeshManager>();
-        ResModule = GameEntry.AddModule<ResourceManager>();
+        ResModule = GameEntry.AddModule<ResourceManager>(new AssetBundleLoadHelper());
         // End2
     }
 

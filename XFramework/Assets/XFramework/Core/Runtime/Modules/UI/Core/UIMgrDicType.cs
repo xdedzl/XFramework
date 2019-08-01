@@ -122,17 +122,16 @@ namespace XFramework.UI
             {
                 // 根据prefab去实例化面板
                 m_PanelPathDict.TryGetValue(uiname, out string path);
-                Debug.Log(path);
                 GameObject instPanel = GameObject.Instantiate(Resources.Load(path)) as GameObject;
 
-                // UICore与派生类不一定在一个程序集类，所以不能直接用Type.GetType  TODO : 根据不同平台规定路径
+                // UICore与派生类不一定在一个程序集类，所以不能直接用Type.GetType
                 Assembly asmb = Assembly.Load("Assembly-CSharp");
                 Type type = asmb.GetType(uiname);
-                BasePanel basePanel = (BasePanel)Activator.CreateInstance(type);
+                BasePanel basePanel = Activator.CreateInstance(type) as BasePanel;
                 basePanel.Init(instPanel, uiname);
                 if (basePanel == null)
                 {
-                    throw new System.Exception("面板类名错误");
+                    throw new FrameworkException("[UI]面板类名错误");
                 }
                 m_PanelDict.Add(uiname, basePanel);
 
