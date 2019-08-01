@@ -26,7 +26,7 @@ namespace XFramework.Entity
 
             public EntityInfo(Entity entity)
             {
-                m_Entity = entity ?? throw new FrameworkExecption("Null Entity");
+                m_Entity = entity ?? throw new FrameworkException("Null Entity");
             }
 
             /// <summary>
@@ -81,7 +81,7 @@ namespace XFramework.Entity
 
                 if (m_ChildEntities.Contains(childEntity))
                 {
-                    throw new FrameworkExecption("[Entity] Can not add child which is already exist.");
+                    throw new FrameworkException("[Entity] Can not add child which is already exist.");
                 }
                 m_ChildEntities.Add(childEntity);
             }
@@ -94,7 +94,7 @@ namespace XFramework.Entity
             {
                 if (m_ChildEntities == null || !m_ChildEntities.Remove(childEntity))
                 {
-                    throw new FrameworkExecption("[Entity] Can not remove child which is not exist.");
+                    throw new FrameworkException("[Entity] Can not remove child which is not exist.");
                 }
             }
         }

@@ -16,10 +16,6 @@ namespace XFramework
         /// <param name="realElapseSeconds">真实运行时间</param>
         public static void ModuleUpdate(float elapseSeconds, float realElapseSeconds)
         {
-            //foreach (var module in m_GameModules)
-            //{
-            //    module.Update(elapseSeconds, realElapseSeconds);
-            //}
             m_CurrentModule = m_GameModules.First;
             m_CurrentModule.Value.Update(elapseSeconds, realElapseSeconds);
             while (m_CurrentModule.Next != null)
@@ -48,18 +44,17 @@ namespace XFramework
             return null;
         }
 
-        public static T AddModule<T>() where T : IGameModule
+        public static T AddModule<T>(params object[] args) where T : IGameModule
         {
             Type moduleType = typeof(T);
             foreach (var module in m_GameModules)
             {
                 if (module.GetType() == moduleType)
                 {
-                    //UnityEngine.Debug.LogError($"[{moduleType.Name}]模块已存在，请勿重复添加");
                     return (T)module;
                 }
             }
-            return (T)CreateModule(moduleType);
+            return (T)CreateModule(moduleType, args);
         }
 
         /// <summary>
@@ -91,9 +86,9 @@ namespace XFramework
         /// </summary>
         /// <param name="moduleType"></param>
         /// <returns></returns>
-        private static IGameModule CreateModule(Type moduleType)
+        private static IGameModule CreateModule(Type moduleType, params object[] args)
         {
-            IGameModule module = (IGameModule)Activator.CreateInstance(moduleType);
+            IGameModule module = (IGameModule)Activator.CreateInstance(moduleType, args);
             if (module == null)
             {
                 throw new Exception(moduleType.Name + " is not a module");
