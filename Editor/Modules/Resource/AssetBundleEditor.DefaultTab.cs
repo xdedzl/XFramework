@@ -27,24 +27,16 @@ namespace XFramework.Editor
 
             private List<BuildData> m_BuildDatas;
 
-            private List<string> m_Paths;
-            private List<PackOption> m_Options;
             private List<AssetBundleBuild> m_Builds;
 
             private string OutPutPath;
             private BuildAssetBundleOptions buildAssetBundleOption;
 
-            private bool m_IsShowAB;
-
             public override void OnEnable()
             {
                 m_BuildDatas = new List<BuildData>();
-                m_Paths = new List<string>();
-                m_Options = new List<PackOption>();
                 m_Builds = new List<AssetBundleBuild>();
                 OutPutPath = Application.streamingAssetsPath + "/AssetBundles";
-
-                m_IsShowAB = false;
             }
 
             public override void OnGUI()
@@ -59,16 +51,24 @@ namespace XFramework.Editor
 
                     using (new EditorGUILayout.VerticalScope())
                     {
-                        for (int i = 0; i < m_Paths.Count; i++)
+                        for (int i = 0; i < m_BuildDatas.Count; i++)
                         {
                             using (new EditorGUILayout.HorizontalScope())
                             {
-                                m_Paths[i] = EditorGUILayout.TextField("", m_Paths[i]);
-                                m_Options[i] = (PackOption)EditorGUILayout.EnumPopup(m_Options[i]);
+                                if (GUILayout.Button(EditorIcon.Folder))
+                                {
+                                    string temp = EditorUtility.OpenFolderPanel("要打包的文件夹", Application.dataPath, "");
+                                    if (!string.IsNullOrEmpty(temp))
+                                    {
+                                        m_BuildDatas[i].path = temp;
+                                    }
+                                }
+
+                                GUILayout.TextField(m_BuildDatas[i].path);
+                                m_BuildDatas[i].option = (PackOption)EditorGUILayout.EnumPopup(m_BuildDatas[i].option);
                                 if (GUILayout.Button(EditorIcon.Trash))
                                 {
-                                    m_Paths.RemoveAt(i);
-                                    m_Options.RemoveAt(i);
+                                    m_BuildDatas.RemoveAt(i);
                                 }
                             }
                         }
@@ -105,7 +105,7 @@ namespace XFramework.Editor
             {
                 if (GUILayout.Button("添加文件夹"))
                 {
-                    if (Selection.objects != null)
+                    if (Selection.objects != null && Selection.objects.Length > 0)
                     {
                         foreach (var item in Selection.objects)
                         {
@@ -114,17 +114,30 @@ namespace XFramework.Editor
                                 path = AssetDatabase.GetAssetPath(item),
                                 option = PackOption.AllFiles,
                             });
-
-                            m_Paths.Add(AssetDatabase.GetAssetPath(item));
-                            m_Options.Add(PackOption.AllFiles);
                         }
                     }
                     else
                     {
-                        Debug.LogWarning("请选择要添加的文件夹");
+                        m_BuildDatas.Add(new BuildData()
+                        {
+                            path = "",
+                            option = PackOption.AllFiles,
+                        });
                     }
                 }
-                m_IsShowAB = GUILayout.Toggle(m_IsShowAB, "显示Ab");
+
+
+
+                if (GUILayout.Button("刷新AssetBundleBuild"))
+                {
+                    m_Builds.Clear();
+
+                    for (int i = 0; i < m_BuildDatas.Count; i++)
+                    {
+                        DirectoryInfo info = new DirectoryInfo(Application.dataPath.Replace("Assets", "/") + m_BuildDatas[i].path);
+                        MarkDirectory(info, m_BuildDatas[i].option);
+                    }
+                }
             }
 
             // AB包预览
@@ -132,22 +145,22 @@ namespace XFramework.Editor
             bool[] isOns = new bool[100];
             private void ABPreview()
             {
-                if (m_IsShowAB)
+                using (var scroll = new EditorGUILayout.ScrollViewScope(m_ScrollPos))
                 {
-                    using (var scroll = new EditorGUILayout.ScrollViewScope(m_ScrollPos/*, GUILayout.Height(200)*/))
+                    m_ScrollPos = scroll.scrollPosition;
+
+                    for (int i = 0; i < m_Builds.Count; i++)
                     {
-                        for (int i = 0; i < m_Builds.Count; i++)
+                        GUILayout.BeginVertical("box");
+                        isOns[i] = EditorGUILayout.Toggle(m_Builds[i].assetBundleName + "." + m_Builds[i].assetBundleVariant, isOns[i]);
+                        if (isOns[i])
                         {
-                            m_ScrollPos = scroll.scrollPosition;
-                            isOns[i] = EditorGUILayout.Toggle(m_Builds[i].assetBundleName + "." + m_Builds[i].assetBundleVariant, isOns[i]);
-                            if (isOns[i])
+                            foreach (var assetName in m_Builds[i].assetNames)
                             {
-                                foreach (var assetName in m_Builds[i].assetNames)
-                                {
-                                    GUILayout.Label(assetName);
-                                }
+                                GUILayout.Label(assetName);
                             }
                         }
+                        GUILayout.EndVertical();
                     }
                 }
             }
@@ -165,17 +178,6 @@ namespace XFramework.Editor
                         {
                             f.Delete();
                         }
-                    }
-                }
-
-                if (GUILayout.Button("标记"))
-                {
-                    m_Builds.Clear();
-
-                    for (int i = 0; i < m_Paths.Count; i++)
-                    {
-                        DirectoryInfo info = new DirectoryInfo(Application.dataPath.Replace("Assets", "/") + m_Paths[i]);
-                        MarkDirectory(info, m_Options[i]);
                     }
                 }
 

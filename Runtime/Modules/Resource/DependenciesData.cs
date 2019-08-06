@@ -62,6 +62,18 @@ namespace XFramework.Resource
 
             return result.ToArray();
         }
+
+        public string[] GetAllAssetBundles()
+        {
+            List<string> strs = new List<string>();
+
+            foreach (var item in AllDependenceData)
+            {
+                strs.Add(item.Name);
+            }
+
+            return strs.ToArray();
+        }
     }
 
     [System.Serializable]

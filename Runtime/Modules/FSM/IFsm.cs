@@ -22,13 +22,6 @@ namespace XFramework.Fsm
         void OnUpdate();
 
         /// <summary>
-        /// 从某一状态开始一个状态机
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        void StartFsm<TState>() where TState : FsmState;
-        void StartFsm(Type type);
-
-        /// <summary>
         /// 状态切换
         /// </summary>
         void ChangeState<T>() where T : FsmState;
