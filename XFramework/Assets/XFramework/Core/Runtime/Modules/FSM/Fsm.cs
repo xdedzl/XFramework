@@ -103,13 +103,7 @@ namespace XFramework.Fsm
         /// <summary>
         /// 开启状态机
         /// </summary>
-        /// <typeparam name="KState"></typeparam>
-        public void StartFsm<KState>() where KState : FsmState
-        {
-            StartFsm(typeof(KState));
-        }
-
-        public void StartFsm(Type type)
+        private void StartFsm(Type type)
         {
             if (!IsActive)
             {

@@ -10,19 +10,11 @@ namespace XFramework.Resource
     {
         private IResourceLoadHelper m_LoadHelper;
 
-        /// <summary>
-        /// 资源加载方式
-        /// </summary>
-        private ResMode m_ResMode;
-        public ResMode ResMode { get { return m_ResMode; } }
+        public LoadMode LoadMode { get { return m_LoadHelper.LoadMode; } }
 
         public ResourceManager(IResourceLoadHelper loadHelper)
         {
             m_LoadHelper = loadHelper;
-            if(m_LoadHelper is AssetBundleLoadHelper)
-                m_ResMode = ResMode.AssetBundle;
-            else
-                m_ResMode = ResMode.AssetDataBase;
         }
 
         public string AssetPath
@@ -119,11 +111,5 @@ namespace XFramework.Resource
         }
 
         #endregion
-    }
-
-    public enum ResMode
-    {
-        AssetBundle,
-        AssetDataBase,
     }
 }

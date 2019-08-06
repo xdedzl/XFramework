@@ -20,6 +20,7 @@ namespace XFramework.Editor
         static void OpenWindow()
         {
             var window = GetWindow(typeof(AssetBundleEditor));
+            window.titleContent = new GUIContent("AssetBundle");
             window.Show();
             window.minSize = new Vector2(400, 100);
         }

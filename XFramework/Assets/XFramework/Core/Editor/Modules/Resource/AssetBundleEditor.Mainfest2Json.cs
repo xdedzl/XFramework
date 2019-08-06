@@ -41,7 +41,7 @@ namespace XFramework.Editor
             {
                 using (new EditorGUILayout.VerticalScope())
                 {
-
+                    GUILayout.Label("优先级越往下越高");
                     using (new EditorGUILayout.VerticalScope())
                     {
                         for (int i = 0; i < m_Paths.Count; i++)
@@ -92,25 +92,75 @@ namespace XFramework.Editor
 
             private void GenerateJson()
             {
-                AssetBundle mainfestAB = AssetBundle.LoadFromFile(m_Paths[0]);
-                var mainfest = mainfestAB.LoadAsset<AssetBundleManifest>("AssetBundleManifest");
-                string[] abNames = mainfest.GetAllAssetBundles();
-
-                List<SingleDepenciesData> singleDatas = new List<SingleDepenciesData>();
-
-                for (int i = 0; i < abNames.Length; i++)
+                AssetBundle.UnloadAllAssetBundles(true);
+                DependenciesData[] datas = new DependenciesData[m_Paths.Count];
+                for (int i = 0; i < m_Paths.Count; i++)
                 {
-                    var dpNames = mainfest.GetDirectDependencies(abNames[i]);
-                    if (dpNames.Length <= 0)
+                    if (!m_Paths[i].EndsWith(".json"))
                     {
-                        continue;
+                        AssetBundle mainfestAB = AssetBundle.LoadFromFile(m_Paths[i]);
+                        var mainfest = mainfestAB.LoadAsset<AssetBundleManifest>("AssetBundleManifest");
+                        string[] abNames = mainfest.GetAllAssetBundles();
+
+                        List<SingleDepenciesData> singleDatas = new List<SingleDepenciesData>();
+
+                        for (int j = 0; j < abNames.Length; j++)
+                        {
+                            var dpNames = mainfest.GetDirectDependencies(abNames[j]);
+                            if (dpNames.Length <= 0)
+                            {
+                                continue;
+                            }
+                            singleDatas.Add(new SingleDepenciesData(abNames[j], dpNames));
+                        }
+                        datas[i] = new DependenciesData(singleDatas.ToArray());
                     }
-                    singleDatas.Add(new SingleDepenciesData(abNames[i], dpNames));
+                    else
+                    {
+                        string tempJson = System.IO.File.ReadAllText(m_Paths[i]);
+                        datas[i] = JsonUtility.FromJson<DependenciesData>(tempJson);
+                    }
                 }
-                DependenciesData data = new DependenciesData(singleDatas.ToArray());
-                string json = JsonUtility.ToJson(data, true);
+
+
+                string json = JsonUtility.ToJson(ConbineDependence(datas), true);
                 File.WriteAllText(m_OutPutPath + "/depenencies.json", json);
                 AssetDatabase.Refresh();
+            }
+
+            /// <summary>
+            /// 融合依赖关系
+            /// 在数组中越靠后优先级越高
+            /// </summary>
+            /// <param name="datas"></param>
+            private DependenciesData ConbineDependence(DependenciesData[] datas)
+            {
+                List<SingleDepenciesData> singleDatas = new List<SingleDepenciesData>();
+
+                foreach (var data in datas.Reverse())
+                {
+                    string[] assetBundles = data.GetAllAssetBundles();
+
+                    foreach (var abName in assetBundles)
+                    {
+                        if (Contains(abName))
+                            continue;
+                        singleDatas.Add(new SingleDepenciesData(abName, data.GetDirectDependencies(abName)));
+                    }
+                    
+                }
+
+                return new DependenciesData(singleDatas.ToArray());
+
+                bool Contains(string abName)
+                {
+                    foreach (var item in singleDatas)
+                    {
+                        if (abName == item.Name)
+                            return true;
+                    }
+                    return false;
+                }
             }
 
             private string List2Str(List<String> list)

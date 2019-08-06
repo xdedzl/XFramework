@@ -23,26 +23,17 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 开启一个流程
-        /// </summary>
-        /// <typeparam name="TState"></typeparam>
-        public void StartProcedure<TState>() where TState : ProcedureBase
-        {
-            m_Fsm.StartFsm<TState>();
-        }
-
-        public void StartProcedure(Type type)
-        {
-            m_Fsm.StartFsm(type);
-        }
-
-        /// <summary>
         /// 流程切换
         /// </summary>
         /// <typeparam name="TProcedure"></typeparam>
         public void ChangeProcedure<TProcedure>() where TProcedure : ProcedureBase
         {
             m_Fsm.ChangeState<TProcedure>();
+        }
+
+        public void ChangeProcedure(Type type)
+        {
+            m_Fsm.ChangeState(type);
         }
 
         /// <summary>
@@ -52,11 +43,16 @@ namespace XFramework
         public ProcedureBase GetCurrentProcedure()
         {
             return m_Fsm.GetCurrentState() as ProcedureBase;
-        } 
+        }
 
-        public int Priority { get { return 1000; } }
+        public int Priority { get { return 1; } }
 
         public void Update(float elapseSeconds, float realElapseSeconds)
+        {
+
+        }
+
+        public void Init()
         {
 
         }

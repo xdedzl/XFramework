@@ -53,7 +53,7 @@ public class Game : MonoBehaviour
         System.Type type = System.Type.GetType(TypeName);
         if (type != null)
         {
-            ProcedureModule.StartProcedure(type);
+            ProcedureModule.ChangeProcedure(type);
 
             ProcedureBase procedure = ProcedureModule.GetCurrentProcedure();
             DeSerialize(procedure);

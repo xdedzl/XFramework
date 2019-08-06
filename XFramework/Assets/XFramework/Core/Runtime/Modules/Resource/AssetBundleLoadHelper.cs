@@ -9,7 +9,14 @@ namespace XFramework.Resource
     /// </summary>
     public class AssetBundleLoadHelper : IResourceLoadHelper
     {
-        private readonly string m_ABPath = Application.streamingAssetsPath + "/AssetBundles";
+        /// <summary>
+        /// ab包路径
+        /// </summary>
+        private readonly string m_ABPath;
+        /// <summary>
+        /// ab包后缀名
+        /// </summary>
+        private readonly string m_Variant;
         /// <summary>
         /// AB包的缓存
         /// </summary>
@@ -17,29 +24,29 @@ namespace XFramework.Resource
         /// <summary>
         /// 用于获取AB包的依赖关系
         /// </summary>
-        //private AssetBundleManifest m_Mainfest;
-
-        private DependenciesData dependenceInfo;
+        private DependenciesData m_DependenceInfo;
 
         public string AssetPath => m_ABPath;
 
-        public AssetBundleLoadHelper()
-        {
-            m_ABDic = new Dictionary<string, AssetBundle>();
+        public LoadMode LoadMode => LoadMode.AssetBundle;
 
-            //AssetBundle m_MainfestAB = AssetBundle.LoadFromFile(m_ABPath + "/AssetBundles");
-            //if (m_MainfestAB != null)
-            //    m_Mainfest = m_MainfestAB.LoadAsset<AssetBundleManifest>("AssetBundleManifest");
+        public AssetBundleLoadHelper(string abPath = "", string variant = "")
+        {
+            m_ABPath = string.IsNullOrEmpty(abPath) ? Application.streamingAssetsPath + "/AssetBundles" : abPath;
+            m_Variant = string.IsNullOrEmpty(variant) ? ".ab" : "." + variant;
+
+            m_ABDic = new Dictionary<string, AssetBundle>();
 
             string dependencePath = m_ABPath + "/depenencies.json";
             if (System.IO.File.Exists(dependencePath))
             {
                 string json = System.IO.File.ReadAllText(dependencePath);
-                dependenceInfo = JsonUtility.FromJson<DependenciesData>(json);
+                m_DependenceInfo = JsonUtility.FromJson<DependenciesData>(json);
             }
             else
             {
-                throw new FrameworkException("[Resource]AB包依赖关系文件丢失");
+                m_DependenceInfo = new DependenciesData(new SingleDepenciesData[0]);
+                Debug.LogWarning($"[AssetBundleHelper] 路径 {m_ABPath} 下无依赖关系");
             }
         }
 
@@ -83,7 +90,7 @@ namespace XFramework.Resource
             {
                 string abName = string.IsNullOrEmpty(path) ? "" : "/" + path;
 
-                ab = AssetBundle.LoadFromFile(m_ABPath + abName + ".ab");
+                ab = AssetBundle.LoadFromFile(m_ABPath + abName + m_Variant);
                 if (ab == null)
                     Debug.LogError(path + " 为空");
                 m_ABDic.Add(path, ab);
@@ -91,7 +98,7 @@ namespace XFramework.Resource
 
             //加载当前AB包的依赖包
             //string[] dependencies = m_Mainfest.GetAllDependencies(ab.name);
-            string[] dependencies = dependenceInfo.GetAllDependencies(ab.name);
+            string[] dependencies = m_DependenceInfo.GetAllDependencies(ab.name);
 
             foreach (var item in dependencies)
             {
@@ -124,7 +131,7 @@ namespace XFramework.Resource
                 };
 
                 //string[] dependencies = m_Mainfest.GetAllDependencies(path + ".ab");
-                string[] dependencies = dependenceInfo.GetAllDependencies(path + ".ab");
+                string[] dependencies = m_DependenceInfo.GetAllDependencies(path + ".ab");
                 foreach (var name in dependencies)
                 {
                     if (m_ABDic.ContainsKey(Name2Key(name)))
@@ -180,12 +187,31 @@ namespace XFramework.Resource
 
         private string Name2Key(string abName)
         {
-            return abName.Substring(0, abName.Length - 3);
+            return abName.Substring(0, abName.Length - (m_Variant.Length + 1));
         }
 
         private string Path2Key(string path)
         {
             return path.ToLower();
+        }
+
+        public void UnLoad(string name)
+        {
+            m_ABDic.TryGetValue(name, out AssetBundle ab);
+            if (ab != null)
+            {
+                ab.Unload(true);
+                m_ABDic.Remove(name);
+            }
+        }
+
+        public void UnLoadAll()
+        {
+            foreach (var item in m_ABDic.Values)
+            {
+                item.Unload(true);
+            }
+            m_ABDic.Clear();
         }
     }
 }
