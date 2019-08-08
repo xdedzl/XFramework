@@ -41,10 +41,6 @@ public class UIHelper : IGameModule
     /// 确认操作的委托
     /// </summary>
     private Action VerifyOperate;
-    /// <summary>
-    /// 确认面板的显示文字
-    /// </summary>
-    private Text VerifyText;
 
     public UIHelper()
     {
@@ -125,8 +121,7 @@ public class UIHelper : IGameModule
     public void OpenVerifyOperateTip(string showText, Action action)
     {
         VerifyOperate = action;
-        VerifyText.text = showText;
-        Open(UIName.Verify);
+        Open(UIName.Verify, showText);
     }
 
     public int Priority { get { return m_UIManager.Priority; } }
