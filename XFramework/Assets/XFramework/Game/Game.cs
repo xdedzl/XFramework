@@ -26,13 +26,13 @@ public class Game : MonoBehaviour
     public static TaskManager TaskModule { get; private set; }
     public static ObjectPoolManager ObjectPool { get; private set; }
     public static NetManager NetModule { get; private set; }
+    public static ResourceManager ResModule { get; private set; }
     // End0
 
     // 框架扩展模块
     // Start1
     public static UIHelper UIModule { get; private set; }
     public static MeshManager MeshModule { get; private set; }
-    public static ResourceManager ResModule { get; private set; }
     // End1
 
     // 初始流程
@@ -84,9 +84,9 @@ public class Game : MonoBehaviour
         TaskModule = GameEntry.AddModule<TaskManager>();
         ObjectPool = GameEntry.AddModule<ObjectPoolManager>();
         NetModule = GameEntry.AddModule<NetManager>();
+        ResModule = GameEntry.AddModule<ResourceManager>(new AssetDataBaseLoadHelper());
         UIModule = GameEntry.AddModule<UIHelper>();
         MeshModule = GameEntry.AddModule<MeshManager>();
-        ResModule = GameEntry.AddModule<ResourceManager>(new AssetBundleLoadHelper());
         // End2
     }
 

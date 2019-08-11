@@ -12,7 +12,7 @@ public class UIDemo : ProcedureBase
     {
         base.Init();
 
-        GameObject obj = Resources.Load<GameObject>("UIPanelPrefabs/RootBtn");
+        GameObject obj = Game.ResModule.Load<GameObject>("Assets/XFramework/Demo/UI/PanelPrefab/RootBtn.prefab");
         Transform trans = Object.Instantiate(obj, GameObject.Find("Canvas").transform).transform;
         startBtn = trans.GetComponent<Button>();
         Screen.SetResolution(1920, 1080, true);

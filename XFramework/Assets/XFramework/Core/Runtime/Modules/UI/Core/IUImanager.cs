@@ -16,7 +16,7 @@ namespace XFramework.UI
         /// <summary>
         /// 打开面板
         /// </summary>
-        void OpenPanel(string uiname, object arg);
+        void OpenPanel(string uiname, bool closable, object arg);
         /// <summary>
         /// 关闭面板
         /// </summary>
