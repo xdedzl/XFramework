@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
+using XFramework.Resource;
 
 namespace XFramework.UI
 {
@@ -36,16 +37,24 @@ namespace XFramework.UI
         /// </summary>
         private Dictionary<int, List<BasePanel>> m_OnDisplayPanelDic;
 
+        private ResourceManager m_ResMgr;
+
         public UIMgrDicType()
         {
             m_OnDisplayPanelDic = new Dictionary<int, List<BasePanel>>();
             InitPathDic();
+
+            m_ResMgr = GameEntry.GetModule<ResourceManager>();
+            if (m_ResMgr == null)
+            {
+                throw new FrameworkException("[UIMgr]加载UI模块之前需要加载Resource模块");
+            }
         }
 
         /// <summary>
         /// 打开面板
         /// </summary>
-        public void OpenPanel(string uiname, object arg)
+        public void OpenPanel(string uiname, bool closable, object arg)
         {
             BasePanel panel = GetPanel(uiname);
             if (null == panel)
@@ -55,7 +64,8 @@ namespace XFramework.UI
             {
                 if (m_OnDisplayPanelDic[panel.Level].Contains(panel))
                 {
-                    ClosePanel(uiname);
+                    if (closable)
+                        ClosePanel(uiname);
                     return;
                 }
             }
@@ -122,16 +132,16 @@ namespace XFramework.UI
             {
                 // 根据prefab去实例化面板
                 m_PanelPathDict.TryGetValue(uiname, out string path);
-                GameObject instPanel = GameObject.Instantiate(Resources.Load(path)) as GameObject;
+                GameObject instPanel = GameObject.Instantiate(m_ResMgr.Load<GameObject>(path));
 
-                // UICore与派生类不一定在一个程序集类，所以不能直接用Type.GetType
+                // UICore与派生类不一定在一个程序集类，所以不能直接用Type.GetType  TODO : 根据不同平台规定路径
                 Assembly asmb = Assembly.Load("Assembly-CSharp");
                 Type type = asmb.GetType(uiname);
-                BasePanel basePanel = Activator.CreateInstance(type) as BasePanel;
+                BasePanel basePanel = (BasePanel)Activator.CreateInstance(type);
                 basePanel.Init(instPanel, uiname);
                 if (basePanel == null)
                 {
-                    throw new FrameworkException("[UI]面板类名错误");
+                    throw new System.Exception("面板类名错误");
                 }
                 m_PanelDict.Add(uiname, basePanel);
 
@@ -141,11 +151,17 @@ namespace XFramework.UI
                     RectTransform rect;
                     rect = (new GameObject("Level" + basePanel.Level)).AddComponent<RectTransform>();
                     rect.SetParent(CanvasTransform);
-                    rect.sizeDelta = CanvasTransform.sizeDelta;
-                    rect.position = CanvasTransform.position;
+
+                    // 在Canvas的渲染模式为Screen Space-Camera时 在1920*1080的情况下直接设置分辨率有时会获取到1080*1080
+                    rect.anchorMin = Vector2.zero;
+                    rect.anchorMax = Vector2.one;
+                    rect.sizeDelta = Vector2.zero;
+                    rect.localPosition = Vector3.zero;
                     rect.localScale = Vector3.one;
+
                     uiGroup = rect;
                 }
+
                 instPanel.transform.SetParent(uiGroup, false);
                 return basePanel;
             }
@@ -187,14 +203,7 @@ namespace XFramework.UI
         private void InitPathDic()
         {
             m_PanelPathDict = new Dictionary<string, string>();
-            string rootPath = "UIPanelPrefabs/";
-            TextAsset textAsset = Resources.Load<TextAsset>("UIPath");
-            if (textAsset == null)
-            {
-                Debug.LogWarning("没有UI面板的路径配置文件或文件路径有误");
-                return;
-            }
-            string uipaths = textAsset.text;
+            string uipaths = Resources.Load<TextAsset>("UIPath").text;
             uipaths = uipaths.Replace("\"", "");
             uipaths = uipaths.Replace("\n", "");
             uipaths = uipaths.Replace("\r", "");
@@ -206,11 +215,14 @@ namespace XFramework.UI
                 if (nameAndPath == null || nameAndPath.Length != 2)
                     continue;
                 string temp = nameAndPath[1] == "" ? nameAndPath[0] : nameAndPath[1] + "/" + nameAndPath[0];
-                m_PanelPathDict.Add(nameAndPath[0], rootPath + temp);
+                //m_PanelPathDict.Add(nameAndPath[0], rootPath + temp);
+                m_PanelPathDict.Add(nameAndPath[0], nameAndPath[1] + "/" + nameAndPath[0] + ".prefab");
             }
         }
 
-        public int Priority { get { return 4000; } }
+        #region 接口实现
+
+        public int Priority { get { return 200; } }
 
         public void Update(float elapseSeconds, float realElapseSeconds)
         {
@@ -225,7 +237,9 @@ namespace XFramework.UI
 
         public void Shutdown()
         {
-            
+
         }
+
+        #endregion
     }
 }

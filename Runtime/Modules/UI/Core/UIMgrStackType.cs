@@ -245,7 +245,7 @@ namespace XFramework.UI
             m_PanelStack?.Clear();
         }
 
-        public void OpenPanel(string uiname, object arg = null)
+        public void OpenPanel(string uiname, bool closable, object arg = null)
         {
             PushPanel(uiname, arg);
         }
