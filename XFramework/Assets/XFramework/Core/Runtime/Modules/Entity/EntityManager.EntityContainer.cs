@@ -33,8 +33,12 @@ namespace XFramework.Entity
             /// </summary>
             private Stack<Entity> m_Pool;
 
-            public int Count { get { return m_Entities.Count; } }
-
+            /// <summary>
+            /// 构造一个实体容器
+            /// </summary>
+            /// <param name="type">实体类型</param>
+            /// <param name="name">容器名</param>
+            /// <param name="template">实体模板</param>
             public EntityContainer(Type type, string name, GameObject template)
             {
                 if (!type.IsSubclassOf(typeof(Entity)))
@@ -50,18 +54,29 @@ namespace XFramework.Entity
             }
 
             /// <summary>
+            /// 实体数量（不包括池种的）
+            /// </summary>
+            public int Count
+            {
+                get
+                {
+                    return m_Entities.Count;
+                }
+            }
+
+            /// <summary>
             /// 实体实例化及初始化
             /// </summary>
             /// <param name="id">唯一标识符</param>
             /// <param name="pos">位置</param>
             /// <param name="quaternion">朝向</param>
             /// <returns></returns>
-            private Entity Instantiate(int id, Vector3 pos, Quaternion quaternion)
+            private Entity Instantiate(Vector3 pos, Quaternion quaternion)
             {
                 GameObject gameObject = UnityEngine.Object.Instantiate(m_Template, pos, quaternion);
 
                 Entity entity = gameObject.AddComponent(type) as Entity;
-                entity.PreInit(id, name);
+                entity.name = name;
                 entity.OnInit();
                 return entity;
             }
@@ -83,8 +98,9 @@ namespace XFramework.Entity
                 }
                 else
                 {
-                    entity = Instantiate(id, pos, quaternion);
+                    entity = Instantiate(pos, quaternion);
                 }
+                entity.Id = id;
                 entity.OnAllocate(entityData);
                 m_Entities.Add(entity);
                 return entity;
@@ -120,12 +136,11 @@ namespace XFramework.Entity
             /// </summary>
             /// <param name="count">清理后实体池的最大数量</param>
             /// <param name="callBack"></param>
-            internal void Clean(int count, Action<int> callBack)
+            internal void Clean(int count)
             {
-                while(count < m_Pool.Count)
+                while (count < m_Pool.Count)
                 {
                     Entity entity = m_Pool.Pop();
-                    callBack?.Invoke(entity.Id);
                 }
             }
 

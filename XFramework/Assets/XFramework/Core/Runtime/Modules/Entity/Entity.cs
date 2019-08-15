@@ -7,18 +7,12 @@ namespace XFramework.Entity
     /// </summary>
     public abstract class Entity : MonoBehaviour, IEntity
     {
-        public int Id { get; private set; }
+        public int Id { get; internal set; }
 
         /// <summary>
         /// 所属容器名
         /// </summary>
-        public string ContainerName { get; private set; }
-
-        public void PreInit(int id, string containerName)
-        {
-            Id = id;
-            ContainerName = containerName;
-        }
+        public string ContainerName { get; internal set; }
 
         /// <summary>
         /// 初始化

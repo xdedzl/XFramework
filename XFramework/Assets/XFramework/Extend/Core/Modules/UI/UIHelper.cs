@@ -51,9 +51,9 @@ public class UIHelper : IGameModule
     /// <summary>
     /// 打开面板
     /// </summary>
-    public void Open(string name, object arg = null)
+    public void Open(string name, bool closeable = false, object arg = null)
     {
-        m_UIManager.OpenPanel(name, arg);
+        m_UIManager.OpenPanel(name, closeable, arg);
     }
 
     /// <summary>
@@ -121,7 +121,7 @@ public class UIHelper : IGameModule
     public void OpenVerifyOperateTip(string showText, Action action)
     {
         VerifyOperate = action;
-        Open(UIName.Verify, showText);
+        Open(UIName.Verify, false, showText);
     }
 
     public int Priority { get { return m_UIManager.Priority; } }

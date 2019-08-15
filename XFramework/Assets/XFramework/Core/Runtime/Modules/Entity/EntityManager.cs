@@ -22,7 +22,7 @@ namespace XFramework.Entity
         /// </summary>
         private Dictionary<int, Entity> m_EntityDic;
         /// <summary>
-        /// 存储所有实体（在使用的，被回收在池中的）
+        /// 存储实体父子关系的字典
         /// </summary>
         private Dictionary<int, EntityInfo> m_EntityInfoDic;
 
@@ -31,18 +31,6 @@ namespace XFramework.Entity
             m_EntityContainerDic = new Dictionary<string, EntityContainer>();
             m_EntityDic = new Dictionary<int, Entity>();
             m_EntityInfoDic = new Dictionary<int, EntityInfo>();
-        }
-
-        private int NextId
-        {
-            get
-            {
-                m_Id++;
-                if (m_EntityDic.ContainsKey(m_Id))
-                    return NextId;
-                else
-                    return m_Id;
-            }
         }
 
         /// <summary>
@@ -86,9 +74,9 @@ namespace XFramework.Entity
         /// <param name="pos">位置</param>
         /// <param name="quaternion">朝向</param>
         /// <returns></returns>
-        public T Allocate<T>(Vector3 pos = default, Quaternion quaternion = default) where T : Entity
+        public T Allocate<T>(int id, Vector3 pos = default, Quaternion quaternion = default) where T : Entity
         {
-            return Allocate(typeof(T).Name, NextId, null, pos, quaternion) as T;
+            return Allocate(typeof(T).Name, id, null, pos, quaternion) as T;
         }
 
         /// <summary>
@@ -99,18 +87,18 @@ namespace XFramework.Entity
         /// <param name="pos">位置</param>
         /// <param name="quaternion">朝向</param>
         /// <returns>实体</returns>
-        public T Allocate<T>(EntityData entityData, Vector3 pos = default, Quaternion quaternion = default) where T : Entity
+        public T Allocate<T>(int id, EntityData entityData, Vector3 pos = default, Quaternion quaternion = default) where T : Entity
         {
             string key = typeof(T).Name;
-            return Allocate(key, NextId, entityData, pos, quaternion) as T;
+            return Allocate(key, id, entityData, pos, quaternion) as T;
         }
 
         /// <summary>
         /// 分配实体
         /// </summary>
-        public T Allocate<T>(string key, EntityData entityData, Vector3 pos = default, Quaternion quaternion = default) where T : Entity
+        public T Allocate<T>(int id, string key, EntityData entityData, Vector3 pos = default, Quaternion quaternion = default) where T : Entity
         {
-            return Allocate(key, NextId, entityData, pos, quaternion) as T;
+            return Allocate(key, id, entityData, pos, quaternion) as T;
         }
 
         /// <summary>
@@ -120,9 +108,9 @@ namespace XFramework.Entity
         /// <param name="pos">位置</param>
         /// <param name="quaternion">朝向</param>
         /// <returns>实体</returns>
-        public Entity Allocate(string key, Vector3 pos = default, Quaternion quaternion = default)
+        public Entity Allocate(int id, string key, Vector3 pos = default, Quaternion quaternion = default)
         {
-            return Allocate(key, NextId, null, pos, quaternion);
+            return Allocate(key, id, null, pos, quaternion);
         }
 
         /// <summary>
@@ -155,7 +143,7 @@ namespace XFramework.Entity
         /// <param name="entity">目标实体</param>
         public bool Recycle(Entity entity)
         {
-            if(entity != null)
+            if (entity != null)
             {
                 EntityContainer container = GetContainer(entity.ContainerName);
                 if (container != null)
@@ -178,8 +166,10 @@ namespace XFramework.Entity
         public bool Recycle(int id)
         {
             Entity entity = GetEntity(id);
-            if(entity != null)
+            if (entity != null)
             {
+                Detach(entity);
+                m_EntityInfoDic.Remove(id);
                 return Recycle(entity);
             }
             return false;
@@ -188,8 +178,8 @@ namespace XFramework.Entity
         /// <summary>
         /// 附加实体，将child附加到parent上
         /// </summary>
-        /// <param name="child"></param>
-        /// <param name="parent"></param>
+        /// <param name="child">子实体</param>
+        /// <param name="parent">父实体</param>
         public void Attach(Entity child, Entity parent)
         {
             EntityInfo childInfo = GetEntityInfo(child);
@@ -211,11 +201,29 @@ namespace XFramework.Entity
         {
             EntityInfo childInfo = GetEntityInfo(child);
 
-            if(childInfo.Parent != null)
+            if (childInfo.Parent != null)
             {
                 childInfo.Parent.OnDetached(child);
                 child.OnDetachFrom(childInfo.Parent);
                 childInfo.Parent = null;
+            }
+        }
+
+        /// <summary>
+        /// 移除父实体上的所有子实体
+        /// </summary>
+        /// <param name="parent"></param>
+        public void DetachChilds(Entity parent)
+        {
+            EntityInfo parentInfo = GetEntityInfo(parent);
+
+            if (parent != null)
+            {
+                foreach (var item in parentInfo.GetChilds())
+                {
+                    Detach(item);
+                }
+                m_EntityInfoDic.Remove(parent.Id);
             }
         }
 
@@ -304,7 +312,7 @@ namespace XFramework.Entity
         public void Clean(string containerName, int count)
         {
             EntityContainer container = GetContainer(containerName);
-            if(container != null)
+            if (container != null)
             {
                 InternalClean(container, count);
             }
@@ -316,7 +324,7 @@ namespace XFramework.Entity
 
         private void InternalClean(EntityContainer entityContainer, int count)
         {
-             entityContainer.Clean(count, (id) => { m_EntityInfoDic.Remove(id); });
+            entityContainer.Clean(count);
         }
 
         #region 接口实现

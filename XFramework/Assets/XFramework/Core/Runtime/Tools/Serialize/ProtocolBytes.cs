@@ -17,21 +17,32 @@ namespace XFramework
     /// </summary>
     public class ProtocolBytes
     {
-        private byte[] buffer;     //传输的字节流
+        /// <summary>
+        /// 传输的字节流,用于解码时
+        /// </summary>
+        private byte[] buffer;
+        /// <summary>
+        /// 用于编码时
+        /// </summary>
         private List<byte> bufferList;
         private int index;
 
+        /// <summary>
+        /// 构造成编码器
+        /// </summary>
         public ProtocolBytes()
         {
             index = 0;
             bufferList = new List<byte>();
         }
 
-        public ProtocolBytes(byte[] _bytes)
+        /// <summary>
+        /// 构造成解码器
+        /// </summary>
+        /// <param name="_bytes">待解析的数据</param>
+        public ProtocolBytes(byte[] _bytes) : this()
         {
-            index = 0;
             buffer = _bytes;
-            bufferList = new List<byte>(_bytes);
         }
 
         /// <summary>
@@ -57,11 +68,6 @@ namespace XFramework
                 str += b.ToString() + " ";
             }
             return str;
-        }
-
-        public bool CheckReadFinish()
-        {
-            return index >= bufferList.Count - 1;
         }
 
         #region 添加和获取字符串
@@ -636,10 +642,22 @@ namespace XFramework
             }
         }
 
+        /// <summary>
+        /// 清理缓存
+        /// </summary>
         public void Clear()
         {
             bufferList.Clear();
             index = 0;
+        }
+
+        /// <summary>
+        /// 清理缓存并用bytes赋值进行解码
+        /// </summary>
+        public void Clear(byte[] bytes)
+        {
+            Clear();
+            buffer = bytes;
         }
     }
 }

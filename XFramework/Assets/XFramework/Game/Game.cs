@@ -4,7 +4,6 @@ using XFramework.Draw;
 using XFramework.Entity;
 using XFramework.Event;
 using XFramework.Fsm;
-using XFramework.Net;
 using XFramework.Pool;
 using XFramework.Resource;
 using XFramework.Tasks;
@@ -20,12 +19,11 @@ public class Game : MonoBehaviour
     public static EntityManager EntityModule { get; private set; }
     public static FsmManager FsmModule { get; private set; }
     public static GraphicsManager GraphicsModule { get; private set; }
-    public static MessengerManager MessengerModule { get; private set; }
+    public static MessageManager MessengerModule { get; private set; }
     public static DataSubjectManager ObserverModule { get; private set; }
     public static ProcedureManager ProcedureModule { get; private set; }
     public static TaskManager TaskModule { get; private set; }
     public static ObjectPoolManager ObjectPool { get; private set; }
-    public static NetManager NetModule { get; private set; }
     public static ResourceManager ResModule { get; private set; }
     // End0
 
@@ -78,12 +76,11 @@ public class Game : MonoBehaviour
         EntityModule = GameEntry.AddModule<EntityManager>();
         FsmModule = GameEntry.AddModule<FsmManager>();
         GraphicsModule = GameEntry.AddModule<GraphicsManager>();
-        MessengerModule = GameEntry.AddModule<MessengerManager>();
+        MessengerModule = GameEntry.AddModule<MessageManager>();
         ObserverModule = GameEntry.AddModule<DataSubjectManager>();
         ProcedureModule = GameEntry.AddModule<ProcedureManager>();
         TaskModule = GameEntry.AddModule<TaskManager>();
         ObjectPool = GameEntry.AddModule<ObjectPoolManager>();
-        NetModule = GameEntry.AddModule<NetManager>();
         ResModule = GameEntry.AddModule<ResourceManager>(new AssetDataBaseLoadHelper());
         UIModule = GameEntry.AddModule<UIHelper>();
         MeshModule = GameEntry.AddModule<MeshManager>();
@@ -99,12 +96,11 @@ public class Game : MonoBehaviour
         EntityModule = GameEntry.GetModule<EntityManager>();
         FsmModule = GameEntry.GetModule<FsmManager>();
         GraphicsModule = GameEntry.GetModule<GraphicsManager>();
-        MessengerModule = GameEntry.GetModule<MessengerManager>();
+        MessengerModule = GameEntry.GetModule<MessageManager>();
         ObserverModule = GameEntry.GetModule<DataSubjectManager>();
         ProcedureModule = GameEntry.GetModule<ProcedureManager>();
         TaskModule = GameEntry.GetModule<TaskManager>();
         ObjectPool = GameEntry.GetModule<ObjectPoolManager>();
-        NetModule = GameEntry.GetModule<NetManager>();
         UIModule = GameEntry.GetModule<UIHelper>();
         MeshModule = GameEntry.GetModule<MeshManager>();
         ResModule = GameEntry.GetModule<ResourceManager>();
