@@ -1,10 +1,34 @@
-# XFramewrok
-薛定谔的蟑螂
+# XFramework  --xdedzl
+我是薛定谔的蟑螂
 
-github源码地址[源码](https://github.com/xdedzl/XFramework)
-<a name="VlPZx"></a>
-## 目录介绍
-github工程中一共有三个文件夹和框架内容有关<br />1.XFramework文件夹为核心代码；<br />2.XFrameworkGame文件夹为具体项目对框架的扩展内容，删掉不影响框架，但在这里提供了一种开启游戏入口可管理所有模块的方式；<br />3.XFrmaeworkExample文件夹为框架模块的一些示例代码；
-<a name="SZvxe"></a>
-### 框架介绍
-框架被大致分为三个部分，由工具，模块和编辑器扩展三大块组成，在设计各个模块的时候参考了GameFramework和QFramework的一些设计思路。<br />1.工具不依赖于任何其他部分，且不同工具类之间相互独立；<br />2.模块会运用到一些工具方法，一个模块可能会依赖另一个模块，但两个模块不会相互依赖。且除了框架模块之外，不同项目也可以写各自的模块类，这些不属于框架的模块往往会依赖多个框架模块；<br />3.编辑器拓展了框架内容，简化了一些开发过程；
+## 1. 启动流程
+
+在场景新建一个空物体命名为GameManager，将Game脚本附加到物体上。新建一个类MyFirstProcedure继承ProcedureBase，Game脚本的属性面板可以选择游戏开始时第一个进入的流程。
+
+## 2. 模块说明
+
+**`Entity`**：实体的管理，提供了实体的加载，回收以及不同实体之间父子关系的处理。
+
+**`FSM`**：状态机，内置提供了鼠标状态机。
+
+**`Graphics`**：图像处理器，方便的使用Unity底层绘图API在相机上绘制图形，并提供了一系列构造Mesh的工具方法。
+
+**`Messenger`**：全局消息处理。
+
+**`Observer`**：观察者模式实现的事件处理机制。
+
+**`Pool`**：基础对象池，实体的对象池的管理集成到了Entity中。
+
+**`Procedure`**：流程，实际上是一个贯穿整个游戏过程的状态机。
+
+**`Resource`**：资源管理机制，统一使用Game.ResourceModule.Load<T>("Assets/Path/xxx.png")的方式加载，开发过程中使用AssetDataBase,输出版本后使用assetbundle。提供了ab包编辑器
+
+**`Task`**：任务处理。
+
+**`Terrain`**：运行时Terrain编辑。
+
+**`UI`**：基于UGUI的UI管理模块，GUCompotent是对UI组件的扩展并提供了一种UI组件的查找方式以替代transform.Find，在开发过程中修改了UI面板的层级之后无需更改代码。
+
+
+
+![在这里插入图片描述](https://img-blog.csdnimg.cn/20190509223528770.png)
