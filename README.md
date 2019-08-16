@@ -11,7 +11,7 @@
 
 **`FSM`**：状态机，内置提供了鼠标状态机。
 
-**`Graphics`**：图像处理器，方便的使用Unity底层绘图API在相机上绘制图形，并提供了一系列构造Mesh的工具方法。
+**`Graphics`**：图形管理，方便的使用Unity底层绘图API在相机上绘制图形，并提供了一系列构造Mesh的工具方法。
 
 **`Messenger`**：全局消息处理。
 
@@ -21,7 +21,7 @@
 
 **`Procedure`**：流程，实际上是一个贯穿整个游戏过程的状态机。
 
-**`Resource`**：资源管理机制，统一使用Game.ResourceModule.Load<T>("Assets/Path/xxx.png")的方式加载，开发过程中使用AssetDataBase,输出版本后使用assetbundle。提供了ab包编辑器
+**`Resource`**：资源管理机制，统一使用Game.ResourceModule.Load<T>("Assets/Path/xxx.png")的方式加载，开发过程中使用AssetDataBase,输出版本后使用assetbundle。提供了ab包编辑器。
 
 **`Task`**：任务处理。
 
@@ -29,6 +29,19 @@
 
 **`UI`**：基于UGUI的UI管理模块，GUCompotent是对UI组件的扩展并提供了一种UI组件的查找方式以替代transform.Find，在开发过程中修改了UI面板的层级之后无需更改代码。
 
+## 2. 工具类说明
+**`Collections`**：有向图和无向图
 
+**`file parse`**：csv文件读写
+
+**`Math`**：曲线拟合，二三维点线面关系，向量转换等。
+
+**`Serialize`**：使用unsafe关键字的序列化方式，速度很快
+
+**`Singleton`**：这理把单例归为工具类，建议用IGameModuel接口替代单例类。
+
+**`extension function`**：提供一系列的扩展函数以简化。
+
+**`utility function`**：实用静态方法分为几大类，IO，Log，Reflection,Text,UI。
 
 ![在这里插入图片描述](https://img-blog.csdnimg.cn/20190509223528770.png)
