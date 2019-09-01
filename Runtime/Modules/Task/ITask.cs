@@ -4,7 +4,7 @@ namespace XFramework.Tasks
 {
     public interface ITask
     {
-        bool IsDone { get; set; }
+        bool IsDone { get;}
         ITask Next { get; set; }
 
         void Update();

@@ -9,7 +9,7 @@ namespace XFramework.Tasks
     public class TaskManager : IGameModule
     {
         private List<ITask> m_Tasks;
-        List<int> m_ToRemove;
+        private List<int> m_ToRemove;
 
         public TaskManager()
         {
@@ -28,7 +28,6 @@ namespace XFramework.Tasks
 
         public void Update(float elapseSeconds, float realElapseSeconds)
         {
-
             m_ToRemove.Clear();
             for (int i = 0; i < m_Tasks.Count; i++)
             {
@@ -59,32 +58,5 @@ namespace XFramework.Tasks
         }
 
         #endregion
-    }
-
-    /// <summary>
-    /// 任务状态
-    /// </summary>
-    public enum TaskState
-    {
-        /// <summary>
-        /// 等待中
-        /// </summary>
-        Waiting,
-        /// <summary>
-        /// 运行中
-        /// </summary>
-        Running,
-        /// <summary>
-        /// 已完成
-        /// </summary>
-        Completed,
-        /// <summary>
-        /// 已失败
-        /// </summary>
-        Failed,
-        /// <summary>
-        /// 已取消
-        /// </summary>
-        Canceled,
     }
 }
