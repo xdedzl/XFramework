@@ -17,7 +17,6 @@ namespace XFramework.Resource
         }
 
         public string AssetPath => m_AssetPath;
-        public LoadMode LoadMode => LoadMode.AssetDataBase;
 
         public T Load<T>(string assetName) where T : UnityEngine.Object
         {

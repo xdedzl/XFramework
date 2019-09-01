@@ -28,8 +28,6 @@ namespace XFramework.Resource
 
         public string AssetPath => m_ABPath;
 
-        public LoadMode LoadMode => LoadMode.AssetBundle;
-
         public AssetBundleLoadHelper(string abPath = "", string variant = "")
         {
             m_ABPath = string.IsNullOrEmpty(abPath) ? Application.streamingAssetsPath + "/AssetBundles" : abPath;

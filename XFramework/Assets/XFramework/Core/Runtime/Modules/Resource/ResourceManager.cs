@@ -10,8 +10,6 @@ namespace XFramework.Resource
     {
         private IResourceLoadHelper m_LoadHelper;
 
-        public LoadMode LoadMode { get { return m_LoadHelper.LoadMode; } }
-
         public ResourceManager(IResourceLoadHelper loadHelper)
         {
             m_LoadHelper = loadHelper;

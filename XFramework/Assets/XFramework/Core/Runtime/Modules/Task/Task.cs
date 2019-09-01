@@ -5,7 +5,7 @@ namespace XFramework.Tasks
     /// <summary>
     /// 任务基类
     /// </summary>
-    public abstract class BaseTask : ITask
+    public abstract class TaskBase : ITask
     {
         /// <summary>
         /// 下一个任务
@@ -14,7 +14,7 @@ namespace XFramework.Tasks
         /// <summary>
         /// 当前任务是否完成
         /// </summary>
-        public virtual bool IsDone { get; set; }
+        public virtual bool IsDone { get; protected set; }
         /// <summary>
         /// 任务完成前每帧执行
         /// </summary>
@@ -24,7 +24,7 @@ namespace XFramework.Tasks
     /// <summary>
     /// 单个任务
     /// </summary>
-    public class SingleTask : BaseTask
+    public class SingleTask : TaskBase
     {
         private Func<bool> action;
 
@@ -45,7 +45,7 @@ namespace XFramework.Tasks
     /// <summary>
     /// 任务组（组内任一任务完成就算完成）
     /// </summary>
-    public class RaceTask : BaseTask
+    public class RaceTask : TaskBase
     {
         /// <summary>
         /// 任务组
@@ -85,7 +85,7 @@ namespace XFramework.Tasks
     /// <summary>
     /// 任务组（组内所有任务完成算完成）
     /// </summary>
-    public class AllTask : BaseTask
+    public class AllTask : TaskBase
     {
         /// <summary>
         /// 任务组

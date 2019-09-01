@@ -36,12 +36,17 @@ public class Game : MonoBehaviour
     // 初始流程
     public string TypeName;
 
+    private static Game activeGame = null;
+
     void Awake()
     {
-        if (GameObject.FindObjectsOfType<Game>().Length > 1)
+        if(activeGame != null)
         {
             DestroyImmediate(this);
-            return;
+        }
+        else
+        {
+            activeGame = this;
         }
 
         InitAllModel();
@@ -67,6 +72,14 @@ public class Game : MonoBehaviour
         GameEntry.ModuleUpdate(Time.deltaTime, Time.unscaledDeltaTime);
     }
 
+    private void OnDestroy()
+    {
+        if(activeGame == this)
+        {
+            GameEntry.CleraAllModule();
+        }
+    }
+
     /// <summary>
     /// 初始化模块，这个应该放再各个流程中，暂时默认开始时初始化所有模块
     /// </summary>
@@ -81,7 +94,11 @@ public class Game : MonoBehaviour
         ProcedureModule = GameEntry.AddModule<ProcedureManager>();
         TaskModule = GameEntry.AddModule<TaskManager>();
         ObjectPool = GameEntry.AddModule<ObjectPoolManager>();
+#if UNITY_EDITOR
         ResModule = GameEntry.AddModule<ResourceManager>(new AssetDataBaseLoadHelper());
+#else
+        ResModule = GameEntry.AddModule<ResourceManager>(new AssetBundleLoadHelper());
+#endif
         UIModule = GameEntry.AddModule<UIHelper>();
         MeshModule = GameEntry.AddModule<MeshManager>();
         // End2
