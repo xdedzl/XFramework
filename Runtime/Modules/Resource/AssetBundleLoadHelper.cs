@@ -25,6 +25,10 @@ namespace XFramework.Resource
         /// 用于获取AB包的依赖关系
         /// </summary>
         private DependenciesData m_DependenceInfo;
+        /// <summary>
+        /// 正在异步加载中的ab包
+        /// </summary>
+        private Dictionary<string, AssetBundleCreateRequest> m_LoadingAB;
 
         public string AssetPath => m_ABPath;
 
@@ -34,6 +38,7 @@ namespace XFramework.Resource
             m_Variant = string.IsNullOrEmpty(variant) ? ".ab" : "." + variant;
 
             m_ABDic = new Dictionary<string, AssetBundle>();
+            m_LoadingAB = new Dictionary<string, AssetBundleCreateRequest>();
 
             string dependencePath = m_ABPath + "/depenencies.json";
             if (System.IO.File.Exists(dependencePath))
@@ -84,7 +89,7 @@ namespace XFramework.Resource
         {
             path = Path2Key(path);
 
-            if(!m_ABDic.TryGetValue(path, out AssetBundle ab))
+            if (!m_ABDic.TryGetValue(path, out AssetBundle ab))
             {
                 string abName = string.IsNullOrEmpty(path) ? "" : "/" + path;
 
@@ -117,11 +122,13 @@ namespace XFramework.Resource
         private IProgress GetAssetBundleAsync(string path, System.Action<AssetBundle> callBack)
         {
             path = Path2Key(path);
-            if(!m_ABDic.TryGetValue(path, out AssetBundle ab))
+            if (!m_ABDic.TryGetValue(path, out AssetBundle ab))
             {
                 string abName = string.IsNullOrEmpty(path) ? "" : "/" + path;
 
-                AssetBundleCreateRequest mainRequest = AssetBundle.LoadFromFileAsync(m_ABPath + abName + ".ab");
+                AssetBundleCreateRequest mainRequest = AssetBundle.LoadFromFileAsync(m_ABPath + abName + m_Variant);
+                m_LoadingAB.Add(Name2Key(abName), mainRequest);
+
                 // 添加任务列表
                 List<AssetBundleCreateRequest> requests = new List<AssetBundleCreateRequest>
                 {
@@ -129,12 +136,14 @@ namespace XFramework.Resource
                 };
 
                 //string[] dependencies = m_Mainfest.GetAllDependencies(path + ".ab");
-                string[] dependencies = m_DependenceInfo.GetAllDependencies(path + ".ab");
+                string[] dependencies = m_DependenceInfo.GetAllDependencies(path + m_Variant);
                 foreach (var name in dependencies)
                 {
                     if (m_ABDic.ContainsKey(Name2Key(name)))
                         continue;
-                    requests.Add(AssetBundle.LoadFromFileAsync(m_ABPath + "/" + name));
+                    var request = AssetBundle.LoadFromFileAsync(m_ABPath + "/" + name);
+                    requests.Add(request);
+                    m_LoadingAB.Add(Name2Key(name), request);
                 }
 
                 ITask[] tasks = new ITask[requests.Count];
@@ -148,7 +157,9 @@ namespace XFramework.Resource
                     });
                     tasks[index].Then(new SingleTask(() =>
                     {
-                        m_ABDic.Add(Name2Key(requests[index].assetBundle.name), requests[index].assetBundle);
+                        string key = Name2Key(requests[index].assetBundle.name);
+                        m_ABDic.Add(key, requests[index].assetBundle);
+                        m_LoadingAB.Remove(key);
                         return true;
                     }));
                 }
@@ -166,7 +177,7 @@ namespace XFramework.Resource
             else
             {
                 callBack(ab);
-                return null;
+                return new DefaultProgress();
             }
         }
 
@@ -185,7 +196,7 @@ namespace XFramework.Resource
 
         private string Name2Key(string abName)
         {
-            return abName.Substring(0, abName.Length - (m_Variant.Length + 1));
+            return abName.Substring(0, abName.Length - (m_Variant.Length));
         }
 
         private string Path2Key(string path)
@@ -208,6 +219,10 @@ namespace XFramework.Resource
             foreach (var item in m_ABDic.Values)
             {
                 item.Unload(true);
+            }
+            foreach (var item in m_LoadingAB.Values)
+            {
+                item.assetBundle.Unload(true);
             }
             m_ABDic.Clear();
         }

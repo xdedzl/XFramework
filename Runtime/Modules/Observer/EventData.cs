@@ -3,9 +3,9 @@ namespace XFramework.Event
     /// <summary>
     /// 观察者数据基类
     /// </summary>
-    public abstract class BaseData
+    public abstract class EventData
     {
-        protected BaseData() { }
+        protected EventData() { }
 
         /// <summary>
         /// 这个在派生类中要重写，返回对应的类型

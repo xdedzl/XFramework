@@ -4,7 +4,7 @@ using UnityEngine.Events;
 namespace XFramework.UI
 {
     [RequireComponent(typeof(LongOrDoubleBtn))]
-    public class GULongOrDoubleBtn : BaseGUI
+    public class GULongOrDoubleBtn : GUIBase
     {
         public LongOrDoubleBtn longOrDoubleBtn;
 

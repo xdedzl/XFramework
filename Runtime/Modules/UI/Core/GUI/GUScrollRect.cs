@@ -5,7 +5,7 @@ using UnityEngine;
 namespace XFramework.UI
 {
     [RequireComponent(typeof(ScrollRect))]
-    public class GUScrollRect : BaseGUI
+    public class GUScrollRect : GUIBase
     {
         public ScrollRect scrollRect;
 

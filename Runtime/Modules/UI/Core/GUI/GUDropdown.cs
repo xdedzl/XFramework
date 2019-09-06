@@ -2,7 +2,7 @@
 namespace XFramework.UI
 {
     [UnityEngine.RequireComponent(typeof(UnityEngine.UI.Dropdown))]
-    public class GUDropdown : BaseGUI
+    public class GUDropdown : GUIBase
     {
         public UnityEngine.UI.Dropdown dropdown;
         private void Reset()

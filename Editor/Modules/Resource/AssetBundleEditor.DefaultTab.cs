@@ -60,6 +60,12 @@ namespace XFramework.Editor
                                     string temp = EditorUtility.OpenFolderPanel("要打包的文件夹", Application.dataPath, "");
                                     if (!string.IsNullOrEmpty(temp))
                                     {
+                                        int index = temp.IndexOf("Assets");
+                                        if (index == -1)
+                                        {
+                                            Debug.LogError("选择的AB包文件夹必须在Assets文件夹下");
+                                        }
+                                        temp = temp.Substring(index, temp.Length - index);
                                         m_BuildDatas[i].path = temp;
                                     }
                                 }

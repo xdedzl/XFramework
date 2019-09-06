@@ -33,7 +33,7 @@ namespace XFramework.Editor
 
         private Vector2 scrollWidgetPos;
 
-        private List<BaseGUI> baseGUIList;
+        private List<GUIBase> baseGUIList;
         private List<bool> hasCacheList;
         private List<bool> isLamdaList;
         private string[] GUIName;
@@ -44,7 +44,7 @@ namespace XFramework.Editor
         void OnEnable()
         {
             serializedObj = new SerializedObject(this);
-            baseGUIList = new List<BaseGUI>();
+            baseGUIList = new List<GUIBase>();
             hasCacheList = new List<bool>();
             isLamdaList = new List<bool>();
         }
@@ -188,7 +188,7 @@ namespace XFramework.Editor
         {
             if (baseGUIList == null && baseGUIList.Count <= 0)
             {
-                baseGUIList = new List<BaseGUI>(root.GetComponentsInChildren<BaseGUI>());
+                baseGUIList = new List<GUIBase>(root.GetComponentsInChildren<GUIBase>());
                 hasCacheList = new List<bool>(new bool[baseGUIList.Count]);
                 for (int i = 0, length = hasCacheList.Count; i < length; i++)
                 {
@@ -198,7 +198,7 @@ namespace XFramework.Editor
             }
             else
             {
-                BaseGUI[] tempArray = root.GetComponentsInChildren<BaseGUI>();
+                GUIBase[] tempArray = root.GetComponentsInChildren<GUIBase>();
                 for (int i = 0; i < tempArray.Length; i++)
                 {
                     if (!baseGUIList.Contains(tempArray[i]))

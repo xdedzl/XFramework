@@ -1,58 +1,60 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
-public class CSVReader
+namespace XFramework.Tool
 {
-    private int index;
-    private string[] keys;
-    private string[] lines;
-    private Dictionary<string, string> readerDic;
-
-    public CSVReader(string text)
+    public class CSVReader
     {
-        readerDic = new Dictionary<string, string>();
-        lines = text.Split('\n');
-        string[] keys = lines[0].Split(',');
-        for (int i = 0; i < keys.Length; i++)
-        {
-            readerDic[keys[i]] = "";
-        }
-        index = 1;
-        Debug.Log("A");
-    }
+        private int index;
+        private string[] keys;
+        private string[] lines;
+        private Dictionary<string, string> readerDic;
 
-    public bool ReadLine()
-    {
-        if (index >= lines.Length)
-            return false;
-        string[] line = lines[index].Split(',');
-        int num = 0;
-        foreach (var key in readerDic.Keys)
+        public CSVReader(string text)
         {
-            readerDic[key] = line[num++];
+            readerDic = new Dictionary<string, string>();
+            lines = text.Split('\n');
+            string[] keys = lines[0].Split(',');
+            for (int i = 0; i < keys.Length; i++)
+            {
+                readerDic[keys[i]] = "";
+            }
+            index = 1;
+            Debug.Log("A");
         }
 
-        return true;
-    }
+        public bool ReadLine()
+        {
+            if (index >= lines.Length)
+                return false;
+            string[] line = lines[index].Split(',');
+            int num = 0;
+            foreach (var key in readerDic.Keys)
+            {
+                readerDic[key] = line[num++];
+            }
 
-    public int GetInt32(string name)
-    {
-        return int.Parse(readerDic[name]);
-    }
+            return true;
+        }
 
-    public float GetFloat(string name)
-    {
-        return float.Parse(readerDic[name]);
-    }
+        public int GetInt32(string name)
+        {
+            return int.Parse(readerDic[name]);
+        }
 
-    public double GetDouble(string name)
-    {
-        return double.Parse(readerDic[name]);
-    }
+        public float GetFloat(string name)
+        {
+            return float.Parse(readerDic[name]);
+        }
 
-    public string GetString(string name)
-    {
-        return readerDic[name];
+        public double GetDouble(string name)
+        {
+            return double.Parse(readerDic[name]);
+        }
+
+        public string GetString(string name)
+        {
+            return readerDic[name];
+        }
     }
 }

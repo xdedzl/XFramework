@@ -597,101 +597,102 @@ namespace XFramework.Mathematics
             TwoPoint,
         }
     }
-}
 
-/// <summary>
-/// 坐标系
-/// </summary>
-public class GameCoordinate
-{
+
     /// <summary>
-    /// 坐标原点在世界中的位置
+    /// 坐标系
     /// </summary>
-    public Vector2 origin;
-    /// <summary>
-    /// 和世界坐标系的夹角(y轴向x轴方向)
-    /// </summary>
-    private readonly float theta;
-
-    #region 构造函数
-
-    public GameCoordinate(Vector2 _origin, float _theta)
+    public class GameCoordinate
     {
-        origin = _origin;
-        theta = _theta;
+        /// <summary>
+        /// 坐标原点在世界中的位置
+        /// </summary>
+        public Vector2 origin;
+        /// <summary>
+        /// 和世界坐标系的夹角(y轴向x轴方向)
+        /// </summary>
+        private readonly float theta;
+
+        #region 构造函数
+
+        public GameCoordinate(Vector2 _origin, float _theta)
+        {
+            origin = _origin;
+            theta = _theta;
+        }
+
+        public GameCoordinate(Vector3 _origin, Vector3 dir)
+        {
+            origin = new Vector2(_origin.x, _origin.z);
+            theta = Mathf.Atan(-dir.z / dir.x);
+        }
+
+        public GameCoordinate(Vector2 _origin, Vector2 dir)
+        {
+            origin = _origin;
+            theta = Mathf.Atan(-dir.y / dir.x);
+        }
+
+        public GameCoordinate(Vector3 _origin, float _theta)
+        {
+            origin = new Vector2(_origin.x, _origin.z);
+            theta = _theta;
+        }
+
+        #endregion
+
+        #region 世界坐标转本地坐标
+
+        public Vector2 World2Loacal(Vector2 pos)
+        {
+            Vector2 rel = pos - origin;
+            float x = rel.x * Mathf.Cos(theta) - rel.y * Mathf.Sin(theta);
+            float y = rel.x * Mathf.Sin(theta) + rel.y * Mathf.Cos(theta);
+            return new Vector2(x, y);
+        }
+
+        public Vector2 World2Loacal(Vector3 pos)
+        {
+            return World2Loacal(new Vector2(pos.x, pos.z));
+        }
+
+        public Vector3 World2Loacal3(Vector2 pos)
+        {
+            Vector2 vec = World2Loacal(pos);
+            return new Vector3(vec.x, 0, vec.y);
+        }
+
+        public Vector3 World2Loacal3(Vector3 pos)
+        {
+            return World2Loacal3(new Vector2(pos.x, pos.z));
+        }
+
+        #endregion
+
+        #region 本地坐标转世界坐标
+        public Vector2 Local2World(Vector2 pos)
+        {
+            float x = pos.x * Mathf.Cos(theta) + pos.y * Mathf.Sin(theta) + origin.x;
+            float y = pos.y * Mathf.Cos(theta) - pos.x * Mathf.Sin(theta) + origin.y;
+            return new Vector2(x, y);
+        }
+
+        public Vector2 Local2World(Vector3 pos)
+        {
+            return Local2World(new Vector2(pos.x, pos.z));
+        }
+
+        public Vector3 Local2World3(Vector2 pos)
+        {
+            Vector2 vec = Local2World(pos);
+            return new Vector3(vec.x, 0, vec.y);
+        }
+
+        public Vector3 Local2World3(Vector3 pos)
+        {
+            return Local2World3(new Vector2(pos.x, pos.z));
+        }
+
+        #endregion
     }
-
-    public GameCoordinate(Vector3 _origin, Vector3 dir)
-    {
-        origin = new Vector2(_origin.x, _origin.z);
-        theta = Mathf.Atan(-dir.z / dir.x);
-    }
-
-    public GameCoordinate(Vector2 _origin, Vector2 dir)
-    {
-        origin = _origin;
-        theta = Mathf.Atan(-dir.y / dir.x);
-    }
-
-    public GameCoordinate(Vector3 _origin, float _theta)
-    {
-        origin = new Vector2(_origin.x, _origin.z);
-        theta = _theta;
-    }
-
-    #endregion
-
-    #region 世界坐标转本地坐标
-
-    public Vector2 World2Loacal(Vector2 pos)
-    {
-        Vector2 rel = pos - origin;
-        float x = rel.x * Mathf.Cos(theta) - rel.y * Mathf.Sin(theta);
-        float y = rel.x * Mathf.Sin(theta) + rel.y * Mathf.Cos(theta);
-        return new Vector2(x, y);
-    }
-
-    public Vector2 World2Loacal(Vector3 pos)
-    {
-        return World2Loacal(new Vector2(pos.x, pos.z));
-    }
-
-    public Vector3 World2Loacal3(Vector2 pos)
-    {
-        Vector2 vec = World2Loacal(pos);
-        return new Vector3(vec.x, 0, vec.y);
-    }
-
-    public Vector3 World2Loacal3(Vector3 pos)
-    {
-        return World2Loacal3(new Vector2(pos.x, pos.z));
-    }
-
-    #endregion
-
-    #region 本地坐标转世界坐标
-    public Vector2 Local2World(Vector2 pos)
-    {
-        float x = pos.x * Mathf.Cos(theta) + pos.y * Mathf.Sin(theta) + origin.x;
-        float y = pos.y * Mathf.Cos(theta) - pos.x * Mathf.Sin(theta) + origin.y;
-        return new Vector2(x, y);
-    }
-
-    public Vector2 Local2World(Vector3 pos)
-    {
-        return Local2World(new Vector2(pos.x, pos.z));
-    }
-
-    public Vector3 Local2World3(Vector2 pos)
-    {
-        Vector2 vec = Local2World(pos);
-        return new Vector3(vec.x, 0, vec.y);
-    }
-
-    public Vector3 Local2World3(Vector3 pos)
-    {
-        return Local2World3(new Vector2(pos.x, pos.z));
-    }
-
-    #endregion
 }

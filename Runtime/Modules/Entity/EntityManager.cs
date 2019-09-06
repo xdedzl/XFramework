@@ -76,7 +76,7 @@ namespace XFramework.Entity
         /// <returns></returns>
         public T Allocate<T>(int id, Vector3 pos = default, Quaternion quaternion = default) where T : Entity
         {
-            return Allocate(typeof(T).Name, id, null, pos, quaternion) as T;
+            return Allocate(id, typeof(T).Name, null, pos, quaternion) as T;
         }
 
         /// <summary>
@@ -90,7 +90,7 @@ namespace XFramework.Entity
         public T Allocate<T>(int id, EntityData entityData, Vector3 pos = default, Quaternion quaternion = default) where T : Entity
         {
             string key = typeof(T).Name;
-            return Allocate(key, id, entityData, pos, quaternion) as T;
+            return Allocate(id, key, entityData, pos, quaternion) as T;
         }
 
         /// <summary>
@@ -98,7 +98,7 @@ namespace XFramework.Entity
         /// </summary>
         public T Allocate<T>(int id, string key, EntityData entityData, Vector3 pos = default, Quaternion quaternion = default) where T : Entity
         {
-            return Allocate(key, id, entityData, pos, quaternion) as T;
+            return Allocate(id, key, entityData, pos, quaternion) as T;
         }
 
         /// <summary>
@@ -110,7 +110,7 @@ namespace XFramework.Entity
         /// <returns>实体</returns>
         public Entity Allocate(int id, string key, Vector3 pos = default, Quaternion quaternion = default)
         {
-            return Allocate(key, id, null, pos, quaternion);
+            return Allocate(id, key, null, pos, quaternion);
         }
 
         /// <summary>
@@ -122,7 +122,7 @@ namespace XFramework.Entity
         /// <param name="pos">位置</param>
         /// <param name="quaternion">角度</param>
         /// <returns></returns>
-        public Entity Allocate(string key, int id, EntityData entityData, Vector3 pos, Quaternion quaternion)
+        public Entity Allocate(int id, string key, EntityData entityData, Vector3 pos, Quaternion quaternion)
         {
             if (!m_EntityContainerDic.ContainsKey(key))
             {

@@ -24,7 +24,7 @@ namespace XFramework.UI
         /// <summary>
         /// 获取面板
         /// </summary>
-        BasePanel GetPanel(string uiname);
+        PanelBase GetPanel(string uiname);
         /// <summary>
         /// 关闭最近一次打开的面板
         /// </summary>

@@ -3,7 +3,7 @@
 namespace XFramework.UI
 {
     [RequireComponent(typeof(SliderMixInput))]
-    public class GUSliderMixInput : BaseGUI
+    public class GUSliderMixInput : GUIBase
     {
         public SliderMixInput mix;
 

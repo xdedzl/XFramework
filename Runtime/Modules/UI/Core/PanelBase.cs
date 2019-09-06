@@ -6,7 +6,7 @@ namespace XFramework.UI
     /// <summary>
     /// 面板基类
     /// </summary>
-    public class BasePanel
+    public class PanelBase : MonoBehaviour
     {
         /// <summary>
         /// UI层级,层级最低的显示在底层
@@ -19,19 +19,14 @@ namespace XFramework.UI
 
         protected RectTransform rect;
 
-        private Dictionary<string, BaseGUI> mUIDic;
-
-        protected Transform transform;
-        protected GameObject gameObject;
+        private Dictionary<string, GUIBase> mUIDic;
 
         /// <summary>
         /// 面板初始化，只会执行一次，在Awake后start前执行
         /// </summary>
-        public void Init(GameObject _gameObject, string name)
+        internal void Init(string name)
         {
             Name = name;
-            gameObject = _gameObject;
-            transform = _gameObject.transform;
             InitGUIDic();
             rect = transform.GetComponent<RectTransform>();
             Vector3 rectSize = rect.localScale;
@@ -94,8 +89,8 @@ namespace XFramework.UI
         /// </summary>
         private void InitGUIDic()
         {
-            mUIDic = new Dictionary<string, BaseGUI>();
-            BaseGUI[] uis = transform.GetComponentsInChildren<BaseGUI>();
+            mUIDic = new Dictionary<string, GUIBase>();
+            GUIBase[] uis = transform.GetComponentsInChildren<GUIBase>();
             for (int i = 0; i < uis.Length; i++)
             {
                 mUIDic.Add(uis[i].name, uis[i]);
@@ -105,7 +100,7 @@ namespace XFramework.UI
         /// <summary>
         /// Find UI组件的索引器
         /// </summary>
-        public BaseGUI this[string key]
+        public GUIBase this[string key]
         {
             get
             {
