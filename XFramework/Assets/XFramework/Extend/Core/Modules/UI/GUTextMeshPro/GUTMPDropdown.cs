@@ -3,7 +3,7 @@
 namespace XFramework.UI
 {
     [UnityEngine.RequireComponent(typeof(TMP_Dropdown))]
-    public class GUTMPDropdown : BaseGUI
+    public class GUTMPDropdown : GUIBase
     {
         public TMP_Dropdown dropdown;
 

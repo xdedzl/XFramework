@@ -29,11 +29,11 @@ namespace XFramework.UI
         /// <summary>
         /// 保存所有实例化面板的游戏物体身上的BasePanel组件
         /// </summary>
-        private Dictionary<string, BasePanel> m_PanelDict;
+        private Dictionary<string, PanelBase> m_PanelDict;
         /// <summary>
         /// 存储面板的栈
         /// </summary>
-        private Stack<BasePanel> m_PanelStack;
+        private Stack<PanelBase> m_PanelStack;
 
         public UIMgrStackType()
         {
@@ -43,22 +43,23 @@ namespace XFramework.UI
         /// <summary>
         /// 把某个页面入栈，  把某个页面显示在界面上
         /// </summary>
-        public void PushPanel(string uiname, object arg)
+        public void PushPanel(string uiname, bool colsable, object arg)
         {
             if (m_PanelStack == null)
-                m_PanelStack = new Stack<BasePanel>();
+                m_PanelStack = new Stack<PanelBase>();
 
-            BasePanel nextPanel = GetPanel(uiname); // 计划打开的页面
-            BasePanel currentPanel = null;             // 最近一次关闭的界面
+            PanelBase nextPanel = GetPanel(uiname); // 计划打开的页面
+            PanelBase currentPanel = null;             // 最近一次关闭的界面
                                                        // 判断一下栈里面是否有页面
             if (m_PanelStack.Count > 0)
             {
-                BasePanel topPanel = m_PanelStack.Peek(); // 获取栈顶页面
+                PanelBase topPanel = m_PanelStack.Peek(); // 获取栈顶页面
 
                 // 如果即将打开的页面是栈顶页面，即关闭栈顶页面
                 if (topPanel == nextPanel)
                 {
-                    PopPanel();
+                    if (colsable)
+                        PopPanel();
                     return;
                 }
                 // 当栈内有面板时，进行判断
@@ -87,14 +88,14 @@ namespace XFramework.UI
         /// <summary>
         /// 出栈 ，把页面从界面上移除
         /// </summary>
-        public BasePanel PopPanel()
+        public PanelBase PopPanel()
         {
             if (m_PanelStack == null)
-                m_PanelStack = new Stack<BasePanel>();
+                m_PanelStack = new Stack<PanelBase>();
 
             if (m_PanelStack.Count <= 0) return null;
 
-            BasePanel topPanel = m_PanelStack.Pop(); // 获取并移除栈顶面板
+            PanelBase topPanel = m_PanelStack.Pop(); // 获取并移除栈顶面板
             topPanel.OnClose();                     // 关闭面板
             return topPanel;
         }
@@ -103,14 +104,14 @@ namespace XFramework.UI
         /// 根据面板类型 得到实例化的面板
         /// </summary>
         /// <returns></returns>
-        public BasePanel GetPanel(string uiname)
+        public PanelBase GetPanel(string uiname)
         {
             if (m_PanelDict == null)
             {
-                m_PanelDict = new Dictionary<string, BasePanel>();
+                m_PanelDict = new Dictionary<string, PanelBase>();
             }
 
-            m_PanelDict.TryGetValue(uiname, out BasePanel panel);
+            m_PanelDict.TryGetValue(uiname, out PanelBase panel);
 
             if (panel == null)
             {
@@ -119,15 +120,15 @@ namespace XFramework.UI
                 Debug.Log(path);
                 GameObject instPanel = GameObject.Instantiate(Resources.Load(path)) as GameObject;
 
-                // UICore与派生类不一定在一个程序集类，所以不能直接用Type.GetType  TODO : 根据不同平台规定路径
+                // UICore与派生类不一定在一个程序集类，所以不能直接用Type.GetType
                 Assembly asmb = Assembly.Load("Assembly-CSharp");
                 Type type = asmb.GetType(uiname);
-                BasePanel basePanel = (BasePanel)Activator.CreateInstance(type);
-                basePanel.Init(instPanel, uiname);
-                if (basePanel == null)
+                if (type == null || type.IsSubclassOf(typeof(PanelBase)))
                 {
-                    throw new System.Exception("面板类名错误");
+                    throw new FrameworkException("[UI] 面板类名错误 | 没有继承BasePanel");
                 }
+                PanelBase basePanel = instPanel.AddComponent(type) as PanelBase;
+                basePanel.Init(uiname);
                 m_PanelDict.Add(uiname, basePanel);
 
                 Transform uiGroup = CanvasTransform.Find("Level" + basePanel.Level);
@@ -153,7 +154,7 @@ namespace XFramework.UI
         /// <summary>
         /// 返回特定类型的panel
         /// </summary>
-        public T GetPanel<T>(string uiname) where T : BasePanel
+        public T GetPanel<T>(string uiname) where T : PanelBase
         {
             return (T)GetPanel(uiname);
         }
@@ -171,7 +172,7 @@ namespace XFramework.UI
         /// <summary>
         /// 栈顶界面
         /// </summary>
-        public BasePanel TopPanel
+        public PanelBase TopPanel
         {
             get
             {
@@ -187,7 +188,7 @@ namespace XFramework.UI
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <returns></returns>
-        public T TopPanell<T>() where T : BasePanel
+        public T TopPanell<T>() where T : PanelBase
         {
             return (T)TopPanel;
         }
@@ -210,13 +211,7 @@ namespace XFramework.UI
         {
             m_PanelPathDict = new Dictionary<string, string>();
             string rootPath = "UIPanelPrefabs/";
-            TextAsset textAsset = Resources.Load<TextAsset>("UIPath");
-            if(textAsset == null)
-            {
-                Debug.LogWarning("没有UI面板的路径配置文件或文件路径有误");
-                return;
-            }
-            string uipaths = textAsset.text;
+            string uipaths = Resources.Load<TextAsset>("UIPath").text;
             uipaths = uipaths.Replace("\"", "");
             uipaths = uipaths.Replace("\n", "");
             uipaths = uipaths.Replace("\r", "");
@@ -245,9 +240,9 @@ namespace XFramework.UI
             m_PanelStack?.Clear();
         }
 
-        public void OpenPanel(string uiname, bool closable, object arg = null)
+        public void OpenPanel(string uiname, bool colsable, object arg)
         {
-            PushPanel(uiname, arg);
+            PushPanel(uiname, colsable, arg);
         }
 
         public void ClosePanel(string uiname)
@@ -260,7 +255,7 @@ namespace XFramework.UI
             PopPanel();
         }
 
-        public int Priority { get { return 4000; } }
+        public int Priority { get { return 200; } }
 
         public void Update(float elapseSeconds, float realElapseSeconds)
         {
@@ -272,7 +267,7 @@ namespace XFramework.UI
 
         public void Shutdown()
         {
-            
+
         }
     }
 }

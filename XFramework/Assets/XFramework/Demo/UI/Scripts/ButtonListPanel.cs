@@ -11,7 +11,7 @@ using UnityEngine.Events;
 using XFramework.UI;
 using XFramework;
 
-public class ButtonListPanel : BasePanel {
+public class ButtonListPanel : PanelBase {
 
     /// <summary>
     /// 内容

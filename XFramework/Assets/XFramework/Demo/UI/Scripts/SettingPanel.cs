@@ -2,7 +2,7 @@
 using XFramework.UI;
 using System.Text.RegularExpressions;
 
-public class SettingPanel : BasePanel {
+public class SettingPanel : PanelBase {
 
     Regex regex = new Regex("^[0-9]*$");
 

@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
+using XFramework.Singleton;
 using OnEventDelegate = System.Action;
 
 namespace XFramework

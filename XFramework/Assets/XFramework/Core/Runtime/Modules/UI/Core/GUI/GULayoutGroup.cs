@@ -6,7 +6,7 @@ using System.Collections.Generic;
 namespace XFramework.UI
 {
     [RequireComponent(typeof(LayoutGroup))]
-    public class GULayoutGroup : BaseGUI
+    public class GULayoutGroup : GUIBase
     {
         public LayoutGroup layoutGroup;
 

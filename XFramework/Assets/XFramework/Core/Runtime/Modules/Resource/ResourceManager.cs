@@ -10,11 +10,18 @@ namespace XFramework.Resource
     {
         private IResourceLoadHelper m_LoadHelper;
 
+        /// <summary>
+        /// 构造一个资源管理器
+        /// </summary>
+        /// <param name="loadHelper">资源加载辅助类</param>
         public ResourceManager(IResourceLoadHelper loadHelper)
         {
             m_LoadHelper = loadHelper;
         }
 
+        /// <summary>
+        /// 资源路径
+        /// </summary>
         public string AssetPath
         {
             get
@@ -30,7 +37,7 @@ namespace XFramework.Resource
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <param name="assetName"></param>
-        /// <returns></returns>
+        /// <returns>资源</returns>
         public T Load<T>(string assetName) where T : Object
         {
 
@@ -45,9 +52,9 @@ namespace XFramework.Resource
         /// <summary>
         /// 加载一个路径下的所有资源
         /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="path"></param>
-        /// <returns></returns>
+        /// <typeparam name="T">资源类型</typeparam>
+        /// <param name="path">资源路径</param>
+        /// <returns>资源组</returns>
         public T[] LoadAll<T>(string path) where T : Object
         {
             if (path.Substring(0, 4) == "Res/")
@@ -62,9 +69,9 @@ namespace XFramework.Resource
         /// <summary>
         /// 异步加载资源
         /// </summary>
-        /// <param name="assetName"></param>
-        /// <param name="name"></param>
-        /// <param name="callBack"></param>
+        /// <param name="assetName">资源名称</param>
+        /// <param name="callBack">回调函数</param>
+        /// <returns>加载进度</returns>
         public IProgress LoadAsync<T>(string assetName, System.Action<T> callBack) where T : Object
         {
             if (assetName.Substring(0, 4) == "Res/")
@@ -98,14 +105,11 @@ namespace XFramework.Resource
 
         public int Priority { get { return 100; } }
 
-        public void Update(float elapseSeconds, float realElapseSeconds)
-        {
-            //m_TaskPool.Update();
-        }
+        public void Update(float elapseSeconds, float realElapseSeconds) { }
 
         public void Shutdown()
         {
-            AssetBundle.UnloadAllAssetBundles(true);
+            m_LoadHelper.UnLoadAll();
         }
 
         #endregion

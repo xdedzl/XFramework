@@ -3,7 +3,7 @@
 namespace XFramework.UI
 {
     [UnityEngine.RequireComponent(typeof(TextMeshProUGUI))]
-    public class GUTMPText : BaseGUI
+    public class GUTMPText : GUIBase
     {
         public TextMeshProUGUI text;
 

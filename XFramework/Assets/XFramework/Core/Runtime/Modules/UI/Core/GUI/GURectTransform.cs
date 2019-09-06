@@ -1,7 +1,7 @@
 ﻿namespace XFramework.UI
 {
     [UnityEngine.RequireComponent(typeof(UnityEngine.RectTransform))]
-    public class GURectTransform : BaseGUI
+    public class GURectTransform : GUIBase
     {
         public UnityEngine.RectTransform rect;
 

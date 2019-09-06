@@ -1,7 +1,7 @@
 ﻿using UnityEngine;
 using XFramework.UI;
 
-public class MainPanel : BasePanel {
+public class MainPanel : PanelBase {
 
     public override void Reg()
     {

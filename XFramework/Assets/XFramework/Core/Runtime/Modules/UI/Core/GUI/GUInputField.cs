@@ -4,7 +4,7 @@ using UnityEngine.Events;
 namespace XFramework.UI
 {
     [UnityEngine.RequireComponent(typeof(Image))]
-    public class GUInputField : BaseGUI
+    public class GUInputField : GUIBase
     {
         public InputField inputField;
 

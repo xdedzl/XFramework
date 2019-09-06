@@ -5,6 +5,6 @@ namespace XFramework.Event
 {
     public interface IObserver
     {
-        void OnDataChange(BaseData eventData, int type, object obj);
+        void OnDataChange(EventData eventData, int type, object obj);
     }
 }

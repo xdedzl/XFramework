@@ -11,7 +11,7 @@ namespace XFramework.Event
         /// <summary>
         /// 每一个Subject都是一个被观察的对象
         /// </summary>
-        protected class Subject : ObservableSubjectTemplate<BaseData, int, object>
+        protected class Subject : ObservableSubjectTemplate<EventData, int, object>
         {
             // 继承泛型模板定义一个非泛型主题模板
         }
@@ -63,7 +63,7 @@ namespace XFramework.Event
         /// <param name="data">data主题</param>
         /// <param name="type">事件类型</param>
         /// <param name="obj">映射参数</param>
-        public void Notify(BaseData data, int type = 0, object obj = null)
+        public void Notify(EventData data, int type = 0, object obj = null)
         {
             if (m_SubjectDic.ContainsKey(data.dataType))
                 m_SubjectDic[data.dataType].Notify(data, type, obj);

@@ -4,7 +4,7 @@ using XFramework.UI;
 /// <summary>
 /// 五群界面
 /// </summary>
-public class GroupPanel : BasePanel {
+public class GroupPanel : PanelBase {
 
     private Vector2 rectSize;
     protected CanvasGroup canvasGroup;

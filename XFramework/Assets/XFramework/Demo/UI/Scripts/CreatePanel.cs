@@ -7,7 +7,7 @@ using UnityEngine.UI;
 /// <summary>
 /// 创建单位按钮
 /// </summary>
-public class CreatePanel : BasePanel {
+public class CreatePanel : PanelBase {
 
     [HideInInspector] public Button groupBtn;        // 五群按钮
     [HideInInspector] public Button teamBtn;         // 十八队按钮

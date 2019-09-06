@@ -74,7 +74,7 @@ public class BattleSystem
     }
 }
 
-public class BattleData : BaseData
+public class BattleData : EventData
 {
     public int battleCount;
     public int loseCount;
@@ -122,7 +122,7 @@ public class PlayerDataMgr : IObserver
     }
 
     // 固定写法
-    public void OnDataChange(BaseData eventData, int type, object obj)
+    public void OnDataChange(EventData eventData, int type, object obj)
     {
         switch (eventData.dataType)
         {

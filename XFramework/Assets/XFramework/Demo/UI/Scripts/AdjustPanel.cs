@@ -1,6 +1,6 @@
 ﻿using UnityEngine;
 using XFramework.UI;
-public class AdjustPanel : BasePanel {
+public class AdjustPanel : PanelBase {
     protected CanvasGroup canvasGroup;
 
     public override void Reg()

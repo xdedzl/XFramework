@@ -31,17 +31,17 @@ namespace XFramework.UI
         /// <summary>
         /// 保存所有实例化面板的游戏物体身上的BasePanel组件
         /// </summary>
-        private Dictionary<string, BasePanel> m_PanelDict;
+        private Dictionary<string, PanelBase> m_PanelDict;
         /// <summary>
         /// 处于打开状态的面板字典，key为层级
         /// </summary>
-        private Dictionary<int, List<BasePanel>> m_OnDisplayPanelDic;
+        private Dictionary<int, List<PanelBase>> m_OnDisplayPanelDic;
 
         private ResourceManager m_ResMgr;
 
         public UIMgrDicType()
         {
-            m_OnDisplayPanelDic = new Dictionary<int, List<BasePanel>>();
+            m_OnDisplayPanelDic = new Dictionary<int, List<PanelBase>>();
             InitPathDic();
 
             m_ResMgr = GameEntry.GetModule<ResourceManager>();
@@ -56,7 +56,7 @@ namespace XFramework.UI
         /// </summary>
         public void OpenPanel(string uiname, bool closable, object arg)
         {
-            BasePanel panel = GetPanel(uiname);
+            PanelBase panel = GetPanel(uiname);
             if (null == panel)
                 return;
 
@@ -71,7 +71,7 @@ namespace XFramework.UI
             }
             else
             {
-                m_OnDisplayPanelDic.Add(panel.Level, new List<BasePanel>());
+                m_OnDisplayPanelDic.Add(panel.Level, new List<PanelBase>());
             }
 
             m_OnDisplayPanelDic[panel.Level].Add(panel);
@@ -88,7 +88,7 @@ namespace XFramework.UI
         /// </summary>
         public void ClosePanel(string uiname)
         {
-            BasePanel panel = GetPanel(uiname);
+            PanelBase panel = GetPanel(uiname);
             if (m_OnDisplayPanelDic.ContainsKey(panel.Level) && m_OnDisplayPanelDic[panel.Level].Contains(panel))
             {
                 panel.OnClose();
@@ -96,7 +96,7 @@ namespace XFramework.UI
             }
 
             int index = panel.Level + 1;
-            List<BasePanel> temp;
+            List<PanelBase> temp;
             while (m_OnDisplayPanelDic.ContainsKey(index))
             {
                 temp = m_OnDisplayPanelDic[index];
@@ -119,14 +119,14 @@ namespace XFramework.UI
         /// <summary>
         /// 获取面板
         /// </summary>
-        public BasePanel GetPanel(string uiname)
+        public PanelBase GetPanel(string uiname)
         {
             if (m_PanelDict == null)
             {
-                m_PanelDict = new Dictionary<string, BasePanel>();
+                m_PanelDict = new Dictionary<string, PanelBase>();
             }
 
-            m_PanelDict.TryGetValue(uiname, out BasePanel panel);
+            m_PanelDict.TryGetValue(uiname, out PanelBase panel);
 
             if (panel == null)
             {
@@ -134,15 +134,17 @@ namespace XFramework.UI
                 m_PanelPathDict.TryGetValue(uiname, out string path);
                 GameObject instPanel = GameObject.Instantiate(m_ResMgr.Load<GameObject>(path));
 
-                // UICore与派生类不一定在一个程序集类，所以不能直接用Type.GetType  TODO : 根据不同平台规定路径
+                // UICore与派生类不一定在一个程序集类，所以不能直接用Type.GetType
                 Assembly asmb = Assembly.Load("Assembly-CSharp");
                 Type type = asmb.GetType(uiname);
-                BasePanel basePanel = (BasePanel)Activator.CreateInstance(type);
-                basePanel.Init(instPanel, uiname);
-                if (basePanel == null)
+
+                if (type == null || !type.IsSubclassOf(typeof(PanelBase)))
                 {
-                    throw new System.Exception("面板类名错误");
+                    throw new FrameworkException("[UI] 面板类名错误 | 没有继承BasePanel");
                 }
+
+                PanelBase basePanel = instPanel.AddComponent(type) as PanelBase;
+                basePanel.Init(uiname);
                 m_PanelDict.Add(uiname, basePanel);
 
                 Transform uiGroup = CanvasTransform.Find("Level" + basePanel.Level);
@@ -151,17 +153,11 @@ namespace XFramework.UI
                     RectTransform rect;
                     rect = (new GameObject("Level" + basePanel.Level)).AddComponent<RectTransform>();
                     rect.SetParent(CanvasTransform);
-
-                    // 在Canvas的渲染模式为Screen Space-Camera时 在1920*1080的情况下直接设置分辨率有时会获取到1080*1080
-                    rect.anchorMin = Vector2.zero;
-                    rect.anchorMax = Vector2.one;
-                    rect.sizeDelta = Vector2.zero;
-                    rect.localPosition = Vector3.zero;
+                    rect.sizeDelta = CanvasTransform.sizeDelta;
+                    rect.position = CanvasTransform.position;
                     rect.localScale = Vector3.one;
-
                     uiGroup = rect;
                 }
-
                 instPanel.transform.SetParent(uiGroup, false);
                 return basePanel;
             }
@@ -237,7 +233,9 @@ namespace XFramework.UI
 
         public void Shutdown()
         {
-
+            m_PanelDict.Clear();
+            m_PanelPathDict.Clear();
+            m_OnDisplayPanelDic.Clear();
         }
 
         #endregion

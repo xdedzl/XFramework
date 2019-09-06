@@ -1,6 +1,6 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
+using XFramework.Singleton;
 
 namespace XFramework
 {
@@ -25,12 +25,12 @@ namespace XFramework
 
         public void Shutdown()
         {
-            
+
         }
 
         public void Update(float elapseSeconds, float realElapseSeconds)
         {
-            
+
         }
 
         /// <summary>

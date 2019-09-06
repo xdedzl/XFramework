@@ -4,7 +4,7 @@ using XFramework.UI;
 /// <summary>
 /// 十八队界面
 /// </summary>
-public class TeamPanel : BasePanel {
+public class TeamPanel : PanelBase {
 
     private Vector2 rectSize;
     protected CanvasGroup canvasGroup;

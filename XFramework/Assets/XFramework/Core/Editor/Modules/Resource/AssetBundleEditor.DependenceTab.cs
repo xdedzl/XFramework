@@ -139,6 +139,8 @@ namespace XFramework.Editor
                     Directory.CreateDirectory(m_PrefabABPath);
                 }
                 BuildPipeline.BuildAssetBundles(m_PrefabABPath, builds.ToArray(), BuildAssetBundleOptions.None, EditorUserBuildSettings.activeBuildTarget);
+
+                AssetDatabase.Refresh();
             }
         }
     }

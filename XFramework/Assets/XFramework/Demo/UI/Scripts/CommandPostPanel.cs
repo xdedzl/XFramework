@@ -1,7 +1,7 @@
 ﻿using UnityEngine;
 using XFramework.UI;
 
-public class CommandPostPanel : BasePanel {
+public class CommandPostPanel : PanelBase {
 
     private Vector2 rectSize;
     protected CanvasGroup canvasGroup;

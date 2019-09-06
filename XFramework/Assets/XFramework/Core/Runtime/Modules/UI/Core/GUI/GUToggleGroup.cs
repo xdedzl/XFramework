@@ -6,7 +6,7 @@ using UnityEngine.UI;
 namespace XFramework.UI
 {
     [RequireComponent(typeof(ToggleGroup))]
-    public class GUToggleGroup : BaseGUI
+    public class GUToggleGroup : GUIBase
     {
         public ToggleGroup toggleGroup;
         private void Reset()

@@ -68,7 +68,7 @@ public class UIHelper : IGameModule
     /// <summary>
     /// 获取面板
     /// </summary>
-    public BasePanel GetPanel(string name)
+    public PanelBase GetPanel(string name)
     {
         return m_UIManager.GetPanel(name);
     }

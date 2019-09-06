@@ -1,7 +1,7 @@
 ﻿using UnityEngine;
 using XFramework.UI;
 
-public class ShowPowerPanel : BasePanel {
+public class ShowPowerPanel : PanelBase {
     protected CanvasGroup canvasGroup;
     public override void Reg()
     {
