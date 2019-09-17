@@ -68,6 +68,21 @@ namespace XFramework.Entity
         }
 
         /// <summary>
+        /// 移除一个模板
+        /// </summary>
+        /// <param name="key">key</param>
+        public void RemoveTemplate(string key)
+        {
+            var entitys = GetEntities(key);
+            foreach (var item in entitys)
+            {
+                m_EntityDic.Remove(item.Id);
+                m_EntityInfoDic.Remove(item.Id);
+            }
+            m_EntityContainerDic.Remove(key);
+        }
+
+        /// <summary>
         /// 分配实体
         /// </summary>
         /// <typeparam name="T">实体子类型</typeparam>

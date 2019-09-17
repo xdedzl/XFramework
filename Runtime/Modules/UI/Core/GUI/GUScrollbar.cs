@@ -4,6 +4,7 @@ using UnityEngine;
 namespace XFramework.UI
 {
     [RequireComponent(typeof(Scrollbar))]
+    [UnityEngine.AddComponentMenu("XFramework/GUScrollbar")]
     public class GUScrollbar : GUIBase
     {
         public Scrollbar scrollbar;

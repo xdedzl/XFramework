@@ -6,6 +6,7 @@ using System.Collections.Generic;
 namespace XFramework.UI
 {
     [RequireComponent(typeof(LayoutGroup))]
+    [UnityEngine.AddComponentMenu("XFramework/GULayoutGroup")]
     public class GULayoutGroup : GUIBase
     {
         public LayoutGroup layoutGroup;

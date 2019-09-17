@@ -1,91 +1,132 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace XFramework
+namespace XFramework.Event
 {
     /// <summary>
     /// 消息类 全局类消息
     /// </summary>
     public class MessageManager : IGameModule
     {
-        public delegate void Callback();
-
-        public delegate void Callback<T>(T arg1);
-
-        public delegate void Callback<T, U>(T arg1, U arg2);
-
-        public delegate void Callback<T, U, V>(T arg1, U arg2, V arg3);
-
-        public Dictionary<int, Delegate> m_eventDictionary = new Dictionary<int, Delegate>();
+        private Dictionary<int, Delegate> m_eventDictionary = new Dictionary<int, Delegate>();
 
         public int Priority { get { return 100; } }
 
         #region AddEventListener
 
-        public void AddEventListener(Enum eventType, Callback handler)
+        /// <summary>
+        /// 添加监听事件
+        /// </summary>
+        /// <param name="eventType">事件类型</param>
+        /// <param name="handler">事件</param>
+        public void AddListener(Enum eventType, Action handler)
         {
             int id = Convert.ToInt32(eventType);
             OnListenerAdding(id, handler);
-            m_eventDictionary[id] = (Callback)m_eventDictionary[id] + handler;
+            m_eventDictionary[id] = (Action)m_eventDictionary[id] + handler;
         }
 
-        //一个参数 parameter
-        public void AddEventListener<T>(Enum eventType, Callback<T> handler)
+        /// <summary>
+        /// 添加监听事件
+        /// </summary>
+        /// <typeparam name="T">参数类型</typeparam>
+        /// <param name="eventType">事件类型</param>
+        /// <param name="handler">事件</param>
+        public void AddListener<T>(Enum eventType, Action<T> handler)
         {
             int id = Convert.ToInt32(eventType);
             OnListenerAdding(id, handler);
-            m_eventDictionary[id] = (Callback<T>)m_eventDictionary[id] + handler;
+            m_eventDictionary[id] = (Action<T>)m_eventDictionary[id] + handler;
         }
 
-        //两个参数 parameter
-        public void AddEventListener<T, U>(Enum eventType, Callback<T, U> handler)
+        /// <summary>
+        /// 添加监听事件
+        /// </summary>
+        /// <typeparam name="T">参数一类型</typeparam>
+        /// <typeparam name="U">参数二类型</typeparam>
+        /// <param name="eventType">事件类型</param>
+        /// <param name="handler">事件</param>
+        public void AddListener<T, U>(Enum eventType, Action<T, U> handler)
         {
             int id = Convert.ToInt32(eventType);
             OnListenerAdding(id, handler);
-            m_eventDictionary[id] = (Callback<T, U>)m_eventDictionary[id] + handler;
+            m_eventDictionary[id] = (Action<T, U>)m_eventDictionary[id] + handler;
         }
 
-        //三个参数 parameter
-        public void AddEventListener<T, U, V>(Enum eventType, Callback<T, U, V> handler)
+        /// <summary>
+        /// 添加监听事件
+        /// </summary>
+        /// <typeparam name="T">参数一类型</typeparam>
+        /// <typeparam name="U">参数二类型</typeparam>
+        /// <typeparam name="V">参数三类型</typeparam>
+        /// <param name="eventType">事件类型</param>
+        /// <param name="handler">事件</param>
+        public void AddListener<T, U, V>(Enum eventType, Action<T, U, V> handler)
         {
             int id = Convert.ToInt32(eventType);
             OnListenerAdding(id, handler);
-            m_eventDictionary[id] = (Callback<T, U, V>)m_eventDictionary[id] + handler;
+            m_eventDictionary[id] = (Action<T, U, V>)m_eventDictionary[id] + handler;
         }
 
         #endregion AddEventListener
 
         #region RemoveEventListener
 
-        public void RemoveEventListener(Enum eventType, Callback handler)
+        /// <summary>
+        /// 移除监听事件
+        /// </summary>
+        /// <param name="eventType">事件类型</param>
+        /// <param name="handler">事件</param>
+        public void RemoveListener(Enum eventType, Action handler)
         {
             int id = Convert.ToInt32(eventType);
             OnListenerRemoving(id, handler);
-            m_eventDictionary[id] = (Callback)m_eventDictionary[id] - handler;
+            m_eventDictionary[id] = (Action)m_eventDictionary[id] - handler;
             OnListenerRemoved(id);
         }
 
-        public void RemoveEventListener<T>(Enum eventType, Callback<T> handler)
+        /// <summary>
+        /// 移除监听事件
+        /// </summary>
+        /// <typeparam name="T">参数类型</typeparam>
+        /// <param name="eventType">事件类型</param>
+        /// <param name="handler">事件</param>
+        public void RemoveListener<T>(Enum eventType, Action<T> handler)
         {
             int id = Convert.ToInt32(eventType);
             OnListenerRemoving(id, handler);
-            m_eventDictionary[id] = (Callback<T>)m_eventDictionary[id] - handler;
+            m_eventDictionary[id] = (Action<T>)m_eventDictionary[id] - handler;
             OnListenerRemoved(id);
         }
 
-        public void RemoveEventListener<T, U>(Enum eventType, Callback<T, U> handler)
+        /// <summary>
+        /// 移除监听事件
+        /// </summary>
+        /// <typeparam name="T">参数一类型</typeparam>
+        /// <typeparam name="U">参数二类型</typeparam>
+        /// <param name="eventType">事件类型</param>
+        /// <param name="handler">事件</param>
+        public void RemoveListener<T, U>(Enum eventType, Action<T, U> handler)
         {
             int id = Convert.ToInt32(eventType);
             OnListenerRemoving(id, handler);
-            m_eventDictionary[id] = (Callback<T, U>)m_eventDictionary[id] - handler;
+            m_eventDictionary[id] = (Action<T, U>)m_eventDictionary[id] - handler;
             OnListenerRemoved(id);
         }
 
-        public void RemoveEventListener<T, U, V>(Enum eventType, Callback<T, U, V> handler)
+        /// <summary>
+        /// 移除监听事件
+        /// </summary>
+        /// <typeparam name="T">参数一类型</typeparam>
+        /// <typeparam name="U">参数二类型</typeparam>
+        /// <typeparam name="V">参数三类型</typeparam>
+        /// <param name="eventType">事件类型</param>
+        /// <param name="handler">事件</param>
+        public void RemoveListener<T, U, V>(Enum eventType, Action<T, U, V> handler)
         {
             int id = Convert.ToInt32(eventType);
             OnListenerRemoving(id, handler);
-            m_eventDictionary[id] = (Callback<T, U, V>)m_eventDictionary[id] - handler;
+            m_eventDictionary[id] = (Action<T, U, V>)m_eventDictionary[id] - handler;
             OnListenerRemoved(id);
         }
 
@@ -141,12 +182,16 @@ namespace XFramework
 
         #region BroadCastEventMsg
 
-        public void BroadCastEventMsg(Enum eventType)
+        /// <summary>
+        /// 事件广播
+        /// </summary>
+        /// <param name="eventType">事件类型</param>
+        public void BroadCast(Enum eventType)
         {
             int id = Convert.ToInt32(eventType);
             if (m_eventDictionary.TryGetValue(id, out Delegate d))
             {
-                if (d is Callback callback)
+                if (d is Action callback)
                 {
                     callback();
                 }
@@ -157,12 +202,18 @@ namespace XFramework
             }
         }
 
-        public void BroadCastEventMsg<T>(Enum eventType, T arg1)
+        /// <summary>
+        /// 事件广播
+        /// </summary>
+        /// <typeparam name="T">参数类型</typeparam>
+        /// <param name="eventType">事件类型</param>
+        /// <param name="arg1">参数</param>
+        public void BroadCast<T>(Enum eventType, T arg1)
         {
             int id = Convert.ToInt32(eventType);
             if (m_eventDictionary.TryGetValue(id, out Delegate d))
             {
-                if (d is Callback<T> callback)
+                if (d is Action<T> callback)
                 {
                     callback(arg1);
                 }
@@ -173,13 +224,20 @@ namespace XFramework
             }
         }
 
-        public void BroadCastEventMsg<T, U>(Enum eventType, T arg1, U arg2)
+        /// <summary>
+        /// 事件广播
+        /// </summary>
+        /// <typeparam name="T">参数一类型</typeparam>
+        /// <typeparam name="U">参数二类型</typeparam>
+        /// <param name="eventType">事件类型</param>
+        /// <param name="arg1">参数</param>
+        public void BroadCast<T, U>(Enum eventType, T arg1, U arg2)
         {
             int id = Convert.ToInt32(eventType);
             if (m_eventDictionary.TryGetValue(id, out Delegate d))
             {
 
-                if (d is Callback<T, U> callback)
+                if (d is Action<T, U> callback)
                 {
                     callback(arg1, arg2);
                 }
@@ -190,14 +248,20 @@ namespace XFramework
             }
         }
 
-        public void BroadCastEventMsg<T, U, V>(Enum eventType, T arg1, U arg2, V arg3)
+        /// <summary>
+        /// 事件广播
+        /// </summary>
+        /// <typeparam name="T">参数一类型</typeparam>
+        /// <typeparam name="U">参数二类型</typeparam>
+        /// <typeparam name="V">参数三类型</typeparam>
+        /// <param name="eventType">事件类型</param>
+        /// <param name="arg1">参数</param>
+        public void BroadCast<T, U, V>(Enum eventType, T arg1, U arg2, V arg3)
         {
             int id = Convert.ToInt32(eventType);
             if (m_eventDictionary.TryGetValue(id, out Delegate d))
             {
-                Callback<T, U, V> callback = d as Callback<T, U, V>;
-
-                if (callback != null)
+                if (d is Action<T, U, V> callback)
                 {
                     callback(arg1, arg2, arg3);
                 }
@@ -212,7 +276,7 @@ namespace XFramework
 
         #region CheckEventListener
 
-        public bool CheckEventListener(Enum eventType, Callback handler)
+        public bool CheckListener(Enum eventType, Action handler)
         {
             int id = Convert.ToInt32(eventType);
             if (m_eventDictionary.ContainsKey(id))
@@ -235,7 +299,7 @@ namespace XFramework
         }
 
         //Single parameter
-        public bool CheckEventListener<T>(Enum eventType, Callback<T> handler)
+        public bool CheckListener<T>(Enum eventType, Action<T> handler)
         {
             int id = Convert.ToInt32(eventType);
             if (m_eventDictionary.ContainsKey(id))
@@ -258,7 +322,7 @@ namespace XFramework
         }
 
         //Two parameters
-        public bool CheckEventListener<T, U>(Enum eventType, Callback<T, U> handler)
+        public bool CheckListener<T, U>(Enum eventType, Action<T, U> handler)
         {
             int id = Convert.ToInt32(eventType);
             if (m_eventDictionary.ContainsKey(id))
@@ -281,7 +345,7 @@ namespace XFramework
         }
 
         //Three parameters
-        public bool CheckEventListener<T, U, V>(Enum eventType, Callback<T, U, V> handler)
+        public bool CheckListener<T, U, V>(Enum eventType, Action<T, U, V> handler)
         {
             int id = Convert.ToInt32(eventType);
             if (m_eventDictionary.ContainsKey(id))
@@ -303,9 +367,9 @@ namespace XFramework
             return false;
         }
 
-        public Exception CreateBroadcastSignatureException(Enum eventType)
+        private FrameworkException CreateBroadcastSignatureException(Enum eventType)
         {
-            return new System.Exception(string.Format("Broadcasting message \"{0}\" but listeners have a different signature than the broadcaster.", eventType));
+            return new FrameworkException(string.Format("Broadcasting message \"{0}\" but listeners have a different signature than the broadcaster.", eventType));
         }
 
         #endregion CheckEventListener
