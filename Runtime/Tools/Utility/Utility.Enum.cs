@@ -12,13 +12,13 @@ namespace XFramework
             /// </summary>
             /// <typeparam name="T">枚举类型</typeparam>
             /// <returns>字符串集合</returns>
-            public static List<string> ToCustomStrs<T>() where T : System.Enum
+            public static List<string> GetDescription<T>() where T : System.Enum
             {
-                Type attrType = typeof(EnumStrAttribute);
+                Type attrType = typeof(DescriptionAttribute);
                 Type type = typeof(T);
                 var fields = type.GetFields();
                 List<string> strArray = new List<string>();
-                foreach (var item in fields)
+                foreach (var item in fields) 
                 {
                     if (item.FieldType != type)
                     {
@@ -28,7 +28,7 @@ namespace XFramework
                     Attribute attribute = Attribute.GetCustomAttribute(item, attrType);
                     if (attribute != null)
                     {
-                        strArray.Add((attribute as EnumStrAttribute).str);
+                        strArray.Add((attribute as DescriptionAttribute).str);
                     }
                     else
                     {
