@@ -19,7 +19,7 @@ public class Game : MonoBehaviour
     public static EntityManager EntityModule { get; private set; }
     public static FsmManager FsmModule { get; private set; }
     public static GraphicsManager GraphicsModule { get; private set; }
-    public static MessageManager MessengerModule { get; private set; }
+    public static MessageManager MessageModule { get; private set; }
     public static DataSubjectManager ObserverModule { get; private set; }
     public static ProcedureManager ProcedureModule { get; private set; }
     public static TaskManager TaskModule { get; private set; }
@@ -36,7 +36,7 @@ public class Game : MonoBehaviour
     // 初始流程
     public string TypeName;
 
-    private static Game activeGame = null;
+    public static Game activeGame { get; private set; }
 
     void Awake()
     {
@@ -89,7 +89,7 @@ public class Game : MonoBehaviour
         EntityModule = GameEntry.AddModule<EntityManager>();
         FsmModule = GameEntry.AddModule<FsmManager>();
         GraphicsModule = GameEntry.AddModule<GraphicsManager>();
-        MessengerModule = GameEntry.AddModule<MessageManager>();
+        MessageModule = GameEntry.AddModule<MessageManager>();
         ObserverModule = GameEntry.AddModule<DataSubjectManager>();
         ProcedureModule = GameEntry.AddModule<ProcedureManager>();
         TaskModule = GameEntry.AddModule<TaskManager>();
@@ -113,7 +113,7 @@ public class Game : MonoBehaviour
         EntityModule = GameEntry.GetModule<EntityManager>();
         FsmModule = GameEntry.GetModule<FsmManager>();
         GraphicsModule = GameEntry.GetModule<GraphicsManager>();
-        MessengerModule = GameEntry.GetModule<MessageManager>();
+        MessageModule = GameEntry.GetModule<MessageManager>();
         ObserverModule = GameEntry.GetModule<DataSubjectManager>();
         ProcedureModule = GameEntry.GetModule<ProcedureManager>();
         TaskModule = GameEntry.GetModule<TaskManager>();

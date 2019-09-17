@@ -2,6 +2,7 @@
 namespace XFramework.UI
 {
     [UnityEngine.RequireComponent(typeof(UnityEngine.UI.Dropdown))]
+    [UnityEngine.AddComponentMenu("XFramework/GUDropdown")]
     public class GUDropdown : GUIBase
     {
         public UnityEngine.UI.Dropdown dropdown;

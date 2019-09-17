@@ -3,6 +3,7 @@
 namespace XFramework.UI
 {
     [RequireComponent(typeof(SliderMixInput))]
+    [UnityEngine.AddComponentMenu("XFramework/GUSliderMixInput")]
     public class GUSliderMixInput : GUIBase
     {
         public SliderMixInput mix;

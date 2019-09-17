@@ -3,7 +3,8 @@ using UnityEngine.Events;
 
 namespace XFramework.UI
 {
-    [UnityEngine.RequireComponent(typeof(Image))]
+    [UnityEngine.RequireComponent(typeof(InputField))]
+    [UnityEngine.AddComponentMenu("XFramework/GUInputField")]
     public class GUInputField : GUIBase
     {
         public InputField inputField;

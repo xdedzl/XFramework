@@ -1,5 +1,6 @@
-﻿using UnityEngine;
+﻿using System.Collections.Generic;
 using XFramework.Tasks;
+using UnityEngine;
 
 namespace XFramework.Resource
 {
@@ -9,6 +10,10 @@ namespace XFramework.Resource
     public class ResourceManager : IGameModule
     {
         private IResourceLoadHelper m_LoadHelper;
+        /// <summary>
+        /// 需要实例化的资源
+        /// </summary>
+        private Dictionary<string, Object> m_AssetDic;
 
         /// <summary>
         /// 构造一个资源管理器
@@ -17,6 +22,7 @@ namespace XFramework.Resource
         public ResourceManager(IResourceLoadHelper loadHelper)
         {
             m_LoadHelper = loadHelper;
+            m_AssetDic = new Dictionary<string, Object>();
         }
 
         /// <summary>
@@ -30,6 +36,16 @@ namespace XFramework.Resource
             }
         }
 
+        /// <summary>
+        /// 是否通过Resources内加载
+        /// </summary>
+        /// <param name="assetName"></param>
+        /// <returns></returns>
+        private bool IsResources(string assetName)
+        {
+            return assetName.Substring(0, 3).Equals("Res");
+        }
+
         #region 资源加载
 
         /// <summary>
@@ -40,8 +56,11 @@ namespace XFramework.Resource
         /// <returns>资源</returns>
         public T Load<T>(string assetName) where T : Object
         {
-
-            if (assetName.Substring(0, 4) == "Res/")
+            if (string.IsNullOrEmpty(assetName))
+            {
+                throw new System.Exception("加载资源路径不能为空");
+            }
+            if (IsResources(assetName))
             {
                 assetName = assetName.Substring(4, assetName.Length - 4);
                 return Resources.Load<T>(assetName);
@@ -57,7 +76,7 @@ namespace XFramework.Resource
         /// <returns>资源组</returns>
         public T[] LoadAll<T>(string path) where T : Object
         {
-            if (path.Substring(0, 4) == "Res/")
+            if (IsResources(path))
             {
                 path = path.Substring(4, path.Length - 4);
                 return Resources.LoadAll<T>(path);
@@ -74,7 +93,7 @@ namespace XFramework.Resource
         /// <returns>加载进度</returns>
         public IProgress LoadAsync<T>(string assetName, System.Action<T> callBack) where T : Object
         {
-            if (assetName.Substring(0, 4) == "Res/")
+            if (IsResources(assetName))
             {
                 assetName = assetName.Substring(4, assetName.Length - 4);
                 var request = Resources.LoadAsync(assetName);
@@ -96,7 +115,164 @@ namespace XFramework.Resource
             {
                 return m_LoadHelper.LoadAsync<T>(assetName, callBack);
             }
+        }
 
+        #endregion
+
+        #region 资源实例化
+
+        /// <summary>
+        /// 实例化资源
+        /// </summary>
+        /// <typeparam name="T">资源类型</typeparam>
+        /// <param name="assetName">资源名称</param>
+        /// <returns>资源的拷贝</returns>
+        public T Instantiate<T>(string assetName) where T : Object
+        {
+
+            T asset = GetAsset<T>(assetName);
+            T obj = Object.Instantiate<T>(asset);
+            return obj;
+        }
+
+        /// <summary>
+        /// 实例化资源
+        /// </summary>
+        /// <typeparam name="T">资源类型</typeparam>
+        /// <param name="assetName">资源名称</param>
+        /// <param name="parent">父物体</param>
+        /// <returns>资源的拷贝</returns>
+        public T Instantiate<T>(string assetName, Transform parent) where T : Object
+        {
+            T asset = GetAsset<T>(assetName);
+            T obj = Object.Instantiate<T>(asset, parent);
+            return obj;
+        }
+
+        /// <summary>
+        /// 实例化资源
+        /// </summary>
+        /// <typeparam name="T">资源类型</typeparam>
+        /// <param name="assetName">资源名称</param>
+        /// <param name="position">位置</param>
+        /// <param name="quaternion">方向</param>
+        /// <returns>资源的拷贝</returns>
+        public T Instantiate<T>(string assetName, Vector3 position, Quaternion quaternion) where T : Object
+        {
+            T asset = GetAsset<T>(assetName);
+            T obj = Object.Instantiate<T>(asset, position, quaternion);
+            return obj;
+        }
+
+        /// <summary>
+        /// 实例化资源
+        /// </summary>
+        /// <typeparam name="T">资源类型</typeparam>
+        /// <param name="assetName">资源名称</param>
+        /// <param name="position">位置</param>
+        /// <param name="quaternion">方向</param>
+        /// <param name="parent">父物体</param>
+        /// <returns>资源的拷贝</returns>
+        public T Instantiate<T>(string assetName, Vector3 position, Quaternion quaternion, Transform parent) where T : Object
+        {
+            T asset = GetAsset<T>(assetName);
+            T obj = Object.Instantiate<T>(asset, position, quaternion, parent);
+            return obj;
+        }
+
+        /// <summary>
+        /// 获取一个资源
+        /// </summary>
+        private T GetAsset<T>(string assetName) where T : Object
+        {
+            m_AssetDic.TryGetValue(assetName, out Object asset);
+            if (asset == null)
+            {
+                asset = Load<T>(assetName);
+            }
+            return asset as T;
+        }
+
+        /// <summary>
+        /// 异步实例化资源
+        /// </summary>
+        /// <typeparam name="T">资源类型</typeparam>
+        /// <param name="assetName">资源名称</param>
+        /// <param name="callBack">实例化完成回调</param>
+        public void InstantiateAsync<T>(string assetName, System.Action<T> callBack = null) where T : Object
+        {
+            GetAssetAsync<T>(assetName, (asset) =>
+            {
+                T obj = Object.Instantiate(asset);
+                callBack?.Invoke(obj);
+            });
+        }
+
+        /// <summary>
+        /// 异步实例化资源
+        /// </summary>
+        /// <typeparam name="T">资源类型</typeparam>
+        /// <param name="assetName">资源名称</param>
+        /// <param name="parent">父物体</param>
+        /// <param name="callBack">实例化完成回调</param>
+        public void InstantiateAsync<T>(string assetName, Transform parent, System.Action<T> callBack = null) where T : Object
+        {
+            GetAssetAsync<T>(assetName, (asset) =>
+            {
+                T obj = Object.Instantiate(asset, parent);
+                callBack?.Invoke(obj);
+            });
+        }
+
+        /// <summary>
+        /// 异步实例化资源
+        /// </summary>
+        /// <typeparam name="T">资源类型</typeparam>
+        /// <param name="assetName">资源名称</param>
+        /// <param name="position">位置</param>
+        /// <param name="quaternion">方向</param>
+        /// <param name="callBack">实例化完成回调</param>
+        public void InstantiateAsync<T>(string assetName, Vector3 position, Quaternion quaternion, System.Action<T> callBack = null) where T : Object
+        {
+            GetAssetAsync<T>(assetName, (asset) =>
+            {
+                T obj = Object.Instantiate(asset, position, quaternion);
+                callBack?.Invoke(obj);
+            });
+        }
+
+        /// <summary>
+        /// 异步实例化资源
+        /// </summary>
+        /// <typeparam name="T">资源类型</typeparam>
+        /// <param name="assetName">资源名称</param>
+        /// <param name="position">位置</param>
+        /// <param name="quaternion">方向</param>
+        /// <param name="parent">父物体</param>
+        /// <param name="callBack">实例化完成回调</param>
+        public void InstantiateAsync<T>(string assetName, Vector3 position, Quaternion quaternion, Transform parent, System.Action<T> callBack = null) where T : Object
+        {
+            GetAssetAsync<T>(assetName, (asset) =>
+            {
+                T obj = Object.Instantiate(asset, position, quaternion, parent);
+                callBack?.Invoke(obj);
+            });
+        }
+
+        /// <summary>
+        /// 异步获取一个资源
+        /// </summary>
+        private void GetAssetAsync<T>(string assetName, System.Action<T> callBack) where T : Object
+        {
+            m_AssetDic.TryGetValue(assetName, out Object asset);
+            if (asset == null)
+            {
+                LoadAsync<T>(assetName, callBack);
+            }
+            else
+            {
+                callBack(asset as T);
+            }
         }
 
         #endregion
@@ -110,6 +286,7 @@ namespace XFramework.Resource
         public void Shutdown()
         {
             m_LoadHelper.UnLoadAll();
+            m_AssetDic.Clear();
         }
 
         #endregion

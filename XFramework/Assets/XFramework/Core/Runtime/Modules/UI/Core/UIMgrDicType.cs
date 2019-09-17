@@ -233,7 +233,7 @@ namespace XFramework.UI
 
         public void Shutdown()
         {
-            m_PanelDict.Clear();
+            m_PanelDict?.Clear();
             m_PanelPathDict.Clear();
             m_OnDisplayPanelDic.Clear();
         }

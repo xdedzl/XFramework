@@ -1,11 +1,10 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 
 namespace XFramework.UI
 {
     [RequireComponent(typeof(ToggleGroup))]
+    [AddComponentMenu("XFramework/GUToggleGroup")]
     public class GUToggleGroup : GUIBase
     {
         public ToggleGroup toggleGroup;

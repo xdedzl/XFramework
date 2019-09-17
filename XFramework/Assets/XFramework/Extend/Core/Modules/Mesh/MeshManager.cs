@@ -15,6 +15,13 @@ namespace XFramework.Draw
     /// </summary>
     public class MeshManager : IGameModule
     {
+        private GraphicsManager m_GrahicsManager;
+
+        public MeshManager()
+        {
+            m_GrahicsManager = GameEntry.AddModule<GraphicsManager>();
+        }
+
         /// <summary>
         /// 用于画线的材质
         /// </summary>
@@ -51,7 +58,10 @@ namespace XFramework.Draw
             get
             {
                 if (m_ShapeMaterial == null)
+                {
                     m_ShapeMaterial = new Material(Shader.Find("RunTimeHandles/Shape"));
+                    m_ShapeMaterial.color.Alpha(0.5f);
+                }
                 return m_ShapeMaterial;
             }
         }
@@ -69,7 +79,7 @@ namespace XFramework.Draw
             Mesh mesh = GLDraw.CreateCylinder(point, radius, height, color.Int32());    // 画出图形   
             Debug.Log(color.Int32().Color());
 
-            Game.GraphicsModule.AddGraphics(Camera.main, () =>
+            m_GrahicsManager.AddGraphics(Camera.main, () =>
             {
                 ShapeMaterial.SetPass(0);
                 Graphics.DrawMeshNow(mesh, Matrix4x4.identity);
@@ -93,7 +103,7 @@ namespace XFramework.Draw
             Vector3 highPoint = point + Vector3.up * (height + heightDifference);
             Mesh meshDown = GLDraw.CreateCylinder(highPoint, radius, height);
 
-            Game.GraphicsModule.AddGraphics(Camera.main, () =>
+            m_GrahicsManager.AddGraphics(Camera.main, () =>
             {
                 ShapeMaterial.SetPass(0);
                 Graphics.DrawMeshNow(meshUp, Matrix4x4.identity);
@@ -113,7 +123,7 @@ namespace XFramework.Draw
             Vector3[] vector3s = list.ToArray();                                        // 使数组逆时针排序
             Mesh mesh = GLDraw.CreatePolygon(vector3s, height, color.Int32());          // 画出图形
 
-            Game.GraphicsModule.AddGraphics(Camera.main, () =>
+            m_GrahicsManager.AddGraphics(Camera.main, () =>
             {
                 ShapeMaterial.SetPass(0);
                 Graphics.DrawMeshNow(mesh, Matrix4x4.identity);
@@ -134,7 +144,7 @@ namespace XFramework.Draw
 
             Mesh mesh = GLDraw.CreateLineMesh(list, width, height, color.Int32());
 
-            Game.GraphicsModule.AddGraphics(Camera.main, () =>
+            m_GrahicsManager.AddGraphics(Camera.main, () =>
             {
                 ShapeMaterial.SetPass(0);
                 Graphics.DrawMeshNow(mesh, Matrix4x4.identity);
@@ -154,7 +164,7 @@ namespace XFramework.Draw
             Vector3[] vertices = PhysicsMath.GetSectorPoints_2(origin, tarPoint, alpha, theta);
             Mesh mesh = GLDraw.CreatePolygon(vertices, color.Int32());
 
-            Game.GraphicsModule.AddGraphics(Camera.main, () =>
+            m_GrahicsManager.AddGraphics(Camera.main, () =>
             {
                 ShapeMaterial.SetPass(0);
                 Graphics.DrawMeshNow(mesh, Matrix4x4.identity);
@@ -186,7 +196,7 @@ namespace XFramework.Draw
             Vector3[] vector3s2 = CeilingList.ToArray();                               // 使数组逆时针排序
             Mesh mesh1 = GLDraw.CreatePolygon(vector3s2, Ceiling - lower, color.Int32());      // 画出图形
 
-            Game.GraphicsModule.AddGraphics(Camera.main, () =>
+            m_GrahicsManager.AddGraphics(Camera.main, () =>
             {
                 ShapeMaterial.SetPass(0);
                 Graphics.DrawMeshNow(mesh0, Matrix4x4.identity);
@@ -215,7 +225,7 @@ namespace XFramework.Draw
         {
             Mesh mesh = GLDraw.CreateHemisphere(origin, radius, 90, color.Int32());
 
-            Game.GraphicsModule.AddGraphics(Camera.main, () =>
+            m_GrahicsManager.AddGraphics(Camera.main, () =>
             {
                 ShapeMaterial.SetPass(0);
                 Graphics.DrawMeshNow(mesh, Matrix4x4.identity);
