@@ -74,12 +74,15 @@ namespace XFramework.Entity
         public void RemoveTemplate(string key)
         {
             var entitys = GetEntities(key);
-            foreach (var item in entitys)
+            if (entitys != null)
             {
-                m_EntityDic.Remove(item.Id);
-                m_EntityInfoDic.Remove(item.Id);
+                foreach (var item in entitys)
+                {
+                    m_EntityDic.Remove(item.Id);
+                    m_EntityInfoDic.Remove(item.Id);
+                }
+                m_EntityContainerDic.Remove(key);
             }
-            m_EntityContainerDic.Remove(key);
         }
 
         /// <summary>
