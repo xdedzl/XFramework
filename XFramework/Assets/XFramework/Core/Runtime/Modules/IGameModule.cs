@@ -1,7 +1,7 @@
 ﻿namespace XFramework
 {
     /// <summary>
-    /// 模块基类
+    /// 模块接口
     /// </summary>
     public interface IGameModule
     {

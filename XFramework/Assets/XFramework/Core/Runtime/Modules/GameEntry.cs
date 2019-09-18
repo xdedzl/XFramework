@@ -28,8 +28,8 @@ namespace XFramework
         /// <summary>
         /// 获取一个模块
         /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <returns></returns>
+        /// <typeparam name="T">模块类型</typeparam>
+        /// <returns>模块</returns>
         public static T GetModule<T>() where T : class, IGameModule
         {
             Type moduleType = typeof(T);
@@ -44,6 +44,12 @@ namespace XFramework
             return null;
         }
 
+        /// <summary>
+        /// 开启一个模块
+        /// </summary>
+        /// <typeparam name="T">模块类型</typeparam>
+        /// <param name="args">对应模块构造函数需要用到的参数</param>
+        /// <returns>模块</returns>
         public static T AddModule<T>(params object[] args) where T : IGameModule
         {
             Type moduleType = typeof(T);
@@ -60,7 +66,7 @@ namespace XFramework
         /// <summary>
         /// 关闭一个模块
         /// </summary>
-        /// <typeparam name="T"></typeparam>
+        /// <typeparam name="T">模块类型</typeparam>
         public static void ShutdownModule<T>() where T : IGameModule
         {
             Type moduleType = typeof(T);
@@ -117,6 +123,9 @@ namespace XFramework
             return module;
         }
 
+        /// <summary>
+        /// 卸载当前已加载的所有模块
+        /// </summary>
         public static void CleraAllModule()
         {
             foreach (var item in m_GameModules)
