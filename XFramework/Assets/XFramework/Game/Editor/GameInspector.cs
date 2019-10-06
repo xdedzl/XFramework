@@ -5,6 +5,7 @@ using System;
 using System.IO;
 using System.Reflection;
 using XFramework.Editor;
+using System.Collections.Generic;
 
 [CustomEditor(typeof(Game))]
 public class GameInspector : Editor
@@ -25,7 +26,7 @@ public class GameInspector : Editor
     {
         entranceProcedureIndex = EditorPrefs.GetInt("index", 0);
 
-        typeNames = typeof(ProcedureBase).GetSonNames();
+        typeNames = GetSonNames();
         if (typeNames.Length == 0)
             return;
 
@@ -49,7 +50,7 @@ public class GameInspector : Editor
 
     public override void OnInspectorGUI()
     {
-        typeNames = typeof(ProcedureBase).GetSonNames();
+        typeNames = GetSonNames();
         if (typeNames.Length == 0)
             return;
 
@@ -120,5 +121,28 @@ public class GameInspector : Editor
         p.Serialize(startPrcedureTemplate);
 
         File.WriteAllBytes(savePath + currentType.Name, p.Encode());
+    }
+
+    private string[] GetSonNames()
+    {
+        List<string> typeNames = new List<string>();
+        Type typeBase = typeof(ProcedureBase);
+        Assembly assembly = Assembly.Load("Assembly-CSharp");
+
+        if (assembly == null)
+        {
+            return new string[0];
+        }
+
+        Type[] types = assembly.GetTypes();
+        foreach (Type type in types)
+        {
+            if (type.IsClass && !type.IsAbstract && type.IsSubclassOf(typeBase) && type.GetCustomAttribute<HideInEditor>() == null)
+            {
+                typeNames.Add(type.FullName);
+            }
+        }
+        typeNames.Sort();
+        return typeNames.ToArray();
     }
 }
