@@ -19,19 +19,18 @@ namespace XFramework.Entity
             /// 容器类型
             /// </summary>
             public readonly Type type;
-
             /// <summary>
             /// 实体列表
             /// </summary>
-            private List<Entity> m_Entities;
+            private readonly List<Entity> m_Entities;
             /// <summary>
             /// 模板
             /// </summary>
-            private GameObject m_Template;
+            private readonly GameObject m_Template;
             /// <summary>
             /// 实体池
             /// </summary>
-            private Stack<Entity> m_Pool;
+            private readonly Stack<Entity> m_Pool;
 
             /// <summary>
             /// 构造一个实体容器
@@ -54,7 +53,7 @@ namespace XFramework.Entity
             }
 
             /// <summary>
-            /// 实体数量（不包括池种的）
+            /// 实体数量（不包括池中的）
             /// </summary>
             public int Count
             {
@@ -71,12 +70,13 @@ namespace XFramework.Entity
             /// <param name="pos">位置</param>
             /// <param name="quaternion">朝向</param>
             /// <returns></returns>
-            private Entity Instantiate(Vector3 pos, Quaternion quaternion)
+            private Entity Instantiate(Vector3 pos, Quaternion quaternion, Transform parent)
             {
-                GameObject gameObject = UnityEngine.Object.Instantiate(m_Template, pos, quaternion);
+                GameObject gameObject = GameObject.Instantiate(m_Template, pos, quaternion, parent);
 
                 Entity entity = gameObject.AddComponent(type) as Entity;
                 entity.name = name;
+                entity.ContainerName = this.name;
                 entity.OnInit();
                 return entity;
             }
@@ -87,7 +87,7 @@ namespace XFramework.Entity
             /// <param name="pos">位置</param>
             /// <param name="quaternion">角度</param>
             /// <returns></returns>
-            public Entity Allocate(int id, Vector3 pos, Quaternion quaternion, EntityData entityData)
+            internal Entity Allocate(int id, Vector3 pos, Quaternion quaternion, EntityData entityData, Transform parent)
             {
                 Entity entity;
                 if (m_Pool.Count > 0)
@@ -98,11 +98,12 @@ namespace XFramework.Entity
                 }
                 else
                 {
-                    entity = Instantiate(pos, quaternion);
+                    entity = Instantiate(pos, quaternion, parent);
                 }
                 entity.Id = id;
                 entity.OnAllocate(entityData);
                 m_Entities.Add(entity);
+
                 return entity;
             }
 
@@ -111,7 +112,7 @@ namespace XFramework.Entity
             /// </summary>
             /// <param name="entity">实体</param>
             /// <returns>是否回收成功</returns>
-            public bool Recycle(Entity entity)
+            internal bool Recycle(Entity entity)
             {
                 if (m_Entities.Contains(entity))
                 {
@@ -140,7 +141,8 @@ namespace XFramework.Entity
             {
                 while (count < m_Pool.Count)
                 {
-                    Entity entity = m_Pool.Pop();
+                    GameObject obj = m_Pool.Pop().gameObject;
+                    GameObject.Destroy(obj);
                 }
             }
 
@@ -151,9 +153,9 @@ namespace XFramework.Entity
             /// <param name="realElapseSeconds">实际运行时间</param>
             internal void OnUpdate(float elapseSeconds, float realElapseSeconds)
             {
-                foreach (var item in m_Entities)
+                for (int i = 0; i < m_Entities.Count; i++)
                 {
-                    item.OnUpdate(elapseSeconds, realElapseSeconds);
+                    m_Entities[i].OnUpdate(elapseSeconds, realElapseSeconds);
                 }
             }
         }

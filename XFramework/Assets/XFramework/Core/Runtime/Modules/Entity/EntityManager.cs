@@ -9,11 +9,6 @@ namespace XFramework.Entity
     public partial class EntityManager : IGameModule
     {
         /// <summary>
-        /// 实体id，创建实体时用
-        /// </summary>
-        private int m_Id;
-
-        /// <summary>
         /// 存储对应实体容器的字典
         /// </summary>
         private Dictionary<string, EntityContainer> m_EntityContainerDic;
@@ -80,6 +75,7 @@ namespace XFramework.Entity
                 {
                     m_EntityDic.Remove(item.Id);
                     m_EntityInfoDic.Remove(item.Id);
+                    GameObject.Destroy(item.gameObject);
                 }
                 m_EntityContainerDic.Remove(key);
             }
@@ -92,9 +88,9 @@ namespace XFramework.Entity
         /// <param name="pos">位置</param>
         /// <param name="quaternion">朝向</param>
         /// <returns></returns>
-        public T Allocate<T>(int id, Vector3 pos = default, Quaternion quaternion = default) where T : Entity
+        public T Allocate<T>(int id, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
-            return Allocate(id, typeof(T).Name, null, pos, quaternion) as T;
+            return Allocate(id, typeof(T).Name, null, pos, quaternion, parent) as T;
         }
 
         /// <summary>
@@ -105,18 +101,18 @@ namespace XFramework.Entity
         /// <param name="pos">位置</param>
         /// <param name="quaternion">朝向</param>
         /// <returns>实体</returns>
-        public T Allocate<T>(int id, EntityData entityData, Vector3 pos = default, Quaternion quaternion = default) where T : Entity
+        public T Allocate<T>(int id, EntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
             string key = typeof(T).Name;
-            return Allocate(id, key, entityData, pos, quaternion) as T;
+            return Allocate(id, key, entityData, pos, quaternion, parent) as T;
         }
 
         /// <summary>
         /// 分配实体
         /// </summary>
-        public T Allocate<T>(int id, string key, EntityData entityData, Vector3 pos = default, Quaternion quaternion = default) where T : Entity
+        public T Allocate<T>(int id, string key, EntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
-            return Allocate(id, key, entityData, pos, quaternion) as T;
+            return Allocate(id, key, entityData, pos, quaternion, parent) as T;
         }
 
         /// <summary>
@@ -126,9 +122,9 @@ namespace XFramework.Entity
         /// <param name="pos">位置</param>
         /// <param name="quaternion">朝向</param>
         /// <returns>实体</returns>
-        public Entity Allocate(int id, string key, Vector3 pos = default, Quaternion quaternion = default)
+        public Entity Allocate(int id, string key, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null)
         {
-            return Allocate(id, key, null, pos, quaternion);
+            return Allocate(id, key, null, pos, quaternion, parent);
         }
 
         /// <summary>
@@ -140,16 +136,16 @@ namespace XFramework.Entity
         /// <param name="pos">位置</param>
         /// <param name="quaternion">角度</param>
         /// <returns></returns>
-        public Entity Allocate(int id, string key, EntityData entityData, Vector3 pos, Quaternion quaternion)
+        public Entity Allocate(int id, string key, EntityData entityData, Vector3 pos, Quaternion quaternion, Transform parent)
         {
             if (!m_EntityContainerDic.ContainsKey(key))
             {
-                Debug.LogWarning("没有对应的实体容器");
+                Debug.LogWarning($"没有名为{key}的实体容器");
                 return null;
             }
             else
             {
-                var entity = m_EntityContainerDic[key].Allocate(id, pos, quaternion, entityData);
+                var entity = m_EntityContainerDic[key].Allocate(id, pos, quaternion, entityData, parent);
                 m_EntityDic.Add(entity.Id, entity);
                 return entity;
             }
@@ -251,8 +247,14 @@ namespace XFramework.Entity
         /// <param name="containerName">实体名</param>
         public EntityContainer GetContainer(string containerName)
         {
-            m_EntityContainerDic.TryGetValue(containerName, out EntityContainer entityContainer);
-            return entityContainer;
+            if (m_EntityContainerDic.TryGetValue(containerName, out EntityContainer entityContainer))
+            {
+                return entityContainer;
+            }
+            else
+            {
+                throw new FrameworkException($"[EntityError]没有名为{containerName}的实体容器");
+            }
         }
 
         /// <summary>
@@ -277,8 +279,14 @@ namespace XFramework.Entity
         /// <param name="entityId">实体Id</param>
         public Entity GetEntity(int entityId)
         {
-            m_EntityDic.TryGetValue(entityId, out Entity entity);
-            return entity;
+            if (m_EntityDic.TryGetValue(entityId, out Entity entity))
+            {
+                return entity;
+            }
+            else
+            {
+                throw new FrameworkException($"[Entity]没有id为{entityId}的实体");
+            }
         }
 
         /// <summary>
@@ -287,7 +295,7 @@ namespace XFramework.Entity
         /// <param name="entityName"></param>
         public Entity[] GetEntities(string entityName)
         {
-            return GetContainer(entityName)?.GetEntities();
+            return GetContainer(entityName).GetEntities();
         }
 
         /// <summary>
@@ -315,7 +323,6 @@ namespace XFramework.Entity
         /// <param name="count">容器实体池的最大保留量</param>
         public void Clean(int count = 0)
         {
-            List<string> keys = new List<string>();
             foreach (var item in m_EntityContainerDic.Values)
             {
                 InternalClean(item, count);
@@ -351,9 +358,9 @@ namespace XFramework.Entity
 
         public void Shutdown()
         {
-            m_EntityContainerDic = null;
-            m_EntityDic = null;
-            m_EntityInfoDic = null;
+            m_EntityContainerDic.Clear();
+            m_EntityDic.Clear();
+            m_EntityInfoDic.Clear();
         }
 
         public void Update(float elapseSeconds, float realElapseSeconds)
