@@ -95,13 +95,14 @@ namespace XFramework
             /// <summary>
             /// 打开一个文件
             /// </summary>
-            /// <param name="fllePath"></param>
-            public static void OpenFile(string filePath)
+            /// <param name="fllePath">文件路径</param>
+            public static System.Diagnostics.Process OpenFile(string filePath, string startArgs = "")
             {
                 System.Diagnostics.Process process = new System.Diagnostics.Process();
                 process.StartInfo.FileName = filePath;
+                process.StartInfo.Arguments = startArgs;
                 process.Start();
-                process.Dispose();
+                return process;
             }
 
             /// <summary>

@@ -88,6 +88,7 @@ namespace XFramework.Resource
         public AssetBundle GetAssetBundle(string path)
         {
             path = Path2Key(path);
+            path = path.Replace('\\', '/');
 
             if (!m_ABDic.TryGetValue(path, out AssetBundle ab))
             {
@@ -122,12 +123,14 @@ namespace XFramework.Resource
         private IProgress GetAssetBundleAsync(string path, System.Action<AssetBundle> callBack)
         {
             path = Path2Key(path);
+            path = path.Replace('\\', '/');
             if (!m_ABDic.TryGetValue(path, out AssetBundle ab))
             {
-                string abName = string.IsNullOrEmpty(path) ? "" : "/" + path;
+                string abName = path;
+                //string abName = string.IsNullOrEmpty(path) ? "" : "/" + path;
 
-                AssetBundleCreateRequest mainRequest = AssetBundle.LoadFromFileAsync(m_ABPath + abName + m_Variant);
-                m_LoadingAB.Add(Name2Key(abName), mainRequest);
+                AssetBundleCreateRequest mainRequest = AssetBundle.LoadFromFileAsync(m_ABPath + "/" + abName + m_Variant);
+                m_LoadingAB.Add(abName, mainRequest);
 
                 // 添加任务列表
                 List<AssetBundleCreateRequest> requests = new List<AssetBundleCreateRequest>
