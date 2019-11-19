@@ -100,20 +100,8 @@ namespace XFramework.Editor
                     {
                         AssetBundle mainfestAB = AssetBundle.LoadFromFile(m_Paths[i]);
                         var mainfest = mainfestAB.LoadAsset<AssetBundleManifest>("AssetBundleManifest");
-                        string[] abNames = mainfest.GetAllAssetBundles();
 
-                        List<SingleDepenciesData> singleDatas = new List<SingleDepenciesData>();
-
-                        for (int j = 0; j < abNames.Length; j++)
-                        {
-                            var dpNames = mainfest.GetDirectDependencies(abNames[j]);
-                            if (dpNames.Length <= 0)
-                            {
-                                continue;
-                            }
-                            singleDatas.Add(new SingleDepenciesData(abNames[j], dpNames));
-                        }
-                        datas[i] = new DependenciesData(singleDatas.ToArray());
+                        datas[i] = GenerateDependence(mainfest);
                     }
                     else
                     {
@@ -122,10 +110,11 @@ namespace XFramework.Editor
                     }
                 }
 
-
                 string json = JsonUtility.ToJson(ConbineDependence(datas), true);
                 File.WriteAllText(m_OutPutPath + "/depenencies.json", json);
                 AssetDatabase.Refresh();
+
+                Debug.Log("依赖文件已替换");
             }
 
             /// <summary>

@@ -10,14 +10,6 @@ namespace XFramework.Editor
     {
         private class DefaultTab : SubWindow
         {
-            private enum PackOption
-            {
-                AllFiles,       // 所有文件一个包 
-                TopDirectiony,  // 一级子文件夹单独打包
-                AllDirectiony,  // 所有子文件夹单独打包
-                TopFileOnly,    // 只打包当前文件夹的文件
-            }
-
             private class BuildData
             {
                 public string path;
@@ -29,14 +21,19 @@ namespace XFramework.Editor
 
             private List<AssetBundleBuild> m_Builds;
 
-            private string OutPutPath;
+            private string m_OutPutPath;
             private BuildAssetBundleOptions buildAssetBundleOption;
 
             public override void OnEnable()
             {
                 m_BuildDatas = new List<BuildData>();
                 m_Builds = new List<AssetBundleBuild>();
-                OutPutPath = Application.streamingAssetsPath + "/AssetBundles";
+                m_OutPutPath = EditorPrefs.GetString("ABOutPutPath", Application.streamingAssetsPath + "/AssetBundles");
+            }
+
+            public override void OnDisable()
+            {
+                EditorPrefs.SetString("ABOutPutPath", m_OutPutPath);
             }
 
             public override void OnGUI()
@@ -58,6 +55,7 @@ namespace XFramework.Editor
                                 if (GUILayout.Button(EditorIcon.Folder))
                                 {
                                     string temp = EditorUtility.OpenFolderPanel("要打包的文件夹", Application.dataPath, "");
+
                                     if (!string.IsNullOrEmpty(temp))
                                     {
                                         int index = temp.IndexOf("Assets");
@@ -92,13 +90,13 @@ namespace XFramework.Editor
                     using (new EditorGUILayout.HorizontalScope())
                     {
                         GUILayout.Label("输出路径");
-                        GUILayout.TextField(OutPutPath);
+                        GUILayout.TextField(m_OutPutPath);
                         if (GUILayout.Button(EditorIcon.Folder))
                         {
                             string temp = EditorUtility.OpenFolderPanel("输出文件夹", Application.streamingAssetsPath, "");
                             if (!string.IsNullOrEmpty(temp))
                             {
-                                OutPutPath = temp;
+                                m_OutPutPath = temp;
                             }
                         }
                         buildAssetBundleOption = (BuildAssetBundleOptions)EditorGUILayout.EnumPopup(buildAssetBundleOption);
@@ -176,10 +174,10 @@ namespace XFramework.Editor
             {
                 if (GUILayout.Button("删除AB包"))
                 {
-                    if (!Directory.Exists(OutPutPath))
+                    if (!Directory.Exists(m_OutPutPath))
                     {
                         // 删除之前的ab文件
-                        FileInfo[] fs = new DirectoryInfo(OutPutPath).GetFiles("*", SearchOption.AllDirectories);
+                        FileInfo[] fs = new DirectoryInfo(m_OutPutPath).GetFiles("*", SearchOption.AllDirectories);
                         foreach (var f in fs)
                         {
                             f.Delete();
@@ -189,11 +187,11 @@ namespace XFramework.Editor
 
                 if (GUILayout.Button("打包"))
                 {
-                    if (!Directory.Exists(OutPutPath))
+                    if (!Directory.Exists(m_OutPutPath))
                     {
-                        Directory.CreateDirectory(OutPutPath);
+                        Directory.CreateDirectory(m_OutPutPath);
                     }
-                    BuildPipeline.BuildAssetBundles(OutPutPath, m_Builds.ToArray(), buildAssetBundleOption, EditorUserBuildSettings.activeBuildTarget);
+                    BuildPipeline.BuildAssetBundles(m_OutPutPath, m_Builds.ToArray(), buildAssetBundleOption, EditorUserBuildSettings.activeBuildTarget);
                     AssetDatabase.Refresh();
                     Debug.Log("BuildAssetBundles Complete");
                 }
