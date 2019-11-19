@@ -1,13 +1,33 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
-using XFramework.Singleton;
-using OnEventDelegate = System.Action;
+using Action = System.Action;
 
 namespace XFramework
 {
     public class Timer
     {
-        private OnEventDelegate timeUpDel;
+        private static TimerManager s_Manager;
+        private TimerManager Manager
+        {
+            get
+            {
+                if (Timer.s_Manager == null)
+                {
+                    TimerManager managerInScene = Object.FindObjectOfType<TimerManager>();
+                    if (managerInScene != null)
+                    {
+                        Timer.s_Manager = managerInScene;
+                    }
+                    else
+                    {
+                        GameObject managerObject = new GameObject { name = "TimerManager" };
+                        Timer.s_Manager = managerObject.AddComponent<TimerManager>();
+                    }
+                }
+                return s_Manager;
+            }
+        }
+        private Action timeUpDel;
         /// <summary>
         /// 是否执行
         /// </summary>
@@ -27,29 +47,34 @@ namespace XFramework
         /// <summary>
         /// 运行间隔
         /// </summary>
-        public float TimeInterval { get; set; }
+        private float interval;
         /// <summary>
         /// 设置的运行次数
         /// </summary>
-        public int RepeatCount { get; set; }
+        private int repeatCount;
 
         /// <summary>
         /// <param name="interval">时间间隔，单位是毫秒</param>
         /// <param name="repeatCount">运行次数，一秒一次的话MaxValue可以执行68年</param>
         /// </summary>
-        public Timer(float interval, int repeatCount = int.MaxValue)
+        public Timer(float interval, int repeatCount = 1)
         {
             RunTime = 0f;
-            TimeInterval = Mathf.Max(interval, 1);  // 最小间隔为1毫秒
-            RepeatCount = repeatCount;
+            if (interval <= 0)
+                interval = 0.01f;
+            this.interval = interval;
+            this.repeatCount = repeatCount;
         }
 
         /// <summary>
         /// 是否运行中
         /// </summary>
-        public bool IsRunning
+        private bool IsRunning
         {
-            get { return _isRunning; }
+            get
+            {
+                return _isRunning;
+            }
             set
             {
                 if (_isRunning != value)
@@ -57,13 +82,13 @@ namespace XFramework
                     _isRunning = value;
                     if (_isRunning)
                     {
-                        TimerManager.Instance.AddTimer(this);
+                        Manager.AddTimer(this);
                     }
                     else
                     {
-                        TimerManager.Instance.RemoveTimer(this);
+                        Manager.RemoveTimer(this);
                     }
-                    //这里可以加一个计时器状态变换的委托
+                    // TODO 这里可以加一个计时器状态变换的委托
                 }
             }
         }
@@ -72,20 +97,19 @@ namespace XFramework
         /// 每帧执行
         /// </summary>
         /// <param name="deltaTime"></param>
-        public void Update(float deltaTime)
+        internal void Update(float deltaTime)
         {
-            if (IsRunning && UseCount < RepeatCount)
+            if (IsRunning && UseCount < repeatCount)
             {
                 RunTime += deltaTime;
-                var f = TimeInterval / 1000;
-                while (RunTime - _useTime > f && UseCount < RepeatCount)
+                while (RunTime - _useTime > interval && UseCount < repeatCount)
                 {
                     UseCount++;
-                    _useTime += f;
+                    _useTime += interval;
                     timeUpDel?.Invoke();
                 }
             }
-            if (UseCount >= RepeatCount)
+            if (UseCount >= repeatCount)
             {
                 IsRunning = false;
             }
@@ -96,7 +120,7 @@ namespace XFramework
         /// </summary>
         /// <param name="type"></param>
         /// <param name="fun"></param>
-        public void AddEventListener(OnEventDelegate fun)
+        public void AddListener(Action fun)
         {
             timeUpDel += fun;
         }
@@ -106,7 +130,7 @@ namespace XFramework
         /// </summary>
         /// <param name="type"></param>
         /// <param name="fun"></param>
-        public void RemoveEventListener(OnEventDelegate fun)
+        public void RemoveListener(Action fun)
         {
             timeUpDel -= fun;
         }
@@ -128,9 +152,9 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 重置
+        /// 停止
         /// </summary>
-        public void ReSet()
+        public void Stop()
         {
             IsRunning = false;
             RunTime = 0f;
@@ -138,21 +162,43 @@ namespace XFramework
             UseCount = 0;
         }
 
+        #region 外部调用的静态函数
+
+        /// <summary>
+        /// 注册一个延时执行的任务
+        /// </summary>
+        /// <param name="interval">间隔时间</param>
+        /// <param name="action">任务</param>
+        public static Timer Register(float interval, Action action)
+        {
+            return Register(interval, 1, action);
+        }
+
+        /// <summary>
+        /// 注册一个每隔一段时间执行一次的任务
+        /// </summary>
+        /// <param name="interval">时间间隔</param>
+        /// <param name="repeatCount">重复次数</param>
+        /// <param name="action">任务</param>
+        public static Timer Register(float interval, int repeatCount, Action action)
+        {
+            Timer timer = new Timer(interval, repeatCount);
+            timer.AddListener(action);
+            timer.Start();
+            return timer;
+        }
+
+        #endregion
+
         /// <summary>
         /// 计时器管理
         /// 除了计时器以外其他类暂时不需要调用，以后需要再放到外面去
         /// </summary>
-        public class TimerManager : Singleton<TimerManager>
+        public class TimerManager : MonoBehaviour
         {
-
             private readonly List<Timer> _timers = new List<Timer>();
 
-            public TimerManager()
-            {
-                MonoEvent.Instance.LATEUPDATE += LateUpdate;
-            }
-
-            private void LateUpdate()
+            private void Update()
             {
                 for (var i = 0; i < _timers.Count; i++)
                 {
