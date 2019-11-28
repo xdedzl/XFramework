@@ -14,16 +14,17 @@ namespace XFramework.Editor
 
 
             private string outPutPath;
-            private string abResPath = "Assets/ABRes";
-            private string abRelaPath = "DSTData/AssetBundles";
+            private string abResPath;
+            private string abRelaPath;
 
             private bool isBuildAB;
+            private bool isDevelopment;
 
             public override void OnEnable()
             {
                 outPutPath = EditorPrefs.GetString("build_OutPut");
-                abResPath = EditorPrefs.GetString("build_ABRes");
-                abRelaPath = EditorPrefs.GetString("build_ABPath");
+                abResPath = EditorPrefs.GetString("build_ABRes", "Assets/ABRes");
+                abRelaPath = EditorPrefs.GetString("build_ABPath", "DSTData/AssetBundles");
             }
 
             public override void OnDisable()
@@ -86,8 +87,11 @@ namespace XFramework.Editor
 
                     using (new EditorGUILayout.HorizontalScope())
                     {
-                        GUILayout.Label("是否打包AB", GUILayout.Width(titleW)); ;
+                        GUILayout.Label("是否打包AB", GUILayout.Width(titleW));
                         isBuildAB = EditorGUILayout.Toggle(isBuildAB);
+
+                        GUILayout.Label("是否为Development", GUILayout.Width(titleW));
+                        isDevelopment = EditorGUILayout.Toggle(isDevelopment);
 
                         List<AssetBundleBuild> builds = new List<AssetBundleBuild>();
                         if (GUILayout.Button("一键打包", GUILayout.Width(60)))
@@ -118,7 +122,17 @@ namespace XFramework.Editor
 
                             var buildScenes = EditorBuildSettings.scenes;
 
-                            BuildPipeline.BuildPlayer(buildScenes, outPutPath + "/DST.exe", EditorUserBuildSettings.activeBuildTarget, BuildOptions.Development);
+                            string exeName = Utility.Text.SplitPathName(System.Environment.CurrentDirectory)[1] + ".exe";
+
+
+                            BuildOptions buildOptions = BuildOptions.None;
+
+                            if (isDevelopment)
+                            {
+                                buildOptions &= BuildOptions.Development;
+                            }
+
+                            BuildPipeline.BuildPlayer(buildScenes, outPutPath + "/" + exeName, EditorUserBuildSettings.activeBuildTarget, buildOptions);
                             Debug.Log("Build Complete");
                         }
                     }
