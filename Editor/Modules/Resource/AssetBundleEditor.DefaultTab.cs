@@ -14,7 +14,7 @@ namespace XFramework.Editor
             {
                 public string path;
                 public PackOption option;
-                public AssetBundleBuild build;
+                //public AssetBundleBuild build;
             }
 
             private List<BuildData> m_BuildDatas;
@@ -146,7 +146,7 @@ namespace XFramework.Editor
 
             // AB包预览
             Vector2 m_ScrollPos;
-            bool[] isOns = new bool[100];
+            readonly bool[] isOns = new bool[100];
             private void ABPreview()
             {
                 using (var scroll = new EditorGUILayout.ScrollViewScope(m_ScrollPos))
