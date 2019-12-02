@@ -39,16 +39,27 @@ public class CreateComponent
         itemTemplate.anchoredPosition = new Vector2(0, 0);
         itemTemplate.sizeDelta = new Vector2(180, 30);
 
-        RectTransform button = DefaultControls.CreateButton(GetStandardResources()).GetComponent<RectTransform>();
-        button.SetParent(itemTemplate);
-        button.anchoredPosition = new Vector2(10, 0);
-        button.sizeDelta = new Vector2(160, 30);
+        RectTransform body = DefaultControls.CreateButton(GetStandardResources()).GetComponent<RectTransform>();
+        body.name = "Body";
+        body.SetParent(itemTemplate);
+        body.anchoredPosition = new Vector2(10, 0);
+        body.sizeDelta = new Vector2(160, 30);
+        Object.DestroyImmediate(body.GetComponent<Button>());
+        body.gameObject.AddComponent<Toggle>();
+        body.GetComponentInChildren<Text>().text = "Root";
 
-        RectTransform toggle = DefaultControls.CreateToggle(GetStandardResources()).GetComponent<RectTransform>();
+        //RectTransform toggle = DefaultControls.CreateToggle(GetStandardResources()).GetComponent<RectTransform>();
+        //toggle.SetParent(itemTemplate);
+        //Object.DestroyImmediate(toggle.Find("Label").gameObject);
+        //toggle.anchoredPosition = new Vector2(-80, 0);
+        //toggle.sizeDelta = new Vector2(20, 20);
+
+        RectTransform toggle = DefaultControls.CreateImage(GetStandardResources()).GetComponent<RectTransform>();
+        toggle.name = "Toggle";
         toggle.SetParent(itemTemplate);
-        Object.DestroyImmediate(toggle.Find("Label").gameObject);
         toggle.anchoredPosition = new Vector2(-80, 0);
         toggle.sizeDelta = new Vector2(20, 20);
+        toggle.gameObject.AddComponent<Toggle>();
 
         RectTransform child = new GameObject("Child").AddComponent<RectTransform>();
         child.SetParent(itemTemplate);
