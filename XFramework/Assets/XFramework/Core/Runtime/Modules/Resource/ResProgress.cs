@@ -39,4 +39,30 @@ namespace XFramework.Resource
             }
         }
     }
+
+    public class SingleResProgress : IProgress
+    {
+        private AsyncOperation m_Operation;
+
+        public SingleResProgress(AsyncOperation asyncOperation)
+        {
+            m_Operation = asyncOperation;
+        }
+
+        public bool IsDone
+        {
+            get
+            {
+                return m_Operation.isDone;
+            }
+        }
+
+        public float Progress
+        {
+            get
+            {
+                return m_Operation.progress;
+            }
+        }
+    }
 }

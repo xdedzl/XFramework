@@ -68,13 +68,24 @@ namespace XFramework.Resource
         {
             var temp = Utility.Text.SplitPathName(assetName);
 
-            return GetAssetBundleAsync(temp[0], (ab) =>
+            DynamicMultiProgress progress = new DynamicMultiProgress(2);
+
+            var abProgress = GetAssetBundleAsync(temp[0], (ab) =>
             {
                 var request = ab.LoadAssetAsync(temp[1]);
-                SingleTask task = new SingleTask(() => { return request.isDone; });
+                SingleTask task = new SingleTask(() =>
+                {
+                    return request.isDone;
+                });
                 task.Then(() => { callback(request.asset as T); return true; });
                 GameEntry.GetModule<TaskManager>().StartTask(task);
+
+                SingleResProgress resProgress = new SingleResProgress(request);
+                progress.Add(resProgress);
             });
+            progress.Add(abProgress);
+
+            return progress;
         }
 
 
