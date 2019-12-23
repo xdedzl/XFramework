@@ -83,8 +83,6 @@ namespace XFramework.Editor
                         abRelaPath = GUILayout.TextField(abRelaPath, GUILayout.Width(textFieldW));
                     }
 
-
-
                     using (new EditorGUILayout.HorizontalScope())
                     {
                         GUILayout.Label("是否打包AB", GUILayout.Width(titleW));
@@ -105,7 +103,7 @@ namespace XFramework.Editor
                                 }
 
                                 DirectoryInfo abResInfo = new DirectoryInfo(Application.dataPath.Replace("Assets", "/") + abResPath);
-                                MarkDirectory(abResInfo, PackOption.AllDirectiony, ref builds);
+                                builds = AssetBundleUtility.MarkDirectory(abResInfo, PackOption.AllDirectiony);
 
                                 BuildPipeline.BuildAssetBundles(abOutPath, builds.ToArray(), BuildAssetBundleOptions.ChunkBasedCompression, EditorUserBuildSettings.activeBuildTarget);
                                 AssetDatabase.Refresh();
@@ -129,10 +127,11 @@ namespace XFramework.Editor
 
                             if (isDevelopment)
                             {
-                                buildOptions &= BuildOptions.Development;
+                                buildOptions |= BuildOptions.Development;
                             }
 
                             BuildPipeline.BuildPlayer(buildScenes, outPutPath + "/" + exeName, EditorUserBuildSettings.activeBuildTarget, buildOptions);
+                            Application.OpenURL(outPutPath);
                             Debug.Log("Build Complete");
                         }
                     }

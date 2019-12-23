@@ -14,7 +14,8 @@ namespace XFramework.Editor
             {
                 public string path;
                 public PackOption option;
-                //public AssetBundleBuild build;
+#pragma warning disable 0649
+                public AssetBundleBuild build;
             }
 
             private List<BuildData> m_BuildDatas;
@@ -139,14 +140,14 @@ namespace XFramework.Editor
                     for (int i = 0; i < m_BuildDatas.Count; i++)
                     {
                         DirectoryInfo info = new DirectoryInfo(Application.dataPath.Replace("Assets", "/") + m_BuildDatas[i].path);
-                        MarkDirectory(info, m_BuildDatas[i].option);
+                        m_Builds = AssetBundleUtility.MarkDirectory(info, m_BuildDatas[i].option);
                     }
                 }
             }
 
             // AB包预览
             Vector2 m_ScrollPos;
-            readonly bool[] isOns = new bool[100];
+            bool[] isOns = new bool[100];
             private void ABPreview()
             {
                 using (var scroll = new EditorGUILayout.ScrollViewScope(m_ScrollPos))
@@ -195,72 +196,6 @@ namespace XFramework.Editor
                     AssetDatabase.Refresh();
                     Debug.Log("BuildAssetBundles Complete");
                 }
-            }
-
-            /// <summary>
-            /// 标记文件
-            /// </summary>
-            /// <param name="path"></param>
-            /// <param name="packOption"></param>
-            private void MarkDirectory(DirectoryInfo dirInfo, PackOption packOption)
-            {
-                FileInfo[] files = null;
-                DirectoryInfo[] subDirectory;
-                switch (packOption)
-                {
-                    case PackOption.AllFiles:
-                        files = dirInfo.GetFiles("*", SearchOption.AllDirectories);        // 取出所有文件
-                        break;
-                    case PackOption.TopDirectiony:
-                        files = dirInfo.GetFiles("*", SearchOption.TopDirectoryOnly);      // 取出第一层文件
-                        subDirectory = dirInfo.GetDirectories("*", SearchOption.TopDirectoryOnly);
-                        foreach (var item in subDirectory)
-                        {
-                            MarkDirectory(item, PackOption.AllFiles);
-                        }
-                        break;
-                    case PackOption.AllDirectiony:
-                        files = dirInfo.GetFiles("*", SearchOption.TopDirectoryOnly);      // 取出第一层文件
-                        subDirectory = dirInfo.GetDirectories("*", SearchOption.TopDirectoryOnly);
-                        foreach (var item in subDirectory)
-                        {
-                            MarkDirectory(item, PackOption.AllDirectiony);
-                        }
-                        break;
-                    case PackOption.TopFileOnly:
-                        files = dirInfo.GetFiles("*", SearchOption.TopDirectoryOnly);        // 取出所有文件
-                        break;
-                }
-
-                // 添加AssetBundleBuild
-                List<string> assetNames = new List<string>();
-
-                int total = files.Length;
-                string abName = dirInfo.FullName.Substring(dirInfo.FullName.IndexOf("Assets", StringComparison.Ordinal));
-                for (int i = 0; i < total; i++)
-                {
-                    var fileInfo = files[i];
-
-                    if (fileInfo.Name.EndsWith(".meta")) continue;
-
-                    EditorUtility.DisplayProgressBar(dirInfo.Name, $"正在标记资源{fileInfo.Name}...", (float)i / total);
-
-                    string filePath = fileInfo.FullName.Substring(fileInfo.FullName.IndexOf("Assets", StringComparison.Ordinal));       // 获取 "Assets"目录起的 文件名, 可不用转 "\\"
-
-                    assetNames.Add(filePath);
-                }
-
-                if(assetNames.Count > 0)
-                {
-                    m_Builds.Add(new AssetBundleBuild()
-                    {
-                        assetBundleName = abName,
-                        assetBundleVariant = "ab",
-                        assetNames = assetNames.ToArray()
-                    });
-                }
-                
-                EditorUtility.ClearProgressBar();
             }
         }
     }

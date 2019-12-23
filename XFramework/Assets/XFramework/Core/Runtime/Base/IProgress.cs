@@ -58,10 +58,26 @@
     {
         private int index = 0;
         private IProgress[] progresses;
+        private float[] ratios;
 
-        public DynamicMultiProgress(int count)
+        public DynamicMultiProgress(int count, params float[] ratios)
         {
+            if (ratios == null || count != ratios.Length)
+            {
+                throw new FrameworkException("[DynamicMultiProgress] 需传入正确的参数");
+            }
+
+            float plus = 0;
+            foreach (var item in ratios)
+            {
+                plus += item;
+            }
+            if (plus != 1)
+            {
+                throw new FrameworkException("[DynamicMultiProgress] 需传入争取的比例");
+            }
             progresses = new IProgress[count];
+            this.ratios = ratios;
         }
 
         public void Add(IProgress progress)
@@ -90,14 +106,15 @@
             get
             {
                 float p = 0;
-                foreach (var item in progresses)
+                for (int i = 0; i < progresses.Length; i++)
                 {
-                    if (item != null)
+                    if (progresses[i] != null)
                     {
-                        p += item.Progress;
+                        p += progresses[i].Progress * ratios[i];
                     }
                 }
-                return p / progresses.Length;
+
+                return p;
             }
         }
     }

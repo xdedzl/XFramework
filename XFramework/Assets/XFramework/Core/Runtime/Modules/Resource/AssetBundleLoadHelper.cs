@@ -30,9 +30,21 @@ namespace XFramework.Resource
         /// </summary>
         private Dictionary<string, AssetBundleCreateRequest> m_LoadingAB;
 
+        /// <summary>
+        /// 资源根目录
+        /// </summary>
         public string AssetPath => m_ABPath;
+        /// <summary>
+        /// 资源后缀名
+        /// </summary>
+        public string Variant => m_Variant;
 
-        public AssetBundleLoadHelper(string abPath = "", string variant = "")
+        public AssetBundleLoadHelper(string abPath = "", string variant = "") :this(abPath,variant,"depenencies")
+        {
+             
+        }
+
+        public AssetBundleLoadHelper(string abPath, string variant, string depenenciesFileName)
         {
             m_ABPath = string.IsNullOrEmpty(abPath) ? Application.streamingAssetsPath + "/AssetBundles" : abPath;
             m_Variant = string.IsNullOrEmpty(variant) ? ".ab" : "." + variant;
@@ -40,7 +52,7 @@ namespace XFramework.Resource
             m_ABDic = new Dictionary<string, AssetBundle>();
             m_LoadingAB = new Dictionary<string, AssetBundleCreateRequest>();
 
-            string dependencePath = m_ABPath + "/depenencies.json";
+            string dependencePath = $"{m_ABPath}/{depenenciesFileName}.json";
             if (System.IO.File.Exists(dependencePath))
             {
                 string json = System.IO.File.ReadAllText(dependencePath);
@@ -56,7 +68,7 @@ namespace XFramework.Resource
         public T Load<T>(string assetName) where T : Object
         {
             var temp = Utility.Text.SplitPathName(assetName);
-            return GetAssetBundle(temp[0]).LoadAsset<T>(temp[1]);
+            return GetAssetBundle(temp[0])?.LoadAsset<T>(temp[1]);
         }
 
         public T[] LoadAll<T>(string path) where T : Object
@@ -68,7 +80,7 @@ namespace XFramework.Resource
         {
             var temp = Utility.Text.SplitPathName(assetName);
 
-            DynamicMultiProgress progress = new DynamicMultiProgress(2);
+            DynamicMultiProgress progress = new DynamicMultiProgress(2, 0.9f, 0.1f);
 
             var abProgress = GetAssetBundleAsync(temp[0], (ab) =>
             {
@@ -100,14 +112,11 @@ namespace XFramework.Resource
         {
             path = Path2Key(path);
             path = path.Replace('\\', '/');
-
             if (!m_ABDic.TryGetValue(path, out AssetBundle ab))
             {
                 string abName = string.IsNullOrEmpty(path) ? "" : "/" + path;
-
                 ab = AssetBundle.LoadFromFile(m_ABPath + abName + m_Variant);
-                if (ab == null)
-                    Debug.LogError(path + " 为空");
+
                 m_ABDic.Add(path, ab);
             }
 
