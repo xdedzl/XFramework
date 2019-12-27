@@ -12,7 +12,7 @@ namespace XFramework
             /// </summary>
             /// <typeparam name="T">枚举类型</typeparam>
             /// <returns>字符串集合</returns>
-            public static List<string> GetDescription<T>() where T : System.Enum
+            public static List<string> GetDescriptions<T>() where T : System.Enum
             {
                 Type attrType = typeof(DescriptionAttribute);
                 Type type = typeof(T);

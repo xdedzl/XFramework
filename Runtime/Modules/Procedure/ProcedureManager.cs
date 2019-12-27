@@ -26,14 +26,14 @@ namespace XFramework
         /// 流程切换
         /// </summary>
         /// <typeparam name="TProcedure"></typeparam>
-        public void ChangeProcedure<TProcedure>() where TProcedure : ProcedureBase
+        public void ChangeProcedure<TProcedure>(params object[] parms) where TProcedure : ProcedureBase
         {
-            m_Fsm.ChangeState<TProcedure>();
+            m_Fsm.ChangeState<TProcedure>(parms);
         }
 
-        public void ChangeProcedure(Type type)
+        public void ChangeProcedure(Type type, params object[] parms)
         {
-            m_Fsm.ChangeState(type);
+            m_Fsm.ChangeState(type, parms);
         }
 
         /// <summary>

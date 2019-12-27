@@ -96,15 +96,15 @@ namespace XFramework.Fsm
         /// </summary>
         /// <typeparam name="TFsm">状态机类型</typeparam>
         /// <typeparam name="KState">目标状态</typeparam>
-        public void ChangeState<TFsm, KState>() where TFsm : class, IFsm where KState : FsmState
+        public void ChangeState<TFsm, KState>(params object[] parms) where TFsm : class, IFsm where KState : FsmState
         {
             if (!HasFsm<TFsm>())
             {
                 CreateFsm<TFsm>();
             }
-            m_FsmDic[typeof(TFsm).Name].ChangeState<KState>();
+            m_FsmDic[typeof(TFsm).Name].ChangeState<KState>(parms);
         }
-        public void ChanegState(Type typeFsm, Type typeState)
+        public void ChanegState(Type typeFsm, Type typeState, params object[] parms)
         {
             if (!typeFsm.IsSubclassOf(typeof(IFsm)) || !typeState.IsSubclassOf(typeof(FsmState)))
             {
@@ -113,8 +113,9 @@ namespace XFramework.Fsm
 
             if (!HasFsm(typeFsm))
             {
-
+                CreateFsm(typeFsm);
             }
+            m_FsmDic[typeFsm.Name].ChangeState(typeState, parms);
         }
 
         /// <summary>

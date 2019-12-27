@@ -103,12 +103,12 @@ namespace XFramework.Fsm
         /// <summary>
         /// 开启状态机
         /// </summary>
-        private void StartFsm(Type type)
+        private void StartFsm(Type type, params object[] parms)
         {
             if (!IsActive)
             {
                 m_CurrentState = GetState(type);
-                m_CurrentState.OnEnter();
+                m_CurrentState.OnEnter(parms);
                 m_IsActive = true;
             }
         }
@@ -117,16 +117,16 @@ namespace XFramework.Fsm
         /// 状态切换
         /// </summary>
         /// <typeparam name="KState">目标状态</typeparam>
-        public void ChangeState<KState>() where KState : FsmState
+        public void ChangeState<KState>(params object[] parms) where KState : FsmState
         {
-            ChangeState(typeof(KState));
+            ChangeState(typeof(KState), parms);
         }
 
         /// <summary>
         /// 状态切换
         /// </summary>
         /// <param name="type">目标状态</param>
-        public void ChangeState(Type type)
+        public void ChangeState(Type type, params object[] parms)
         {
             if (IsActive)
             {
@@ -136,12 +136,12 @@ namespace XFramework.Fsm
                 {
                     m_CurrentState?.OnExit();
                     m_CurrentState = tempstate;
-                    m_CurrentState.OnEnter();
+                    m_CurrentState.OnEnter(parms);
                 }
             }
             else
             {
-                StartFsm(type);
+                StartFsm(type, parms);
             }
         }
 

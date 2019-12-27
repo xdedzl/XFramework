@@ -7,7 +7,7 @@
     {
         public virtual void Init() { }
 
-        public virtual void OnEnter() { }
+        public virtual void OnEnter(params object[] parms) { }
 
         public virtual void OnUpdate() { }
 
