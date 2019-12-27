@@ -118,6 +118,28 @@ public class CreateComponent
         mix.gameObject.AddComponent<XFramework.UI.SliderMixInput>();
     }
 
+    [MenuItem("GameObject/UI/DividingRule")]
+    public static void CreateDividingRule()
+    {
+        GameObject parent = Selection.activeGameObject;
+        RectTransform rule = new GameObject("DividingRule").AddComponent<RectTransform>();
+        rule.SetParent(parent.transform);
+        rule.anchoredPosition = Vector2.zero;
+        rule.sizeDelta = new Vector2(1000, 100);
+
+        RectTransform textTmp = DefaultControls.CreateText(GetStandardResources()).GetComponent<RectTransform>();
+        textTmp.SetParent(rule);
+        textTmp.name = "textTmp";
+        textTmp.gameObject.AddComponent<ContentSizeFitter>().horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        RectTransform timeUnitText = DefaultControls.CreateText(GetStandardResources()).GetComponent<RectTransform>();
+        timeUnitText.SetParent(rule);
+        timeUnitText.name = "timeUnitText";
+        timeUnitText.gameObject.AddComponent<ContentSizeFitter>().horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        rule.gameObject.AddComponent<XFramework.UI.DividingRule>();
+    }
+
     private static DefaultControls.Resources GetStandardResources()
     {
         if (s_StandardResources.standard == null)

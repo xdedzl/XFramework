@@ -21,7 +21,7 @@ public class RuntimeHandleDemo : ProcedureBase
         obj.AddComponent<RuntimeHandle>();
     }
 
-    public override void OnEnter()
+    public override void OnEnter(params object[] parms)
     {
         MonoEvent.Instance.ONGUI += OnGUI;
     }

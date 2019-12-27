@@ -6,7 +6,7 @@ using XFramework.Tasks;
 
 public class TasksDemo : ProcedureBase
 {
-    public override void OnEnter()
+    public override void OnEnter(params object[] parms)
     {
         SingleTask singleTask = new SingleTask(() =>
         {

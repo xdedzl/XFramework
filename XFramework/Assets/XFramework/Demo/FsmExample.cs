@@ -9,7 +9,7 @@ public class State1 : MouseState
         Debug.Log("State1Init");
     }
 
-    public override void OnEnter()
+    public override void OnEnter(params object[] parms)
     {
         Debug.Log("State1Enter");
     }
@@ -41,7 +41,7 @@ public class State2 : MouseState
     {
         Debug.Log("State2Init");
     }
-    public override void OnEnter()
+    public override void OnEnter(params object[] parms)
     {
         Debug.Log("State2Enter");
     }
@@ -84,7 +84,7 @@ public class QQQ1 : QQQState
     {
         Debug.Log("QQQ1Init");
     }
-    public override void OnEnter()
+    public override void OnEnter(params object[] parms)
     {
         Debug.Log("QQQ1Enter");
     }
@@ -106,7 +106,7 @@ public class QQQ2 : QQQState
     {
         Debug.Log("QQQ2Init");
     }
-    public override void OnEnter()
+    public override void OnEnter(params object[] parms)
     {
         Debug.Log("QQQ2Enter");
     }

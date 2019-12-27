@@ -117,7 +117,7 @@ public class MeshTest : ProcedureBase
         }
     }
 
-    public override void OnEnter()
+    public override void OnEnter(params object[] parms)
     {
         MonoEvent.Instance.ONGUI += OnGUI;
     }

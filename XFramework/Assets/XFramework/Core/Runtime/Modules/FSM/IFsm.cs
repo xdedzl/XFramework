@@ -24,8 +24,8 @@ namespace XFramework.Fsm
         /// <summary>
         /// 状态切换
         /// </summary>
-        void ChangeState<T>() where T : FsmState;
-        void ChangeState(Type type);
+        void ChangeState<T>(params object[] parms) where T : FsmState;
+        void ChangeState(Type type, params object[] parms);
 
         void OnDestroy();
     }
