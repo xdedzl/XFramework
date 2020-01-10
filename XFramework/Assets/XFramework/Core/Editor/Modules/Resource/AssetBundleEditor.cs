@@ -28,7 +28,7 @@ namespace XFramework.Editor
             BuildProject,
         }
 
-        [MenuItem("SFramework/Resource/AssetBundleWindow")]
+        [MenuItem("XFramework/Resource/AssetBundleWindow")]
         static void OpenWindow()
         {
             var window = GetWindow(typeof(AssetBundleEditor));
