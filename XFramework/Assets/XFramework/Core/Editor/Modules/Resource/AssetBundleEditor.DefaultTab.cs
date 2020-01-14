@@ -194,6 +194,15 @@ namespace XFramework.Editor
                     }
                     BuildPipeline.BuildAssetBundles(m_OutPutPath, m_Builds.ToArray(), buildAssetBundleOption, EditorUserBuildSettings.activeBuildTarget);
                     AssetDatabase.Refresh();
+
+                    string dependenctAb = Utility.Text.SplitPathName(m_OutPutPath)[1];
+                    AssetBundle mainfestAB = AssetBundle.LoadFromFile(m_OutPutPath + "/" + dependenctAb);
+                    var mainfest = mainfestAB.LoadAsset<AssetBundleManifest>("AssetBundleManifest");
+                    var dependence = GenerateDependence(mainfest);
+
+                    string json = JsonUtility.ToJson(dependence, true);
+                    File.WriteAllText(m_OutPutPath + "/depenencies.json", json);
+
                     Debug.Log("BuildAssetBundles Complete");
                 }
             }
