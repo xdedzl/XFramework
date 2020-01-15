@@ -21,6 +21,8 @@ namespace XFramework.UI
 
         private Dictionary<string, GUIBase> mUIDic;
 
+        private List<SubPanelBase> m_SubPanels;
+
         /// <summary>
         /// 面板初始化，只会执行一次，在Awake后start前执行
         /// </summary>
@@ -50,6 +52,11 @@ namespace XFramework.UI
         {
             gameObject.SetActive(true);
             transform.SetAsLastSibling();
+
+            foreach (var item in m_SubPanels)
+            {
+                item.OnOpen();
+            }
         }
 
         /// <summary>
@@ -82,6 +89,11 @@ namespace XFramework.UI
         public virtual void OnClose()
         {
             gameObject.SetActive(false);
+
+            foreach (var item in m_SubPanels)
+            {
+                item.OnClose();
+            }
         }
 
         /// <summary>
@@ -111,6 +123,26 @@ namespace XFramework.UI
                     throw new System.Exception(this + " : 没有名为" + key + "的UI组件");
                 }
             }
+        }
+
+        /// <summary>
+        /// 创建子面板
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <returns></returns>
+        protected T CreateSubPanel<T>(GameObject obj) where T : SubPanelBase
+        {
+            if(m_SubPanels == null)
+            {
+                m_SubPanels = new List<SubPanelBase>();
+            }
+
+            T subPanel = obj.AddComponent<T>();
+            subPanel.Config(this);
+            subPanel.Reg();
+            m_SubPanels.Add(subPanel);
+
+            return subPanel;
         }
     }
 }

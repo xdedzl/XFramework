@@ -22,14 +22,13 @@ namespace XFramework
             /// <param name="source"></param>
             /// <param name="target"></param>
             /// <returns></returns>
-            public static bool CheckUICoincide(Transform source, Transform target)
+            public static bool CheckUICoincide(RectTransform source, RectTransform target)
             {
-                Vector2 sourcePosition = source.transform.position;
-                Vector2 targetPosition = target.transform.position;
+                Vector2 sourcePosition = Camera.main.WorldToScreenPoint(source.position);
+                Vector2 targetPosition = Camera.main.WorldToScreenPoint(target.position);
 
-                float halfWidth = target.GetComponent<RectTransform>().rect.width / 2;
-                float halfHeight = target.GetComponent<RectTransform>().rect.height / 2;
-
+                float halfWidth = target.rect.width / 2; 
+                float halfHeight = target.rect.height / 2;
 
                 if (sourcePosition.x <= targetPosition.x + halfWidth
                     && sourcePosition.x >= targetPosition.x - halfWidth

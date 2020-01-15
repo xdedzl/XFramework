@@ -100,10 +100,6 @@ public class UIHelper : IGameModule
         //tipText.text = content;
     }
 
-    private void InitVerify()
-    {
-    }
-
     /// <summary>
     /// 执行确认委托
     /// 除了VerifyPanel面板 不要调用
