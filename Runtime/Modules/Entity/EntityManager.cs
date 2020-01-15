@@ -11,15 +11,15 @@ namespace XFramework.Entity
         /// <summary>
         /// 存储对应实体容器的字典
         /// </summary>
-        private Dictionary<string, EntityContainer> m_EntityContainerDic;
+        private readonly Dictionary<string, EntityContainer> m_EntityContainerDic;
         /// <summary>
         /// 存储所有在使用的实体字典
         /// </summary>
-        private Dictionary<int, Entity> m_EntityDic;
+        private readonly Dictionary<int, Entity> m_EntityDic;
         /// <summary>
         /// 存储实体父子关系的字典
         /// </summary>
-        private Dictionary<int, EntityInfo> m_EntityInfoDic;
+        private readonly Dictionary<int, EntityInfo> m_EntityInfoDic;
 
         public EntityManager()
         {
@@ -27,6 +27,8 @@ namespace XFramework.Entity
             m_EntityDic = new Dictionary<int, Entity>();
             m_EntityInfoDic = new Dictionary<int, EntityInfo>();
         }
+
+        #region 增删改
 
         /// <summary>
         /// 添加模板
@@ -143,12 +145,16 @@ namespace XFramework.Entity
                 Debug.LogWarning($"没有名为{key}的实体容器");
                 return null;
             }
-            else
+
+            if (m_EntityDic.ContainsKey(id))
             {
-                var entity = m_EntityContainerDic[key].Allocate(id, pos, quaternion, entityData, parent);
-                m_EntityDic.Add(entity.Id, entity);
-                return entity;
+                Entity e = m_EntityDic[id];
+                throw new FrameworkException($"[EntityError] id已被占用  Entity {e.ToString()}");
             }
+
+            var entity = m_EntityContainerDic[key].Allocate(id, pos, quaternion, entityData, parent);
+            m_EntityDic.Add(entity.Id, entity);
+            return entity;
         }
 
         /// <summary>
@@ -241,11 +247,15 @@ namespace XFramework.Entity
             }
         }
 
+        #endregion
+
+        #region 查
+
         /// <summary>
         /// 获取实体容器
         /// </summary>
         /// <param name="containerName">实体名</param>
-        public EntityContainer GetContainer(string containerName)
+        private EntityContainer GetContainer(string containerName)
         {
             if (m_EntityContainerDic.TryGetValue(containerName, out EntityContainer entityContainer))
             {
@@ -318,6 +328,53 @@ namespace XFramework.Entity
         }
 
         /// <summary>
+        /// 获取一个实体的子实体
+        /// </summary>
+        /// <param name="entityId">父实体编号</param>
+        /// <param name="index">子实体索引</param>
+        /// <returns>子实体</returns>
+        public Entity GetChildEntity(int entityId, int index)
+        {
+            Entity entity = GetEntity(entityId);
+            return GetChildEntity(entity, index);
+        }
+
+        /// <summary>
+        /// 获取一个实体的子实体
+        /// </summary>
+        /// <param name="entity">父实体</param>
+        /// <param name="index">子实体索引</param>
+        /// <returns>子实体</returns>
+        public Entity GetChildEntity(Entity entity, int index)
+        {
+            return GetEntityInfo(entity)[index];
+        }
+
+        /// <summary>
+        /// 获取一个实体的父实体
+        /// </summary>
+        /// <param name="entityId">子实体编号</param>
+        /// <returns>父实体</returns>
+        public Entity GetParentEntity(int entityId)
+        {
+            return GetParentEntity(entityId);
+        }
+
+        /// <summary>
+        /// 获取一个实体的父实体
+        /// </summary>
+        /// <param name="entityId">子实体</param>
+        /// <returns>父实体</returns>
+        public Entity GetParentEntity(Entity entity)
+        {
+            return GetEntityInfo(entity).Parent;
+        }
+
+        #endregion
+
+        #region 池的清理
+
+        /// <summary>
         /// 清理实体池
         /// </summary>
         /// <param name="count">容器实体池的最大保留量</param>
@@ -351,6 +408,8 @@ namespace XFramework.Entity
         {
             entityContainer.Clean(count);
         }
+
+        #endregion
 
         #region 接口实现
 
