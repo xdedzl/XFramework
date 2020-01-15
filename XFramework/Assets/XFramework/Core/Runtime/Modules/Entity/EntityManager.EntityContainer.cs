@@ -9,7 +9,7 @@ namespace XFramework.Entity
         /// <summary>
         /// 实体容器
         /// </summary>
-        public class EntityContainer
+        private class EntityContainer
         {
             /// <summary>
             /// 容器名

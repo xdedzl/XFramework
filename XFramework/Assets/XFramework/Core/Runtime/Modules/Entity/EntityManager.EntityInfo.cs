@@ -41,6 +41,17 @@ namespace XFramework.Entity
             }
 
             /// <summary>
+            /// 子实体数量
+            /// </summary>
+            public int ChildCount
+            {
+                get
+                {
+                    return m_ChildEntities.Count;
+                }
+            }
+
+            /// <summary>
             /// 父实体
             /// </summary>
             public Entity Parent
@@ -52,6 +63,23 @@ namespace XFramework.Entity
                 set
                 {
                     m_ParentEntity = value;
+                }
+            }
+
+            /// <summary>
+            /// 
+            /// </summary>
+            /// <param name="index"></param>
+            /// <returns></returns>
+            public Entity this[int index]
+            {
+                get
+                {
+                    if (index >= ChildCount || index < 0)
+                    {
+                        throw new FrameworkException($"[EntityError] entity没有index为{index}的子实体, entity {m_Entity.ToString()}");
+                    }
+                    return m_ChildEntities[index];
                 }
             }
 

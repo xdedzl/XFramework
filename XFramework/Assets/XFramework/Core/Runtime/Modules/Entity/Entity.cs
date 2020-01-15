@@ -50,5 +50,13 @@ namespace XFramework.Entity
         /// 轮询
         /// </summary>
         public virtual void OnUpdate(float elapseSeconds, float realElapseSeconds) { }
+
+        /// <summary>
+        /// 打印实体的基础信息
+        /// </summary>
+        public override string ToString()
+        {
+            return $"(id:{Id}, name:{name}, containerName:{ContainerName})";
+        }
     }
 }
