@@ -104,6 +104,14 @@ namespace XFramework
         }
 
         /// <summary>
+        /// 获取RectTransform
+        /// </summary>
+        public static RectTransform RectTransform(this Transform transform)
+        {
+            return transform.GetComponent<RectTransform>();
+        }
+
+        /// <summary>
         /// 获取Transform的所有子物体
         /// </summary>
         public static Transform[] GetChilds(this Transform transform)
