@@ -90,7 +90,7 @@ namespace XFramework.Resource
                     return request.isDone;
                 });
                 task.Then(() => { callback(request.asset as T); return true; });
-                GameEntry.GetModule<TaskManager>().StartTask(task);
+                TaskManager.Instance.StartTask(task);
 
                 SingleResProgress resProgress = new SingleResProgress(request);
                 progress.Add(resProgress);
@@ -99,7 +99,6 @@ namespace XFramework.Resource
 
             return progress;
         }
-
 
         #region AB包加载
 
@@ -193,7 +192,7 @@ namespace XFramework.Resource
                     callBack.Invoke(mainRequest.assetBundle);
                     return true;
                 }));
-                GameEntry.GetModule<TaskManager>().StartTask(abTask);
+                TaskManager.Instance.StartTask(abTask);
 
                 return new ResProgress(requests.ToArray());
             }

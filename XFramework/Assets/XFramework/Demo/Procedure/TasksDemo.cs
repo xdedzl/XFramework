@@ -1,6 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 using XFramework;
 using XFramework.Tasks;
 
@@ -32,12 +30,12 @@ public class TasksDemo : ProcedureBase
             () => { return TimeTo(1.0f); }
         );
 
-        Game.TaskModule.StartTask(singleTask);
+        singleTask.Start();
     }
 
     private bool TimeTo(float time)
     {
-        if(Time.time > time)
+        if (Time.time > time)
         {
             Debug.Log($"时间 {time} 到");
             return Time.time > time;

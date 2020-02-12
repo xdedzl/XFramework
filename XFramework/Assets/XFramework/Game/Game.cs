@@ -6,7 +6,6 @@ using XFramework.Event;
 using XFramework.Fsm;
 using XFramework.Pool;
 using XFramework.Resource;
-using XFramework.Tasks;
 
 /// <summary>
 /// 这个类挂在初始场景中,是整个游戏的入口
@@ -22,7 +21,6 @@ public class Game : MonoBehaviour
     public static MessageManager MessageModule { get; private set; }
     public static DataSubjectManager ObserverModule { get; private set; }
     public static ProcedureManager ProcedureModule { get; private set; }
-    public static TaskManager TaskModule { get; private set; }
     public static ObjectPoolManager ObjectPool { get; private set; }
     public static ResourceManager ResModule { get; private set; }
     // End0
@@ -40,7 +38,7 @@ public class Game : MonoBehaviour
 
     void Awake()
     {
-        if(activeGame != null)
+        if (activeGame != null)
         {
             DestroyImmediate(this);
         }
@@ -74,7 +72,7 @@ public class Game : MonoBehaviour
 
     private void OnDestroy()
     {
-        if(activeGame == this)
+        if (activeGame == this)
         {
             GameEntry.CleraAllModule();
         }
@@ -92,7 +90,6 @@ public class Game : MonoBehaviour
         MessageModule = GameEntry.AddModule<MessageManager>();
         ObserverModule = GameEntry.AddModule<DataSubjectManager>();
         ProcedureModule = GameEntry.AddModule<ProcedureManager>();
-        TaskModule = GameEntry.AddModule<TaskManager>();
         ObjectPool = GameEntry.AddModule<ObjectPoolManager>();
 #if UNITY_EDITOR
         ResModule = GameEntry.AddModule<ResourceManager>(new AssetDataBaseLoadHelper());
@@ -116,7 +113,6 @@ public class Game : MonoBehaviour
         MessageModule = GameEntry.GetModule<MessageManager>();
         ObserverModule = GameEntry.GetModule<DataSubjectManager>();
         ProcedureModule = GameEntry.GetModule<ProcedureManager>();
-        TaskModule = GameEntry.GetModule<TaskManager>();
         ObjectPool = GameEntry.GetModule<ObjectPoolManager>();
         UIModule = GameEntry.GetModule<UIHelper>();
         MeshModule = GameEntry.GetModule<MeshManager>();

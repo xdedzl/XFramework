@@ -107,7 +107,7 @@ namespace XFramework.Resource
                     callBack.Invoke(request.asset as T);
                     return true;
                 });
-                GameEntry.GetModule<TaskManager>().StartTask(task);
+                TaskManager.Instance.StartTask(task);
                 return null;
             }
 
