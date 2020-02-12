@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using XFramework.Singleton;
 
 namespace XFramework.Tasks
 {
@@ -6,7 +7,7 @@ namespace XFramework.Tasks
     /// 任务管理器
     /// 每帧会产生40B的GC
     /// </summary>
-    public class TaskManager : IGameModule
+    internal class TaskManager : MonoSingleton<TaskManager>
     {
         private List<ITask> m_Tasks;
         private List<int> m_ToRemove;
@@ -17,16 +18,16 @@ namespace XFramework.Tasks
             m_ToRemove = new List<int>();
         }
 
+        /// <summary>
+        /// 开启一个任务
+        /// </summary>
+        /// <param name="task"></param>
         public void StartTask(ITask task)
         {
             m_Tasks.Add(task);
         }
 
-        #region 接口实现
-
-        public int Priority => 2000;
-
-        public void Update(float elapseSeconds, float realElapseSeconds)
+        public void Update()
         {
             m_ToRemove.Clear();
             for (int i = 0; i < m_Tasks.Count; i++)
@@ -50,13 +51,5 @@ namespace XFramework.Tasks
                 m_Tasks.RemoveAt(item);
             }
         }
-
-        public void Shutdown()
-        {
-            m_Tasks.Clear();
-            m_ToRemove.Clear();
-        }
-
-        #endregion
     }
 }

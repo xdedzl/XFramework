@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections;
-using System.Collections.Generic;
 
 namespace XFramework.Tasks
 {
@@ -21,7 +19,7 @@ namespace XFramework.Tasks
             ITask[] tasks = new ITask[funcs.Length];
             for (int i = 0; i < funcs.Length; i++)
             {
-                tasks[i] = new SingleTask(funcs[i]); 
+                tasks[i] = new SingleTask(funcs[i]);
             }
             task.Next = new AllTask(tasks);
             return task.Next;
@@ -62,6 +60,11 @@ namespace XFramework.Tasks
         {
             task.Next = new SingleTask(func);
             return task.Next;
+        }
+
+        public static void Start(this ITask task)
+        {
+            TaskManager.Instance.StartTask(task);
         }
     }
 }
