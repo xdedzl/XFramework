@@ -6,9 +6,6 @@ UnityPackageManager
 .vs
 *.csproj
 *.sln
-Assets/XFrameworkTest
-Assets/XFrameworkTest.meta
-Assets/ResourcesAB/NotCommit
-Assets/ResourcesAB/NotCommit.meta
-Assets/StreamingAssets
-Assets/StreamingAssets.meta
+Assets/XFrameworkTest*
+Assets/ResourcesAB/NotCommit*
+Assets/StreamingAssets*

@@ -107,7 +107,7 @@ public class GameInspector : Editor
         Type[] allType = assembly.GetTypes();
         foreach (Type type in allType)
         {
-            if (type.Name == name)
+            if (type.FullName == name)
                 return type;
         }
         return null;
