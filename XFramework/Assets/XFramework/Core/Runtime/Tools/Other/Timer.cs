@@ -7,7 +7,7 @@ namespace XFramework
     public class Timer
     {
         private static TimerManager s_Manager;
-        private TimerManager Manager
+        private static TimerManager Manager
         {
             get
             {
@@ -27,6 +27,7 @@ namespace XFramework
                 return s_Manager;
             }
         }
+
         private Action timeUpDel;
         /// <summary>
         /// 是否执行
@@ -47,11 +48,11 @@ namespace XFramework
         /// <summary>
         /// 运行间隔
         /// </summary>
-        private float interval;
+        private readonly float interval;
         /// <summary>
         /// 设置的运行次数
         /// </summary>
-        private int repeatCount;
+        private readonly int repeatCount;
 
         /// <summary>
         /// <param name="interval">时间间隔，单位是毫秒</param>
@@ -135,6 +136,8 @@ namespace XFramework
             timeUpDel -= fun;
         }
 
+        #region 生命周期
+
         /// <summary>
         /// 开始(调用了IsRunning的Set,初始化了TimerManager)
         /// </summary>
@@ -162,6 +165,8 @@ namespace XFramework
             UseCount = 0;
         }
 
+        #endregion
+
         #region 外部调用的静态函数
 
         /// <summary>
@@ -188,41 +193,59 @@ namespace XFramework
             return timer;
         }
 
+        /// <summary>
+        /// 计时器的时间速度
+        /// </summary>
+        public static float TimeScale
+        {
+            get
+            {
+                return Manager.timeScale;
+            }
+            set
+            {
+                Manager.timeScale = value;
+            }
+        }
+
         #endregion
 
         /// <summary>
         /// 计时器管理
         /// 除了计时器以外其他类暂时不需要调用，以后需要再放到外面去
         /// </summary>
-        public class TimerManager : MonoBehaviour
+        private class TimerManager : MonoBehaviour
         {
-            private readonly List<Timer> _timers = new List<Timer>();
+            private readonly List<Timer> m_timers = new List<Timer>();
+            internal float timeScale = 1;
 
             private void Update()
             {
-                for (var i = 0; i < _timers.Count; i++)
+                float deltaTime = Time.unscaledDeltaTime * timeScale;
+
+                for (var i = 0; i < m_timers.Count; i++)
                 {
-                    if (_timers[i].IsRunning)
+                    if (m_timers[i].IsRunning)
                     {
                         // unscaledDeltaTime和deltaTime一样，但是不受TimeScale影响
-                        _timers[i].Update(Time.unscaledDeltaTime);
+                        m_timers[i].Update(deltaTime);
                     }
                 }
             }
 
             public void AddTimer(Timer timer)
             {
-                if (_timers.Contains(timer) == false)
+                if (m_timers.Contains(timer) == false)
                 {
-                    _timers.Add(timer);
+                    m_timers.Add(timer);
                 }
             }
 
             public void RemoveTimer(Timer timer)
             {
-                if (_timers.Contains(timer))
+                if (m_timers.Contains(timer))
                 {
-                    _timers.Remove(timer);
+                    m_timers.Remove(timer);
                 }
             }
         }

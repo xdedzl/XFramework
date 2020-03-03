@@ -53,6 +53,7 @@ public class UIHelper : IGameModule
     /// </summary>
     public void Open(string name, bool closeable = false, object arg = null)
     {
+        Debug.Log(closeable);
         m_UIManager.OpenPanel(name, closeable, arg);
     }
 

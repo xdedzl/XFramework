@@ -11,7 +11,7 @@ public class AdjustPanel : PanelBase {
     /// <summary>
     /// 界面被显示出来
     /// </summary>
-    public override void OnOpen(object arg)
+    public override void OnOpen(params object[] args)
     {
         if (canvasGroup == null)
             canvasGroup = transform.GetComponent<CanvasGroup>();

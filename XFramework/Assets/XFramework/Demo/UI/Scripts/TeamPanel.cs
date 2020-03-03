@@ -19,7 +19,7 @@ public class TeamPanel : PanelBase {
         rect.sizeDelta = size;
     }
 
-    public override void OnOpen(object arg)
+    public override void OnOpen(params object[] args)
     {
         CreatePanel createPanel = (CreatePanel)Game.UIModule.GetPanel(UIName.Create);
         // 设父物体以及自己在子物体中的顺序

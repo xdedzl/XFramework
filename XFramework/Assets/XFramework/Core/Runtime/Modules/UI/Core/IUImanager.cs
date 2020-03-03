@@ -13,10 +13,10 @@ namespace XFramework.UI
     /// </summary>
     public interface IUIManager : IGameModule
     {
-        /// <summary>
+        /// <summary> 
         /// 打开面板
         /// </summary>
-        void OpenPanel(string uiname, bool closable, object arg);
+        void OpenPanel(string uiname, bool closable, params object[] args);
         /// <summary>
         /// 关闭面板
         /// </summary>

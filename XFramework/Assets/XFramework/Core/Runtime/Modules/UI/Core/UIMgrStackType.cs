@@ -43,7 +43,7 @@ namespace XFramework.UI
         /// <summary>
         /// 把某个页面入栈，  把某个页面显示在界面上
         /// </summary>
-        public void PushPanel(string uiname, bool colsable, object arg)
+        public void PushPanel(string uiname, bool colsable, params object[] args)
         {
             if (m_PanelStack == null)
                 m_PanelStack = new Stack<PanelBase>();
@@ -80,7 +80,7 @@ namespace XFramework.UI
             // 如果最后关闭的界面和要打开的是同一个，就不打开了
             if (currentPanel != nextPanel)
             {
-                nextPanel.OnOpen(arg);
+                nextPanel.OnOpen(args);
                 m_PanelStack.Push(nextPanel); // 将打开的面板入栈
             }
         }
@@ -240,9 +240,9 @@ namespace XFramework.UI
             m_PanelStack?.Clear();
         }
 
-        public void OpenPanel(string uiname, bool colsable, object arg)
+        public void OpenPanel(string uiname, bool colsable, params object[] args)
         {
-            PushPanel(uiname, colsable, arg);
+            PushPanel(uiname, colsable, args);
         }
 
         public void ClosePanel(string uiname)
