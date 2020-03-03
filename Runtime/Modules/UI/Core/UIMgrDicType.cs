@@ -54,7 +54,7 @@ namespace XFramework.UI
         /// <summary>
         /// 打开面板
         /// </summary>
-        public void OpenPanel(string uiname, bool closable, object arg)
+        public void OpenPanel(string uiname, bool closable, params object[] args)
         {
             PanelBase panel = GetPanel(uiname);
             if (null == panel)
@@ -80,7 +80,7 @@ namespace XFramework.UI
                 m_OnDisplayPanelDic[panel.Level - 1].End().OnPause();
             }
 
-            panel.OnOpen(arg);
+            panel.OnOpen(args);
         }
 
         /// <summary>
@@ -126,9 +126,13 @@ namespace XFramework.UI
                 m_PanelDict = new Dictionary<string, PanelBase>();
             }
 
-            m_PanelDict.TryGetValue(uiname, out PanelBase panel);
-
-            if (panel == null)
+            if(m_PanelDict.TryGetValue(uiname, out PanelBase panel))
+            {
+                if (panel == null)
+                    throw new FrameworkException("[UI] 面板已被卸载");
+                return panel;
+            }
+            else
             {
                 // 根据prefab去实例化面板
                 m_PanelPathDict.TryGetValue(uiname, out string path);
@@ -153,17 +157,16 @@ namespace XFramework.UI
                     RectTransform rect;
                     rect = (new GameObject("Level" + basePanel.Level)).AddComponent<RectTransform>();
                     rect.SetParent(CanvasTransform);
-                    rect.sizeDelta = CanvasTransform.sizeDelta;
-                    rect.position = CanvasTransform.position;
+                    rect.sizeDelta = CanvasTransform.GetComponent<UnityEngine.UI.CanvasScaler>().referenceResolution;
+                    rect.anchorMin = Vector2.zero;
+                    rect.anchorMax = Vector3.one;
+                    rect.anchoredPosition = Vector2.zero;
+                    rect.sizeDelta = Vector2.zero;
                     rect.localScale = Vector3.one;
                     uiGroup = rect;
                 }
                 instPanel.transform.SetParent(uiGroup, false);
                 return basePanel;
-            }
-            else
-            {
-                return panel;
             }
         }
 

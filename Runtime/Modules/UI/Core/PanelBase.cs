@@ -48,14 +48,17 @@ namespace XFramework.UI
         /// <summary>
         /// 界面显示
         /// </summary>
-        public virtual void OnOpen(object arg)
+        public virtual void OnOpen(params object[] args)
         {
             gameObject.SetActive(true);
             transform.SetAsLastSibling();
 
-            foreach (var item in m_SubPanels)
+            if(m_SubPanels != null)
             {
-                item.OnOpen();
+                foreach (var item in m_SubPanels)
+                {
+                    item.OnOpen();
+                }
             }
         }
 
@@ -90,9 +93,12 @@ namespace XFramework.UI
         {
             gameObject.SetActive(false);
 
-            foreach (var item in m_SubPanels)
+            if (m_SubPanels != null)
             {
-                item.OnClose();
+                foreach (var item in m_SubPanels)
+                {
+                    item.OnClose();
+                }
             }
         }
 
@@ -105,6 +111,10 @@ namespace XFramework.UI
             GUIBase[] uis = transform.GetComponentsInChildren<GUIBase>();
             for (int i = 0; i < uis.Length; i++)
             {
+                if (mUIDic.ContainsKey(uis[i].name))
+                {
+                    throw new FrameworkException($"{this.name}已有名为{uis[i].name}的GUBase组件");
+                }
                 mUIDic.Add(uis[i].name, uis[i]);
             }
         }
