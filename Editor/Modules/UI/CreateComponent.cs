@@ -122,6 +122,7 @@ public class CreateComponent
     public static void CreateDividingRule()
     {
         GameObject parent = Selection.activeGameObject;
+        parent = parent ?? Object.FindObjectOfType<Canvas>().gameObject;
         RectTransform rule = new GameObject("DividingRule").AddComponent<RectTransform>();
         rule.SetParent(parent.transform);
         rule.anchoredPosition = Vector2.zero;

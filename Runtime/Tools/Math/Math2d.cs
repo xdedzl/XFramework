@@ -33,9 +33,6 @@ namespace XFramework.Mathematics
                 return false;
             }
 
-
-
-
             intersection = Vector2.zero;
             return false;
         }
@@ -98,7 +95,6 @@ namespace XFramework.Mathematics
                         }
 
                     });
-                    //Debug.Log(string.Format("i:{0}", i));
                 }
             }
             );
@@ -109,11 +105,59 @@ namespace XFramework.Mathematics
         /// <summary>
         /// 双线性差值
         /// </summary>
+        /// <param name="array_In"></param>
+        /// <param name="newWidth"></param>
+        /// <param name="newHeight"></param>
+        /// <returns></returns>
+        public static float[,] ZoomBilinearInterp(float[,] array_In, int newWidth, int newHeight)
+        {
+            int originalHeight = array_In.GetLength(0);
+            int originalWidth = array_In.GetLength(1);
+
+            float scaleX = ((float)newHeight) / ((float)originalHeight);
+            float scaleY = ((float)newWidth) / ((float)originalWidth);
+
+            float[,] array_Out = new float[newHeight, newWidth];
+            float u = 0, v = 0, x = 0, y = 0;
+            int m = 0, n = 0;
+            int i, j;
+            for (i = 0; i < newHeight; ++i)
+            {
+                for (j = 0; j < newWidth; ++j)
+                {
+                    x = i / scaleX;
+                    y = j / scaleY;
+
+                    m = Mathf.FloorToInt(x);
+                    n = Mathf.FloorToInt(y);
+
+                    u = x - m;
+                    v = y - n;
+
+                    if (m < originalHeight - 1 && n < originalWidth - 1)
+                    {
+
+                        array_Out[i, j] = (1.0f - v) * (1.0f - u) * array_In[m, n] + (1 - v) * u * array_In[m, n + 1]
+                                               + v * (1.0f - u) * array_In[m + 1, n] + v * u * array_In[m + 1, n + 1];
+                    }
+                    else
+                    {
+                        array_Out[i, j] = array_In[m, n];
+                    }
+                }
+            }
+
+            return array_Out;
+        }
+
+        /// <summary>
+        /// 双线性差值
+        /// </summary>
         /// <param name="array"></param>
         /// <param name="length_0"></param>
         /// <param name="length_1"></param>
         /// <returns></returns>
-        public static async Task<float[,]> BilinearInterp(float[,] array, int length_0, int length_1)
+        public static async Task<float[,]> BilinearInterpAsync(float[,] array, int length_0, int length_1)
         {
             float[,] _out = new float[length_0, length_1];
             int original_0 = array.GetLength(0);
@@ -152,6 +196,60 @@ namespace XFramework.Mathematics
                     });
                 }
             });
+
+            return _out;
+        }
+
+        /// <summary>
+        /// 双线性差值
+        /// </summary>
+        /// <param name="array"></param>
+        /// <param name="length_0"></param>
+        /// <param name="length_1"></param>
+        /// <returns></returns>
+        public static float[,] BilinearInterp(float[,] array, int length_0, int length_1)
+        {
+            float[,] _out = new float[length_0, length_1];
+            int original_0 = array.GetLength(0);
+            int original_1 = array.GetLength(1);
+
+            float ReScale_0 = original_0 / ((float)length_0);  // 倍数的倒数
+            float ReScale_1 = original_1 / ((float)length_1);
+
+            float index_0;
+            float index_1;
+            int inde_0;
+            int inde_1;
+            float s_leftUp;
+            float s_rightUp;
+            float s_rightDown;
+            float s_leftDown;
+
+            for (int i = 0; i < length_0; i++)
+            {
+                for (int j = 0; j < length_1; j++)
+                {
+                    index_0 = i * ReScale_0;
+                    index_1 = j * ReScale_1;
+                    inde_0 = Mathf.FloorToInt(index_0);
+                    inde_1 = Mathf.FloorToInt(index_1);
+                    s_leftUp = (index_0 - inde_0) * (index_1 - inde_1);
+                    s_rightUp = (inde_0 + 1 - index_0) * (index_1 - inde_1);
+                    s_rightDown = (inde_0 + 1 - index_0) * (inde_1 + 1 - index_1);
+                    s_leftDown = (index_0 - inde_0) * (inde_1 + 1 - index_1);
+
+                    try
+                    {
+                        _out[i, j] = array[inde_0, inde_1] * s_rightDown + array[inde_0 + 1, inde_1] * s_leftDown + array[inde_0 + 1, inde_1 + 1] * s_leftUp + array[inde_0, inde_1 + 1] * s_rightUp;
+                    }
+                    catch (Exception)
+                    {
+
+                        throw;
+                    }
+
+                }
+            }
 
             return _out;
         }
@@ -440,6 +538,23 @@ namespace XFramework.Mathematics
 
             // 计算回转数并判断点和多边形的几何关系
             return Mathf.RoundToInt((float)(sum / Math.PI)) == 0 ? false : true;
+        }
+
+        /// <summary>
+        /// 计算多边形面积(忽略y轴)
+        /// </summary>
+        /// <param name="points"></param>
+        /// <returns>平方米</returns>
+        public static float ComputePolygonArea(List<Vector3> points)
+        {
+            float iArea = 0;
+
+            for (int iCycle = 0, iCount = points.Count; iCycle < iCount; iCycle++)
+            {
+                iArea += (points[iCycle].x * points[(iCycle + 1) % iCount].z - points[(iCycle + 1) % iCount].x * points[iCycle].z);
+            }
+
+            return (float)Math.Abs(0.5 * iArea);
         }
 
         #endregion

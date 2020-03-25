@@ -17,59 +17,21 @@ namespace XFramework.Mathematics
     public class PhysicsMath
     {
         #region 公式类计算
-        // 大小比较
-        private const double epsilon = 1e-7;
-        /// <summary>
-        /// 判断a是否小于b
-        /// </summary>
-        private bool Less(float a, float b)
-        {
-            return (b - a) > epsilon;
-        }
-        /// <summary>
-        /// 判断a是否大于b
-        /// </summary>
-        private bool Great(float a, float b)
-        {
-            return (a - b) > epsilon;
-        }
-        /// <summary>
-        /// 判断a是否等于b
-        /// </summary>
-        public static bool FloatEqual(float a, float b)
-        {
-            return Mathf.Abs(a - b) < epsilon;
-        }
-        /// <summary>
-        /// 判断a是否等于b
-        /// </summary>
-        public static bool Vector3Equal(Vector3 a, Vector3 b)
-        {
-            return FloatEqual(a.x, b.x) && FloatEqual(a.y, b.y) && FloatEqual(a.z, b.z);
-        }
 
         /// <summary>
-        /// 获取平方根 一元二次方程求根公式 x = (-b+(b^2-4ac)^1/2)/2a
+        /// 点绕点旋转
         /// </summary>
-        /// <param name="a"></param>
-        /// <param name="b"></param>
-        /// <param name="d"></param>
+        /// <param name="_orgPos">中心点</param>
+        /// <param name="_tarPos">需要旋转的点</param>
+        /// <param name="_angle">角度逆时针</param>
         /// <returns></returns>
-        public static float GetSqrtOfMath(float a, float b, float d)
+        public static Vector2 GetTargetVector(Vector2 _orgPos, Vector2 _tarPos, float _angle)
         {
-            float a1 = (-b + Mathf.Sqrt(d)) / (2 * a);
-            float a2 = (-b - Mathf.Sqrt(d)) / (2 * a);
-
-            return a1 > a2 ? a1 : a2;
-        }
-
-        private float GetDelta(float a, float b, float c)
-        {
-            return b * b - 4 * a * c;
+            return GetTargetVector(_tarPos - _orgPos, _angle) + _orgPos;
         }
 
         /// <summary>
-        /// 获取平面向量向右旋转theta后的目标向量
+        /// 获取平面向量向左旋转theta后的目标向量
         /// </summary>
         /// <param name="startVector"></param>
         /// <param name="theta"></param>
@@ -492,16 +454,15 @@ namespace XFramework.Mathematics
             return u * u * u * _P0 + 3 * u * u * _t * _P1 + 3 * _t * _t * u * _P2 + _t * _t * _t * _P3;
         }
 
-
         /// <summary>         
         /// 获取曲线上面的所有路径点
         /// </summary> 
         /// <returns>The list.</returns> 
         /// <param name="wayPoints">路点列表</param> 
         /// <param name="pointSize">两个点之间的节点数量</param> 
-        public static List<Vector3> GetPoints(List<Vector3> wayPoints)
+        public static List<Vector3> GetHermitPoints(List<Vector3> wayPoints)
         {
-            Vector3[] controlPointList = PathControlPointGenerator(wayPoints.ToArray());
+            Vector3[] controlPointList = HermitPathControlPoint(wayPoints.ToArray());
             int smoothAmount = 0;       // wayPoints.Length * pointSize;     
 
             // 根据 路点 间的距离计算所需 路径点 的数量
@@ -513,16 +474,28 @@ namespace XFramework.Mathematics
             Vector3[] pointArr = new Vector3[smoothAmount];
             for (int index = 1; index <= smoothAmount; index++)
             {
-                pointArr[index - 1] = Interp(controlPointList, (float)index / smoothAmount);
+                pointArr[index - 1] = HermitInterp(controlPointList, (float)index / smoothAmount);
             }
             return pointArr.ToList();
+        }
+
+        /// <summary>
+        /// 获取 Hermit 曲线上的某点
+        /// </summary>
+        /// <param name="wayPoints"></param>
+        /// <param name="t"></param>
+        /// <returns></returns>
+        public static Vector3 GetHermitPoint(List<Vector3> wayPoints, float t)
+        {
+            Vector3[] controlPointList = HermitPathControlPoint(wayPoints.ToArray());
+            return HermitInterp(controlPointList, t);
         }
         /// <summary> 
         /// 获取控制点 
         /// </summary> 
         /// <returns>The control point generator.</returns> 
         /// <param name="path">Path.</param> 
-        private static Vector3[] PathControlPointGenerator(Vector3[] path)
+        public static Vector3[] HermitPathControlPoint(Vector3[] path)
         {
             int offset = 2;
             Vector3[] suppliedPath = path;
@@ -557,7 +530,7 @@ namespace XFramework.Mathematics
         /// </summary> 
         /// <param name="pts">控制点点集</param> 
         /// <param name="t">分割进度</param> 
-        private static Vector3 Interp(Vector3[] pts, float t)
+        public static Vector3 HermitInterp(Vector3[] pts, float t)
         {
             int numSections = pts.Length - 3;       // 控制点总数减3
             int currPt = Mathf.Min(Mathf.FloorToInt(t * (float)numSections), numSections - 1);
@@ -620,29 +593,76 @@ namespace XFramework.Mathematics
         }
 
         /// <summary>
-        /// 获取扇形区域的点集合（包括圆心点）
+        /// 获取椭圆上的点
+        /// </summary>
+        /// <param name="_r">短轴</param>
+        /// <param name="_R">长轴</param>
+        /// <param name="_origin">中点</param>
+        /// <param name="seg">间隔</param>
+        /// <returns></returns>
+        public static Vector2[] GetEllipsePoints(float _r, float _R, Vector2 _origin, int seg)
+        {
+            float angle;
+            Vector2[] points = new Vector2[seg];
+            int j = 0;
+            for (float i = 0; i < 360; j++, i += 360 / seg)
+            {
+                angle = (i / 180) * Mathf.PI;
+                points[j] = _origin + new Vector2(_r * Mathf.Cos(angle), _R * Mathf.Sin(angle));
+            }
+            return points;
+        }
+
+
+
+        ///// <summary>
+        ///// 获取扇形区域的点集合（包括圆心点）
+        ///// </summary>
+        ///// <param name="origin">圆心点</param>
+        ///// <param name="egdePoint">扇形弧边右边缘点</param>
+        ///// <param name="angleDiffer">x，z轴张角</param>
+        ///// <returns></returns>
+        //public static Vector3[] GetSectorPoints_1(Vector3 origin, Vector3 egdePoint, float angleDiffer)
+        //{
+        //    float angle;
+        //    Vector3 dir = egdePoint - origin;                               //取两点的向量
+        //    float radius = dir.magnitude;                                   //获取扇形的半径
+
+        //    //取数组长度 如60度的弧边取61个点 0~60 再加上一个圆心点
+        //    Vector3[] points = new Vector3[(int)(angleDiffer / 3) + 2];
+        //    points[0] = origin;                                             //取圆心点
+        //    int startEuler = (int)Vector2.Angle(Vector2.right, new Vector2(dir.x, dir.z));
+        //    for (int i = startEuler, j = 1; i <= angleDiffer + startEuler; j++, i += 3)
+        //    {
+        //        angle = Mathf.Deg2Rad * i;
+        //        float differ = Mathf.Abs(Mathf.Cos(angle - (float)(0.5 * angleDiffer * Mathf.Deg2Rad)) * egdePoint.y - egdePoint.y);//高度差的绝对值
+        //        points[j] = origin + new Vector3(radius * Mathf.Cos(angle), egdePoint.y + differ, radius * Mathf.Sin(angle));       //给底面点赋值
+        //    }
+        //    return points;
+        //}
+
+        /// <summary>
+        /// 获取扇形区域的点集合（不包括扇形的圆心点与边缘两点）
         /// </summary>
         /// <param name="origin">圆心点</param>
         /// <param name="egdePoint">扇形弧边右边缘点</param>
         /// <param name="angleDiffer">x，z轴张角</param>
         /// <returns></returns>
-        public static Vector3[] GetSectorPoints_1(Vector3 origin, Vector3 egdePoint, float angleDiffer)
+        public static List<Vector3> GetSectorPoints_1(Vector3 origin, Vector3 egdePoint, float angleDiffer)
         {
+            List<Vector3> outList = new List<Vector3>();
             float angle;
-            Vector3 dir = egdePoint - origin;                               //取两点的向量
-            float radius = dir.magnitude;                                   //获取扇形的半径
+            Vector3 dir = egdePoint - origin;                               // 取两点的向量
+            float radius = dir.magnitude;                                   // 获取扇形的半径
 
-            //取数组长度 如60度的弧边取61个点 0~60 再加上一个圆心点
-            Vector3[] points = new Vector3[(int)(angleDiffer / 3) + 2];
-            points[0] = origin;                                             //取圆心点
-            int startEuler = (int)Vector2.Angle(Vector2.right, new Vector2(dir.x, dir.z));
-            for (int i = startEuler, j = 1; i <= angleDiffer + startEuler; j++, i += 3)
+            int startEuler = (int)Vector2.SignedAngle(Vector2.right, new Vector2(dir.x, dir.z));        // 取出起始角度(带符号)
+            for (int i = startEuler + 10, j = 0; i < angleDiffer + startEuler; j++, i += 10)
             {
                 angle = Mathf.Deg2Rad * i;
-                float differ = Mathf.Abs(Mathf.Cos(angle - (float)(0.5 * angleDiffer * Mathf.Deg2Rad)) * egdePoint.y - egdePoint.y);//高度差的绝对值
-                points[j] = origin + new Vector3(radius * Mathf.Cos(angle), egdePoint.y + differ, radius * Mathf.Sin(angle));       //给底面点赋值
+                outList.Add(origin + new Vector3(radius * Mathf.Cos(angle), 0, radius * Mathf.Sin(angle)));       // 给底面点赋值
             }
-            return points;
+
+            return outList;
         }
 
         /// <summary>
@@ -1206,8 +1226,6 @@ namespace XFramework.Mathematics
 
             Vector3 _dir = GetHorizontalDir(_list[0], _list[1]);        // 获取两点之间的垂直向量;
             verticesList.Add(_list[0] + _dir * _width - Vector3.up * _height);       // 右下点
-            verticesList.Add(_list[0] + _dir * _width + Vector3.up * _height);       // 
-            verticesList.Add(_list[0] - _dir * _width + Vector3.up * _height);       // 
             verticesList.Add(_list[0] - _dir * _width - Vector3.up * _height);       // 左下点
 
             for (int i = 1; i < count - 1; i++)
@@ -1223,15 +1241,11 @@ namespace XFramework.Mathematics
                 _dir3 = ((_dir + _dir2) / 2).normalized;              // 获取方向向量
 
                 verticesList.Add(_list[i] + _dir3 * _width / cosTheta - Vector3.up * _height);
-                verticesList.Add(_list[i] + _dir3 * _width / cosTheta + Vector3.up * _height);
-                verticesList.Add(_list[i] - _dir3 * _width / cosTheta + Vector3.up * _height);
                 verticesList.Add(_list[i] - _dir3 * _width / cosTheta - Vector3.up * _height);
             }
 
             _dir = GetHorizontalDir(_list[count - 2], _list[count - 1]);    // 获取两点之间的垂直向量        
             verticesList.Add(_list[count - 1] + _dir * _width - Vector3.up * _height);       // 右下点
-            verticesList.Add(_list[count - 1] + _dir * _width + Vector3.up * _height);       // 右上点
-            verticesList.Add(_list[count - 1] - _dir * _width + Vector3.up * _height);       // 左上点
             verticesList.Add(_list[count - 1] - _dir * _width - Vector3.up * _height);       // 左下点
 
             return verticesList.ToArray();
@@ -1249,6 +1263,12 @@ namespace XFramework.Mathematics
             List<Vector3> verticesList = new List<Vector3>();
             List<Vector3> tmpList = new List<Vector3>();
             int count = _list.Count;
+            if (count < 2)
+            {
+                Debug.LogError($"空中走廊List数量：{count}");
+                return verticesList.ToArray();
+            }
+
             _height /= 2;
             _width /= 2;
 
@@ -1292,21 +1312,35 @@ namespace XFramework.Mathematics
 
                 #endregion
 
-                //计算相连三个点夹角的补角的一半的余弦值
-                Vector2 pos_1 = new Vector2(_list[i + 1].x - _list[i].x, _list[i + 1].z - _list[i].z);
-                Vector2 pos_2 = new Vector2(_list[i].x - _list[i - 1].x, _list[i].z - _list[i - 1].z);
-                float theta = Vector2.Angle(pos_1, pos_2);
+                ////计算相连三个点夹角的补角的一半的余弦值
+                //Vector2 pos_1 = new Vector2(_list[i + 1].x - _list[i].x, _list[i + 1].z - _list[i].z);
+                //Vector2 pos_2 = new Vector2(_list[i].x - _list[i - 1].x, _list[i].z - _list[i - 1].z);
+                //float theta = Vector2.Angle(pos_1, pos_2);
+                //theta /= 2.00f;
+                //float cosTheta = Mathf.Cos(Mathf.Deg2Rad * theta);
 
-                theta /= 2.00f;
-
-                float cosTheta = Mathf.Cos(Mathf.Deg2Rad * theta);
+                // 计算相连三点夹角的一半的正弦值
+                Vector2 pos1 = new Vector2(_list[i].x - _list[i - 1].x, _list[i].z - _list[i - 1].z);
+                Vector2 pos2 = new Vector2(_list[i].x - _list[i + 1].x, _list[i].z - _list[i + 1].z);
+                float alpha = Vector2.Angle(pos1, pos2) / 2.00f;
+                float sinAlpha = Mathf.Sin(Mathf.Deg2Rad * alpha);
 
                 _dir = GetHorizontalDir(_list[i - 1], _list[i]);        // 获取两点之间的垂直向量
                 _dir2 = GetHorizontalDir(_list[i], _list[i + 1]);       // 获取两点之间的垂直向量
                 _dir3 = ((_dir + _dir2) / 2).normalized;
 
-                verticesList.Add(_list[i] + _dir3 * _width / cosTheta - Vector3.up * _height);      // 右下点
-                tmpList.Add(_list[i] - _dir3 * _width / cosTheta - Vector3.up * _height);           // 左下点
+                float maxDir = _width / sinAlpha;       // 限制宽度不能超过前后两点之间的距离
+                if (maxDir > Vector3.Magnitude(_list[i] - _list[i - 1]))
+                {
+                    maxDir = Vector3.Magnitude(_list[i] - _list[i - 1]);
+                }
+                if (maxDir > Vector3.Magnitude(_list[i] - _list[i + 1]))
+                {
+                    maxDir = Vector3.Magnitude(_list[i] - _list[i + 1]);
+                }
+
+                verticesList.Add(_list[i] + _dir3 * maxDir - Vector3.up * _height);      // 右下点
+                tmpList.Add(_list[i] - _dir3 * maxDir - Vector3.up * _height);           // 左下点
 
             }
 
@@ -1351,8 +1385,8 @@ namespace XFramework.Mathematics
                 polygon.RemoveAt(i);
 
                 // 对 index 点进行弧边处理
-                Vector3 _dir1 = _bottomList[i] - _bottomList[i - 1];        // 获取两点之间的垂直向量
-                Vector3 _dir2 = _bottomList[i + 1] - _bottomList[i];        // 获取两点之间的垂直向量
+                Vector3 _dir1 = (_bottomList[i] - _bottomList[i - 1]).normalized;        // 获取两点之间的垂直向量
+                Vector3 _dir2 = (_bottomList[i + 1] - _bottomList[i]).normalized;        // 获取两点之间的垂直向量
 
                 //是否是凹点
                 if (IsPointInsidePolygon(_bottomList[i], polygon))
@@ -1367,7 +1401,15 @@ namespace XFramework.Mathematics
                     //加上0.05中和浮点数精度问题
                     for (float j = 0; j <= 1.05f; j += 0.1f)
                     {
-                        arcList.Add(Vector3.Slerp(_dir1, _dir2, j).normalized * _width + _bottomList[i]);       // 添加进圆弧点集
+                        if (_dir1 == -_dir2)
+                        {
+                            arcList.Add(_dir1 * _width + _bottomList[i]);
+                            Debug.Log("???");
+                        }
+                        else
+                        {
+                            arcList.Add(Vector3.Slerp(_dir1, _dir2, j).normalized * _width + _bottomList[i]);       // 添加进圆弧点集
+                        }
                     }
 
                     Vector3 leftArcPoint = _bottomList[i] + _dir1.normalized * _width;                          // 圆弧左点
@@ -1420,23 +1462,6 @@ namespace XFramework.Mathematics
         #endregion
 
         /// <summary>
-        /// 计算多边形面积(忽略y轴)
-        /// </summary>
-        /// <param name="points"></param>
-        /// <returns>平方米</returns>
-        public static float ComputePolygonArea(List<Vector3> points)
-        {
-            float iArea = 0;
-
-            for (int iCycle = 0, iCount = points.Count; iCycle < iCount; iCycle++)
-            {
-                iArea += (points[iCycle].x * points[(iCycle + 1) % iCount].z - points[(iCycle + 1) % iCount].x * points[iCycle].z);
-            }
-
-            return (float)Math.Abs(0.5 * iArea);
-        }
-
-        /// <summary>
         /// 计算线段是否相交
         /// 端点相交不算相交
         /// </summary>
@@ -1449,9 +1474,9 @@ namespace XFramework.Mathematics
             Vector3 pq = q - p;
             float rxs = r.x * s.z - r.z * s.x;
             float pqxr = pq.x * r.z - pq.z * r.x;
-            if (IsApproximately(rxs, 0f))
+            if (MathX.IsApproximately(rxs, 0f))
             {
-                if (IsApproximately(pqxr, 0f))
+                if (MathX.IsApproximately(pqxr, 0f))
                 {
                     return true;
                 }
@@ -1461,14 +1486,6 @@ namespace XFramework.Mathematics
             float t = pqxs / rxs;
             float u = pqxr / rxs;
             return t > 0 && t < 1 && u > 0 && u < 1;
-        }
-
-        /// <summary>
-        /// 计算两个数字是否接近相等,阈值是dvalue
-        /// </summary>
-        public static bool IsApproximately(double a, double b, double dvalue = 0)
-        {
-            return Math.Abs(a - b) <= dvalue;
         }
     }
 }

@@ -37,20 +37,21 @@ namespace XFramework.Mathematics
         /// <param name="face_1">平面1法线</param>
         /// <param name="face_2">平面1上一点</param>
         /// <returns>是否相交</returns>
-        public static bool PlanePlaneIntersection(out Vector3 linePoint, out Vector3 lineVec, Face face_1, Face face_2)
+        public static bool PlanePlaneIntersection(Face face_1, Face face_2, out Line line)
         {
-            linePoint = Vector3.zero;
-            lineVec = Vector3.zero;
-            lineVec = Vector3.Cross(face_1.normal, face_2.normal);
+            Vector3 lineVec = Vector3.Cross(face_1.normal, face_2.normal);
             Vector3 vector = Vector3.Cross(face_2.normal, lineVec);
             float num = Vector3.Dot(face_1.normal, vector);
             if (Mathf.Abs(num) > 0.006f)
             {
                 Vector3 rhs = face_1.point - face_2.point;
                 float d = Vector3.Dot(face_1.normal, rhs) / num;
-                linePoint = face_2.point + d * vector;
+                Vector3 linePoint = face_2.point + d * vector;
+                line.point = linePoint;
+                line.direction = lineVec;
                 return true;
             }
+            line = default;
             return false;
         }
 
@@ -62,7 +63,7 @@ namespace XFramework.Mathematics
         /// <param name="lineVec"></param>
         /// <param name="face"></param>
         /// <returns>是否相交</returns>
-        public static bool LinePlaneIntersection(out Vector3 intersection, Vector3 linePoint, Vector3 lineVec, Face face)
+        public static bool LinePlaneIntersection(Vector3 linePoint, Vector3 lineVec, Face face, out Vector3 intersection)
         {
             intersection = Vector3.zero;
             float num = Vector3.Dot(face.point - linePoint, face.normal);
@@ -86,7 +87,7 @@ namespace XFramework.Mathematics
         /// <param name="p2">直线2上一点</param>
         /// <param name="v2">直线2方向</param>
         /// <returns>是否相交</returns>
-        public static bool LineLineIntersection(out Vector3 intersection, Vector3 p1, Vector3 v1, Vector3 p2, Vector3 v2)
+        public static bool LineLineIntersection(Vector3 p1, Vector3 v1, Vector3 p2, Vector3 v2, out Vector3 intersection)
         {
             intersection = Vector3.zero;
             if (Vector3.Dot(v1, v2) == 1)
@@ -124,7 +125,7 @@ namespace XFramework.Mathematics
         /// <summary>
         /// 计算两直线的起点分别到交点的有向距离
         /// </summary>
-        public static bool LineLineIntersection(out float tLine1, out float tLine2, Vector3 linePoint1, Vector3 lineVec1, Vector3 linePoint2, Vector3 lineVec2)
+        public static bool LineLineIntersection(Vector3 linePoint1, Vector3 lineVec1, Vector3 linePoint2, Vector3 lineVec2, out float tLine1, out float tLine2)
         {
             tLine1 = float.PositiveInfinity;
             tLine2 = float.PositiveInfinity;
@@ -152,7 +153,7 @@ namespace XFramework.Mathematics
         /// <param name="linePoint2"></param>
         /// <param name="lineVec2"></param>
         /// <returns></returns>
-        public static bool ClosestPointsOnTwoLines(out Vector3 closestPointLine1, out Vector3 closestPointLine2, Vector3 linePoint1, Vector3 lineVec1, Vector3 linePoint2, Vector3 lineVec2)
+        public static bool ClosestPointsOnTwoLines(Vector3 linePoint1, Vector3 lineVec1, Vector3 linePoint2, Vector3 lineVec2, out Vector3 closestPointLine1, out Vector3 closestPointLine2)
         {
             closestPointLine1 = Vector3.zero;
             closestPointLine2 = Vector3.zero;
@@ -184,7 +185,7 @@ namespace XFramework.Mathematics
         /// <param name="linePoint2"></param>
         /// <param name="lineVec2"></param>
         /// <returns></returns>
-        public static bool ClosestPointsOnTwoLines(out float s, out float t, Vector3 linePoint1, Vector3 lineVec1, Vector3 linePoint2, Vector3 lineVec2)
+        public static bool ClosestPointsOnTwoLines(Vector3 linePoint1, Vector3 lineVec1, Vector3 linePoint2, Vector3 lineVec2, out float s, out float t)
         {
             t = (s = 0f);
             float num = Vector3.Dot(lineVec1, lineVec1);
@@ -215,7 +216,7 @@ namespace XFramework.Mathematics
         /// <param name="segmentPoint1"></param>
         /// <param name="segmentPoint2"></param>
         /// <returns></returns>
-        public static bool ClosestPointsOnLineSegment(out Vector3 closestPointLine, out Vector3 closestPointSegment, out float lineT, out float segmentT, Vector3 linePoint, Vector3 lineVec, Vector3 segmentPoint1, Vector3 segmentPoint2)
+        public static bool ClosestPointsOnLineSegment(Vector3 linePoint, Vector3 lineVec, Vector3 segmentPoint1, Vector3 segmentPoint2, out Vector3 closestPointLine, out Vector3 closestPointSegment, out float lineT, out float segmentT)
         {
             Vector3 vector = segmentPoint2 - segmentPoint1;
             closestPointLine = Vector3.zero;
@@ -325,14 +326,6 @@ namespace XFramework.Mathematics
             return Vector3.Dot(lhs, vectorB);
         }
 
-        // Token: 0x060019FC RID: 6652 RVA: 0x000BA4C4 File Offset: 0x000B86C4
-        public static float SignedVectorAngle(Vector3 referenceVector, Vector3 otherVector, Vector3 normal)
-        {
-            Vector3 lhs = Vector3.Cross(normal, referenceVector);
-            float num = Vector3.Angle(referenceVector, otherVector);
-            return num * Mathf.Sign(Vector3.Dot(lhs, otherVector));
-        }
-
         /// <summary>
         /// 一个向量和平面的夹角
         /// </summary>
@@ -372,36 +365,40 @@ namespace XFramework.Mathematics
         /// </summary>
         public static Face PlaneFrom3Points(Vector3 pointA, Vector3 pointB, Vector3 pointC)
         {
-            Vector3 planeNormal = Vector3.zero;
-            Vector3 planePoint = Vector3.zero;
             Vector3 vector = pointB - pointA;
             Vector3 vector2 = pointC - pointA;
-            planeNormal = Vector3.Normalize(Vector3.Cross(vector, vector2));
+            Vector3 planeNormal = Vector3.Normalize(Vector3.Cross(vector, vector2));
             Vector3 vector3 = pointA + vector / 2f;
             Vector3 vector4 = pointA + vector2 / 2f;
             Vector3 lineVec = pointC - vector3;
             Vector3 lineVec2 = pointB - vector4;
-            Vector3 vector5;
-            Math3d.ClosestPointsOnTwoLines(out planePoint, out vector5, vector3, lineVec, vector4, lineVec2);
+            Math3d.ClosestPointsOnTwoLines(vector3, lineVec, vector4, lineVec2, out Vector3 planePoint, out Vector3 vector5);
             return new Face(planePoint, planeNormal);
         }
 
-        // Token: 0x06001A00 RID: 6656 RVA: 0x000BA5FC File Offset: 0x000B87FC
+        /// <summary>
+        /// 获取一个四元数对应的方向
+        /// </summary>
+        /// <param name="q"></param>
+        /// <returns></returns>
         public static Vector3 GetForwardVector(Quaternion q)
         {
             return q * Vector3.forward;
         }
 
-        // Token: 0x06001A01 RID: 6657 RVA: 0x000BA60C File Offset: 0x000B880C
         public static Vector3 GetUpVector(Quaternion q)
         {
             return q * Vector3.up;
         }
 
-        // Token: 0x06001A02 RID: 6658 RVA: 0x000BA61C File Offset: 0x000B881C
         public static Vector3 GetRightVector(Quaternion q)
         {
             return q * Vector3.right;
+        }
+
+        public static Vector3 GetLeftVector(Quaternion q)
+        {
+            return q * Vector3.left;
         }
 
         /// <summary>
@@ -443,30 +440,23 @@ namespace XFramework.Mathematics
             gameObjectInOut.transform.Translate(translation, Space.World);
         }
 
-        // Token: 0x06001A07 RID: 6663 RVA: 0x000BA700 File Offset: 0x000B8900
-        private static void VectorsToTransform(ref GameObject gameObjectInOut, Vector3 positionVector, Vector3 directionVector, Vector3 normalVector)
-        {
-            gameObjectInOut.transform.position = positionVector;
-            gameObjectInOut.transform.rotation = Quaternion.LookRotation(directionVector, normalVector);
-        }
-
         /// <summary>
         /// 判断一个点在一个线段的哪一边
         /// </summary>
-        /// <param name="linePoint1"></param>
-        /// <param name="linePoint2"></param>
-        /// <param name="point"></param>
-        /// <returns></returns>
+        /// <param name="linePoint1">线段起点</param>
+        /// <param name="linePoint2">线段终点</param>
+        /// <param name="point">点</param>
+        /// <returns>0：线段两点之间， 1：线段外，更靠近p1，2：线段外，更靠近p2</returns>
         public static int PointOnWhichSideOfLineSegment(Vector3 linePoint1, Vector3 linePoint2, Vector3 point)
         {
-            Vector3 rhs = linePoint2 - linePoint1;
+            Vector3 lineDir = linePoint2 - linePoint1;
             Vector3 lhs = point - linePoint1;
-            float num = Vector3.Dot(lhs, rhs);
+            float num = Vector3.Dot(lhs, lineDir);
             if (num <= 0f)
             {
                 return 1;
             }
-            if (lhs.magnitude <= rhs.magnitude)
+            if (lhs.magnitude <= lineDir.magnitude)
             {
                 return 0;
             }
@@ -549,9 +539,7 @@ namespace XFramework.Mathematics
         {
             Vector3 vector = pointA2 - pointA1;
             Vector3 vector2 = pointB2 - pointB1;
-            Vector3 point;
-            Vector3 point2;
-            bool flag = Math3d.ClosestPointsOnTwoLines(out point, out point2, pointA1, vector.normalized, pointB1, vector2.normalized);
+            bool flag = Math3d.ClosestPointsOnTwoLines(pointA1, vector.normalized, pointB1, vector2.normalized, out Vector3 point, out Vector3 point2);
             if (flag)
             {
                 int num = Math3d.PointOnWhichSideOfLineSegment(pointA1, pointA2, point);
@@ -565,7 +553,7 @@ namespace XFramework.Mathematics
     /// <summary>
     /// 表示一个平面
     /// </summary>
-    public class Face
+    public struct Face
     {
         public Vector3 point;   // 平面上一点
         public Vector3 normal;  // 平面的法线 
@@ -577,18 +565,18 @@ namespace XFramework.Mathematics
         }
     }
 
-    public class Line
+    public struct Line
     {
         public Vector3 point;   // 直线上一点
-        public Vector3 vec;     // 直线的方向
+        public Vector3 direction;     // 直线的方向
 
         public Line(Vector3 startPoint, Vector3 endPointOrVec, CreatType creatType = CreatType.TwoPoint)
         {
             point = startPoint;
             if (creatType == CreatType.TwoPoint)
-                vec = endPointOrVec - startPoint;
+                direction = endPointOrVec - startPoint;
             else
-                vec = endPointOrVec;
+                direction = endPointOrVec;
         }
 
         public enum CreatType
@@ -598,11 +586,10 @@ namespace XFramework.Mathematics
         }
     }
 
-
     /// <summary>
     /// 坐标系
     /// </summary>
-    public class GameCoordinate
+    public struct GameCoordinate
     {
         /// <summary>
         /// 坐标原点在世界中的位置
