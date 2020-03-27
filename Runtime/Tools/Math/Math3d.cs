@@ -9,25 +9,7 @@ namespace XFramework.Mathematics
     /// </summary>
     public static class Math3d
     {
-        /// <summary>
-        /// 给vector的长度加上size
-        /// </summary>
-        public static Vector3 AddVectorLength(Vector3 vector, float size)
-        {
-            float num = Vector3.Magnitude(vector);
-            num += size;
-            Vector3 a = Vector3.Normalize(vector);
-            return Vector3.Scale(a, new Vector3(num, num, num));
-        }
-
-        /// <summary>
-        /// 将vector的长度设为size
-        /// </summary>
-        public static Vector3 SetVectorLength(Vector3 vector, float size)
-        {
-            Vector3 a = Vector3.Normalize(vector);
-            return a * size;
-        }
+        #region 点线面关系
 
         /// <summary>
         /// 两个面是否相交
@@ -377,70 +359,6 @@ namespace XFramework.Mathematics
         }
 
         /// <summary>
-        /// 获取一个四元数对应的方向
-        /// </summary>
-        /// <param name="q"></param>
-        /// <returns></returns>
-        public static Vector3 GetForwardVector(Quaternion q)
-        {
-            return q * Vector3.forward;
-        }
-
-        public static Vector3 GetUpVector(Quaternion q)
-        {
-            return q * Vector3.up;
-        }
-
-        public static Vector3 GetRightVector(Quaternion q)
-        {
-            return q * Vector3.right;
-        }
-
-        public static Vector3 GetLeftVector(Quaternion q)
-        {
-            return q * Vector3.left;
-        }
-
-        /// <summary>
-        /// 通过矩阵获取一个四元数
-        /// </summary>
-        /// <param name="m"></param>
-        /// <returns></returns>
-        public static Quaternion QuaternionFromMatrix(Matrix4x4 m)
-        {
-            // GetColum是从矩阵中取出第i行构造一个Vector4
-            return Quaternion.LookRotation(m.GetColumn(2), m.GetColumn(1));
-        }
-
-        /// <summary>
-        /// 通过矩阵获取一个位置
-        /// </summary>
-        /// <param name="m"></param>
-        /// <returns></returns>
-        public static Vector3 PositionFromMatrix(Matrix4x4 m)
-        {
-            Vector4 column = m.GetColumn(3);
-            return new Vector3(column.x, column.y, column.z);
-        }
-
-        // Token: 0x06001A05 RID: 6661 RVA: 0x000BA688 File Offset: 0x000B8888
-        public static void LookRotationExtended(ref GameObject gameObjectInOut, Vector3 alignWithVector, Vector3 alignWithNormal, Vector3 customForward, Vector3 customUp)
-        {
-            Quaternion lhs = Quaternion.LookRotation(alignWithVector, alignWithNormal);
-            Quaternion rotation = Quaternion.LookRotation(customForward, customUp);
-            gameObjectInOut.transform.rotation = lhs * Quaternion.Inverse(rotation);
-        }
-
-        // Token: 0x06001A06 RID: 6662 RVA: 0x000BA6C0 File Offset: 0x000B88C0
-        public static void PreciseAlign(ref GameObject gameObjectInOut, Vector3 alignWithVector, Vector3 alignWithNormal, Vector3 alignWithPosition, Vector3 triangleForward, Vector3 triangleNormal, Vector3 trianglePosition)
-        {
-            Math3d.LookRotationExtended(ref gameObjectInOut, alignWithVector, alignWithNormal, triangleForward, triangleNormal);
-            Vector3 b = gameObjectInOut.transform.TransformPoint(trianglePosition);
-            Vector3 translation = alignWithPosition - b;
-            gameObjectInOut.transform.Translate(translation, Space.World);
-        }
-
-        /// <summary>
         /// 判断一个点在一个线段的哪一边
         /// </summary>
         /// <param name="linePoint1">线段起点</param>
@@ -548,7 +466,110 @@ namespace XFramework.Mathematics
             }
             return false;
         }
+
+        /// <summary>
+        /// 求入射方向的反射方向
+        /// </summary>
+        /// <param name="v1">入射方向</param>
+        /// <param name="n">法向量</param>
+        /// <returns>反射方向</returns>
+        public static Vector3 GetReflectedDir(Vector3 v1, Vector3 n)
+        {
+            return v1 - 2 * Vector3.Dot(v1, n) * n;
+        }
+
+        #endregion
+
+        #region 方向,旋转相关
+
+        /// <summary>
+        /// 给vector的长度加上size
+        /// </summary>
+        public static Vector3 AddVectorLength(Vector3 vector, float size)
+        {
+            float num = Vector3.Magnitude(vector);
+            num += size;
+            Vector3 a = Vector3.Normalize(vector);
+            return Vector3.Scale(a, new Vector3(num, num, num));
+        }
+
+        /// <summary>
+        /// 将vector的长度设为size
+        /// </summary>
+        public static Vector3 SetVectorLength(Vector3 vector, float size)
+        {
+            Vector3 a = Vector3.Normalize(vector);
+            return a * size;
+        }
+
+        /// <summary>
+        /// 获取一个四元数对应的方向
+        /// </summary>
+        /// <param name="q"></param>
+        /// <returns></returns>
+        public static Vector3 GetForwardVector(Quaternion q)
+        {
+            return q * Vector3.forward;
+        }
+
+        public static Vector3 GetUpVector(Quaternion q)
+        {
+            return q * Vector3.up;
+        }
+
+        public static Vector3 GetRightVector(Quaternion q)
+        {
+            return q * Vector3.right;
+        }
+
+        public static Vector3 GetLeftVector(Quaternion q)
+        {
+            return q * Vector3.left;
+        }
+
+        /// <summary>
+        /// 通过矩阵获取一个四元数
+        /// </summary>
+        /// <param name="m"></param>
+        /// <returns></returns>
+        public static Quaternion QuaternionFromMatrix(Matrix4x4 m)
+        {
+            // GetColum是从矩阵中取出第i行构造一个Vector4
+            return Quaternion.LookRotation(m.GetColumn(2), m.GetColumn(1));
+        }
+
+        /// <summary>
+        /// 通过矩阵获取一个位置
+        /// </summary>
+        /// <param name="m"></param>
+        /// <returns></returns>
+        public static Vector3 PositionFromMatrix(Matrix4x4 m)
+        {
+            Vector4 column = m.GetColumn(3);
+            return new Vector3(column.x, column.y, column.z);
+        }
+
+        // Token: 0x06001A05 RID: 6661 RVA: 0x000BA688 File Offset: 0x000B8888
+        public static void LookRotationExtended(ref GameObject gameObjectInOut, Vector3 alignWithVector, Vector3 alignWithNormal, Vector3 customForward, Vector3 customUp)
+        {
+            Quaternion lhs = Quaternion.LookRotation(alignWithVector, alignWithNormal);
+            Quaternion rotation = Quaternion.LookRotation(customForward, customUp);
+            gameObjectInOut.transform.rotation = lhs * Quaternion.Inverse(rotation);
+        }
+
+        // Token: 0x06001A06 RID: 6662 RVA: 0x000BA6C0 File Offset: 0x000B88C0
+        public static void PreciseAlign(ref GameObject gameObjectInOut, Vector3 alignWithVector, Vector3 alignWithNormal, Vector3 alignWithPosition, Vector3 triangleForward, Vector3 triangleNormal, Vector3 trianglePosition)
+        {
+            Math3d.LookRotationExtended(ref gameObjectInOut, alignWithVector, alignWithNormal, triangleForward, triangleNormal);
+            Vector3 b = gameObjectInOut.transform.TransformPoint(trianglePosition);
+            Vector3 translation = alignWithPosition - b;
+            gameObjectInOut.transform.Translate(translation, Space.World);
+        }
+
+        #endregion
     }
+
+    #region Other Class
 
     /// <summary>
     /// 表示一个平面
@@ -585,6 +606,8 @@ namespace XFramework.Mathematics
             TwoPoint,
         }
     }
+
+    #endregion
 
     /// <summary>
     /// 坐标系
