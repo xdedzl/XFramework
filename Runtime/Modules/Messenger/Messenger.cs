@@ -230,7 +230,8 @@ namespace XFramework.Event
         /// <typeparam name="T">参数一类型</typeparam>
         /// <typeparam name="U">参数二类型</typeparam>
         /// <param name="eventType">事件类型</param>
-        /// <param name="arg1">参数</param>
+        /// <param name="arg1">参数1</param>
+        /// <param name="arg2">参数2</param>
         public void BroadCast<T, U>(Enum eventType, T arg1, U arg2)
         {
             int id = Convert.ToInt32(eventType);
@@ -255,7 +256,9 @@ namespace XFramework.Event
         /// <typeparam name="U">参数二类型</typeparam>
         /// <typeparam name="V">参数三类型</typeparam>
         /// <param name="eventType">事件类型</param>
-        /// <param name="arg1">参数</param>
+        /// <param name="arg1">参数1</param>
+        /// <param name="arg2">参数2</param>
+        /// <param name="arg3">参数3</param>
         public void BroadCast<T, U, V>(Enum eventType, T arg1, U arg2, V arg3)
         {
             int id = Convert.ToInt32(eventType);

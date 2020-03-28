@@ -17,7 +17,13 @@ namespace XFramework.Fsm
         /// </summary>
         protected Dictionary<string, FsmState> m_StateDic;
 
+        /// <summary>
+        /// 是否处于激活状态
+        /// </summary>
         public bool IsActive { get { return m_IsActive; } }
+        /// <summary>
+        /// 当前状态
+        /// </summary>
         public FsmState CurrentState { get { return m_CurrentState; } }
 
         public Fsm()
@@ -26,6 +32,9 @@ namespace XFramework.Fsm
             m_IsActive = false;
         }
 
+        /// <summary>
+        /// 每帧运行
+        /// </summary>
         public virtual void OnUpdate()
         {
             if (CurrentState != null)
@@ -37,8 +46,8 @@ namespace XFramework.Fsm
         /// <summary>
         /// 获取一个状态
         /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <returns></returns>
+        /// <typeparam name="T">状态类型</typeparam>
+        /// <returns>状态</returns>
         protected FsmState GetState<T>()
         {
             return GetState(typeof(T));
@@ -48,6 +57,7 @@ namespace XFramework.Fsm
         /// 获取一个状态
         /// </summary>
         /// <typeparam name="T">状态类型</typeparam>
+        /// <returns>状态</returns>
         protected FsmState GetState(Type type)
         {
             m_StateDic.TryGetValue(type.Name, out FsmState state);
@@ -64,6 +74,8 @@ namespace XFramework.Fsm
         /// <summary>
         /// 创建一个状态
         /// </summary>
+        /// <typeparam name="T">状态类型</typeparam>
+        /// <returns>状态</returns>
         protected FsmState CreateState<T>()
         {
             return CreateState(typeof(T));
@@ -87,6 +99,7 @@ namespace XFramework.Fsm
         /// <summary>
         /// 获取当前状态
         /// </summary>
+        /// <returns>状态</returns>
         public FsmState GetCurrentState()
         {
             return CurrentState;
@@ -103,6 +116,8 @@ namespace XFramework.Fsm
         /// <summary>
         /// 开启状态机
         /// </summary>
+        /// <param name="type">状态类型</param>
+        /// <param name="parms">启动参数</param>
         private void StartFsm(Type type, params object[] parms)
         {
             if (!IsActive)
@@ -116,7 +131,8 @@ namespace XFramework.Fsm
         /// <summary>
         /// 状态切换
         /// </summary>
-        /// <typeparam name="KState">目标状态</typeparam>
+        /// <typeparam name="KState">状态类型</typeparam>
+        /// <param name="parms">启动参数</param>
         public void ChangeState<KState>(params object[] parms) where KState : FsmState
         {
             ChangeState(typeof(KState), parms);
@@ -125,7 +141,8 @@ namespace XFramework.Fsm
         /// <summary>
         /// 状态切换
         /// </summary>
-        /// <param name="type">目标状态</param>
+        /// <param name="type">状态类型</param>
+        /// <param name="parms">启动参数</param>
         public void ChangeState(Type type, params object[] parms)
         {
             if (IsActive)

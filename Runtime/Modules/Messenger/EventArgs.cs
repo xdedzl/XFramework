@@ -7,8 +7,14 @@ namespace XFramework.Event
     /// </summary>
     public class EventArgs
     {
-        public object[] data;                    // 事件参数
-        public int eventType;      // 事件类型
+        /// <summary>
+        /// 事件参数
+        /// </summary>
+        public object[] data;
+        /// <summary>
+        /// 事件类型
+        /// </summary>
+        public int eventType;
 
         public EventArgs(Enum eventType, params object[] data)
         {

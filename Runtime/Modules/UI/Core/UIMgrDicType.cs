@@ -81,6 +81,7 @@ namespace XFramework.UI
             }
 
             panel.OnOpen(args);
+            panel.OpenSubPanels();
         }
 
         /// <summary>
@@ -92,6 +93,7 @@ namespace XFramework.UI
             if (m_OnDisplayPanelDic.ContainsKey(panel.Level) && m_OnDisplayPanelDic[panel.Level].Contains(panel))
             {
                 panel.OnClose();
+                panel.CloseSubPanels();
                 m_OnDisplayPanelDic[panel.Level].Remove(panel);
             }
 
@@ -103,6 +105,8 @@ namespace XFramework.UI
                 if (temp.Count > 0)
                 {
                     temp.End().OnClose();
+                    temp.End().CloseSubPanels();
+
                     temp.RemoveAt(temp.Count - 1);
                 }
                 else
@@ -160,7 +164,7 @@ namespace XFramework.UI
                     rect.sizeDelta = CanvasTransform.GetComponent<UnityEngine.UI.CanvasScaler>().referenceResolution;
                     rect.anchorMin = Vector2.zero;
                     rect.anchorMax = Vector3.one;
-                    rect.anchoredPosition = Vector2.zero;
+                    rect.anchoredPosition3D = Vector3.zero;
                     rect.sizeDelta = Vector2.zero;
                     rect.localScale = Vector3.one;
                     uiGroup = rect;
@@ -182,6 +186,7 @@ namespace XFramework.UI
                     level = item;
             }
             m_OnDisplayPanelDic[level].End().OnClose();
+            m_OnDisplayPanelDic[level].End().CloseSubPanels();
             m_OnDisplayPanelDic.Remove(level);
         }
 
@@ -193,6 +198,7 @@ namespace XFramework.UI
             foreach (var item in m_OnDisplayPanelDic[level])
             {
                 item.OnClose();
+                item.CloseSubPanels();
             }
         }
 

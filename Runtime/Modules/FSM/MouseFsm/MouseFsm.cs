@@ -27,6 +27,9 @@ namespace XFramework.Fsm
         /// </summary>
         public bool MouseMove { get; private set; }
 
+        /// <summary>
+        /// 每帧调用
+        /// </summary>
         public override void OnUpdate()
         {
             //处理鼠标事件 当点击UI面板时不处理

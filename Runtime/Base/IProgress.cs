@@ -5,17 +5,34 @@
     /// </summary>
     public interface IProgress
     {
+        /// <summary>
+        /// 是否完成
+        /// </summary>
         bool IsDone { get; }
+        /// <summary>
+        /// 当前进度
+        /// </summary>
         float Progress { get; }
     }
 
+    /// <summary>
+    /// 默认直接完成的进度
+    /// </summary>
     public class DefaultProgress : IProgress
     {
+        /// <summary>
+        /// 是否完成 （恒为true）
+        /// </summary>
         public bool IsDone => true;
-
+        /// <summary>
+        /// 当前进度（恒为1）
+        /// </summary>
         public float Progress => 1;
     }
 
+    /// <summary>
+    /// 包含多个子任务的进度
+    /// </summary>
     public class MultiProgress : IProgress
     {
         private IProgress[] progresses;
@@ -25,6 +42,9 @@
             this.progresses = progresses;
         }
 
+        /// <summary>
+        /// 是否完成
+        /// </summary>
         public bool IsDone
         {
             get
@@ -40,6 +60,9 @@
             }
         }
 
+        /// <summary>
+        /// 当前进度
+        /// </summary>
         public float Progress
         {
             get
@@ -54,6 +77,9 @@
         }
     }
 
+    /// <summary>
+    /// 执行时可以添加子任务的进度
+    /// </summary>
     public class DynamicMultiProgress : IProgress
     {
         private int index = 0;
@@ -80,12 +106,19 @@
             this.ratios = ratios;
         }
 
+        /// <summary>
+        /// 添加一个子任务
+        /// </summary>
+        /// <param name="progress">子任务进度</param>
         public void Add(IProgress progress)
         {
             progresses[index] = progress;
             index++;
         }
 
+        /// <summary>
+        /// 是否完成
+        /// </summary>
         public bool IsDone
         {
             get
@@ -101,6 +134,9 @@
             }
         }
 
+        /// <summary>
+        /// 当前进度
+        /// </summary>
         public float Progress
         {
             get

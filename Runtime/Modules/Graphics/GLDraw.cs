@@ -13,6 +13,9 @@ namespace XFramework.Draw
         /// <summary>
         /// 创建一个轴的箭头网格
         /// </summary>
+        /// <param name="color">颜色</param>
+        /// <param name="scale">大小</param>
+        /// <returns>箭头网格</returns>
         public static Mesh CreateArrow(Color color, float scale)
         {
             int segmentsCount = 12;  // 侧面三角形数量
@@ -70,14 +73,28 @@ namespace XFramework.Draw
 
             return cone;
         }
+
+        /// <summary>
+        /// 创建一个箭头网格
+        /// </summary>
+        /// <param name="scale">大小</param>
+        /// <param name="colorInt">颜色</param>
+        /// <returns>箭头网格</returns>
         public static Mesh CreateArrow(float scale, int colorInt = ColorInt32.white)
         {
             return CreateArrow(colorInt.Color(), scale);
         }
 
         /// <summary>
-        /// 创建一个方块网格 
+        /// 创建一个立方体网格
         /// </summary>
+        /// <param name="color">颜色</param>
+        /// <param name="center">中心位置</param>
+        /// <param name="scale">大小</param>
+        /// <param name="cubeLength">长</param>
+        /// <param name="cubeWidth">宽</param>
+        /// <param name="cubeHeight">高</param>
+        /// <returns>立方体网格</returns>
         public static Mesh CreateCube(Color color, Vector3 center, float scale, float cubeLength = 1, float cubeWidth = 1, float cubeHeight = 1)
         {
             cubeHeight *= scale;
@@ -144,17 +161,29 @@ namespace XFramework.Draw
             cubeMesh.RecalculateNormals();
             return cubeMesh;
         }
+
+        /// <summary>
+        /// 创建一个立方体网格
+        /// </summary>
+        /// <param name="center">中心位置</param>
+        /// <param name="scale">大小</param>
+        /// <param name="cubeLength">长</param>
+        /// <param name="cubeWidth">宽</param>
+        /// <param name="cubeHeight">高</param>
+        /// <param name="colorInt">颜色</param>
+        /// <returns>立方体网格</returns>
         public static Mesh CreateCube(Vector3 center, float scale, float cubeLength = 1, float cubeWidth = 1, float cubeHeight = 1, int colorInt = ColorInt32.white)
         {
             return CreateCube(colorInt.Color(), center, scale, cubeLength, cubeWidth, cubeHeight);
         }
 
         /// <summary>
-        /// 返回一个球的网格
+        /// 创造一个球的网格
         /// </summary>
-        /// <param name="subdivisions"></param>
-        /// <param name="radius"></param>
-        /// <returns></returns>
+        /// <param name="subdivisions">细分层级</param>
+        /// <param name="radius">半径</param>
+        /// <param name="colorInt">颜色</param>
+        /// <returns>球形网格</returns>
         public static Mesh CreateSphere(int subdivisions = 0, float radius = 1, int colorInt = ColorInt32.white)
         {
             Vector3[] directions = {
@@ -376,8 +405,13 @@ namespace XFramework.Draw
         }
 
         /// <summary>
-        /// 圆柱
+        /// 创建一个圆柱网格
         /// </summary>
+        /// <param name="buttomOrigin">底部中心坐标</param>
+        /// <param name="radius">班级</param>
+        /// <param name="height">高</param>
+        /// <param name="colorInt">颜色</param>
+        /// <returns>圆柱网格</returns>
         public static Mesh CreateCylinder(Vector3 buttomOrigin, float radius, float height, int colorInt = ColorInt32.white)
         {
             Vector3[] buttomSurface = PhysicsMath.GetCirclePoints(buttomOrigin, radius);

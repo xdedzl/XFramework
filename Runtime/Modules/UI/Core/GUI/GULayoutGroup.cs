@@ -57,11 +57,6 @@ namespace XFramework.UI
             return obj;
         }
 
-        public GameObject AddEntity(int index)
-        {
-            return null;
-        }
-
         /// <summary>
         /// 移除实体
         /// </summary>
@@ -69,6 +64,10 @@ namespace XFramework.UI
         {
             onEntityRecycle.Invoke(gameObject);
             m_EntityPool.Push(gameObject);
+
+            if(m_PoolParnet == null)
+                m_PoolParnet = new GameObject(name + "_Pool").transform;
+
             gameObject.transform.SetParent(m_PoolParnet);
         }
 
@@ -149,8 +148,7 @@ namespace XFramework.UI
         public void SetEntity(GameObject template)
         {
             m_EntityTemplate = template;
-            m_EntityTemplate.transform.position = Vector3.up * 100000;
-            m_PoolParnet = new GameObject("Layout" + template.name).transform;
+            m_EntityTemplate.transform.position = Vector3.up * 5000;
         }
 
         public class EntityEvent : UnityEvent<GameObject> { }

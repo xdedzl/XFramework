@@ -4,6 +4,9 @@ namespace XFramework
 {
     public partial class Utility
     {
+        /// <summary>
+        /// UI相关工具
+        /// </summary>
         public class UI
         {
             /// <summary>
