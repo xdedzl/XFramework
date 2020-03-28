@@ -7,6 +7,9 @@ namespace XFramework.Entity
     /// </summary>
     public abstract class Entity : MonoBehaviour, IEntity
     {
+        /// <summary>
+        /// 实体编号
+        /// </summary>
         public int Id { get; internal set; }
 
         /// <summary>
@@ -34,7 +37,7 @@ namespace XFramework.Entity
         /// <summary>
         /// 移除子实体
         /// </summary>
-        /// <param name="parentEntity">子实体</param>
+        /// <param name="childEntity">子实体</param>
         public virtual void OnDetached(Entity childEntity) { }
         /// <summary>
         /// 附加到别的实体上
@@ -49,6 +52,8 @@ namespace XFramework.Entity
         /// <summary>
         /// 轮询
         /// </summary>
+        /// <param name="elapseSeconds">逻辑运行时间</param>
+        /// <param name="realElapseSeconds">真实运行时间</param>
         public virtual void OnUpdate(float elapseSeconds, float realElapseSeconds) { }
 
         /// <summary>

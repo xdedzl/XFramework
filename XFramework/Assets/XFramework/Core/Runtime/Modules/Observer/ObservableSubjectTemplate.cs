@@ -1,10 +1,10 @@
 using System;
 
-///<summary>
-///观察主题模板 任何数据类都可以成为主题
-///<summary>
 namespace XFramework.Event
 {
+    ///<summary>
+    ///观察主题模板 任何数据类都可以成为主题
+    ///<summary>
     public abstract class ObservableSubjectTemplate<T1, T2, T3>
     {
         protected event Action<T1, T2, T3> m_delegate;
@@ -23,7 +23,6 @@ namespace XFramework.Event
         /// <summary>
         /// 移除
         /// </summary>
-        /// <param name="observer"></param>
         public void Detach(Action<T1, T2, T3> call)
         {
             m_delegate = (Action<T1, T2, T3>)Delegate.Remove(m_delegate, call);

@@ -66,10 +66,10 @@ namespace XFramework.Entity
             /// <summary>
             /// 实体实例化及初始化
             /// </summary>
-            /// <param name="id">唯一标识符</param>
             /// <param name="pos">位置</param>
             /// <param name="quaternion">朝向</param>
-            /// <returns></returns>
+            /// <param name="parent">父物体</param>
+            /// <returns>实体</returns>
             private Entity Instantiate(Vector3 pos, Quaternion quaternion, Transform parent)
             {
                 GameObject gameObject = GameObject.Instantiate(m_Template, pos, quaternion, parent);
@@ -84,9 +84,12 @@ namespace XFramework.Entity
             /// <summary>
             /// 实例化物体
             /// </summary>
+            /// <param name="id">实体编号</param>
             /// <param name="pos">位置</param>
             /// <param name="quaternion">角度</param>
-            /// <returns></returns>
+            /// <param name="entityData">实体数据</param>
+            /// <param name="parent">父物体</param>
+            /// <returns>实体</returns>
             internal Entity Allocate(int id, Vector3 pos, Quaternion quaternion, EntityData entityData, Transform parent)
             {
                 Entity entity;
@@ -136,7 +139,6 @@ namespace XFramework.Entity
             /// 清理实体池
             /// </summary>
             /// <param name="count">清理后实体池的最大数量</param>
-            /// <param name="callBack"></param>
             internal void Clean(int count)
             {
                 while (count < m_Pool.Count)

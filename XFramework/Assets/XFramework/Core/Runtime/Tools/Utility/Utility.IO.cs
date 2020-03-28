@@ -12,8 +12,14 @@ namespace XFramework
         KeepOld,
     }
 
+    /// <summary>
+    /// 实用工具方法类
+    /// </summary>
     public static partial class Utility
     {
+        /// <summary>
+        /// IO相关工具方法类
+        /// </summary>
         public static class IO
         {
             #region 序列化相关

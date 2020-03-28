@@ -3,6 +3,9 @@ using System.Collections.Generic;
 
 namespace XFramework
 {
+    /// <summary>
+    /// 框架入口类
+    /// </summary>
     public static class GameEntry
     {
         private static LinkedList<IGameModule> m_GameModules = new LinkedList<IGameModule>();
@@ -90,8 +93,9 @@ namespace XFramework
         /// <summary>
         /// 创建一个模块
         /// </summary>
-        /// <param name="moduleType"></param>
-        /// <returns></returns>
+        /// <param name="moduleType">模块类型</param>
+        /// <param name="args">模块启动参数</param>
+        /// <returns>模块</returns>
         private static IGameModule CreateModule(Type moduleType, params object[] args)
         {
             IGameModule module = (IGameModule)Activator.CreateInstance(moduleType, args);

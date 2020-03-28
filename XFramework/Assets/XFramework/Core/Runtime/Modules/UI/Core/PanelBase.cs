@@ -52,8 +52,11 @@ namespace XFramework.UI
         {
             gameObject.SetActive(true);
             transform.SetAsLastSibling();
+        }
 
-            if(m_SubPanels != null)
+        internal void OpenSubPanels()
+        {
+            if (m_SubPanels != null)
             {
                 foreach (var item in m_SubPanels)
                 {
@@ -92,7 +95,10 @@ namespace XFramework.UI
         public virtual void OnClose()
         {
             gameObject.SetActive(false);
+        }
 
+        internal void CloseSubPanels()
+        {
             if (m_SubPanels != null)
             {
                 foreach (var item in m_SubPanels)

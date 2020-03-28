@@ -15,18 +15,25 @@ namespace XFramework.Fsm
         /// 状态机是否激活
         /// </summary>
         bool IsActive { get; }
-
         /// <summary>
         /// 每帧调用
         /// </summary>
         void OnUpdate();
-
         /// <summary>
         /// 状态切换
         /// </summary>
+        /// <typeparam name="T">状态类型</typeparam>
+        /// <param name="parms">启动参数</param>
         void ChangeState<T>(params object[] parms) where T : FsmState;
+        /// <summary>
+        /// 状态切换
+        /// </summary>
+        /// <param name="type">状态类型</param>
+        /// <param name="parms">启动参数</param>
         void ChangeState(Type type, params object[] parms);
-
+        /// <summary>
+        /// 状态机销毁
+        /// </summary>
         void OnDestroy();
     }
 }

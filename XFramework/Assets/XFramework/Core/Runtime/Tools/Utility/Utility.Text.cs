@@ -2,6 +2,9 @@
 {
     public static partial class Utility
     {
+        /// <summary>
+        /// 文本相关工具
+        /// </summary>
         public static class Text
         {
             /// <summary>

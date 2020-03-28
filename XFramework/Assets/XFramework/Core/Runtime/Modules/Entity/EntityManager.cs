@@ -83,13 +83,16 @@ namespace XFramework.Entity
             }
         }
 
+
         /// <summary>
         /// 分配实体
         /// </summary>
         /// <typeparam name="T">实体子类型</typeparam>
+        /// <param name="id">实体编号</param>
         /// <param name="pos">位置</param>
         /// <param name="quaternion">朝向</param>
-        /// <returns></returns>
+        /// <param name="parent">实体父物体</param>
+        /// <returns>实体</returns>
         public T Allocate<T>(int id, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
             return Allocate(id, typeof(T).Name, null, pos, quaternion, parent) as T;
@@ -99,9 +102,11 @@ namespace XFramework.Entity
         /// 分配实体
         /// </summary>
         /// <typeparam name="T">实体子类型</typeparam>
+        /// <param name="id">实体编号</param>
         /// <param name="entityData">实体数据</param>
         /// <param name="pos">位置</param>
         /// <param name="quaternion">朝向</param>
+        /// <param name="parent">实体父物体</param>
         /// <returns>实体</returns>
         public T Allocate<T>(int id, EntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
@@ -112,6 +117,14 @@ namespace XFramework.Entity
         /// <summary>
         /// 分配实体
         /// </summary>
+        /// <typeparam name="T">实体子类型</typeparam>
+        /// <param name="id">实体编号</param>
+        /// <param name="key">键值</param>
+        /// <param name="entityData">实体数据</param>
+        /// <param name="pos">位置</param>
+        /// <param name="quaternion">朝向</param>
+        /// <param name="parent">实体父物体</param>
+        /// <returns>实体</returns>
         public T Allocate<T>(int id, string key, EntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
             return Allocate(id, key, entityData, pos, quaternion, parent) as T;
@@ -120,9 +133,11 @@ namespace XFramework.Entity
         /// <summary>
         /// 分配实体
         /// </summary>
+        /// <param name="id">实体编号</param>
         /// <param name="key">键值</param>
         /// <param name="pos">位置</param>
         /// <param name="quaternion">朝向</param>
+        /// <param name="parent">实体父物体</param>
         /// <returns>实体</returns>
         public Entity Allocate(int id, string key, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null)
         {
@@ -132,11 +147,12 @@ namespace XFramework.Entity
         /// <summary>
         /// 分配实体
         /// </summary>
-        /// <param name="key">键值</param>
         /// <param name="id">实体Id</param>
-        /// <param name="entityData">实体信息</param>
+        /// <param name="key">键值</param>
+        /// <param name="entityData">实体数据</param>
         /// <param name="pos">位置</param>
         /// <param name="quaternion">角度</param>
+        /// <param name="parent">实体父物体</param>
         /// <returns></returns>
         public Entity Allocate(int id, string key, EntityData entityData, Vector3 pos, Quaternion quaternion, Transform parent)
         {
@@ -215,8 +231,7 @@ namespace XFramework.Entity
         /// <summary>
         /// 移除实体，将child从它的父物体上移除
         /// </summary>
-        /// <param name="child"></param>
-        /// <param name="parent"></param>
+        /// <param name="child">子实体</param>
         public void Detach(Entity child)
         {
             EntityInfo childInfo = GetEntityInfo(child);
@@ -232,7 +247,7 @@ namespace XFramework.Entity
         /// <summary>
         /// 移除父实体上的所有子实体
         /// </summary>
-        /// <param name="parent"></param>
+        /// <param name="parent">父实体</param>
         public void DetachChilds(Entity parent)
         {
             EntityInfo parentInfo = GetEntityInfo(parent);
@@ -363,7 +378,7 @@ namespace XFramework.Entity
         /// <summary>
         /// 获取一个实体的父实体
         /// </summary>
-        /// <param name="entityId">子实体</param>
+        /// <param name="entity">子实体</param>
         /// <returns>父实体</returns>
         public Entity GetParentEntity(Entity entity)
         {

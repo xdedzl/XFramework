@@ -5,6 +5,9 @@ using System.Reflection;
 
 namespace XFramework.Editor
 {
+    /// <summary>
+    /// 编辑器工具方法
+    /// </summary>
     public static class XEditorUtility
     {
         public static void SerializableObj(object obj)
