@@ -6,6 +6,7 @@ namespace XFramework.Resource
 {
     /// <summary>
     /// 资源管理器
+    /// 若加载路径以 Res/ 开头，则会使用unity Resource.xxx 方式加载）
     /// </summary>
     public class ResourceManager : IGameModule
     {
@@ -73,8 +74,9 @@ namespace XFramework.Resource
         /// </summary>
         /// <typeparam name="T">资源类型</typeparam>
         /// <param name="path">资源路径</param>
+        /// <param name="isTopOnly">是否是仅加载本层级的资源</param>
         /// <returns>资源组</returns>
-        public T[] LoadAll<T>(string path) where T : Object
+        public T[] LoadAll<T>(string path, bool isTopOnly = true) where T : Object
         {
             if (IsResources(path))
             {
@@ -82,7 +84,7 @@ namespace XFramework.Resource
                 return Resources.LoadAll<T>(path);
             }
 
-            return m_LoadHelper.LoadAll<T>(path);
+            return m_LoadHelper.LoadAll<T>(path, isTopOnly);
         }
 
         /// <summary>
@@ -115,6 +117,23 @@ namespace XFramework.Resource
             {
                 return m_LoadHelper.LoadAsync<T>(assetName, callBack);
             }
+        }
+
+        /// <summary>
+        /// 加载一个路径下的所有资源
+        /// </summary>
+        /// <typeparam name="T">资源类型</typeparam>
+        /// <param name="path">资源路径</param>
+        /// <param name="isTopOnly">是否是仅加载本层级的资源</param>
+        /// <returns>资源组</returns>
+        public IProgress LoadAllAsync<T>(string path, bool isTopOnly, System.Action<T[]> callback) where T : Object
+        {
+            if (IsResources(path))
+            {
+                throw new FrameworkException("Res: 不能用Resource的方式异步加载所有资源");
+            }
+
+            return m_LoadHelper.LoadAllSync<T>(path, isTopOnly, callback);
         }
 
         #endregion

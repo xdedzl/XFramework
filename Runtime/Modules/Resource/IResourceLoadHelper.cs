@@ -16,23 +16,33 @@ namespace XFramework.Resource
         /// </summary>
         /// <typeparam name="T">资源类型</typeparam>
         /// <param name="assetName">资源名称</param>
-        /// <returns></returns>
+        /// <returns>资源</returns>
         T Load<T>(string assetName) where T : Object;
         /// <summary>
         /// 同步加载一组资源
         /// </summary>
         /// <typeparam name="T">资源类型</typeparam>
         /// <param name="path">资源路径</param>
-        /// <returns></returns>
-        T[] LoadAll<T>(string path) where T : Object;
+        /// <param name="isTopOnly">是否是仅加载本层级的资源</param>
+        /// <returns>资源</returns>
+        T[] LoadAll<T>(string path, bool isTopOnly = true) where T : Object;
         /// <summary>
         /// 异步加载资源
         /// </summary>
         /// <typeparam name="T">资源类型</typeparam>
         /// <param name="assetName">资源名称</param>
         /// <param name="callback">回调函数</param>
-        /// <returns></returns>
+        /// <returns>加载进度</returns>
         IProgress LoadAsync<T>(string assetName, System.Action<T> callback) where T : Object;
+        /// <summary>
+        /// 异步加载一组资源
+        /// </summary>
+        /// <typeparam name="T">资源名称</typeparam>
+        /// <param name="path">资源路径</param>
+        /// <param name="isTopOnly">是否是仅加载本层级的资源</param>
+        /// <param name="callback">回调</param>
+        /// <returns>加载进度</returns>
+        IProgress LoadAllSync<T>(string path, bool isTopOnly, System.Action<T[]> callback) where T : Object;
         /// <summary>
         /// 卸载某个资源
         /// </summary>
