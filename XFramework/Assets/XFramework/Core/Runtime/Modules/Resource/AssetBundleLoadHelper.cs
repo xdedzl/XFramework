@@ -233,18 +233,20 @@ namespace XFramework.Resource
             }
 
             string dirPath = m_ABPath + "/" + path;
-            var a = new System.IO.DirectoryInfo(dirPath);
-            var abFiles = a.GetFiles($"*{m_Variant}", System.IO.SearchOption.AllDirectories);
-
-            int startIndex = m_ABPath.Length + 1;
-
-            foreach (var item in abFiles)
+            var subDirectory = new System.IO.DirectoryInfo(dirPath);
+            if (subDirectory.Exists)
             {
-                var abPath = item.FullName.Substring(startIndex);
-                var ab = GetAssetBundle(abPath);
-                if (ab != null)
+                var abFiles = subDirectory.GetFiles($"*{m_Variant}", System.IO.SearchOption.AllDirectories);
+                int startIndex = m_ABPath.Length + 1;
+
+                foreach (var item in abFiles)
                 {
-                    assetBundles.Add(ab);
+                    var abPath = item.FullName.Substring(startIndex);
+                    var ab = GetAssetBundle(abPath);
+                    if (ab != null)
+                    {
+                        assetBundles.Add(ab);
+                    }
                 }
             }
 
@@ -338,23 +340,27 @@ namespace XFramework.Resource
                 assetBundles.Add(ab);
             });
             progresses.Add(abProgress);
+            int abCount = 1;
 
             // 其它层
             string directoryPath = m_ABPath + "/" + path;
-            var a = new System.IO.DirectoryInfo(directoryPath);
-            var abFiles = a.GetFiles($"*{m_Variant}", System.IO.SearchOption.AllDirectories);
-
-            int startIndex = m_ABPath.Length + 1;
-            int abCount = abFiles.Length + 1;
-            foreach (var item in abFiles)
+            var subDirectory = new System.IO.DirectoryInfo(directoryPath);
+            if (subDirectory.Exists)
             {
-                var abPath = item.FullName.Substring(startIndex);
+                var abFiles = subDirectory.GetFiles($"*{m_Variant}", System.IO.SearchOption.AllDirectories);
 
-                var progress = GetAssetBundleAsync(abPath, (ab) =>
+                int startIndex = m_ABPath.Length + 1;
+                abCount += abFiles.Length;
+                foreach (var item in abFiles)
                 {
-                    assetBundles.Add(ab);
-                });
-                progresses.Add(abProgress);
+                    var abPath = item.FullName.Substring(startIndex);
+
+                    var progress = GetAssetBundleAsync(abPath, (ab) =>
+                    {
+                        assetBundles.Add(ab);
+                    });
+                    progresses.Add(abProgress);
+                }
             }
 
             SingleTask singleTask = new SingleTask(() => { return assetBundles.Count == abCount; });
@@ -379,8 +385,15 @@ namespace XFramework.Resource
 
         private string ABPath2FullPath(string path)
         {
-            string abName = string.IsNullOrEmpty(path) ? "" : "/" + path;
-            return m_ABPath + abName + m_Variant;
+            string fullPath = string.IsNullOrEmpty(path) ? "" : "/" + path;
+            fullPath = m_ABPath + fullPath;
+
+            if (!fullPath.EndsWith(m_Variant))
+            {
+                fullPath += m_Variant;
+            }
+
+            return fullPath;
         }
 
         /// <summary>

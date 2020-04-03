@@ -88,10 +88,13 @@ namespace XFramework.Resource
             DirectoryInfo info = new DirectoryInfo(Application.dataPath.Replace("Assets", "") + path);
             foreach (var item in info.GetFiles("*", searchOption))
             {
+                var fullName = item.FullName;
                 if (item.Name.EndsWith(".meta"))
                     continue;
-                string assetName = path + "/" + item.Name;
-                objs.Add(AssetDatabase.LoadAssetAtPath<T>(assetName));
+
+                int startIndex = fullName.IndexOf("Assets");
+                string assetPath = fullName.Substring(startIndex);
+                objs.Add(AssetDatabase.LoadAssetAtPath<T>(assetPath));
             }
             return objs.ToArray();
         }
