@@ -206,7 +206,7 @@ namespace XFramework.UI
                 int next = (i + 1) % length;
                 int pre = (i + length - 1) % length;
                 var inDir = (polygonVertex[i] + polygonVertex[pre]).normalized;
-                var outDir = Mathematics.PhysicsMath.GetHorizontalDir(polygonVertex[i]);
+                var outDir = Mathematics.Math2d.GetHorizontalDir(polygonVertex[i]);
 
                 m_Vertexs.Add(new UIVertex() { position = inDir * m_Width, color = m_LineColor });
 

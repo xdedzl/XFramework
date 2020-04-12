@@ -11,7 +11,7 @@ namespace XFramework.UI
     {
         public EllipseGraphic(Vector2 center, Vector2 radius)
         {
-            var points = PhysicsMath.GetEllipsePoints(radius.x, radius.y, center, 60);
+            var points = Math2d.GetEllipsePoints(radius.x, radius.y, center, 60);
 
             m_Poses = new List<Vector3>();
             foreach (var item in points)

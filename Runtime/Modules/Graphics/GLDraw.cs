@@ -414,7 +414,7 @@ namespace XFramework.Draw
         /// <returns>圆柱网格</returns>
         public static Mesh CreateCylinder(Vector3 buttomOrigin, float radius, float height, int colorInt = ColorInt32.white)
         {
-            Vector3[] buttomSurface = PhysicsMath.GetCirclePoints(buttomOrigin, radius);
+            Vector3[] buttomSurface = Math2d.GetCirclePoints(buttomOrigin, radius);
 
             List<Vector3> verticesDown = new List<Vector3>();
             List<Vector3> verticesUp = new List<Vector3>();

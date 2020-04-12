@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using System;
+﻿using System;
 
 namespace XFramework.Collections
 {
@@ -7,6 +6,7 @@ namespace XFramework.Collections
     /// 有向图
     /// 采用十字链表存储
     /// </summary>
+    /// <typeparam name="T">数据类型</typeparam>
     public class GraphDir<T> : IGraph<T>
     {
         /// <summary>
@@ -14,13 +14,47 @@ namespace XFramework.Collections
         /// </summary>
         private VertexNode[] vertexs;
         /// <summary>
-        /// 下一个添加的顶点索值引，当前顶点数量
+        /// 下一个添加的顶点索值引
         /// </summary>
         private int index;
 
-        public GraphDir(int capacity = 10, bool _isDirected = true)
+        /// <summary>
+        /// 当前顶点数量
+        /// </summary>
+        public int NodeCount
+        {
+            get
+            {
+                return index;
+            }
+        }
+
+        /// <summary>
+        /// 容量
+        /// </summary>
+        public int Capcity
+        {
+            get
+            {
+                return vertexs.Length;
+            }
+        }
+
+        /// <summary>
+        /// 构造一个有向图
+        /// </summary>
+        /// <param name="capacity">初始容量</param>
+        public GraphDir(int capacity = 10)
         {
             vertexs = new VertexNode[capacity];
+        }
+
+        public T this[int i]
+        {
+            get
+            {
+                return vertexs[i].data;
+            }
         }
 
         /// <summary>
@@ -32,12 +66,7 @@ namespace XFramework.Collections
             // 扩容
             if (index >= vertexs.Length)
             {
-                VertexNode[] tempNodes = new VertexNode[vertexs.Length * 2];
-                for (int i = 0, length = vertexs.Length; i < length; i++)
-                {
-                    tempNodes[i] = vertexs[i];
-                }
-                vertexs = tempNodes;
+                Resize();
             }
             vertexs[index] = new VertexNode(data);
             index++;
@@ -51,7 +80,7 @@ namespace XFramework.Collections
         /// <param name="weight"></param>
         public void AddEdge(int fromIndex, int toIndex, int weight = 1)
         {
-            if (fromIndex > index || toIndex > index)
+            if (fromIndex > NodeCount || toIndex > NodeCount)
             {
                 throw new System.Exception("添加临界点的索引超出范围");
             }
@@ -94,7 +123,7 @@ namespace XFramework.Collections
         }
 
         /// <summary>
-        /// 找寻最短路径startIndex到其余所有点的最短路径,Dijkstra
+        /// 找寻最短路径startIndex到其余点的最短路径,Dijkstra算法求单源最短路径
         /// </summary>
         public void GetShortPath(int startIndex)
         {
@@ -149,15 +178,10 @@ namespace XFramework.Collections
                 paths[tempIndex].ensure = true;
                 count++;
             }
-
-            foreach (var item in paths)
-            {
-                UnityEngine.Debug.Log(item.length);
-            }
         }
 
         /// <summary>
-        /// 找寻最短路径i到j短路径,Floyd
+        /// 找寻最短路径i到j短路径,Floyd算法求多源最短路径
         /// </summary>
         public int[,] GetShortPath()
         {
@@ -167,27 +191,26 @@ namespace XFramework.Collections
             {
                 for (int k = 0; k < d.GetLength(0); k++)
                 {
-                    d[i, k] = 1000;
+                    if (i == k)
+                        d[i, k] = 0;
+                    else
+                        d[i, k] = int.MaxValue;
                 }
             }
-            for (int i = 0; i < index; i++)
+
+            // 录入边的权重
+            Foreach((edge) =>
             {
-                Edge edge = vertexs[i].firstOut;
-                while (edge != null)
-                {
-                    d[edge.headIndex, edge.tailIndex] = edge.weight;
-                    edge = edge.headLink;
-                }
-            }
+                d[edge.headIndex, edge.tailIndex] = edge.weight;
+            });
 
             // 计算最短路径矩阵
             for (int k = 0; k < index; k++)
                 for (int i = 0; i < index; i++)
                     for (int j = 0; j < index; j++)
                     {
-                        if (i == j)
-                            d[i, j] = 0;
-                        else if (i != k && k != j && d[i, k] + d[k, j] < d[i, j])
+                        // i->j->k 的距离小于 i->k
+                        if (i != k && k != j && d[i, k] + d[k, j] < d[i, j])
                             d[i, j] = d[i, k] + d[k, j];
                     }
             return d;
@@ -197,7 +220,7 @@ namespace XFramework.Collections
         /// 遍历所有边并执行同一操作
         /// </summary>
         /// <param name="action"></param>
-        public void Foreach(Action<Edge> action)
+        private void Foreach(Action<Edge> action)
         {
             Edge edge;
             for (int i = 0; i < vertexs.Length; i++)
@@ -211,16 +234,21 @@ namespace XFramework.Collections
             }
         }
 
-        public VertexNode this[int i]
+        /// <summary>
+        /// 扩容
+        /// </summary>
+        private void Resize()
         {
-            get { return vertexs[i]; }
+            VertexNode[] tempNodes = new VertexNode[vertexs.Length * 2];
+            Array.Copy(vertexs, 0, tempNodes, 0, vertexs.Length);
+            vertexs = tempNodes;
         }
 
         /// <summary>
         /// 边表结点
-        /// 当Graph为有向图时,head和tail代表首尾，当Graph为无向图时，head和tail没有首尾之分
+        /// head和tail代表首尾
         /// </summary>
-        public class Edge
+        private class Edge
         {
             /// <summary>
             /// 有向图：有向边起点对应的下标
@@ -263,7 +291,7 @@ namespace XFramework.Collections
         /// <summary>
         /// 顶点表结构
         /// </summary>
-        public class VertexNode
+        private class VertexNode
         {
             /// <summary>
             /// 顶点信息

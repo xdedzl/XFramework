@@ -1,16 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
+using XFramework.Singleton;
 
 namespace XFramework.Event
 {
     /// <summary>
     /// 消息类 全局类消息
     /// </summary>
-    public class MessageManager : IGameModule
+    public class MessageManager : Singleton<MessageManager>
     {
         private Dictionary<int, Delegate> m_eventDictionary = new Dictionary<int, Delegate>();
-
-        public int Priority { get { return 100; } }
 
         #region AddEventListener
 
@@ -376,15 +375,5 @@ namespace XFramework.Event
         }
 
         #endregion CheckEventListener
-
-        public void Update(float elapseSeconds, float realElapseSeconds)
-        {
-
-        }
-
-        public void Shutdown()
-        {
-            m_eventDictionary.Clear();
-        }
     }
 }

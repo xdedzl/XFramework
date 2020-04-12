@@ -10,6 +10,68 @@ namespace XFramework.Mathematics
     /// </summary>
     public static class Math2d
     {
+        #region 向量
+
+        /// <summary>
+        /// 点绕点旋转
+        /// </summary>
+        /// <param name="_orgPos">中心点</param>
+        /// <param name="_tarPos">需要旋转的点</param>
+        /// <param name="_angle">角度逆时针</param>
+        /// <returns></returns>
+        public static Vector2 GetTargetVector(Vector2 _orgPos, Vector2 _tarPos, float _angle)
+        {
+            return GetTargetVector(_tarPos - _orgPos, _angle) + _orgPos;
+        }
+
+        /// <summary>
+        /// 获取平面向量向左旋转theta后的目标向量
+        /// </summary>
+        /// <param name="startVector"></param>
+        /// <param name="theta"></param>
+        /// <returns></returns>
+        public static Vector2 GetTargetVector(Vector2 startVector, float theta = 90)
+        {
+            float x = startVector.x * Mathf.Cos(theta * Mathf.Deg2Rad) - startVector.y * Mathf.Sin(theta * Mathf.Deg2Rad);
+            float y = startVector.x * Mathf.Sin(theta * Mathf.Deg2Rad) + startVector.y * Mathf.Cos(theta * Mathf.Deg2Rad);
+            return new Vector2(x, y);
+        }
+
+        /// <summary>
+        /// 获取一个向量的垂直向量（顺时针）
+        /// </summary>
+        /// <param name="_dir">方向</param>
+        /// <returns>垂直方向</returns>
+        public static Vector2 GetHorizontalDir(Vector2 _dir)
+        {
+            return new Vector2(_dir.y, -_dir.x).normalized;
+        }
+
+        /// <summary>
+        /// 获取两点组成的向量的水平垂直向量（忽略Y轴，顺时针）
+        /// </summary>
+        /// <param name="_start">起始点</param>
+        /// <param name="_end">终止点</param>
+        /// <returns>垂直向量</returns>
+        public static Vector3 GetHorizontalDir(Vector3 _start, Vector3 _end)
+        {
+            Vector3 _dirValue = (_end - _start);
+            return GetHorizontalDir(_dirValue);
+        }
+
+        /// <summary>
+        /// 获取一个向量的水平垂直向量（忽略y轴，顺时针）
+        /// </summary>
+        /// <param name="_dirValue"></param>
+        /// <returns></returns>
+        public static Vector3 GetHorizontalDir(Vector3 _dirValue)
+        {
+            Vector3 returnVec = new Vector3(_dirValue.z, 0, -_dirValue.x);
+            return returnVec.normalized;
+        }
+
+        #endregion
+
         #region 线段相关
 
         /// <summary>
@@ -489,6 +551,76 @@ namespace XFramework.Mathematics
             res1 = res1 * v * Mathf.Cos(Mathf.Deg2Rad * angle);     // x = vxz * t
 
             return res1;
+        }
+
+        #endregion
+
+        #region 曲线相关
+
+        /// <summary>
+        /// y为0的伯努利方程
+        /// </summary>
+        /// <param name="a"></param>
+        /// <param name="radian">弧度</param>
+        /// <param name="y"></param>
+        /// <returns></returns>
+        public static Vector2 GetBernoulli(int a, float radian)
+        {
+            float p = Mathf.Sqrt(a * a * Mathf.Cos(2 * radian));
+            float x = p * Mathf.Cos(radian);
+            float y = p * Mathf.Sin(radian);
+            if ((0.75) * Mathf.PI < radian && radian < (1.25) * Mathf.PI)
+            {
+                return new Vector2(x, -y);
+            }
+            else
+            {
+                return new Vector2(x, y);
+            }
+        }
+
+        #endregion
+
+        #region 几何图形
+
+        /// <summary>
+        /// 获取椭圆上的点
+        /// </summary>
+        /// <param name="_r">短轴</param>
+        /// <param name="_R">长轴</param>
+        /// <param name="_origin">中点</param>
+        /// <param name="seg">间隔</param>
+        /// <returns></returns>
+        public static Vector2[] GetEllipsePoints(float _r, float _R, Vector2 _origin, int seg)
+        {
+            float angle;
+            Vector2[] points = new Vector2[seg];
+            int j = 0;
+            for (float i = 0; i < 360; j++, i += 360 / seg)
+            {
+                angle = (i / 180) * Mathf.PI;
+                points[j] = _origin + new Vector2(_r * Mathf.Cos(angle), _R * Mathf.Sin(angle));
+            }
+            return points;
+        }
+
+        /// <summary>
+        /// 获取半径为r的圆的点坐标集合
+        /// </summary>
+        /// <param name="origin"> 圆心 </param>
+        /// <param name="radius"> 半径 </param>
+        /// <returns></returns>
+        public static Vector3[] GetCirclePoints(Vector3 origin, float radius, int seg = 120)
+        {
+            float angle;
+            Vector3[] points = new Vector3[seg];
+            for (int i = 0, j = 0; i < 360; j++, i += 360 / seg)
+            {
+                angle = Mathf.Deg2Rad * i;
+                points[j] = origin + new Vector3(radius * Mathf.Cos(angle), 0, radius * Mathf.Sin(angle));
+            }
+            //points[360] = origin;     // 圆心点
+            return points;
         }
 
         #endregion
