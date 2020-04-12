@@ -19,55 +19,6 @@ namespace XFramework.Mathematics
         #region 公式类计算
 
         /// <summary>
-        /// 点绕点旋转
-        /// </summary>
-        /// <param name="_orgPos">中心点</param>
-        /// <param name="_tarPos">需要旋转的点</param>
-        /// <param name="_angle">角度逆时针</param>
-        /// <returns></returns>
-        public static Vector2 GetTargetVector(Vector2 _orgPos, Vector2 _tarPos, float _angle)
-        {
-            return GetTargetVector(_tarPos - _orgPos, _angle) + _orgPos;
-        }
-
-        /// <summary>
-        /// 获取平面向量向左旋转theta后的目标向量
-        /// </summary>
-        /// <param name="startVector"></param>
-        /// <param name="theta"></param>
-        /// <returns></returns>
-        public static Vector2 GetTargetVector(Vector2 startVector, float theta = 90)
-        {
-            float x = startVector.x * Mathf.Cos(theta * Mathf.Deg2Rad) - startVector.y * Mathf.Sin(theta * Mathf.Deg2Rad);
-            float y = startVector.x * Mathf.Sin(theta * Mathf.Deg2Rad) + startVector.y * Mathf.Cos(theta * Mathf.Deg2Rad);
-            return new Vector2(x, y);
-        }
-
-        /// <summary>
-        /// 获取三维空间向量绕已知轴旋转θ角后的得到的向量
-        /// </summary>
-        /// <param name="startVector">待旋转向量</param>
-        /// <param name="n">旋转轴</param>
-        /// <param name="theta">旋转角度(弧度)</param>
-        /// <returns></returns>
-        public static Vector3 GetTargetVector(Vector3 startVector, Vector3 n, float theta)
-        {
-            float x = (n.x * n.x * (1 - Mathf.Cos(theta)) + Mathf.Cos(theta)) * startVector.x +
-                (n.x * n.y * (1 - Mathf.Cos(theta)) + n.z * Mathf.Sin(theta)) * startVector.y +
-                (n.x * n.z * (1 - Mathf.Cos(theta)) - n.y * Mathf.Sin(theta)) * startVector.z;
-
-            float y = (n.x * n.y * (1 - Mathf.Cos(theta)) - n.z * Mathf.Sin(theta)) * startVector.x +
-                (n.y * n.y * (1 - Mathf.Cos(theta)) + Mathf.Cos(theta)) * startVector.y +
-                (n.y * n.z * (1 - Mathf.Cos(theta)) + n.x * Mathf.Sin(theta)) * startVector.z;
-
-            float z = (n.x * n.z * (1 - Mathf.Cos(theta)) + n.y * Mathf.Sin(theta)) * startVector.x +
-                (n.z * n.y * (1 - Mathf.Cos(theta)) - n.x * Mathf.Sin(theta)) * startVector.y +
-                (n.z * n.z * (1 - Mathf.Cos(theta)) + Mathf.Cos(theta)) * startVector.z;
-
-            return new Vector3(x, y, z);
-        }
-
-        /// <summary>
         /// 检查所给点集是否为顺时针排序(向量叉乘的法线朝向)
         /// </summary>
         /// <returns></returns>
@@ -102,268 +53,9 @@ namespace XFramework.Mathematics
             return true;
         }
 
-        /// <summary>
-        /// 检查所给点集是否为顺时针排序(向量叉乘的法线朝向)
-        /// </summary>
-        /// <param name="points"></param>
-        /// <param name="outPoints"></param>
-        /// <returns></returns>
-        public static bool CheckVector(List<Vector3> points, out List<Vector3> outPoints)
-        {
-            outPoints = new List<Vector3>(points);
-            if (!CheckVector(points))
-            {
-                outPoints.Reverse();
-                return false;
-            }
-            return true;
-        }
-
-        /// <summary>
-        /// 获取扇形弧边中点
-        /// </summary>
-        /// <param name="origin"></param>
-        /// <param name="leftPoint"></param>
-        /// <param name="rightPoint"></param>
-        /// <returns></returns>
-        public static Vector3 GetSectorOutPoint(Vector3 origin, Vector3 leftPoint, Vector3 rightPoint)
-        {
-            Vector3 leftVector = leftPoint - origin;                // 左向量
-            Vector3 rightVector = rightPoint - origin;              // 右向量
-            float radius = Vector3.Distance(origin, leftPoint);     // 半径
-
-            return (leftPoint + rightPoint).normalized * radius;
-        }
-
         #endregion
 
         #region 点线面之间的关系
-
-        /// <summary>
-        /// y为0的伯努利方程
-        /// </summary>
-        /// <param name="a"></param>
-        /// <param name="radian">弧度</param>
-        /// <param name="y"></param>
-        /// <returns></returns>
-        public static Vector3 GetBernoulli(int a, float radian, float y)
-        {
-            float p = Mathf.Sqrt(a * a * Mathf.Cos(2 * radian));
-            float x = p * Mathf.Cos(radian);
-            float z = p * Mathf.Sin(radian);
-            if ((0.75) * Mathf.PI < radian && radian < (1.25) * Mathf.PI)
-            {
-                return new Vector3(x, y, -z);
-            }
-            else
-            {
-                return new Vector3(x, y, z);
-            }
-        }
-
-        /// <summary>
-        /// 从一个数组中取固定位置子数组
-        /// </summary>
-        /// <param name="SourceArray"> 原始数组 </param>
-        /// <param name="StartIndex"> 起始位置 </param>
-        /// <param name="EndIndex"> 终止位置 </param>
-        /// <returns></returns>
-        public static int[] GetRangeArray(int[] SourceArray, int StartIndex, int EndIndex)
-        {
-            try
-            {
-                int[] result = new int[EndIndex - StartIndex + 1];      // 存放结果的数组
-                for (int i = 0; i <= EndIndex - StartIndex; i++)
-                {
-                    result[i] = SourceArray[i + StartIndex];
-                }
-                return result;
-            }
-            catch (IndexOutOfRangeException ex)
-            {
-                throw new System.Exception(ex.Message);
-            }
-        }
-
-        /// <summary>
-        ///求两直线的交点坐标
-        ///给定两个点P1和P2，直线上的点为P
-        ///参数方程：
-        ///   P＝ P1 ＋ t*(P2-P1）
-        ///展开就是
-        ///   p.x = p1.x + t*(p2.x-p1.x)
-        ///   p.y = p1.y + t*(p2.y-p1.y)
-        ///   p.z = p1.z + t*(p2.z-p1.z)
-        ///这种写法就比用等式的好，因为不存在分母为0的问题
-        /// </summary>
-        /// <param name="pn1">L1上的点</param>
-        /// <param name="pn2">L1上的点</param>
-        /// <param name="pn3">L2上的点</param>
-        /// <param name="pn4">L2上的点</param>
-        /// <returns></returns>
-        public static Vector3 GetIntersectionPoint(Vector3 p1, Vector3 p2, Vector3 p3, Vector3 p4)
-        {
-            float P1x = 0.0f;
-            float P1y = 0.0f;
-            float P1z = 0.0f;
-            double plr1_x = p2.x - p1.x;
-            double plr1_y = p2.y - p1.y;
-            double plr1_z = p2.z - p1.z;
-            double plr2_x = p4.x - p3.x;
-            double plr2_y = p4.y - p3.y;
-            double plr2_z = p4.z - p3.z;
-            double t = 1.0f;
-            //有且只有一条直线垂直于X轴时
-            if (((plr1_x != 0) && (plr2_x == 0)) || ((plr1_x == 0) && (plr2_x != 0)))
-            {
-                if (plr2_x == 0)
-                {
-                    t = (p3.x - p1.x) / plr1_x;
-                    P1x = (float)(p1.x + t * plr1_x);
-                    P1y = (float)(p1.y + t * plr1_y);
-                    P1z = (float)(p1.z + t * plr1_z);
-                    return new Vector3(P1x, P1y, P1z);
-                }
-                else
-                {
-                    t = (p1.x - p3.x) / plr2_x;
-                    P1x = (float)(p3.x + t * plr2_x);
-                    P1y = (float)(p3.y + t * plr2_y);
-                    P1z = (float)(p3.z + t * plr2_z);
-                    return new Vector3(P1x, P1y, P1z);
-                }
-            }
-            //有且只有一条直线垂直于Y轴时
-            else if (((plr1_y != 0) && (plr2_y == 0)) || ((plr1_y == 0) && (plr2_y != 0)))
-            {
-                if (plr2_y == 0)
-                {
-                    t = (p3.y - p1.y) / plr1_y;
-                    P1x = (float)(p1.x + t * plr1_x);
-                    P1y = (float)(p1.y + t * plr1_y);
-                    P1z = (float)(p1.z + t * plr1_z);
-                    return new Vector3(P1x, P1y, P1z);
-                }
-                else
-                {
-                    t = (p1.y - p3.y) / plr2_y;
-                    P1x = (float)(p3.x + t * plr2_x);
-                    P1y = (float)(p3.y + t * plr2_y);
-                    P1z = (float)(p3.z + t * plr2_z);
-                    return new Vector3(P1x, P1y, P1z);
-                }
-            }
-            //有且只有一条直线垂直于Z轴时
-            else if (((plr1_z != 0) && (plr2_z == 0)) || ((plr1_z == 0) && (plr2_z != 0)))
-            {
-                if (plr2_z == 0)
-                {
-                    t = (p3.z - p1.z) / plr1_z;
-                    P1x = (float)(p1.x + t * plr1_x);
-                    P1y = (float)(p1.y + t * plr1_y);
-                    P1z = (float)(p1.z + t * plr1_z);
-                    return new Vector3(P1x, P1y, P1z);
-                }
-                else
-                {
-                    t = (p1.z - p3.z) / plr2_z;
-                    P1x = (float)(p3.x + t * plr2_x);
-                    P1y = (float)(p3.y + t * plr2_y);
-                    P1z = (float)(p3.z + t * plr2_z);
-                    return new Vector3(P1x, P1y, P1z);
-                }
-            }
-            //其他情况
-            else
-            {
-                if (((plr1_x != 0) && (plr2_x != 0)) && ((plr1_y != 0) && (plr2_y != 0)))
-                {
-                    double fz = (p3.x * plr2_y - p3.y * plr2_x - plr2_y * p1.x + plr2_x * p1.y);
-                    double fm = (plr1_x * plr2_y - plr1_y * plr2_x);
-                    t = fz / fm;
-                    P1x = (float)(p1.x + t * plr1_x);
-                    P1y = (float)(p1.y + t * plr1_y);
-                    P1z = (float)(p1.z + t * plr1_z);
-                    return new Vector3(P1x, P1y, P1z);
-                }
-                else if (((plr1_x != 0) && (plr2_x != 0)) && ((plr1_z != 0) && (plr2_z != 0)))
-                {
-                    double fz = (p3.x * plr2_z - p3.z * plr2_x - plr2_z * p1.x + plr2_x * p1.z);
-                    double fm = (plr1_x * plr2_z - plr1_z * plr2_x);
-                    t = fz / fm;
-                    P1x = (float)(p1.x + t * plr1_x);
-                    P1y = (float)(p1.y + t * plr1_y);
-                    P1z = (float)(p1.z + t * plr1_z);
-                    return new Vector3(P1x, P1y, P1z);
-                }
-                else if (((plr1_y != 0) && (plr2_y != 0)) && ((plr1_z != 0) && (plr2_z != 0)))
-                {
-                    double fz = (p3.y * plr2_z - p3.z * plr2_y - plr2_z * p1.y + plr2_y * p1.z);
-                    double fm = (plr1_y * plr2_z - plr1_z * plr2_y);
-                    t = fz / fm;
-                    P1x = (float)(p1.x + t * plr1_x);
-                    P1y = (float)(p1.y + t * plr1_y);
-                    P1z = (float)(p1.z + t * plr1_z);
-                    return new Vector3(P1x, P1y, P1z);
-                }
-                else
-                {
-                    return Vector3.zero;
-                }
-            }
-        }
-
-        /// <summary>
-        /// 获取两点间向右的水平垂直向量，忽略Y轴
-        /// </summary>
-        /// <param name="_start"> 起始点 </param>
-        /// <param name="_end"> 终止点 </param>
-        /// <returns></returns>
-        public static Vector3 GetHorizontalDir(Vector3 _start, Vector3 _end)
-        {
-            Vector3 _dirValue = (_end - _start);
-            return GetHorizontalDir(_dirValue);
-        }
-        public static Vector3 GetHorizontalDir(Vector3 _dirValue)
-        {
-            Vector3 returnVec = new Vector3(_dirValue.z, 0, -_dirValue.x);
-            return returnVec.normalized;
-        }
-        public static Vector2 GetHorizontalDir(Vector2 _dir)
-        {
-            return new Vector2(_dir.y, -_dir.x).normalized;
-        }
-
-        /// <summary>
-        /// 获取两点间向上的竖直垂直向量
-        /// </summary>
-        /// <param name="_start"> 起始点 </param>
-        /// <param name="_end"> 终止点 </param>
-        /// <returns></returns>
-        public static Vector3 GetVerticalDir(Vector3 _start, Vector3 _end)
-        {
-            Vector3 vector = _end - _start;             // 两点之间的向量
-            return GetVerticalDir(vector);
-        }
-        public static Vector3 GetVerticalDir(Vector3 vector)
-        {
-            Vector3 dirUp;                              // 两点间向量的垂直向量
-            if (vector.y == 0)
-            {
-                dirUp = Vector3.up;
-            }
-            else if (vector.y > 0)
-            {
-                //向上的垂直向量的x和z的值和原向量相等，且两个向量内积等于0    
-                dirUp = new Vector3(vector.x, (vector.x * vector.x + vector.z * vector.z) / -vector.y, vector.z).normalized;
-                dirUp = -dirUp;
-            }
-            else
-            {
-                dirUp = new Vector3(vector.x, (vector.x * vector.x + vector.z * vector.z) / -vector.y, vector.z).normalized;
-            }
-            return dirUp;
-        }
 
         /// <summary>
         /// 获取两点组成的矩形边框
@@ -375,7 +67,7 @@ namespace XFramework.Mathematics
         public static Vector3[] GetRect(Vector3 _start, Vector3 _end, float _width)
         {
             Vector3[] rect = new Vector3[4];
-            Vector3 dir = GetHorizontalDir(_start, _end);
+            Vector3 dir = Math2d.GetHorizontalDir(_start, _end);
             rect[0] = _start + dir * _width;
             rect[1] = _start - dir * _width;
             rect[2] = _end + dir * _width;
@@ -386,7 +78,7 @@ namespace XFramework.Mathematics
         public static Vector2[] GetRect(Vector2 _start, Vector2 _end, float _width)
         {
             Vector2[] rect = new Vector2[4];
-            Vector2 dir = GetHorizontalDir(_end - _start);
+            Vector2 dir = Math2d.GetHorizontalDir(_end - _start);
             rect[0] = _start + dir * _width;
             rect[1] = _start - dir * _width;
             rect[2] = _end + dir * _width;
@@ -412,46 +104,17 @@ namespace XFramework.Mathematics
             {
                 for (float i = 0; i <= _count; i++)
                 {
-                    outList.Add(GetBezierPoint(i / _count, _points[0], _points[1], _points[2]));
+                    outList.Add(Math3d.GetBezierPoint(i / _count, _points[0], _points[1], _points[2]));
                 }
             }
             if (_points.Length == 4)
             {
                 for (float i = 0; i <= _count; i++)
                 {
-                    outList.Add(GetBezierPoint(i / _count, _points[0], _points[1], _points[2], _points[3]));
+                    outList.Add(Math3d.GetBezierPoint(i / _count, _points[0], _points[1], _points[2], _points[3]));
                 }
             }
             return outList;
-        }
-
-        /// <summary>
-        /// 获取二次贝塞尔曲线上点
-        /// </summary>
-        /// <param name="_t">间隔</param>
-        /// <param name="_P0">起始点</param>
-        /// <param name="_P1">控制点</param>
-        /// <param name="_P2">末尾点</param>
-        /// <returns></returns>
-        private static Vector3 GetBezierPoint(float _t, Vector3 _P0, Vector3 _P1, Vector3 _P2)
-        {
-            float u = 1 - _t;
-            return u * u * _P0 + 2 * _t * u * _P1 + _t * _t * _P2;
-        }
-
-        /// <summary>
-        /// 获取三次贝塞尔曲线上点
-        /// </summary>
-        /// <param name="_t">间隔</param>
-        /// <param name="_P0">起始点</param>
-        /// <param name="_P1">控制点1</param>
-        /// <param name="_P2">控制点2</param>
-        /// <param name="_P3">末尾点</param>
-        /// <returns></returns>
-        private static Vector3 GetBezierPoint(float _t, Vector3 _P0, Vector3 _P1, Vector3 _P2, Vector3 _P3)
-        {
-            float u = 1 - _t;
-            return u * u * u * _P0 + 3 * u * u * _t * _P1 + 3 * _t * _t * u * _P2 + _t * _t * _t * _P3;
         }
 
         /// <summary>         
@@ -552,69 +215,6 @@ namespace XFramework.Mathematics
 
         #region 半球形与圆形
 
-        /// <summary>
-        /// 获取半径为r的圆的点坐标集合
-        /// </summary>
-        /// <param name="origin"> 圆心 </param>
-        /// <param name="radius"> 半径 </param>
-        /// <returns></returns>
-        public static Vector3[] GetCirclePoints(Vector3 origin, float radius, int seg = 120)
-        {
-            float angle;
-            Vector3[] points = new Vector3[seg];
-            for (int i = 0, j = 0; i < 360; j++, i += 360 / seg)
-            {
-                angle = Mathf.Deg2Rad * i;
-                points[j] = origin + new Vector3(radius * Mathf.Cos(angle), 0, radius * Mathf.Sin(angle));
-            }
-            //points[360] = origin;     // 圆心点
-            return points;
-        }
-
-        /// <summary>
-        /// 获取椭圆上的点
-        /// </summary>
-        /// <param name="_r">短轴</param>
-        /// <param name="_R">长轴</param>
-        /// <param name="_origin">中点</param>
-        /// <param name="seg">间隔</param>
-        /// <returns></returns>
-        public static Vector3[] GetEllipsePoints(float _r, float _R, Vector3 _origin, int seg)
-        {
-            float angle;
-            Vector3[] points = new Vector3[seg];
-            int j = 0;
-            for (float i = 0; i < 360; j++, i += 360 / seg)
-            {
-                angle = (i / 180) * Mathf.PI;
-                points[j] = _origin + new Vector3(_r * Mathf.Cos(angle), 0, _R * Mathf.Sin(angle));
-            }
-            return points;
-        }
-
-        /// <summary>
-        /// 获取椭圆上的点
-        /// </summary>
-        /// <param name="_r">短轴</param>
-        /// <param name="_R">长轴</param>
-        /// <param name="_origin">中点</param>
-        /// <param name="seg">间隔</param>
-        /// <returns></returns>
-        public static Vector2[] GetEllipsePoints(float _r, float _R, Vector2 _origin, int seg)
-        {
-            float angle;
-            Vector2[] points = new Vector2[seg];
-            int j = 0;
-            for (float i = 0; i < 360; j++, i += 360 / seg)
-            {
-                angle = (i / 180) * Mathf.PI;
-                points[j] = _origin + new Vector2(_r * Mathf.Cos(angle), _R * Mathf.Sin(angle));
-            }
-            return points;
-        }
-
-
-
         ///// <summary>
         ///// 获取扇形区域的点集合（包括圆心点）
         ///// </summary>
@@ -694,7 +294,7 @@ namespace XFramework.Mathematics
             for (int i = -halfAlpha, j = 0; i <= halfAlpha; i += 3, j++)
             {
                 // 获取下弧边的方向向量
-                Vector2 temp = GetTargetVector(new Vector2(startVector_1.x, startVector_1.z), i);
+                Vector2 temp = Math2d.GetTargetVector(new Vector2(startVector_1.x, startVector_1.z), i);
                 dirsDown.Add(new Vector3(temp.x, 0, temp.y));
 
                 // 获取上弧边的方向向量
@@ -1224,7 +824,7 @@ namespace XFramework.Mathematics
             _width /= 2;
             _height /= 2;
 
-            Vector3 _dir = GetHorizontalDir(_list[0], _list[1]);        // 获取两点之间的垂直向量;
+            Vector3 _dir = Math2d.GetHorizontalDir(_list[0], _list[1]);        // 获取两点之间的垂直向量;
             verticesList.Add(_list[0] + _dir * _width - Vector3.up * _height);       // 右下点
             verticesList.Add(_list[0] - _dir * _width - Vector3.up * _height);       // 左下点
 
@@ -1236,15 +836,15 @@ namespace XFramework.Mathematics
                 float theta = Vector2.Angle(pos_1, pos_2) / 2;
                 float cosTheta = Mathf.Cos(Mathf.Deg2Rad * theta);
 
-                _dir = GetHorizontalDir(_list[i - 1], _list[i]);        // 获取两点之间的垂直向量
-                _dir2 = GetHorizontalDir(_list[i], _list[i + 1]);       // 获取两点之间的垂直向量
+                _dir = Math2d.GetHorizontalDir(_list[i - 1], _list[i]);        // 获取两点之间的垂直向量
+                _dir2 = Math2d.GetHorizontalDir(_list[i], _list[i + 1]);       // 获取两点之间的垂直向量
                 _dir3 = ((_dir + _dir2) / 2).normalized;              // 获取方向向量
 
                 verticesList.Add(_list[i] + _dir3 * _width / cosTheta - Vector3.up * _height);
                 verticesList.Add(_list[i] - _dir3 * _width / cosTheta - Vector3.up * _height);
             }
 
-            _dir = GetHorizontalDir(_list[count - 2], _list[count - 1]);    // 获取两点之间的垂直向量        
+            _dir = Math2d.GetHorizontalDir(_list[count - 2], _list[count - 1]);    // 获取两点之间的垂直向量        
             verticesList.Add(_list[count - 1] + _dir * _width - Vector3.up * _height);       // 右下点
             verticesList.Add(_list[count - 1] - _dir * _width - Vector3.up * _height);       // 左下点
 
@@ -1275,7 +875,7 @@ namespace XFramework.Mathematics
             Vector3 _dir2 = Vector3.zero;
             Vector3 _dir3 = Vector3.zero;
 
-            Vector3 _dir = GetHorizontalDir(_list[0], _list[1]);        // 获取两点之间的垂直向量;
+            Vector3 _dir = Math2d.GetHorizontalDir(_list[0], _list[1]);        // 获取两点之间的垂直向量;
             verticesList.Add(_list[0] + _dir * _width - Vector3.up * _height);       // 右下点
             tmpList.Add(_list[0] - _dir * _width - Vector3.up * _height);            // 左下点
 
@@ -1325,8 +925,8 @@ namespace XFramework.Mathematics
                 float alpha = Vector2.Angle(pos1, pos2) / 2.00f;
                 float sinAlpha = Mathf.Sin(Mathf.Deg2Rad * alpha);
 
-                _dir = GetHorizontalDir(_list[i - 1], _list[i]);        // 获取两点之间的垂直向量
-                _dir2 = GetHorizontalDir(_list[i], _list[i + 1]);       // 获取两点之间的垂直向量
+                _dir = Math2d.GetHorizontalDir(_list[i - 1], _list[i]);        // 获取两点之间的垂直向量
+                _dir2 = Math2d.GetHorizontalDir(_list[i], _list[i + 1]);       // 获取两点之间的垂直向量
                 _dir3 = ((_dir + _dir2) / 2).normalized;
 
                 float maxDir = _width / sinAlpha;       // 限制宽度不能超过前后两点之间的距离
@@ -1345,7 +945,7 @@ namespace XFramework.Mathematics
             }
 
 
-            _dir = GetHorizontalDir(_list[count - 2], _list[count - 1]);    // 获取两点之间的垂直向量        
+            _dir = Math2d.GetHorizontalDir(_list[count - 2], _list[count - 1]);    // 获取两点之间的垂直向量        
             verticesList.Add(_list[count - 1] + _dir * _width - Vector3.up * _height);              // 右下点
             tmpList.Add(_list[count - 1] - _dir * _width - Vector3.up * _height);                   // 左下点
 
@@ -1391,9 +991,9 @@ namespace XFramework.Mathematics
                 //是否是凹点
                 if (IsPointInsidePolygon(_bottomList[i], polygon))
                 {
-                    Vector2 _dirV2 = GetTargetVector(new Vector2(_dir1.x, _dir1.z), 90);
+                    Vector2 _dirV2 = Math2d.GetTargetVector(new Vector2(_dir1.x, _dir1.z), 90);
                     _dir1 = new Vector3(_dirV2.x, 0, _dirV2.y);    // 获取左弧边向量
-                    _dirV2 = GetTargetVector(new Vector2(_dir2.x, _dir2.z), 90);
+                    _dirV2 = Math2d.GetTargetVector(new Vector2(_dir2.x, _dir2.z), 90);
                     _dir2 = new Vector3(_dirV2.x, 0, _dirV2.y);    // 获取右弧边向量
 
                     arcList.Add(_bottomList[i]);                                                                // 添加扇心
@@ -1422,9 +1022,9 @@ namespace XFramework.Mathematics
                 }
                 else    // 不是凹点， 则对面顶点为凹点
                 {
-                    Vector2 _dirV2 = GetTargetVector(new Vector2(_dir1.x, _dir1.z), -90);
+                    Vector2 _dirV2 = Math2d.GetTargetVector(new Vector2(_dir1.x, _dir1.z), -90);
                     _dir1 = new Vector3(_dirV2.x, 0, _dirV2.y);    // 获取左弧边向量
-                    _dirV2 = GetTargetVector(new Vector2(_dir2.x, _dir2.z), -90);
+                    _dirV2 = Math2d.GetTargetVector(new Vector2(_dir2.x, _dir2.z), -90);
                     _dir2 = new Vector3(_dirV2.x, 0, _dirV2.y);    // 获取右弧边向量
 
                     arcList.Add(_bottomList[bottomCount - 1 - i]);                                              // 添加扇心

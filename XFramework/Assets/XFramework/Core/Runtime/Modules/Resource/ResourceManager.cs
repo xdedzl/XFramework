@@ -109,7 +109,7 @@ namespace XFramework.Resource
                     callBack.Invoke(request.asset as T);
                     return true;
                 });
-                TaskManager.Instance.StartTask(task);
+                task.Start();
                 return null;
             }
 

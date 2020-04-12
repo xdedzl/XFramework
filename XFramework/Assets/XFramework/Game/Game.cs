@@ -18,7 +18,7 @@ public class Game : MonoBehaviour
     public static EntityManager EntityModule { get; private set; }
     public static FsmManager FsmModule { get; private set; }
     public static GraphicsManager GraphicsModule { get; private set; }
-    public static MessageManager MessageModule { get; private set; }
+    public static MessageManager MessageModule { get { return MessageManager.Instance; } }
     public static DataSubjectManager ObserverModule { get; private set; }
     public static ProcedureManager ProcedureModule { get; private set; }
     public static ObjectPoolManager ObjectPool { get; private set; }
@@ -87,7 +87,6 @@ public class Game : MonoBehaviour
         EntityModule = GameEntry.AddModule<EntityManager>();
         FsmModule = GameEntry.AddModule<FsmManager>();
         GraphicsModule = GameEntry.AddModule<GraphicsManager>();
-        MessageModule = GameEntry.AddModule<MessageManager>();
         ObserverModule = GameEntry.AddModule<DataSubjectManager>();
         ProcedureModule = GameEntry.AddModule<ProcedureManager>();
         ObjectPool = GameEntry.AddModule<ObjectPoolManager>();
@@ -110,7 +109,6 @@ public class Game : MonoBehaviour
         EntityModule = GameEntry.GetModule<EntityManager>();
         FsmModule = GameEntry.GetModule<FsmManager>();
         GraphicsModule = GameEntry.GetModule<GraphicsManager>();
-        MessageModule = GameEntry.GetModule<MessageManager>();
         ObserverModule = GameEntry.GetModule<DataSubjectManager>();
         ProcedureModule = GameEntry.GetModule<ProcedureManager>();
         ObjectPool = GameEntry.GetModule<ObjectPoolManager>();

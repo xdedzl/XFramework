@@ -46,18 +46,18 @@ public class RoadTest : ProcedureBase
             List<Vector3> points_in = new List<Vector3>();
             Vector3 dirr;
 
-            dirr = PhysicsMath.GetHorizontalDir(positions[1] - positions[0]);
+            dirr = Math2d.GetHorizontalDir(positions[1] - positions[0]);
             points_in.Add(positions[0] + dirr * 4);
             points_out.Add(positions[0] - dirr * 4);
 
             for (int i = 1; i < positions.Count - 1; i++)
             {
-                dirr = PhysicsMath.GetHorizontalDir(positions[i + 1] - positions[i - 1]);
+                dirr = Math2d.GetHorizontalDir(positions[i + 1] - positions[i - 1]);
                 points_in.Add(positions[i] + dirr * 4);
                 points_out.Add(positions[i] - dirr * 4);
             }
 
-            dirr = PhysicsMath.GetHorizontalDir(positions[positions.Count - 1] - positions[positions.Count - 2]);
+            dirr = Math2d.GetHorizontalDir(positions[positions.Count - 1] - positions[positions.Count - 2]);
             points_in.Add(positions[positions.Count - 1] + dirr * 4);
             points_out.Add(positions[positions.Count - 1] - dirr * 4);
 
@@ -178,7 +178,7 @@ public class RoadTest : ProcedureBase
         List<int> triangles = new List<int>();          // 三角形排序
         List<Vector2> uv = new List<Vector2>();         // uv排序
 
-        Vector3 dir = PhysicsMath.GetHorizontalDir(_roadPoints[1], _roadPoints[0]);   // 获取两点间的垂直向量
+        Vector3 dir = Math2d.GetHorizontalDir(_roadPoints[1], _roadPoints[0]);   // 获取两点间的垂直向量
         vertice.Add(_roadPoints[0] + dir * _width);     // 添加初始顶点
         vertice.Add(_roadPoints[0] - dir * _width);
 
@@ -188,7 +188,7 @@ public class RoadTest : ProcedureBase
         for (int i = 1, count = _roadPoints.Count; i < count; i++)
         {
             // 添加由 路径点 生成的路面点集
-            dir = PhysicsMath.GetHorizontalDir(_roadPoints[i], _roadPoints[i - 1]);
+            dir = Math2d.GetHorizontalDir(_roadPoints[i], _roadPoints[i - 1]);
             vertice.Add(_roadPoints[i] + dir * _width);
             vertice.Add(_roadPoints[i] - dir * _width);
 

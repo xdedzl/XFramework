@@ -9,6 +9,71 @@ namespace XFramework.Mathematics
     /// </summary>
     public static class Math3d
     {
+        #region 向量
+
+        /// <summary>
+        /// 获取三维空间向量绕已知轴旋转θ角后的得到的向量
+        /// </summary>
+        /// <param name="startVector">待旋转向量</param>
+        /// <param name="n">旋转轴</param>
+        /// <param name="theta">旋转角度(弧度)</param>
+        /// <returns></returns>
+        public static Vector3 GetTargetVector(Vector3 startVector, Vector3 n, float theta)
+        {
+            float x = (n.x * n.x * (1 - Mathf.Cos(theta)) + Mathf.Cos(theta)) * startVector.x +
+                (n.x * n.y * (1 - Mathf.Cos(theta)) + n.z * Mathf.Sin(theta)) * startVector.y +
+                (n.x * n.z * (1 - Mathf.Cos(theta)) - n.y * Mathf.Sin(theta)) * startVector.z;
+
+            float y = (n.x * n.y * (1 - Mathf.Cos(theta)) - n.z * Mathf.Sin(theta)) * startVector.x +
+                (n.y * n.y * (1 - Mathf.Cos(theta)) + Mathf.Cos(theta)) * startVector.y +
+                (n.y * n.z * (1 - Mathf.Cos(theta)) + n.x * Mathf.Sin(theta)) * startVector.z;
+
+            float z = (n.x * n.z * (1 - Mathf.Cos(theta)) + n.y * Mathf.Sin(theta)) * startVector.x +
+                (n.z * n.y * (1 - Mathf.Cos(theta)) - n.x * Mathf.Sin(theta)) * startVector.y +
+                (n.z * n.z * (1 - Mathf.Cos(theta)) + Mathf.Cos(theta)) * startVector.z;
+
+            return new Vector3(x, y, z);
+        }
+
+        /// <summary>
+        /// 获取两点间向上的竖直垂直向量
+        /// </summary>
+        /// <param name="start"> 起始点 </param>
+        /// <param name="end"> 终止点 </param>
+        /// <returns></returns>
+        public static Vector3 GetVerticalDir(Vector3 start, Vector3 end)
+        {
+            Vector3 vector = end - start;             // 两点之间的向量
+            return GetVerticalDir(vector);
+        }
+
+        /// <summary>
+        /// 获取一个方向的竖直垂直向量
+        /// </summary>
+        /// <param name="vector"></param>
+        /// <returns></returns>
+        public static Vector3 GetVerticalDir(Vector3 vector)
+        {
+            Vector3 dirUp;                              // 两点间向量的垂直向量
+            if (vector.y == 0)
+            {
+                dirUp = Vector3.up;
+            }
+            else if (vector.y > 0)
+            {
+                //向上的垂直向量的x和z的值和原向量相等，且两个向量内积等于0    
+                dirUp = new Vector3(vector.x, (vector.x * vector.x + vector.z * vector.z) / -vector.y, vector.z).normalized;
+                dirUp = -dirUp;
+            }
+            else
+            {
+                dirUp = new Vector3(vector.x, (vector.x * vector.x + vector.z * vector.z) / -vector.y, vector.z).normalized;
+            }
+            return dirUp;
+        }
+
+        #endregion
+
         #region 点线面关系
 
         /// <summary>
@@ -564,6 +629,39 @@ namespace XFramework.Mathematics
             Vector3 b = gameObjectInOut.transform.TransformPoint(trianglePosition);
             Vector3 translation = alignWithPosition - b;
             gameObjectInOut.transform.Translate(translation, Space.World);
+        }
+
+        #endregion
+
+        #region 曲线相关
+
+        /// <summary>
+        /// 获取二次贝塞尔曲线上点
+        /// </summary>
+        /// <param name="_t">间隔</param>
+        /// <param name="_P0">起始点</param>
+        /// <param name="_P1">控制点</param>
+        /// <param name="_P2">末尾点</param>
+        /// <returns></returns>
+        public static Vector3 GetBezierPoint(float _t, Vector3 _P0, Vector3 _P1, Vector3 _P2)
+        {
+            float u = 1 - _t;
+            return u * u * _P0 + 2 * _t * u * _P1 + _t * _t * _P2;
+        }
+
+        /// <summary>
+        /// 获取三次贝塞尔曲线上点
+        /// </summary>
+        /// <param name="_t">间隔</param>
+        /// <param name="_P0">起始点</param>
+        /// <param name="_P1">控制点1</param>
+        /// <param name="_P2">控制点2</param>
+        /// <param name="_P3">末尾点</param>
+        /// <returns></returns>
+        public static Vector3 GetBezierPoint(float _t, Vector3 _P0, Vector3 _P1, Vector3 _P2, Vector3 _P3)
+        {
+            float u = 1 - _t;
+            return u * u * u * _P0 + 3 * u * u * _t * _P1 + 3 * _t * _t * u * _P2 + _t * _t * _t * _P3;
         }
 
         #endregion

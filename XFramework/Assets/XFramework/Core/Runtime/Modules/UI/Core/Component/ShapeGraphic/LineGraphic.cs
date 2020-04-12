@@ -38,19 +38,19 @@ namespace XFramework.UI
             }
 
             int count = m_Poses.Count;
-            Vector2 dir = PhysicsMath.GetHorizontalDir((m_Poses[1] - m_Poses[0]).XY());
+            Vector2 dir = Math2d.GetHorizontalDir((m_Poses[1] - m_Poses[0]).XY());
             vertexs.Add(new UIVertex() { position = m_Poses[0].XY() - dir * width, color = color, });
             vertexs.Add(new UIVertex() { position = m_Poses[0].XY() + dir * width, color = color, });
 
 
             for (int i = 1; i < count - 1; i++)
             {
-                dir = PhysicsMath.GetHorizontalDir((m_Poses[i + 1] - m_Poses[i - 1]).XY());
+                dir = Math2d.GetHorizontalDir((m_Poses[i + 1] - m_Poses[i - 1]).XY());
                 vertexs.Add(new UIVertex() { position = m_Poses[i].XY() - dir * width, color = color, });
                 vertexs.Add(new UIVertex() { position = m_Poses[i].XY() + dir * width, color = color });
             }
 
-            dir = PhysicsMath.GetHorizontalDir((m_Poses[count - 1] - m_Poses[count - 2]).XY());
+            dir = Math2d.GetHorizontalDir((m_Poses[count - 1] - m_Poses[count - 2]).XY());
             vertexs.Add(new UIVertex() { position = m_Poses[count - 1].XY() - dir * width, color = color, });
             vertexs.Add(new UIVertex() { position = m_Poses[count - 1].XY() + dir * width, color = color, });
         }

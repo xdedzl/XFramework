@@ -74,7 +74,7 @@ namespace XFramework.Resource
         public T Load<T>(string assetName) where T : UnityEngine.Object
         {
             var temp = Utility.Text.SplitPathName(assetName);
-            return GetAssetBundle(temp[0])?.LoadAsset<T>(temp[1]);
+            return LoadAssetBundle(temp[0])?.LoadAsset<T>(temp[1]);
         }
 
         /// <summary>
@@ -88,11 +88,11 @@ namespace XFramework.Resource
         {
             if (isTopOnly)
             {
-                return GetAssetBundle(path).LoadAllAssets<T>();
+                return LoadAssetBundle(path).LoadAllAssets<T>();
             }
             else
             {
-                var abs = GetAssetBundles(path);
+                var abs = LoadAssetBundles(path);
                 List<T> assets = new List<T>();
                 foreach (var item in abs)
                 {
@@ -115,7 +115,7 @@ namespace XFramework.Resource
 
             DynamicMultiProgress progress = new DynamicMultiProgress(2, 0.9f, 0.1f);
 
-            var abProgress = GetAssetBundleAsync(temp[0], (ab) =>
+            var abProgress = LoadAssetBundleAsync(temp[0], (ab) =>
             {
                 var request = ab.LoadAssetAsync(temp[1]);
                 SingleTask task = new SingleTask(() =>
@@ -123,7 +123,7 @@ namespace XFramework.Resource
                     return request.isDone;
                 });
                 task.Then(() => { callback(request.asset as T); return true; });
-                TaskManager.Instance.StartTask(task);
+                task.Start();
 
                 SingleResProgress resProgress = new SingleResProgress(request);
                 progress.Add(resProgress);
@@ -144,7 +144,7 @@ namespace XFramework.Resource
         {
             if (isTopOnly)
             {
-                return GetAssetBundleAsync(path, (ab) =>
+                return LoadAssetBundleAsync(path, (ab) =>
                 {
                     AssetBundleRequest request = ab.LoadAllAssetsAsync<T>();
                     SingleTask task = new SingleTask(() =>
@@ -159,7 +159,7 @@ namespace XFramework.Resource
                 List<T> assets = new List<T>();
 
                 DynamicMultiProgress dynamicProgress = new DynamicMultiProgress(2);
-                var assetBundlesProgress = GetAssetBundlesAsync(path, OnAssetBundleLoadComplate);
+                var assetBundlesProgress = LoadAssetBundlesAsync(path, OnAssetBundleLoadComplate);
 
                 return dynamicProgress;
 
@@ -188,14 +188,13 @@ namespace XFramework.Resource
         /// </summary>
         /// <param name="path">相对路径</param>
         /// <returns></returns>
-        private AssetBundle GetAssetBundle(string path)
+        private AssetBundle LoadAssetBundle(string path)
         {
             path = Path2Key(path);
             if (!m_ABDic.TryGetValue(path, out AssetBundle ab))
             {
-                string fullName = ABPath2FullPath(path);
+                string fullName = Convert2FullPath(path);
                 ab = AssetBundle.LoadFromFile(fullName);
-
                 m_ABDic.Add(path, ab);
 
                 //加载当前AB包的依赖包
@@ -204,10 +203,10 @@ namespace XFramework.Resource
 
                 foreach (var item in dependencies)
                 {
-                    string key = Name2Key(item);  // 对key去除.ab
+                    string key = GetNoVariantName(item);  // 对key去除.ab
                     if (!m_ABDic.ContainsKey(key))
                     {
-                        GetAssetBundle(key);
+                        LoadAssetBundle(key);
                     }
                 }
             }
@@ -220,13 +219,13 @@ namespace XFramework.Resource
         /// </summary>
         /// <param name="path"></param>
         /// <returns></returns>
-        private IEnumerable<AssetBundle> GetAssetBundles(string path)
+        private IEnumerable<AssetBundle> LoadAssetBundles(string path)
         {
             List<AssetBundle> assetBundles = new List<AssetBundle>();
 
             path = Path2Key(path);
 
-            var topAb = GetAssetBundle(path);
+            var topAb = LoadAssetBundle(path);
             if (topAb != null)
             {
                 assetBundles.Add(topAb);
@@ -242,7 +241,7 @@ namespace XFramework.Resource
                 foreach (var item in abFiles)
                 {
                     var abPath = item.FullName.Substring(startIndex);
-                    var ab = GetAssetBundle(abPath);
+                    var ab = LoadAssetBundle(abPath);
                     if (ab != null)
                     {
                         assetBundles.Add(ab);
@@ -257,16 +256,13 @@ namespace XFramework.Resource
         /// 异步获取AB包
         /// </summary>
         /// <param name="path"></param>
-        private IProgress GetAssetBundleAsync(string path, Action<AssetBundle> callBack)
+        private IProgress LoadAssetBundleAsync(string path, Action<AssetBundle> callBack)
         {
-            path = Path2Key(path);
-            if (!m_ABDic.TryGetValue(path, out AssetBundle ab))
+            string abKey = Path2Key(path);
+            if (!m_ABDic.TryGetValue(abKey, out AssetBundle ab))
             {
-                string abName = path;
-                //string abName = string.IsNullOrEmpty(path) ? "" : "/" + path;
-
-                AssetBundleCreateRequest mainRequest = AssetBundle.LoadFromFileAsync(m_ABPath + "/" + abName + m_Variant);
-                m_LoadingAB.Add(abName, mainRequest);
+                AssetBundleCreateRequest mainRequest = AssetBundle.LoadFromFileAsync(Convert2FullPath(abKey));
+                m_LoadingAB.Add(abKey, mainRequest);
 
                 // 添加任务列表
                 List<AssetBundleCreateRequest> requests = new List<AssetBundleCreateRequest>
@@ -275,14 +271,15 @@ namespace XFramework.Resource
                 };
 
                 //string[] dependencies = m_Mainfest.GetAllDependencies(path + ".ab");
-                string[] dependencies = m_DependenceInfo.GetAllDependencies(path + m_Variant);
+                string[] dependencies = m_DependenceInfo.GetAllDependencies(abKey + m_Variant);
                 foreach (var name in dependencies)
                 {
-                    if (m_ABDic.ContainsKey(Name2Key(name)))
+                    string key = GetNoVariantName(name);
+                    if (m_ABDic.ContainsKey(key))
                         continue;
-                    var request = AssetBundle.LoadFromFileAsync(m_ABPath + "/" + name);
+                    var request = AssetBundle.LoadFromFileAsync(Convert2FullPath(name));
                     requests.Add(request);
-                    m_LoadingAB.Add(Name2Key(name), request);
+                    m_LoadingAB.Add(key, request);
                 }
 
                 ITask[] tasks = new ITask[requests.Count];
@@ -296,7 +293,7 @@ namespace XFramework.Resource
                     });
                     tasks[index].Then(new SingleTask(() =>
                     {
-                        string key = Name2Key(requests[index].assetBundle.name);
+                        string key = GetNoVariantName(requests[index].assetBundle.name);
                         m_ABDic.Add(key, requests[index].assetBundle);
                         m_LoadingAB.Remove(key);
                         return true;
@@ -309,7 +306,7 @@ namespace XFramework.Resource
                     callBack.Invoke(mainRequest.assetBundle);
                     return true;
                 }));
-                TaskManager.Instance.StartTask(abTask);
+                abTask.Start();
 
                 return new ResProgress(requests.ToArray());
             }
@@ -326,7 +323,7 @@ namespace XFramework.Resource
         /// <param name="path"></param>
         /// <param name="callback"></param>
         /// <returns></returns>
-        private IProgress GetAssetBundlesAsync(string path, Action<IEnumerable<AssetBundle>> callback)
+        private IProgress LoadAssetBundlesAsync(string path, Action<IEnumerable<AssetBundle>> callback)
         {
             List<IProgress> progresses = new List<IProgress>();
 
@@ -335,7 +332,7 @@ namespace XFramework.Resource
             List<AssetBundle> assetBundles = new List<AssetBundle>();
 
             // top层
-            var abProgress = GetAssetBundleAsync(path, (ab) =>
+            var abProgress = LoadAssetBundleAsync(path, (ab) =>
             {
                 assetBundles.Add(ab);
             });
@@ -355,7 +352,7 @@ namespace XFramework.Resource
                 {
                     var abPath = item.FullName.Substring(startIndex);
 
-                    var progress = GetAssetBundleAsync(abPath, (ab) =>
+                    var progress = LoadAssetBundleAsync(abPath, (ab) =>
                     {
                         assetBundles.Add(ab);
                     });
@@ -365,14 +362,14 @@ namespace XFramework.Resource
 
             SingleTask singleTask = new SingleTask(() => { return assetBundles.Count == abCount; });
             singleTask.Then(() => { callback(assetBundles); return true; });
-            TaskManager.Instance.StartTask(singleTask);
+            singleTask.Start();
 
             return new MultiProgress(progresses.ToArray());
         }
 
         #endregion
 
-        private string Name2Key(string abName)
+        private string GetNoVariantName(string abName)
         {
             return abName.Substring(0, abName.Length - (m_Variant.Length));
         }
@@ -383,7 +380,7 @@ namespace XFramework.Resource
             return path.Replace('\\', '/');
         }
 
-        private string ABPath2FullPath(string path)
+        private string Convert2FullPath(string path)
         {
             string fullPath = string.IsNullOrEmpty(path) ? "" : "/" + path;
             fullPath = m_ABPath + fullPath;
@@ -403,7 +400,7 @@ namespace XFramework.Resource
         /// <param name="unLoadAllObjects"></param>
         public void UnLoad(string path, bool unLoadAllObjects = true)
         {
-            GetAssetBundle(path).Unload(unLoadAllObjects);
+            LoadAssetBundle(path).Unload(unLoadAllObjects);
             m_ABDic.Remove(path);
         }
 
