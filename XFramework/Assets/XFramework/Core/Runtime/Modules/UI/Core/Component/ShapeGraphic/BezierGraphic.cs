@@ -25,7 +25,7 @@ namespace XFramework.UI
                         bezier2[0] = originPoints[index++];
                         bezier2[1] = originPoints[index++];
                         bezier2[2] = originPoints[index];
-                        AddifNotContain(points, PhysicsMath.GetBezierList(bezier2));
+                        AddifNotContain(points, Math3d.GetBezierList(bezier2));
                         break;
                     case 2:     // 三次贝塞尔, 取4个点
                         Vector3[] bezier3 = new Vector3[4];
@@ -33,7 +33,7 @@ namespace XFramework.UI
                         bezier3[1] = originPoints[index++];
                         bezier3[2] = originPoints[index++];
                         bezier3[3] = originPoints[index];
-                        AddifNotContain(points, PhysicsMath.GetBezierList(bezier3));
+                        AddifNotContain(points, Math3d.GetBezierList(bezier3));
                         break;
                     default:
                         break;

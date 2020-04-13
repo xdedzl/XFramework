@@ -623,9 +623,155 @@ namespace XFramework.Mathematics
             return points;
         }
 
+        /// <summary>
+        /// 获取扇形区域的点集合（包括圆心点）
+        /// </summary>
+        /// <param name="origin">圆心点</param>
+        /// <param name="egdePoint">扇形弧边右边缘点</param>
+        /// <param name="angleDiffer">x，z轴张角</param>
+        /// <returns></returns>
+        public static Vector3[] GetSectorPoints(Vector3 origin, Vector3 egdePoint, float angleDiffer)
+        {
+            float angle;
+            Vector3 dir = egdePoint - origin;                               //取两点的向量
+            float radius = dir.magnitude;                                   //获取扇形的半径
+
+            //取数组长度 如60度的弧边取61个点 0~60 再加上一个圆心点
+            Vector3[] points = new Vector3[(int)(angleDiffer / 3) + 2];
+            points[0] = origin;                                             //取圆心点
+            int startEuler = (int)Vector2.Angle(Vector2.right, new Vector2(dir.x, dir.z));
+            for (int i = startEuler, j = 1; i <= angleDiffer + startEuler; j++, i += 3)
+            {
+                angle = Mathf.Deg2Rad * i;
+                float differ = Mathf.Abs(Mathf.Cos(angle - (float)(0.5 * angleDiffer * Mathf.Deg2Rad)) * egdePoint.y - egdePoint.y);//高度差的绝对值
+                points[j] = origin + new Vector3(radius * Mathf.Cos(angle), egdePoint.y + differ, radius * Mathf.Sin(angle));       //给底面点赋值
+            }
+            return points;
+        }
+
+        /// <summary>
+        /// 获取两点组成的矩形边框
+        /// </summary>
+        /// <param name="start">起始点</param>
+        /// <param name="end">终止点</param>
+        /// <param name="width">宽度</param>
+        /// <returns></returns>
+        public static Vector2[] GetRect(Vector2 start, Vector2 end, float width)
+        {
+            Vector2[] rect = new Vector2[4];
+            Vector2 dir = Math2d.GetHorizontalDir(end - start);
+            rect[0] = start + dir * width;
+            rect[1] = start - dir * width;
+            rect[2] = end + dir * width;
+            rect[3] = end - dir * width;
+
+            return rect;
+        }
+
         #endregion
 
         #region 多边形相关
+
+        /// <summary>
+        /// 以index点和前后两个点构造一个三角形,判断点集内的其余点是否全部在这个三角形外部
+        /// </summary>
+        public static bool IsFragementIndex(List<Vector2> verts, int index, bool containEdge = true)
+        {
+            int len = verts.Count;
+            List<Vector2> triangleVert = new List<Vector2>();
+            int next = (index == len - 1) ? 0 : index + 1;
+            int prev = (index == 0) ? len - 1 : index - 1;
+            triangleVert.Add(verts[prev]);
+            triangleVert.Add(verts[index]);
+            triangleVert.Add(verts[next]);
+            for (int i = 0; i < len; i++)
+            {
+                if (i != index && i != prev && i != next)
+                {
+                    if (IsPointInsidePolygon(verts[i], triangleVert.ToArray(), containEdge))
+                    {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 以index点和前后两个点构造一个三角形,判断点集内的其余点是否全部在这个三角形外部(忽略y轴)
+        /// </summary>
+        public static bool IsFragementIndex(List<Vector3> verts, int index, bool containEdge = true)
+        {
+            int len = verts.Count;
+            List<Vector3> triangleVert = new List<Vector3>();
+            int next = (index == len - 1) ? 0 : index + 1;
+            int prev = (index == 0) ? len - 1 : index - 1;
+            triangleVert.Add(verts[prev]);
+            triangleVert.Add(verts[index]);
+            triangleVert.Add(verts[next]);
+            for (int i = 0; i < len; i++)
+            {
+                if (i != index && i != prev && i != next)
+                {
+                    if (Math2d.IsPointInsidePolygon(verts[i], triangleVert.ToArray(), containEdge))
+                    {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 将一个多边形转化为多个三角形
+        /// </summary>
+        /// <param name="points"></param>
+        /// <returns></returns>
+        public static List<Vector2[]> PolygonToTriangles(List<Vector2> points)
+        {
+            if (points.Count < 3)
+            {
+                return null;
+            }
+            List<Vector2[]> triangles = new List<Vector2[]>();
+            int index = points.Count - 1;
+            int next;
+            int prev;
+
+            while (points.Count > 3)
+            {
+                List<Vector2> polygon = new List<Vector2>(points);
+                polygon.RemoveAt(index);
+
+                //是否是凹点
+                if (!Math2d.IsPointInsidePolygon(points[index], polygon.ToArray(), false))
+                {
+                    // 是否是可划分顶点:新的多边形没有顶点在分割的三角形内
+                    if (IsFragementIndex(points, index, false))
+                    {
+                        //可划分，剖分三角形
+                        next = (index == points.Count - 1) ? 0 : index + 1;
+                        prev = (index == 0) ? points.Count - 1 : index - 1;
+
+                        triangles.Add(new Vector2[]
+                        {
+                        points[index],
+                        points[prev],
+                        points[next]
+                        });
+
+                        points.RemoveAt(index);
+
+                        index = (index + points.Count - 1) % points.Count;       // 防止出现index超出值域
+                        continue;
+                    }
+                }
+                index = (index + 1) % points.Count;
+            }
+            triangles.Add(new Vector2[] { points[1], points[0], points[2] });
+
+            return triangles;
+        }
 
         /// <summary>
         /// 判断点是否在多边形区域内
@@ -670,6 +816,219 @@ namespace XFramework.Mathematics
 
             // 计算回转数并判断点和多边形的几何关系
             return Mathf.RoundToInt((float)(sum / Math.PI)) == 0 ? false : true;
+        }
+
+        /// <summary>
+        /// 判断点是否在多边形区域内(忽略y轴)
+        /// </summary>
+        /// <param name="p">待判断的点，格式：{ x: X坐标, y: Y坐标 }</param>
+        /// <param name="poly">多边形顶点，数组成员的格式同</param>
+        /// <returns>true:在多边形内，凹点   false：在多边形外，凸点</returns>
+        public static bool IsPointInsidePolygon(Vector3 p, Vector3[] poly, bool containEdge = true)
+        {
+            float px = p.x;
+            float py = p.z;
+            double sum = 0;
+
+            for (int i = 0, j = poly.Length - 1; i < poly.Length; j = i, i++)
+            {
+                float sx = poly[i].x;
+                float sy = poly[i].z;
+                float tx = poly[j].x;
+                float ty = poly[j].z;
+
+                // 点与多边形顶点重合或在多边形的边上(这个判断有些情况不需要)
+                if ((sx - px) * (px - tx) >= 0 && (sy - py) * (py - ty) >= 0 && (px - sx) * (ty - sy) == (py - sy) * (tx - sx))
+                {
+                    return containEdge;
+                }
+
+                // 点与相邻顶点连线的夹角
+                var angle = Mathf.Atan2(sy - py, sx - px) - Math.Atan2(ty - py, tx - px);
+
+                // 确保夹角不超出取值范围（-π 到 π）
+                if (angle >= Mathf.PI)
+                {
+                    angle -= Mathf.PI * 2;
+                }
+                else if (angle <= -Mathf.PI)
+                {
+                    angle += Mathf.PI * 2;
+                }
+
+                sum += angle;
+            }
+
+            // 计算回转数并判断点和多边形的几何关系
+            return Mathf.RoundToInt((float)(sum / Math.PI)) == 0 ? false : true;
+        }
+
+        /// <summary>
+        /// 判断点是否在多边形区域内
+        /// </summary>
+        /// <param name="point"> 待判断的点 </param>
+        /// <param name="mPoints"> 多边形 </param>
+        /// <returns></returns>
+        public static bool IsPointInsidePolygon(Vector3 point, List<Vector3> mPoints)
+        {
+            int nCross = 0;
+
+            for (int i = 0; i < mPoints.Count; i++)
+            {
+                Vector3 p1 = mPoints[i];
+                Vector3 p2 = mPoints[(i + 1) % mPoints.Count];
+
+                // 取多边形任意一个边,做点point的水平延长线,求解与当前边的交点个数
+                // p1p2是水平线段,要么没有交点,要么有无限个交点, 计为无交点
+                if (p1.z == p2.z)
+                {
+                    continue;
+                }
+
+                // point 在p1p2 底部 --> 无交点   (等于底部时, 算有交点)
+                if (point.z < Mathf.Min(p1.z, p2.z))
+                {
+                    continue;
+                }
+
+                // point 在p1p2 顶部 或等于顶部 --> 无交点
+                if (point.z >= Mathf.Max(p1.z, p2.z))
+                {
+                    continue;
+                }
+
+                // 求解 point点水平线与当前p1p2边的交点的 X 坐标
+                // 直线两点式方程：(y-y2)/(y1-y2) = (x-x2)/(x1-x2)
+                float x = (point.z - p1.z) * (p2.x - p1.x) / (p2.z - p1.z) + p1.x;
+
+                if (x > point.x)        // 当 x = point.x 时,说明 point 在 p1p2 线段上, 不成立
+                {
+                    nCross++;           // 只统计单边交点
+                }
+            }
+
+            // 单边交点为奇数，点在多边形之内
+            return (nCross % 2 == 1);
+        }
+
+        /// <summary>
+        /// 判断点是否在多边形区域内
+        /// </summary>
+        /// <param name="point"> 待判断的点 </param>
+        /// <param name="mPoints"> 多边形 </param>
+        /// <returns></returns>
+        public static bool IsPointInsidePolygon(Vector3 point, Vector3[] mPoints, out List<Vector3> crossPoints)
+        {
+            int nCross = 0;
+            crossPoints = new List<Vector3>();
+
+            for (int i = 0; i < mPoints.Length; i++)
+            {
+                Vector3 p1 = mPoints[i];
+                Vector3 p2 = mPoints[(i + 1) % mPoints.Length];
+
+                // 取多边形任意一个边,做点point的水平延长线,求解与当前边的交点个数
+                // p1p2是水平线段,要么没有交点,要么有无限个交点, 计为无交点
+                if (p1.z == p2.z)
+                {
+                    // point点与p1p2在同一高度,加入p1点和p2点
+                    if (p1.z == point.z)
+                    {
+                        crossPoints?.Add(p1);
+                        crossPoints?.Add(p2);
+                    }
+                    continue;
+                }
+                // point 在p1p2 底部 --> 无交点   (等于底部时, 算有交点)
+                if (point.z < Mathf.Min(p1.z, p2.z))
+                {
+                    continue;
+                }
+
+                // point 在p1p2 顶部 或等于顶部 --> 无交点
+                if (point.z >= Mathf.Max(p1.z, p2.z))
+                {
+                    continue;
+                }
+
+                // 求解 point点水平线与当前p1p2边的交点的 X 坐标
+                // 直线两点式方程：(y-y2)/(y1-y2) = (x-x2)/(x1-x2)
+                float x = (point.z - p1.z) * (p2.x - p1.x) / (p2.z - p1.z) + p1.x;
+
+                // 加上交点
+                crossPoints?.Add(new Vector3(x, 0, point.z));
+
+                if (x > point.x)        // 当 x = point.x 时,说明 point 在 p1p2 线段上, 不成立
+                {
+                    nCross++;           // 只统计单边交点
+                }
+            }
+
+            // 单边交点为奇数，点在多边形之内
+            return (nCross % 2 == 1);
+        }
+
+        public static bool IsPointInsidePolygon(Vector2 point, Vector2[] mPoints, out List<Vector2> crossPoints)
+        {
+            int nCross = 0;
+            crossPoints = new List<Vector2>();
+
+            for (int i = 0; i < 3; i++)
+            {
+                Vector2 p1 = mPoints[i];
+                Vector2 p2 = mPoints[(i + 1) % 3];
+
+                // 取多边形任意一个边,做点point的水平延长线,求解与当前边的交点个数
+                // p1p2是水平线段,要么没有交点,要么有无限个交点, 计为无交点
+                if (p1.y == p2.y)
+                {
+                    // point点与p1p2在同一高度,加入p1点和p2点
+                    if (p1.y == point.y)
+                    {
+                        crossPoints?.Add(p1);
+                        crossPoints?.Add(p2);
+                    }
+                    continue;
+                }
+
+                // 加上水平线与线段的端点交点
+                if (point.y == p1.y)
+                {
+                    crossPoints?.Add(p1);
+                }
+                else if (point.y == p2.y)
+                {
+                    crossPoints?.Add(p2);
+                }
+
+
+                // point 在p1p2 底部 --> 无交点   (等于底部时, 算有交点)
+                if (point.y < Mathf.Min(p1.y, p2.y))
+                {
+                    continue;
+                }
+
+                // point 在p1p2 顶部 或等于顶部 --> 无交点
+                if (point.y >= Mathf.Max(p1.y, p2.y))
+                {
+                    continue;
+                }
+
+                // 求解 point点水平线与当前p1p2边的交点的 X 坐标
+                // 直线两点式方程：(y-y2)/(y1-y2) = (x-x2)/(x1-x2)
+                float x = (point.y - p1.y) * (p2.x - p1.x) / (p2.y - p1.y) + p1.x;
+
+                // 加上交点
+                crossPoints?.Add(new Vector2(x, point.y));
+
+                if (x > point.x)        // 当 x = point.x 时,说明 point 在 p1p2 线段上, 不成立
+                {
+                    nCross++;           // 只统计单边交点
+                }
+            }
+
+            // 单边交点为奇数，点在多边形之内
+            return (nCross % 2 == 1);
         }
 
         /// <summary>

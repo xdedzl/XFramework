@@ -168,7 +168,7 @@ namespace XFramework.UI
 
                 void SetVerts(Vector2 _start, Vector2 _end, float _width, UIVertex[] _verts)
                 {
-                    Vector2[] tmp = PhysicsMath.GetRect(_start, _end, _width);
+                    Vector2[] tmp = Math2d.GetRect(_start, _end, _width);
                     _verts[0].position = tmp[0];
                     _verts[1].position = tmp[1];
                     _verts[2].position = tmp[3];

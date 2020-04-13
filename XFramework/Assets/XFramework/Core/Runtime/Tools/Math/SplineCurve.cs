@@ -147,142 +147,142 @@ namespace XFramework.Mathematics
             preSegement.endTangents = segement.startTangents;
 
         }
-    }
-
-    /// <summary>
-    /// 曲线段
-    /// </summary>
-    public class CurveSegement
-    {
-        /// <summary>
-        /// 所属曲线
-        /// </summary>
-        public SplineCurve rootCurve;
 
         /// <summary>
-        /// 曲线段起始位置
+        /// 曲线段
         /// </summary>
-        public Node startNode { get; private set; }
-        /// <summary>
-        /// 曲线段末尾位置
-        /// </summary>
-        public Node endNode { get; private set; }
-
-        public Vector3 startTangents;
-        public Vector3 endTangents;
-
-        /// <summary>
-        /// 张力系数
-        /// </summary>
-        public float c { get; set; }
-
-        public CurveSegement(Node _startNode, Node _endNode, SplineCurve _rootCurve)
+        public class CurveSegement
         {
-            startNode = _startNode;
-            endNode = _endNode;
-            rootCurve = _rootCurve;
-            c = -5f;
-        }
+            /// <summary>
+            /// 所属曲线
+            /// </summary>
+            public SplineCurve rootCurve;
 
-        /// <summary>
-        /// 获取点
-        /// </summary>
-        /// <param name="t"></param>
-        /// <returns></returns>
-        public Vector3 GetPoint(float t)
-        {
-            Vector3 x = Vector3.zero;
-            switch (rootCurve.mode)
+            /// <summary>
+            /// 曲线段起始位置
+            /// </summary>
+            public Node startNode { get; private set; }
+            /// <summary>
+            /// 曲线段末尾位置
+            /// </summary>
+            public Node endNode { get; private set; }
+
+            public Vector3 startTangents;
+            public Vector3 endTangents;
+
+            /// <summary>
+            /// 张力系数
+            /// </summary>
+            public float c { get; set; }
+
+            public CurveSegement(Node _startNode, Node _endNode, SplineCurve _rootCurve)
             {
-                case SplineMode.Hermite:
-                    x = (2 * t * t * t - 3 * t * t + 1) * startNode.pos;
-                    x += (-2 * t * t * t + 3 * t * t) * endNode.pos;
-                    x += (t * t * t - 2 * t * t + t) * startTangents;
-                    x += (t * t * t - t * t) * endTangents;
-                    break;
-                case SplineMode.Catmull_Rom:
-                    x += startNode.preNode.pos * (-0.5f * t * t * t + t * t - 0.5f * t);
-                    x += startNode.pos * (1.5f * t * t * t - 2.5f * t * t + 1.0f);
-                    x += endNode.pos * (-1.5f * t * t * t + 2.0f * t * t + 0.5f * t);
-                    x += endNode.nextNode.pos * (0.5f * t * t * t - 0.5f * t * t);
-                    break;
-                case SplineMode.CentripetalCatmull_Rom:
-                    break;
-                default:
-                    break;
+                startNode = _startNode;
+                endNode = _endNode;
+                rootCurve = _rootCurve;
+                c = -5f;
             }
 
-            return x;
-
-        }
-
-        /// <summary>
-        /// 获取切线
-        /// </summary>
-        /// <param name="t"></param>
-        /// <returns></returns>
-        public Vector3 GetTangents(float t)
-        {
-            Vector3 tangents = Vector3.zero;
-            switch (rootCurve.mode)
+            /// <summary>
+            /// 获取点
+            /// </summary>
+            /// <param name="t"></param>
+            /// <returns></returns>
+            public Vector3 GetPoint(float t)
             {
-                case SplineMode.Hermite:
-                    tangents = (6 * t * t - 6 * t) * startNode.pos;
-                    tangents += (-6 * t * t + 6 * t) * endNode.pos;
-                    tangents += (3 * t * t - 4 * t + 1) * startTangents;
-                    tangents += (3 * t * t - 2 * t) * endTangents;
-                    break;
-                case SplineMode.Catmull_Rom:
-                    tangents = startNode.preNode.pos * (-1.5f * t * t + 2 * t - 0.5f);
-                    tangents += startNode.pos * (3.0f * t * t - 5.0f * t);
-                    tangents += endNode.pos * (-3.0f * t * t + 4.0f * t + 0.5f);
-                    tangents += endNode.nextNode.pos * (1.5f * t * t - 1.0f * t);
-                    break;
-                case SplineMode.CentripetalCatmull_Rom:
-                    break;
-                default:
-                    break;
+                Vector3 x = Vector3.zero;
+                switch (rootCurve.mode)
+                {
+                    case SplineMode.Hermite:
+                        x = (2 * t * t * t - 3 * t * t + 1) * startNode.pos;
+                        x += (-2 * t * t * t + 3 * t * t) * endNode.pos;
+                        x += (t * t * t - 2 * t * t + t) * startTangents;
+                        x += (t * t * t - t * t) * endTangents;
+                        break;
+                    case SplineMode.Catmull_Rom:
+                        x += startNode.preNode.pos * (-0.5f * t * t * t + t * t - 0.5f * t);
+                        x += startNode.pos * (1.5f * t * t * t - 2.5f * t * t + 1.0f);
+                        x += endNode.pos * (-1.5f * t * t * t + 2.0f * t * t + 0.5f * t);
+                        x += endNode.nextNode.pos * (0.5f * t * t * t - 0.5f * t * t);
+                        break;
+                    case SplineMode.CentripetalCatmull_Rom:
+                        break;
+                    default:
+                        break;
+                }
+
+                return x;
+
             }
 
-            return tangents;
-        }
-    }
-
-    /// <summary>
-    /// 曲线节点
-    /// </summary>
-    public class Node
-    {
-        /// <summary>
-        /// 节点位置
-        /// </summary>
-        public Vector3 pos;
-        /// <summary>
-        /// 前连接节点
-        /// </summary>
-        public Node preNode;
-        /// <summary>
-        /// 后连接节点
-        /// </summary>
-        public Node nextNode;
-
-        public Node(Vector3 _pos)
-        {
-            pos = _pos;
-        }
-
-        public Node(Vector3 _pos, Node _preNode, Node _nextNode = null)
-        {
-            pos = _pos;
-            if (_preNode != null)
+            /// <summary>
+            /// 获取切线
+            /// </summary>
+            /// <param name="t"></param>
+            /// <returns></returns>
+            public Vector3 GetTangents(float t)
             {
-                preNode = _preNode;
-                _preNode.nextNode = this;
+                Vector3 tangents = Vector3.zero;
+                switch (rootCurve.mode)
+                {
+                    case SplineMode.Hermite:
+                        tangents = (6 * t * t - 6 * t) * startNode.pos;
+                        tangents += (-6 * t * t + 6 * t) * endNode.pos;
+                        tangents += (3 * t * t - 4 * t + 1) * startTangents;
+                        tangents += (3 * t * t - 2 * t) * endTangents;
+                        break;
+                    case SplineMode.Catmull_Rom:
+                        tangents = startNode.preNode.pos * (-1.5f * t * t + 2 * t - 0.5f);
+                        tangents += startNode.pos * (3.0f * t * t - 5.0f * t);
+                        tangents += endNode.pos * (-3.0f * t * t + 4.0f * t + 0.5f);
+                        tangents += endNode.nextNode.pos * (1.5f * t * t - 1.0f * t);
+                        break;
+                    case SplineMode.CentripetalCatmull_Rom:
+                        break;
+                    default:
+                        break;
+                }
+
+                return tangents;
             }
-            if (_nextNode != null)
+        }
+
+        /// <summary>
+        /// 曲线节点
+        /// </summary>
+        public class Node
+        {
+            /// <summary>
+            /// 节点位置
+            /// </summary>
+            public Vector3 pos;
+            /// <summary>
+            /// 前连接节点
+            /// </summary>
+            public Node preNode;
+            /// <summary>
+            /// 后连接节点
+            /// </summary>
+            public Node nextNode;
+
+            public Node(Vector3 _pos)
             {
-                nextNode = _nextNode;
-                _nextNode.preNode = this;
+                pos = _pos;
+            }
+
+            public Node(Vector3 _pos, Node _preNode, Node _nextNode = null)
+            {
+                pos = _pos;
+                if (_preNode != null)
+                {
+                    preNode = _preNode;
+                    _preNode.nextNode = this;
+                }
+                if (_nextNode != null)
+                {
+                    nextNode = _nextNode;
+                    _nextNode.preNode = this;
+                }
             }
         }
     }

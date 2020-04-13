@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace XFramework.Mathematics
@@ -636,6 +638,32 @@ namespace XFramework.Mathematics
         #region 曲线相关
 
         /// <summary>
+        /// 获取贝塞尔曲线(3个点为二次,4个点为三次,其他返回空)
+        /// </summary>
+        /// <param name="_points">控制点集</param>
+        /// <param name="_count">曲线段数</param>
+        /// <returns></returns>
+        public static List<Vector3> GetBezierList(Vector3[] _points, int _count = 10)
+        {
+            List<Vector3> outList = new List<Vector3>();
+            if (_points.Length == 3)
+            {
+                for (float i = 0; i <= _count; i++)
+                {
+                    outList.Add(Math3d.GetBezierPoint(i / _count, _points[0], _points[1], _points[2]));
+                }
+            }
+            if (_points.Length == 4)
+            {
+                for (float i = 0; i <= _count; i++)
+                {
+                    outList.Add(Math3d.GetBezierPoint(i / _count, _points[0], _points[1], _points[2], _points[3]));
+                }
+            }
+            return outList;
+        }
+
+        /// <summary>
         /// 获取二次贝塞尔曲线上点
         /// </summary>
         /// <param name="_t">间隔</param>
@@ -662,6 +690,100 @@ namespace XFramework.Mathematics
         {
             float u = 1 - _t;
             return u * u * u * _P0 + 3 * u * u * _t * _P1 + 3 * _t * _t * u * _P2 + _t * _t * _t * _P3;
+        }
+
+        /// <summary>         
+        /// 获取曲线上面的所有路径点
+        /// </summary> 
+        /// <returns>The list.</returns> 
+        /// <param name="wayPoints">路点列表</param> 
+        /// <param name="pointSize">两个点之间的节点数量</param> 
+        public static List<Vector3> GetHermitPoints(List<Vector3> wayPoints)
+        {
+            Vector3[] controlPointList = HermitPathControlPoint(wayPoints.ToArray());
+            int smoothAmount = 0;       // wayPoints.Length * pointSize;     
+
+            // 根据 路点 间的距离计算所需 路径点 的数量
+            for (int i = 0, length = wayPoints.Count - 1; i < length; i++)
+            {
+                smoothAmount += (int)Vector3.Distance(wayPoints[i + 1], wayPoints[i]) / 4;
+            }
+
+            Vector3[] pointArr = new Vector3[smoothAmount];
+            for (int index = 1; index <= smoothAmount; index++)
+            {
+                pointArr[index - 1] = HermitInterp(controlPointList, (float)index / smoothAmount);
+            }
+            return pointArr.ToList();
+        }
+
+        /// <summary>
+        /// 获取 Hermit 曲线上的某点
+        /// </summary>
+        /// <param name="wayPoints"></param>
+        /// <param name="t"></param>
+        /// <returns></returns>
+        public static Vector3 GetHermitPoint(List<Vector3> wayPoints, float t)
+        {
+            Vector3[] controlPointList = HermitPathControlPoint(wayPoints.ToArray());
+            return HermitInterp(controlPointList, t);
+        }
+
+        /// <summary> 
+        /// 获取控制点 
+        /// </summary> 
+        /// <returns>The control point generator.</returns> 
+        /// <param name="path">Path.</param> 
+        public static Vector3[] HermitPathControlPoint(Vector3[] path)
+        {
+            int offset = 2;
+            Vector3[] suppliedPath = path;
+            Vector3[] controlPoint = new Vector3[suppliedPath.Length + offset];
+
+            Array.Copy(suppliedPath, 0, controlPoint, 1, suppliedPath.Length);
+
+            controlPoint[0] = controlPoint[1] + (controlPoint[1] - controlPoint[2]);
+            controlPoint[controlPoint.Length - 1] = controlPoint[controlPoint.Length - 2] +
+                (controlPoint[controlPoint.Length - 2] - controlPoint[controlPoint.Length - 3]);
+
+            if (controlPoint[1] == controlPoint[controlPoint.Length - 2])
+            {
+                Vector3[] tmpLoopSpline = new Vector3[controlPoint.Length];
+
+                Array.Copy(controlPoint, tmpLoopSpline, controlPoint.Length);
+
+                tmpLoopSpline[0] = tmpLoopSpline[tmpLoopSpline.Length - 3];
+
+                tmpLoopSpline[tmpLoopSpline.Length - 1] = tmpLoopSpline[2];
+
+                controlPoint = new Vector3[tmpLoopSpline.Length];
+
+                Array.Copy(tmpLoopSpline, controlPoint, tmpLoopSpline.Length);
+            }
+            return (controlPoint);
+        }
+
+        /// <summary> 
+        /// 根据 T 获取曲线上面的点位置 ，
+        /// 插值函数，
+        /// Hermit曲线方程
+        /// </summary> 
+        /// <param name="pts">控制点点集</param> 
+        /// <param name="t">分割进度</param> 
+        public static Vector3 HermitInterp(Vector3[] pts, float t)
+        {
+            int numSections = pts.Length - 3;       // 控制点总数减3
+            int currPt = Mathf.Min(Mathf.FloorToInt(t * (float)numSections), numSections - 1);
+
+            float u = t * (float)numSections - (float)currPt;
+
+            Vector3 a = pts[currPt];
+            Vector3 b = pts[currPt + 1];
+            Vector3 c = pts[currPt + 2];
+            Vector3 d = pts[currPt + 3];
+
+            return .5f * ((-a + 3f * b - 3f * c + d) * (u * u * u) +
+                (2f * a - 5f * b + 4f * c - d) * (u * u) + (-a + c) * u + 2f * b);
         }
 
         #endregion
