@@ -2,8 +2,8 @@
 
 namespace XFramework
 {
-    public abstract class ProcedureBase : FsmState
-    {
-         
-    }
+    /// <summary>
+    /// 流程基类
+    /// </summary>
+    public abstract class ProcedureBase : FsmState { }
 }
