@@ -160,6 +160,30 @@ namespace XFramework
                     Directory.Delete(dirPath);
             }
 
+            /// <summary>
+            /// 清空一个文件夹
+            /// </summary>
+            /// <param name="fullPath">文件夹路径</param>
+            public static void CleraDirectory(string fullPath)
+            {
+                DirectoryInfo directoryInfo = new DirectoryInfo(fullPath);
+                if (directoryInfo.Exists)
+                {
+                    FileSystemInfo[] fileSysInfo = directoryInfo.GetFileSystemInfos();
+                    foreach (FileSystemInfo fsi in fileSysInfo)
+                    {
+                        if (fsi is DirectoryInfo)
+                        {
+                            Directory.Delete(fsi.FullName, true);
+                        }
+                        else
+                        {
+                            File.Delete(fsi.FullName);
+                        }
+                    }
+                }
+            }
+
             #endregion
 
 

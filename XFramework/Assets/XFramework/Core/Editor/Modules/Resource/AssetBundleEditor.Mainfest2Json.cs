@@ -101,7 +101,7 @@ namespace XFramework.Editor
                         AssetBundle mainfestAB = AssetBundle.LoadFromFile(m_Paths[i]);
                         var mainfest = mainfestAB.LoadAsset<AssetBundleManifest>("AssetBundleManifest");
 
-                        datas[i] = GenerateDependence(mainfest);
+                        datas[i] = DependenceUtility.Manifest2Dependence(mainfest);
                     }
                     else
                     {
@@ -110,46 +110,11 @@ namespace XFramework.Editor
                     }
                 }
 
-                string json = JsonUtility.ToJson(ConbineDependence(datas), true);
+                string json = JsonUtility.ToJson(DependenceUtility.ConbineDependence(datas), true);
                 File.WriteAllText(m_OutPutPath + "/depenencies.json", json);
                 AssetDatabase.Refresh();
 
                 Debug.Log("依赖文件已替换");
-            }
-
-            /// <summary>
-            /// 融合依赖关系
-            /// 在数组中越靠后优先级越高
-            /// </summary>
-            /// <param name="datas"></param>
-            private DependenciesData ConbineDependence(DependenciesData[] datas)
-            {
-                List<SingleDepenciesData> singleDatas = new List<SingleDepenciesData>();
-
-                foreach (var data in datas.Reverse())
-                {
-                    string[] assetBundles = data.GetAllAssetBundles();
-
-                    foreach (var abName in assetBundles)
-                    {
-                        if (Contains(abName))
-                            continue;
-                        singleDatas.Add(new SingleDepenciesData(abName, data.GetDirectDependencies(abName)));
-                    }
-                    
-                }
-
-                return new DependenciesData(singleDatas.ToArray());
-
-                bool Contains(string abName)
-                {
-                    foreach (var item in singleDatas)
-                    {
-                        if (abName == item.Name)
-                            return true;
-                    }
-                    return false;
-                }
             }
 
             private string List2Str(List<String> list)

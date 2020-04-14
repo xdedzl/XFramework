@@ -2,6 +2,7 @@
 using UnityEngine;
 using System.IO;
 using System.Collections.Generic;
+using XFramework.Resource;
 
 namespace XFramework.Editor
 {
@@ -112,7 +113,7 @@ namespace XFramework.Editor
                                 string dependenctAb = Utility.Text.SplitPathName(abOutPath)[1];
                                 AssetBundle mainfestAB = AssetBundle.LoadFromFile(abOutPath + "/" + dependenctAb);
                                 var mainfest = mainfestAB.LoadAsset<AssetBundleManifest>("AssetBundleManifest");
-                                var dependence = GenerateDependence(mainfest);
+                                var dependence = DependenceUtility.Manifest2Dependence(mainfest);
 
                                 string json = JsonUtility.ToJson(dependence, true);
                                 File.WriteAllText(abOutPath + "/depenencies.json", json);
