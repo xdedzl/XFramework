@@ -37,7 +37,7 @@ namespace XFramework.Editor
             window.minSize = new Vector2(400, 100);
         }
 
-        private TabMode m_TabMode = TabMode.BuildProject;
+        private TabMode m_TabMode;
 
         public SubWindow[] m_SubWindows = new SubWindow[]
         {
@@ -49,6 +49,8 @@ namespace XFramework.Editor
 
         private void OnEnable()
         {
+            m_TabMode = (TabMode)EditorPrefs.GetInt("TabMode", (int)TabMode.BuildProject);
+
             foreach (var item in m_SubWindows)
             {
                 item.OnEnable();
@@ -71,39 +73,12 @@ namespace XFramework.Editor
 
         private void OnDisable()
         {
+            EditorPrefs.SetInt("TabMode", (int)m_TabMode);
+
             foreach (var item in m_SubWindows)
             {
                 item.OnDisable();
             }
         }
-
-        #region 
-
-        /// <summary>
-        /// 将unity依赖转为自己的
-        /// </summary>
-        /// <param name="mainfest"></param>
-        /// <returns></returns>
-        public static DependenciesData GenerateDependence(AssetBundleManifest mainfest)
-        {
-            string[] abNames = mainfest.GetAllAssetBundles();
-
-            List<SingleDepenciesData> singleDatas = new List<SingleDepenciesData>();
-
-            for (int j = 0; j < abNames.Length; j++)
-            {
-                var dpNames = mainfest.GetDirectDependencies(abNames[j]);
-                if (dpNames.Length <= 0)
-                {
-                    continue;
-                }
-                singleDatas.Add(new SingleDepenciesData(abNames[j], dpNames));
-            }
-            var data = new DependenciesData(singleDatas.ToArray());
-            return data;
-        }
-
-        #endregion
-
     }
 }

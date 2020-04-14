@@ -1,8 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
+using XFramework.Resource;
 
 namespace XFramework.Editor
 {
@@ -23,18 +23,31 @@ namespace XFramework.Editor
             private List<AssetBundleBuild> m_Builds;
 
             private string m_OutPutPath;
-            private BuildAssetBundleOptions buildAssetBundleOption;
+            private BuildAssetBundleOptions m_buildAssetBundleOption;
+            /// <summary>
+            /// 是否显示ab内容
+            /// </summary>
+            //private bool isShowPreview;
+            /// <summary>
+            /// 是否为增量打包
+            /// </summary>
+            private bool m_incrementalPackaging;
 
             public override void OnEnable()
             {
                 m_BuildDatas = new List<BuildData>();
                 m_Builds = new List<AssetBundleBuild>();
+
                 m_OutPutPath = EditorPrefs.GetString("ABOutPutPath", Application.streamingAssetsPath + "/AssetBundles");
+                m_buildAssetBundleOption = (BuildAssetBundleOptions)EditorPrefs.GetInt("BuildAssetBundleOptions", (int)BuildAssetBundleOptions.None);
+                m_incrementalPackaging = EditorPrefs.GetBool("IncrementalPackaging", false);
             }
 
             public override void OnDisable()
             {
                 EditorPrefs.SetString("ABOutPutPath", m_OutPutPath);
+                EditorPrefs.SetInt("BuildAssetBundleOptions", (int)m_buildAssetBundleOption);
+                EditorPrefs.SetBool("IncrementalPackaging", m_incrementalPackaging);
             }
 
             public override void OnGUI()
@@ -82,11 +95,6 @@ namespace XFramework.Editor
                     }
 
                     GUILayout.Space(10);
-                    using (new EditorGUILayout.HorizontalScope())
-                    {
-                        // 底边栏
-                        BottomMenu();
-                    }
 
                     using (new EditorGUILayout.HorizontalScope())
                     {
@@ -100,7 +108,14 @@ namespace XFramework.Editor
                                 m_OutPutPath = temp;
                             }
                         }
-                        buildAssetBundleOption = (BuildAssetBundleOptions)EditorGUILayout.EnumPopup(buildAssetBundleOption);
+                        m_buildAssetBundleOption = (BuildAssetBundleOptions)EditorGUILayout.EnumPopup(m_buildAssetBundleOption);
+                        m_incrementalPackaging = GUILayout.Toggle(m_incrementalPackaging, "增量包");
+                    }
+
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        // 底边栏
+                        BottomMenu();
                     }
                 }
             }
@@ -117,7 +132,7 @@ namespace XFramework.Editor
                             m_BuildDatas.Add(new BuildData()
                             {
                                 path = AssetDatabase.GetAssetPath(item),
-                                option = PackOption.AllFiles,
+                                option = PackOption.AllDirectiony,
                             });
                         }
                     }
@@ -126,22 +141,14 @@ namespace XFramework.Editor
                         m_BuildDatas.Add(new BuildData()
                         {
                             path = "",
-                            option = PackOption.AllFiles,
+                            option = PackOption.AllDirectiony,
                         });
                     }
                 }
 
-
-
-                if (GUILayout.Button("刷新AssetBundleBuild"))
+                if (GUILayout.Button("刷新预览"))
                 {
-                    m_Builds.Clear();
-
-                    for (int i = 0; i < m_BuildDatas.Count; i++)
-                    {
-                        DirectoryInfo info = new DirectoryInfo(Application.dataPath.Replace("Assets", "/") + m_BuildDatas[i].path);
-                        m_Builds = AssetBundleUtility.MarkDirectory(info, m_BuildDatas[i].option);
-                    }
+                    RefreshAssetBundleBuild();
                 }
             }
 
@@ -173,38 +180,92 @@ namespace XFramework.Editor
             // 底边栏
             private void BottomMenu()
             {
-                if (GUILayout.Button("删除AB包"))
+                if (GUILayout.Button("清空输出目录"))
                 {
-                    if (!Directory.Exists(m_OutPutPath))
+                    if (EditorUtility.DisplayDialog("警告", "是否要删除输出目录下的所有文件", "确认", "取消"))
                     {
-                        // 删除之前的ab文件
-                        FileInfo[] fs = new DirectoryInfo(m_OutPutPath).GetFiles("*", SearchOption.AllDirectories);
-                        foreach (var f in fs)
-                        {
-                            f.Delete();
-                        }
+                        Utility.IO.CleraDirectory(m_OutPutPath);
                     }
                 }
 
                 if (GUILayout.Button("打包"))
                 {
-                    if (!Directory.Exists(m_OutPutPath))
-                    {
-                        Directory.CreateDirectory(m_OutPutPath);
-                    }
-                    BuildPipeline.BuildAssetBundles(m_OutPutPath, m_Builds.ToArray(), buildAssetBundleOption, EditorUserBuildSettings.activeBuildTarget);
-                    AssetDatabase.Refresh();
-
-                    string dependenctAb = Utility.Text.SplitPathName(m_OutPutPath)[1];
-                    AssetBundle mainfestAB = AssetBundle.LoadFromFile(m_OutPutPath + "/" + dependenctAb);
-                    var mainfest = mainfestAB.LoadAsset<AssetBundleManifest>("AssetBundleManifest");
-                    var dependence = GenerateDependence(mainfest);
-
-                    string json = JsonUtility.ToJson(dependence, true);
-                    File.WriteAllText(m_OutPutPath + "/depenencies.json", json);
-
-                    Debug.Log("BuildAssetBundles Complete");
+                    Build();
                 }
+            }
+
+            // 刷新要打包的ab包内容
+            private void RefreshAssetBundleBuild()
+            {
+                m_Builds.Clear();
+
+                for (int i = 0; i < m_BuildDatas.Count; i++)
+                {
+                    DirectoryInfo info = new DirectoryInfo(Application.dataPath.Replace("Assets", "/") + m_BuildDatas[i].path);
+                    var tempBuilds = AssetBundleUtility.MarkDirectory(info, m_BuildDatas[i].option);
+                    m_Builds.AddRange(tempBuilds);
+                }
+            }
+
+            // 打包
+            private void Build()
+            {
+                RefreshAssetBundleBuild();
+
+                DependenciesData dependence;
+
+                string jsonPath = m_OutPutPath + "/depenencies.json";
+                // 增量打包时，融合原有依赖文件
+                if (m_incrementalPackaging)
+                {
+                    if (File.Exists(jsonPath))
+                    {
+                        string readJson = File.ReadAllText(jsonPath);
+                        DependenciesData oldDependencies = JsonUtility.FromJson<DependenciesData>(readJson);
+                        DependenciesData newDependencies = BuildAssetBundle();
+                        dependence = DependenceUtility.ConbineDependence(new DependenciesData[]
+                        {
+                            oldDependencies,
+                            newDependencies
+                        });
+                    }
+                    else
+                    {
+                        if (EditorUtility.DisplayDialog("提示","输出路径中无依赖文件，无法进行增量打包,是否进行非增量打包","确认","取消"))
+                        {
+                            dependence = BuildAssetBundle();
+                        }
+                        else
+                        {
+                            return;
+                        }
+                    }
+                }
+                else
+                {
+                    dependence = BuildAssetBundle();
+                }
+
+                string json = JsonUtility.ToJson(dependence, true);
+                File.WriteAllText(jsonPath, json);
+
+                Debug.Log("BuildAssetBundles Complete");
+            }
+
+            private DependenciesData BuildAssetBundle()
+            {
+                if (!Directory.Exists(m_OutPutPath))
+                {
+                    Directory.CreateDirectory(m_OutPutPath);
+                }
+                BuildPipeline.BuildAssetBundles(m_OutPutPath, m_Builds.ToArray(), m_buildAssetBundleOption, EditorUserBuildSettings.activeBuildTarget);
+                AssetDatabase.Refresh();
+
+                string dependenctAb = Utility.Text.SplitPathName(m_OutPutPath)[1];
+                AssetBundle mainfestAB = AssetBundle.LoadFromFile(m_OutPutPath + "/" + dependenctAb);
+                var mainfest = mainfestAB.LoadAsset<AssetBundleManifest>("AssetBundleManifest");
+                var dependence = DependenceUtility.Manifest2Dependence(mainfest);
+                return dependence;
             }
         }
     }

@@ -1,5 +1,5 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace XFramework.Resource
@@ -27,7 +27,7 @@ namespace XFramework.Resource
         {
             foreach (var item in AllDependenceData)
             {
-                if(assetBundleName == item.Name)
+                if (assetBundleName == item.Name)
                 {
                     return item.Dependencies;
                 }
@@ -42,7 +42,7 @@ namespace XFramework.Resource
             string[] dps = GetDirectDependencies(assetBundleName);
 
             List<string> tempList = new List<string>();
-            while(dps.Length != 0)
+            while (dps.Length != 0)
             {
                 foreach (var item in dps)
                 {
@@ -92,6 +92,67 @@ namespace XFramework.Resource
         {
             Name = name;
             Dependencies = dependencies;
+        }
+    }
+
+    public class DependenceUtility
+    {
+        /// <summary>
+        /// 融合依赖关系
+        /// 在数组中越靠后优先级越高
+        /// </summary>
+        /// <param name="datas"></param>
+        public static DependenciesData ConbineDependence(DependenciesData[] datas)
+        {
+            List<SingleDepenciesData> singleDatas = new List<SingleDepenciesData>();
+
+            foreach (var data in datas.Reverse())
+            {
+                string[] assetBundles = data.GetAllAssetBundles();
+
+                foreach (var abName in assetBundles)
+                {
+                    if (Contains(abName))
+                        continue;
+                    singleDatas.Add(new SingleDepenciesData(abName, data.GetDirectDependencies(abName)));
+                }
+            }
+
+            return new DependenciesData(singleDatas.ToArray());
+
+            bool Contains(string abName)
+            {
+                foreach (var item in singleDatas)
+                {
+                    if (abName == item.Name)
+                        return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 将unity依赖转为自己的
+        /// </summary>
+        /// <param name="mainfest"></param>
+        /// <returns></returns>
+        public static DependenciesData Manifest2Dependence(AssetBundleManifest mainfest)
+        {
+            string[] abNames = mainfest.GetAllAssetBundles();
+
+            List<SingleDepenciesData> singleDatas = new List<SingleDepenciesData>();
+
+            for (int j = 0; j < abNames.Length; j++)
+            {
+                var dpNames = mainfest.GetDirectDependencies(abNames[j]);
+                if (dpNames.Length <= 0)
+                {
+                    continue;
+                }
+                singleDatas.Add(new SingleDepenciesData(abNames[j], dpNames));
+            }
+            var data = new DependenciesData(singleDatas.ToArray());
+            return data;
         }
     }
 }
