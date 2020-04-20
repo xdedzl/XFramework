@@ -1,138 +1,143 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
-public class AssetOpenModeWindow : EditorWindow
+namespace XFramework.Editor
 {
-    private static CodeOpneMode shaderOpenMode = CodeOpneMode.VSCode;
-    private static CodeOpneMode csOpenMode = CodeOpneMode.Default;
-    private static CodeOpneMode jsonOpenMode = CodeOpneMode.VSCode;
-    private static CodeOpneMode txtOpenMode = CodeOpneMode.VSCode;
-
-    private AssetOpenModeWindow m_Window;
-    private float m_CurrentWidth;
-    private float m_CurrentHeight;
-
-    private void OnEnable()
+    public class AssetOpenModeWindow : EditorWindow
     {
-        Load();
-    }
+        private AssetOpenModeWindow m_Window;
 
-    private void OnGUI()
-    {
-        GUI.backgroundColor = new Color32(0, 170, 255, 50);
-        EditorGUILayout.BeginVertical("box");
+        private static Dictionary<string, string> m_fileOpenType = new Dictionary<string, string>();
 
-        GUI.backgroundColor = new Color32(255, 255, 0, 180);
-        shaderOpenMode = (CodeOpneMode)EditorGUILayout.EnumPopup("Shader", shaderOpenMode);
-        csOpenMode = (CodeOpneMode)EditorGUILayout.EnumPopup("CS", csOpenMode);
-        jsonOpenMode = (CodeOpneMode)EditorGUILayout.EnumPopup("Json", jsonOpenMode);
-        txtOpenMode = (CodeOpneMode)EditorGUILayout.EnumPopup("Txt", jsonOpenMode);
-
-        EditorGUILayout.EndVertical();
-    }
-
-    private void OnDestroy()
-    {
-        Save();
-    }
-
-
-    [MenuItem("XFramework/Asset/OpenMode")]
-    private static void OpenWidown()
-    {
-        GetWindow(typeof(AssetOpenModeWindow));
-    }
-
-    [OnOpenAsset(1)]
-    public static bool OpenAsset(int instanceID, int line)
-    {
-        string fileFullPath = System.IO.Directory.GetParent(Application.dataPath) + "/" + AssetDatabase.GetAssetPath(EditorUtility.InstanceIDToObject(instanceID));
-
-        if (fileFullPath.EndsWith(".shader"))    //文件扩展名类型
+        private void OnEnable()
         {
-            return OpenAssetWithEnd(shaderOpenMode, fileFullPath);
-        }
-        else if (fileFullPath.EndsWith(".cs"))
-        {
-            return OpenAssetWithEnd(csOpenMode, fileFullPath);
-        }
-        else if (fileFullPath.EndsWith(".json"))
-        {
-            return OpenAssetWithEnd(jsonOpenMode, fileFullPath);
-        }
-        else if (fileFullPath.EndsWith(".txt"))
-        {
-            return OpenAssetWithEnd(jsonOpenMode, fileFullPath);
-        }
-        return false;
-    }
+            string keysJson = EditorPrefs.GetString("keys");
+            string valuesJson = EditorPrefs.GetString("values");
 
-    /// <summary>
-    /// 打开文件
-    /// </summary>
-    private static bool OpenAssetWithEnd(CodeOpneMode mode, string strFileName)
-    {
-        string fullName = GetFileFullname(mode);
-        if (fullName == null)
+            string[] keys = JsonUtility.FromJson<string[]>(keysJson);
+            string[] values = JsonUtility.FromJson<string[]>(valuesJson);
+
+            if(keys != null && values != null && keys.Length == values.Length)
+            {
+                for (int i = 0; i < keys.Length; i++)
+                {
+                    m_fileOpenType.Add(keys[i], values[i]);
+                }
+            }
+        }
+
+        private void OnDisable()
+        {
+            string keysJson = JsonUtility.ToJson(m_fileOpenType.Keys.ToArray());
+            string valuesJson = JsonUtility.ToJson(m_fileOpenType.Values.ToArray());
+
+            EditorPrefs.SetString("keys", keysJson);
+            EditorPrefs.SetString("values", valuesJson);
+        }
+
+        private string inputFileType;
+
+        private void OnGUI()
+        {
+            using (new EditorGUILayout.VerticalScope())
+            {
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    inputFileType = EditorGUILayout.TextField("文件类型", inputFileType);
+                    if (GUILayout.Button(EditorIcon.Plus))
+                    {
+                        if (string.IsNullOrEmpty(inputFileType))
+                        {
+                            EditorUtility.DisplayDialog("提示", "请输入文件后缀名", "确定");
+                        }
+                        else if(m_fileOpenType.ContainsKey(inputFileType))
+                        {
+                            EditorUtility.DisplayDialog("提示", "请勿重复添加", "确定");
+                        }
+                        else
+                        {
+                            m_fileOpenType.Add(inputFileType, "");
+                        }
+                    }
+                }
+
+                using(new EditorGUILayout.VerticalScope("box"))
+                {
+                    string toRemoveKey = "";
+                    string toChangeKey = "";
+                    string toChangeValue = "";
+                    foreach (var item in m_fileOpenType)
+                    {
+                        using (new EditorGUILayout.HorizontalScope())
+                        {
+                            EditorGUILayout.LabelField(item.Key, item.Value);
+
+                            if (GUILayout.Button(EditorIcon.Folder))
+                            {
+                                string file = EditorUtility.OpenFilePanel("选择exe", item.Value, "exe");
+
+                                if (!string.IsNullOrEmpty(file))
+                                {
+                                    toChangeKey = item.Key;
+                                    toChangeValue = file;
+                                    
+                                }
+                            }
+                            if (GUILayout.Button(EditorIcon.Trash))
+                            {
+                                toRemoveKey = item.Key;
+                            }
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(toChangeKey))
+                    {
+                        m_fileOpenType[toChangeKey] = toChangeValue;
+                    }
+                    m_fileOpenType.Remove(toRemoveKey);
+                }
+            }
+        }
+
+        [MenuItem("XFramework/Asset/OpenMode")]
+        private static void OpenWidown()
+        {
+            GetWindow(typeof(AssetOpenModeWindow));
+        }
+
+        [OnOpenAsset(1)]
+        public static bool OpenAsset(int instanceID, int line)
+        {
+            string fileFullPath = System.IO.Directory.GetParent(Application.dataPath) + "/" + AssetDatabase.GetAssetPath(EditorUtility.InstanceIDToObject(instanceID));
+
+            foreach (var item in m_fileOpenType)
+            {
+                if (fileFullPath.EndsWith(item.Key))
+                {
+                    OpenFileWithExe(item.Value, fileFullPath);
+                    return true;
+                }
+            }
+
             return false;
-        Process process = new Process();
-        ProcessStartInfo startInfo = new ProcessStartInfo();
-        startInfo.WindowStyle = ProcessWindowStyle.Hidden;
-        startInfo.FileName = GetFileFullname(mode);
-        startInfo.Arguments = "\"" + strFileName + "\"";
-        process.StartInfo = startInfo;
-        process.Start();
-        return true;
-    }
-
-    /// <summary>
-    /// 通过打开方式获取exe完整路径
-    /// </summary>
-    private static string GetFileFullname(CodeOpneMode mode)
-    {
-        string editorPath;
-        switch (mode)
-        {
-            case CodeOpneMode.VSCode:
-                editorPath = Environment.GetEnvironmentVariable("VSCode_Path");
-                return editorPath == null ? null : editorPath + (editorPath.EndsWith("/") ? "" : "/") + "Code.exe";
-            case CodeOpneMode.Sublime:
-                editorPath = Environment.GetEnvironmentVariable("Sublime_Path");
-                return editorPath == null ? null : editorPath + (editorPath.EndsWith("/") ? "" : "/") + "sublime_text.exe";
-            default:
-                return null;
         }
-    }
 
-    /// <summary>
-    /// 保存编辑器变量
-    /// </summary>
-    private void Save()
-    {
-        EditorPrefs.SetInt("shaderMode", (int)shaderOpenMode);
-        EditorPrefs.SetInt("csMode", (int)csOpenMode);
-        EditorPrefs.SetInt("jsonMode", (int)jsonOpenMode);
-        EditorPrefs.SetInt("txtMode", (int)jsonOpenMode);
-    }
-
-    /// <summary>
-    /// 加载编辑器变量
-    /// </summary>
-    private void Load()
-    {
-        shaderOpenMode = (CodeOpneMode)EditorPrefs.GetInt("shaderMode", 1);
-        csOpenMode = (CodeOpneMode)EditorPrefs.GetInt("csMode", 0);
-        jsonOpenMode = (CodeOpneMode)EditorPrefs.GetInt("jsonMode", 1);
-        txtOpenMode = (CodeOpneMode)EditorPrefs.GetInt("txtMode", 1);
-    }
-
-    enum CodeOpneMode
-    {
-        Default,
-        VSCode,
-        Sublime,
+        private static void OpenFileWithExe(string filePath, string exePath)
+        {
+            Process process = new Process();
+            ProcessStartInfo startInfo = new ProcessStartInfo();
+            startInfo.WindowStyle = ProcessWindowStyle.Hidden;
+            startInfo.FileName = exePath;
+            startInfo.Arguments = "\"" + filePath + "\"";
+            process.StartInfo = startInfo;
+            process.Start();
+            process.Dispose();
+        }
     }
 }
