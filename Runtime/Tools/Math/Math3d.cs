@@ -637,6 +637,8 @@ namespace XFramework.Mathematics
 
         #region 曲线相关
 
+        #region 贝塞尔曲线
+
         /// <summary>
         /// 获取贝塞尔曲线(3个点为二次,4个点为三次,其他返回空)
         /// </summary>
@@ -691,6 +693,10 @@ namespace XFramework.Mathematics
             float u = 1 - _t;
             return u * u * u * _P0 + 3 * u * u * _t * _P1 + 3 * _t * _t * u * _P2 + _t * _t * _t * _P3;
         }
+
+        #endregion
+
+        #region 埃尔米特曲线
 
         /// <summary>         
         /// 获取曲线上面的所有路径点
@@ -785,6 +791,81 @@ namespace XFramework.Mathematics
             return .5f * ((-a + 3f * b - 3f * c + d) * (u * u * u) +
                 (2f * a - 5f * b + 4f * c - d) * (u * u) + (-a + c) * u + 2f * b);
         }
+
+        #endregion
+
+        #region 抛物线
+
+        /// <summary>
+        /// 获取抛物线上一点
+        /// </summary>
+        /// <param name="start">起点</param>
+        /// <param name="velocity">起始速度</param>
+        /// <param name="t">时间</param>
+        /// <returns>抛物线上一点</returns>
+        public static Vector3 ParabolaGetPoint(Vector3 start, Vector3 velocity, float t)
+        {
+            float y = velocity.y * t + 0.5f * (-9.8f) * t * t;
+            var xyz = new Vector3(velocity.x * t, y, velocity.z * t);
+            return start + xyz;
+        }
+
+        /// <summary>
+        /// 根据起点，终点和初速度大小推算矢量初速度
+        /// </summary>
+        /// <param name="start">起始点</param>
+        /// <param name="end">终点</param>
+        /// <param name="v">初速度大小</param>
+        /// <param name="v1">矢量初速度1</param>
+        /// <param name="v2">矢量初速度1</param>
+        /// <returns>可能的初速度数量</returns>
+        public static int TryGetParabolaVelocity(Vector3 start, Vector3 end, float v, out Vector3 v1, out Vector3 v2)
+        {
+            float Δxz = Vector2.Distance(end.XZ(), start.XZ());
+            float Δy = end.y - start.y;
+            float g = -9.8f;
+
+            float a = 1 / (2 * v * v) * g * Δxz * Δxz;
+            float b = Δxz;
+            float c = a - Δy;
+            float Δ = b * b - 4 * a * c;
+            int count;
+            if (Δ < 0)
+            {
+                v1 = default;
+                v2 = default;
+                count = 0;
+            }
+            else if (Δ == 0)
+            {
+                float tan = (-b + Mathf.Sqrt(Δ)) / (2 * a);
+                float angle = Mathf.Atan(tan);
+                v1 = Angle2V(angle);
+                v2 = default;
+                count = 1;
+            }
+            else
+            {
+                float tan1 = (-b + Mathf.Sqrt(Δ)) / (2 * a);
+                float tan2 = (-b - Mathf.Sqrt(Δ)) / (2 * a);
+                float angle1 = Mathf.Atan(tan1);
+                float angle2 = Mathf.Atan(tan2);
+                v1 = Angle2V(angle1);
+                v2 = Angle2V(angle2);
+                count = 2;
+            }
+
+            return count;
+
+            Vector3 Angle2V(float rad)
+            {
+                Vector2 Vxz = v * Mathf.Cos(rad) * (end.XZ() - start.XZ()).normalized;
+                float Vy = v * Mathf.Sin(rad);
+                return new Vector3(Vxz.x, Vy, Vxz.y);
+            }
+        }
+
+        #endregion
 
         #endregion
     }
