@@ -1,6 +1,6 @@
 ﻿using UnityEngine;
 
-namespace XFramework.Singleton
+namespace XFramework
 {
     /// <summary>
     /// 此单例继承于Mono，不需要手动创建

@@ -2,7 +2,7 @@
 using System.Reflection;
 
 
-namespace XFramework.Singleton
+namespace XFramework
 {
     /// <summary>
     /// 不继承mono的单例基类，如果需要Update，可以将方法注册进MonoEvent的事件中

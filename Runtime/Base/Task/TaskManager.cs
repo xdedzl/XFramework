@@ -1,5 +1,4 @@
 ﻿using System.Collections.Generic;
-using XFramework.Singleton;
 
 namespace XFramework.Tasks
 {

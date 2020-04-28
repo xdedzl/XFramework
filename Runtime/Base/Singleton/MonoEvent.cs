@@ -6,7 +6,6 @@
 // ==========================================
 using System;
 using System.Collections;
-using XFramework.Singleton;
 
 namespace XFramework
 {
