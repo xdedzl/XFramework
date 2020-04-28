@@ -5,7 +5,7 @@ namespace XFramework
     /// <summary>
     /// 流程的优先级应比状态机低
     /// </summary>
-    public class ProcedureManager : IGameModule
+    public class ProcedureManager : MonoSingleton<ProcedureManager>
     {
         /// <summary>
         /// 流程状态机
@@ -53,23 +53,20 @@ namespace XFramework
         /// <returns>当前流程</returns>
         public TProcedure GetCurrentProcedure<TProcedure>() where TProcedure : ProcedureBase
         {
-            return m_Fsm.GetCurrentState() as TProcedure;
+            var current = m_Fsm.GetCurrentState();
+            if (current is TProcedure procedure)
+            {
+                return procedure;
+            }
+            else
+            {
+                throw new FrameworkException($"[Procedure] 当前流程不是{typeof(TProcedure).Name}");
+            }
         }
 
-        #region 接口实现
-
-        public int Priority { get { return 1; } }
-
-        public void Update(float elapseSeconds, float realElapseSeconds)
+        public void Update()
         {
             m_Fsm.OnUpdate();
         }
-
-        public void Shutdown()
-        {
-
-        }
-
-        #endregion
     }
 }

@@ -20,7 +20,7 @@ public class Game : MonoBehaviour
     public static GraphicsManager GraphicsModule { get; private set; }
     public static MessageManager MessageModule { get { return MessageManager.Instance; } }
     public static DataSubjectManager ObserverModule { get; private set; }
-    public static ProcedureManager ProcedureModule { get; private set; }
+    public static ProcedureManager ProcedureModule { get { return ProcedureManager.Instance; } }
     public static ObjectPoolManager ObjectPool { get; private set; }
     public static ResourceManager ResModule { get; private set; }
     // End0
@@ -88,7 +88,6 @@ public class Game : MonoBehaviour
         FsmModule = GameEntry.AddModule<FsmManager>();
         GraphicsModule = GameEntry.AddModule<GraphicsManager>();
         ObserverModule = GameEntry.AddModule<DataSubjectManager>();
-        ProcedureModule = GameEntry.AddModule<ProcedureManager>();
         ObjectPool = GameEntry.AddModule<ObjectPoolManager>();
 #if UNITY_EDITOR
         ResModule = GameEntry.AddModule<ResourceManager>(new AssetDataBaseLoadHelper());
@@ -110,7 +109,6 @@ public class Game : MonoBehaviour
         FsmModule = GameEntry.GetModule<FsmManager>();
         GraphicsModule = GameEntry.GetModule<GraphicsManager>();
         ObserverModule = GameEntry.GetModule<DataSubjectManager>();
-        ProcedureModule = GameEntry.GetModule<ProcedureManager>();
         ObjectPool = GameEntry.GetModule<ObjectPoolManager>();
         UIModule = GameEntry.GetModule<UIHelper>();
         MeshModule = GameEntry.GetModule<MeshManager>();

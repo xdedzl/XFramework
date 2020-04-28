@@ -77,7 +77,6 @@ namespace XFramework.Draw
         public void CreateCylinder(Vector3 point, float radius, float height, Color color)
         {
             Mesh mesh = GLDraw.CreateCylinder(point, radius, height, color.Int32());    // 画出图形   
-            Debug.Log(color.Int32().Color());
 
             m_GrahicsManager.AddGraphics(Camera.main, () =>
             {
