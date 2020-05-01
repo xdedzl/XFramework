@@ -2,36 +2,29 @@
 
 namespace XFramework.Pool
 {
-    public partial class ObjectPoolManager : IGameModule
+    public partial class ObjectPoolManager
     {
         /// <summary>
         /// 内联泛型对象池
         /// </summary>
         /// <typeparam name="T">对象池类型</typeparam>
-        public class Pool<T> : PoolBase where T : IPoolable, new()
+        private class Pool<T> : PoolBase where T : class, IPoolable, new()
         {
             /// <summary>
             /// 可用的对象
             /// </summary>
-            private Stack<T> m_AvailableCache;
+            private readonly Stack<T> m_AvailableCache;
             /// <summary>
             /// 被占有的对象
             /// </summary>
-            private List<T> m_OccupiedCache;
+            private readonly List<T> m_OccupiedCache;
 
             /// <summary>
             /// 构造函数
             /// </summary>
-            /// <param name="_initCount"></param>
-            /// <param name="_lookPoolSize"></param>
-            public Pool(int _initCount = 5, int _maxCount = int.MaxValue)
+            /// <param name="initCount"></param>
+            public Pool(int initCount)
             {
-                if (_initCount > _maxCount)
-                    throw new System.Exception("error");
-
-                initCount = _initCount;
-                maxCount = _maxCount;
-
                 m_AvailableCache = new Stack<T>();
                 m_OccupiedCache = new List<T>();
                 for (int i = 0; i < initCount; ++i)
@@ -57,19 +50,14 @@ namespace XFramework.Pool
                 if (m_AvailableCache.Count > 0)
                 {
                     obj = m_AvailableCache.Pop();
-                    m_OccupiedCache.Add(obj);
-                    return obj;
                 }
-
-                //如果遍历完一遍对象库发现没有闲置对象且对象池未达到数量限制
-                if (CurrentCount < maxCount)
+                else
                 {
-                    T info = Create();
-                    info.IsRecycled = false;
-                    return info;
+                    obj = Create();
                 }
+                m_OccupiedCache.Add(obj);
 
-                return default;
+                return obj;
             }
 
             /// <summary>
@@ -77,31 +65,32 @@ namespace XFramework.Pool
             /// </summary>
             public bool Recycle(T poolObj)
             {
-                if (poolObj == null || poolObj.IsRecycled)
+                if (poolObj == null)
                     return false;
-                m_AvailableCache.Push(poolObj);
-                m_OccupiedCache.Remove(poolObj);
-                poolObj.OnRecycled();
-                return true;
+
+                if (m_OccupiedCache.Remove(poolObj))
+                {
+                    m_AvailableCache.Push(poolObj);
+                    poolObj.OnRecycled();
+                    return true;
+                }
+
+                return false;
             }
 
             /// <summary>
             /// 自动回收
             /// </summary>
             /// <returns>本次操作回收对象的数量</returns>
-            public override int AutoRecycle()
+            public override void RecycleAllObj()
             {
-                List<int> temp = new List<int>();
                 foreach (var poolObj in m_OccupiedCache)
                 {
-                    if (poolObj.IsLocked == false)
-                    {
-                        m_AvailableCache.Push(poolObj);
-                        m_OccupiedCache.Remove(poolObj);
-                        poolObj.OnRecycled();
-                    }
+                    poolObj.OnRecycled();
+                    m_AvailableCache.Push(poolObj);
                 }
-                return temp.Count;
+
+                m_OccupiedCache.Clear();
             }
 
             /// <summary>

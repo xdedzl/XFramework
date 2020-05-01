@@ -18,11 +18,11 @@ public class Game : MonoBehaviour
     public static EntityManager EntityModule { get; private set; }
     public static FsmManager FsmModule { get; private set; }
     public static GraphicsManager GraphicsModule { get; private set; }
-    public static MessageManager MessageModule { get { return MessageManager.Instance; } }
-    public static DataSubjectManager ObserverModule { get; private set; }
-    public static ProcedureManager ProcedureModule { get { return ProcedureManager.Instance; } }
-    public static ObjectPoolManager ObjectPool { get; private set; }
     public static ResourceManager ResModule { get; private set; }
+    public static DataSubjectManager ObserverModule { get; private set; }
+    public static MessageManager MessageModule { get { return MessageManager.Instance; } }
+    public static ProcedureManager ProcedureModule { get { return ProcedureManager.Instance; } }
+    public static ObjectPoolManager ObjectPool { get { return ObjectPoolManager.Instance; } }
     // End0
 
     // 框架扩展模块
@@ -88,7 +88,6 @@ public class Game : MonoBehaviour
         FsmModule = GameEntry.AddModule<FsmManager>();
         GraphicsModule = GameEntry.AddModule<GraphicsManager>();
         ObserverModule = GameEntry.AddModule<DataSubjectManager>();
-        ObjectPool = GameEntry.AddModule<ObjectPoolManager>();
 #if UNITY_EDITOR
         ResModule = GameEntry.AddModule<ResourceManager>(new AssetDataBaseLoadHelper());
 #else
@@ -109,7 +108,6 @@ public class Game : MonoBehaviour
         FsmModule = GameEntry.GetModule<FsmManager>();
         GraphicsModule = GameEntry.GetModule<GraphicsManager>();
         ObserverModule = GameEntry.GetModule<DataSubjectManager>();
-        ObjectPool = GameEntry.GetModule<ObjectPoolManager>();
         UIModule = GameEntry.GetModule<UIHelper>();
         MeshModule = GameEntry.GetModule<MeshManager>();
         ResModule = GameEntry.GetModule<ResourceManager>();
