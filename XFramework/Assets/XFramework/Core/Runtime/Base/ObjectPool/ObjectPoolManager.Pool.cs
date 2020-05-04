@@ -33,14 +33,6 @@ namespace XFramework.Pool
                 }
             }
 
-            public override int CurrentCount
-            {
-                get
-                {
-                    return m_AvailableCache.Count + m_OccupiedCache.Count;
-                }
-            }
-
             /// <summary>
             /// 获取对象池中可以使用的对象。
             /// </summary>

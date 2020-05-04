@@ -9,7 +9,7 @@ namespace XFramework.Pool
     {
         private readonly Dictionary<string, PoolBase> m_ObjectPools;
 
-        public ObjectPoolManager()
+        private ObjectPoolManager()
         {
             m_ObjectPools = new Dictionary<string, PoolBase>();
         }
@@ -46,7 +46,7 @@ namespace XFramework.Pool
         public bool DestoryPool<T>() where T : class, IPoolable, new()
         {
             string typeName = typeof(T).Name;
-            if (TryGetPool(typeName, out PoolBase pool))
+            if (m_ObjectPools.TryGetValue(typeName, out PoolBase pool))
             {
                 pool.OnDestroy();
                 m_ObjectPools.Remove(typeName);
@@ -57,23 +57,12 @@ namespace XFramework.Pool
         }
 
         /// <summary>
-        /// 回收某一类所有对象
-        /// </summary>
-        public void RecycleAllObj<T>() where T : class, IPoolable, new()
-        {
-            if(TryGetPool<T>(out Pool<T> pool))
-            {
-                pool.RecycleAllObj();
-            }
-        }
-
-        /// <summary>
         /// 获取一个对象池
         /// </summary>
         /// <typeparam name="T"></typeparam>
         private Pool<T> GetPool<T>() where T : class, IPoolable, new()
         {
-            if(TryGetPool<T>(out Pool<T> pool))
+            if (TryGetPool<T>(out Pool<T> pool))
             {
                 return pool;
             }
@@ -84,18 +73,13 @@ namespace XFramework.Pool
         {
             string typeName = typeof(T).Name;
 
-            if(TryGetPool(typeName, out PoolBase poolBase))
+            if (m_ObjectPools.TryGetValue(typeName, out PoolBase poolBase))
             {
                 pool = (Pool<T>)poolBase;
                 return true;
             }
             pool = null;
             return false;
-        }
-
-        private bool TryGetPool(string poolName, out PoolBase pool)
-        {
-            return m_ObjectPools.TryGetValue(poolName, out pool);
         }
 
         private Pool<T> CreatePool<T>(int initCount = 0) where T : class, IPoolable, new()

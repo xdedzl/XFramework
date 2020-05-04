@@ -15,11 +15,6 @@ namespace XFramework
     /// </summary>
     public class MonoEvent : MonoSingleton<MonoEvent>
     {
-        public MonoEvent()
-        {
-            isGlobal = true;
-        }
-
         public event Action UPDATE;
         public event Action FIXEDUPDATE;
         public event Action ONGUI;
