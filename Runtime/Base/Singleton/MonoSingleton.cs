@@ -5,13 +5,13 @@ namespace XFramework
     /// <summary>
     /// 此单例继承于Mono，不需要手动创建
     /// </summary>
-    public class MonoSingleton<T> : MonoBehaviour where T : MonoBehaviour
+    public class MonoSingleton<T> : MonoBehaviour where T : MonoSingleton<T>
     {
         private static T _instance;
 
         private static readonly object _lock = new object();
 
-        protected static bool isGlobal = false; // 是否是全局单例
+        protected bool isGlobal = true; // 是否是全局单例
 
         static MonoSingleton()
         {
@@ -59,7 +59,7 @@ namespace XFramework
                             _instance = singleton.AddComponent<T>();
                             singleton.name = "(singleton) " + typeof(T);
 
-                            if (isGlobal && Application.isPlaying)
+                            if (_instance.isGlobal && Application.isPlaying)
                             {
                                 DontDestroyOnLoad(singleton);
                             }

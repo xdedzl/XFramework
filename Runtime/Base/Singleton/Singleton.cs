@@ -29,7 +29,7 @@ namespace XFramework
                             if (ctor == null)
                             {
                                 _instance = Activator.CreateInstance(typeof(T)) as T;
-                                UnityEngine.Debug.LogError("Make the constructor private");
+                                UnityEngine.Debug.LogWarning("Make the constructor private");
                             }
 
                             else

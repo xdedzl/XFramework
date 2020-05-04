@@ -1,9 +1,10 @@
 ﻿namespace XFramework.Pool
 {
+    /// <summary>
+    /// 对象池基类
+    /// </summary>
     public abstract class PoolBase
     {
-        public abstract int CurrentCount { get; }
-
         /// <summary>
         /// 回收所有对象
         /// </summary>

@@ -6,6 +6,7 @@ using XFramework.Resource;
 
 namespace XFramework.UI
 {
+    [DependenceModule(typeof(ResourceManager))]
     /// <summary>
     /// 一个使用字典管理的UI管理器
     /// </summary>
@@ -47,7 +48,7 @@ namespace XFramework.UI
             m_ResMgr = GameEntry.GetModule<ResourceManager>();
             if (m_ResMgr == null)
             {
-                throw new FrameworkException("[UIMgr]加载UI模块之前需要加载Resource模块");
+                throw new FrameworkException("[UIMgr] 加载UI模块之前需要加载Resource模块");
             }
         }
 
@@ -160,10 +161,25 @@ namespace XFramework.UI
                 {
                     RectTransform rect;
                     rect = (new GameObject("Level" + basePanel.Level)).AddComponent<RectTransform>();
+
+                    int siblingIndex = CanvasTransform.childCount;
+                    for (int i = 0, length = CanvasTransform.childCount; i < length; i++)
+                    {
+                        string levelName = CanvasTransform.GetChild(i).name;
+                        if(int.TryParse(levelName[levelName.Length - 1].ToString(), out int level))
+                        {
+                            if (basePanel.Level < level)
+                            {
+                                siblingIndex = i;
+                                break;
+                            }
+                        }
+                    }
                     rect.SetParent(CanvasTransform);
+                    rect.SetSiblingIndex(siblingIndex);
                     rect.sizeDelta = CanvasTransform.GetComponent<UnityEngine.UI.CanvasScaler>().referenceResolution;
                     rect.anchorMin = Vector2.zero;
-                    rect.anchorMax = Vector3.one;
+                    rect.anchorMax = Vector2.one;
                     rect.anchoredPosition3D = Vector3.zero;
                     rect.sizeDelta = Vector2.zero;
                     rect.localScale = Vector3.one;
@@ -185,9 +201,19 @@ namespace XFramework.UI
                 if (item > level)
                     level = item;
             }
-            m_OnDisplayPanelDic[level].End().OnClose();
-            m_OnDisplayPanelDic[level].End().CloseSubPanels();
-            m_OnDisplayPanelDic.Remove(level);
+            if(m_OnDisplayPanelDic.TryGetValue(level, out List<PanelBase> panels))
+            {
+                if(panels.Count > 0)
+                {
+                    panels.End().OnClose();
+                    panels.End().CloseSubPanels();
+                }
+
+                if(panels.Count == 1)
+                {
+                    m_OnDisplayPanelDic.Remove(level);
+                }
+            }
         }
 
         /// <summary>
@@ -195,10 +221,14 @@ namespace XFramework.UI
         /// </summary>
         public void CloseLevelPanel(int level)
         {
-            foreach (var item in m_OnDisplayPanelDic[level])
+            if(m_OnDisplayPanelDic.TryGetValue(level, out List<PanelBase> panels))
             {
-                item.OnClose();
-                item.CloseSubPanels();
+                foreach (var item in panels)
+                {
+                    item.OnClose();
+                    item.CloseSubPanels();
+                }
+                m_OnDisplayPanelDic.Remove(level);
             }
         }
 

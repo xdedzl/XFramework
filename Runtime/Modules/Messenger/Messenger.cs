@@ -10,6 +10,8 @@ namespace XFramework.Event
     {
         private Dictionary<int, Delegate> m_eventDictionary = new Dictionary<int, Delegate>();
 
+        private MessageManager() { }
+
         #region AddEventListener
 
         /// <summary>
