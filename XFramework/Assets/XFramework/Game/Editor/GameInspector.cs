@@ -89,7 +89,7 @@ public class GameInspector : Editor
         }
         else
         {
-            XEditorUtility.SerializableObj(Game.ProcedureModule.GetCurrentProcedure());
+            XEditorUtility.SerializableObj(Game.ProcedureModule.CurrentProcedure);
         }
 
         GUILayout.EndVertical();

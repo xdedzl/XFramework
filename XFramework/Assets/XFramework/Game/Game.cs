@@ -56,7 +56,7 @@ public class Game : MonoBehaviour
         {
             ProcedureModule.ChangeProcedure(type);
 
-            ProcedureBase procedure = ProcedureModule.GetCurrentProcedure();
+            ProcedureBase procedure = ProcedureModule.CurrentProcedure;
             DeSerialize(procedure);
         }
         else

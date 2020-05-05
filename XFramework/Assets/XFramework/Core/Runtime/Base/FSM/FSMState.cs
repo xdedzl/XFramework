@@ -1,7 +1,7 @@
 ﻿namespace XFramework.Fsm
 {
     /// <summary>
-    /// 状态基类，考虑要不要改为接口
+    /// 状态基类
     /// </summary>
     public abstract class FsmState
     {

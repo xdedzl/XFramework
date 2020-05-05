@@ -1,13 +1,12 @@
-﻿
-using XFramework.Fsm;
+﻿using XFramework.Fsm;
 
 namespace XFramework
 {
-    /// <summary>
-    /// 流程状态机
-    /// </summary>
-    public sealed class ProcedureFsm : Fsm<ProcedureBase>
+    public class ProcedureFsm : Fsm<ProcedureBase>
     {
-
+        protected override void OnStateChange(ProcedureBase oldState, ProcedureBase newState)
+        {
+            newState.OnEnter(oldState);
+        }
     }
 }

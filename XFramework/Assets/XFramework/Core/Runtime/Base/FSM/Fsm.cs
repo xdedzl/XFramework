@@ -10,12 +10,12 @@ namespace XFramework.Fsm
     public class Fsm<TState> : IFsm where TState : FsmState
     {
         private bool m_IsActive;
-        private FsmState m_CurrentState;
+        private TState m_CurrentState;
 
         /// <summary>
         /// 存储该状态机包含的所有状态
         /// </summary>
-        protected Dictionary<string, FsmState> m_StateDic;
+        protected Dictionary<string, TState> m_StateDic;
 
         /// <summary>
         /// 是否处于激活状态
@@ -24,11 +24,11 @@ namespace XFramework.Fsm
         /// <summary>
         /// 当前状态
         /// </summary>
-        public FsmState CurrentState { get { return m_CurrentState; } }
+        public TState CurrentState { get { return m_CurrentState; } }
 
         public Fsm()
         {
-            m_StateDic = new Dictionary<string, FsmState>();
+            m_StateDic = new Dictionary<string, TState>();
             m_IsActive = false;
         }
 
@@ -58,13 +58,13 @@ namespace XFramework.Fsm
         /// </summary>
         /// <typeparam name="T">状态类型</typeparam>
         /// <returns>状态</returns>
-        protected FsmState GetState(Type type)
+        protected TState GetState(Type type)
         {
-            m_StateDic.TryGetValue(type.Name, out FsmState state);
+            m_StateDic.TryGetValue(type.Name, out TState state);
 
             if (state == null)
             {
-                state = CreateState(type);
+                state = CreateState(type) as TState;
                 m_StateDic.Add(type.Name, state);
             }
 
@@ -87,7 +87,7 @@ namespace XFramework.Fsm
         /// <param name="type">状态类型</param>
         protected FsmState CreateState(Type type)
         {
-            FsmState state = Utility.Reflection.CreateInstance<FsmState>(type);
+            FsmState state = Utility.Reflection.CreateInstance<TState>(type);
 
             if (!(state is TState))
                 throw new System.Exception("状态类型设置错误");
@@ -99,10 +99,10 @@ namespace XFramework.Fsm
         /// <summary>
         /// 获取当前状态
         /// </summary>
-        /// <returns>状态</returns>
+        /// <returns></returns>
         public FsmState GetCurrentState()
         {
-            return CurrentState;
+            return m_CurrentState;
         }
 
         /// <summary>
@@ -110,7 +110,7 @@ namespace XFramework.Fsm
         /// </summary>
         public T GetCurrentState<T>() where T : TState
         {
-            return CurrentState as T;
+            return m_CurrentState as T;
         }
 
         /// <summary>
@@ -123,6 +123,7 @@ namespace XFramework.Fsm
             if (!IsActive)
             {
                 m_CurrentState = GetState(type);
+                OnStateChange(null, m_CurrentState);
                 m_CurrentState.OnEnter(parms);
                 m_IsActive = true;
             }
@@ -147,12 +148,13 @@ namespace XFramework.Fsm
         {
             if (IsActive)
             {
-                FsmState tempstate = GetState(type);
+                TState newState = GetState(type);
 
-                if (m_CurrentState != tempstate)
+                if (m_CurrentState != newState)
                 {
                     m_CurrentState?.OnExit();
-                    m_CurrentState = tempstate;
+                    OnStateChange(m_CurrentState, newState);
+                    m_CurrentState = newState;
                     m_CurrentState.OnEnter(parms);
                 }
             }
@@ -161,6 +163,8 @@ namespace XFramework.Fsm
                 StartFsm(type, parms);
             }
         }
+
+        protected virtual void OnStateChange(TState oldStart, TState newState) { }
 
         public void OnDestroy()
         {

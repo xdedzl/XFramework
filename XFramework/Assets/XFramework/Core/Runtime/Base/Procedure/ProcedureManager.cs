@@ -18,6 +18,18 @@ namespace XFramework
         }
 
         /// <summary>
+        /// 获取当前流程
+        /// </summary>
+        /// <returns>当前流程</returns>
+        public ProcedureBase CurrentProcedure
+        {
+            get
+            {
+                return m_Fsm.CurrentState;
+            }
+        }
+
+        /// <summary>
         /// 切换流程
         /// </summary>
         /// <typeparam name="TProcedure">流程类型</typeparam>
@@ -40,20 +52,11 @@ namespace XFramework
         /// <summary>
         /// 获取当前流程
         /// </summary>
-        /// <returns>当前流程</returns>
-        public ProcedureBase GetCurrentProcedure()
-        {
-            return m_Fsm.GetCurrentState() as ProcedureBase;
-        }
-
-        /// <summary>
-        /// 获取当前流程
-        /// </summary>
         /// <typeparam name="TProcedure">流程类型</typeparam>
         /// <returns>当前流程</returns>
         public TProcedure GetCurrentProcedure<TProcedure>() where TProcedure : ProcedureBase
         {
-            var current = m_Fsm.GetCurrentState();
+            var current = m_Fsm.CurrentState;
             if (current is TProcedure procedure)
             {
                 return procedure;

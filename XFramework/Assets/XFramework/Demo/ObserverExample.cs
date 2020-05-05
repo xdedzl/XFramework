@@ -1,5 +1,4 @@
 ﻿using UnityEngine;
-using XFramework;
 using XFramework.Event;
 
 /*
@@ -109,7 +108,7 @@ public enum BattleDataType
 /// </summary>
 public class PlayerDataMgr : IObserver
 {
-    // 此类可能是要继承Mono的，如果是，则在start中注册
+    // 在合适的时添加除观察者
     public PlayerDataMgr()
     {
         Game.ObserverModule.AddListener(DataType.BATTLE, this);

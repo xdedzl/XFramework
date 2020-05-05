@@ -8,7 +8,7 @@ namespace XFramework.Event
     /// </summary>
     public class MessageManager : Singleton<MessageManager>
     {
-        private Dictionary<int, Delegate> m_eventDictionary = new Dictionary<int, Delegate>();
+        private readonly Dictionary<int, Delegate> m_eventDictionary = new Dictionary<int, Delegate>();
 
         private MessageManager() { }
 
