@@ -8,10 +8,6 @@ namespace XFramework.Fsm
     public interface IFsm
     {
         /// <summary>
-        /// 状态机当前状态
-        /// </summary>
-        FsmState CurrentState { get; }
-        /// <summary>
         /// 状态机是否激活
         /// </summary>
         bool IsActive { get; }
@@ -31,6 +27,10 @@ namespace XFramework.Fsm
         /// <param name="type">状态类型</param>
         /// <param name="parms">启动参数</param>
         void ChangeState(Type type, params object[] parms);
+        /// <summary>
+        /// 获取当前状态
+        /// </summary>
+        FsmState GetCurrentState();
         /// <summary>
         /// 状态机销毁
         /// </summary>

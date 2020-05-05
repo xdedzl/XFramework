@@ -11,7 +11,7 @@ namespace XFramework.Fsm
         /// <summary>
         /// 存储所有状态机的字典
         /// </summary>
-        private Dictionary<string, IFsm> m_FsmDic;
+        private readonly Dictionary<string, IFsm> m_FsmDic = new Dictionary<string, IFsm>();
 
         /// <summary>
         /// 状态机的数量
@@ -21,23 +21,6 @@ namespace XFramework.Fsm
             get
             {
                 return m_FsmDic.Count;
-            }
-        }
-
-        public FsmManager()
-        {
-            m_FsmDic = new Dictionary<string, IFsm>();
-        }
-
-        /// <summary>
-        /// 每帧调用处于激活状态的状态机
-        /// </summary>
-        public void OnUpdate()
-        {
-            foreach (var fsm in m_FsmDic.Values)
-            {
-                if (fsm.IsActive)
-                    fsm.OnUpdate();
             }
         }
 
@@ -73,12 +56,12 @@ namespace XFramework.Fsm
         /// <summary>
         /// 获取对应状态机当前所处的状态
         /// </summary>
-        /// <typeparam name="TFsm"></typeparam>
+        /// <typeparam name="TFsm">状态机类型</typeparam>
         public FsmState GetCurrentState<TFsm>() where TFsm : IFsm
         {
             if (HasFsm<TFsm>())
             {
-                return m_FsmDic[typeof(TFsm).Name].CurrentState;
+                return m_FsmDic[typeof(TFsm).Name].GetCurrentState();
             }
             else
             {
@@ -86,6 +69,12 @@ namespace XFramework.Fsm
             }
         }
 
+        /// <summary>
+        /// 获取对应状态机当前所处的状态
+        /// </summary>
+        /// <typeparam name="TFsm">状态机类型</typeparam>
+        /// <typeparam name="TState">目标状态</typeparam>
+        /// <returns></returns>
         public TState GetCurrentState<TFsm, TState>() where TFsm : IFsm where TState : FsmState
         {
             return GetCurrentState<TFsm>() as TState;
@@ -96,6 +85,7 @@ namespace XFramework.Fsm
         /// </summary>
         /// <typeparam name="TFsm">状态机类型</typeparam>
         /// <typeparam name="KState">目标状态</typeparam>
+        /// <param name="parms">参数</param>
         public void ChangeState<TFsm, KState>(params object[] parms) where TFsm : class, IFsm where KState : FsmState
         {
             if (!HasFsm<TFsm>())
@@ -104,6 +94,13 @@ namespace XFramework.Fsm
             }
             m_FsmDic[typeof(TFsm).Name].ChangeState<KState>(parms);
         }
+
+        /// <summary>
+        /// 切换对应状态机到对应状态
+        /// </summary>
+        /// <param name="typeFsm">状态机类型</param>
+        /// <param name="typeState">目标状态</param>
+        /// <param name="parms">参数</param>
         public void ChanegState(Type typeFsm, Type typeState, params object[] parms)
         {
             if (!typeFsm.IsSubclassOf(typeof(IFsm)) || !typeState.IsSubclassOf(typeof(FsmState)))
@@ -169,7 +166,11 @@ namespace XFramework.Fsm
 
         public void Update(float elapseSeconds, float realElapseSeconds)
         {
-            OnUpdate();
+            foreach (var fsm in m_FsmDic.Values)
+            {
+                if (fsm.IsActive)
+                    fsm.OnUpdate();
+            }
         }
 
         public void Shutdown()
