@@ -1,20 +1,20 @@
-﻿using System;
-using System.Collections.Generic;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using UnityEngine;
+using System;
+using System.Collections.Generic;
 
 namespace XFramework.JsonConvter
 {
     /// <summary>
     /// 用于多态列表的转化
+    /// 支持列表和数组
     /// </summary>
     /// <typeparam name="T"></typeparam>
     public class PolyListConverter<T> : JsonConverter
     {
         public override bool CanConvert(Type objectType)
         {
-            return true;
+            return objectType.IsArray || objectType.GetGenericTypeDefinition() == typeof(List<>);
         }
 
         public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
@@ -31,25 +31,25 @@ namespace XFramework.JsonConvter
 
                 values.Add((T)value);
             }
-
-            return values;
+            if (objectType.IsArray)
+                return values.ToArray();
+            else
+                return values;
         }
 
         public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
         {
-            var values = (List<T>)value;
+            IList<T> values;
+            if (value.GetType().IsArray)
+                values = (T[])value;
+            else
+                values = (List<T>)value;
 
             JObject jObject = new JObject();
 
             foreach (var item in values)
             {
                 jObject.Add(item.GetType().FullName, JToken.FromObject(item));
-            }
-
-            var p = jObject.Properties();
-            foreach (var item in p)
-            {
-                Debug.Log(item.Name);
             }
 
             serializer.Serialize(writer, jObject);
