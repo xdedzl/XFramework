@@ -12,6 +12,15 @@ namespace XFramework.JsonConvter
     /// <typeparam name="T"></typeparam>
     public class PolyListConverter<T> : JsonConverter
     {
+        private string nameSpace;
+
+        public PolyListConverter() { }
+
+        public PolyListConverter(string nameSpace = null)
+        {
+            this.nameSpace = nameSpace;
+        }
+
         public override bool CanConvert(Type objectType)
         {
             return objectType.IsArray || objectType.GetGenericTypeDefinition() == typeof(List<>);
@@ -25,7 +34,11 @@ namespace XFramework.JsonConvter
 
             foreach (var item in jObject.Properties())
             {
-                Type type = Type.GetType(item.Name);
+                Type type;
+                if (string.IsNullOrEmpty(nameSpace))
+                    type = Type.GetType(item.Name);
+                else
+                    type = Type.GetType($"{nameSpace}.{item.Name}");
 
                 var value = item.Value.ToObject(type);
 
@@ -49,7 +62,8 @@ namespace XFramework.JsonConvter
 
             foreach (var item in values)
             {
-                jObject.Add(item.GetType().FullName, JToken.FromObject(item));
+                string typeName = string.IsNullOrEmpty(nameSpace) ? item.GetType().FullName : item.GetType().Name;
+                jObject.Add(typeName, JToken.FromObject(item));
             }
 
             serializer.Serialize(writer, jObject);
@@ -61,6 +75,15 @@ namespace XFramework.JsonConvter
     /// </summary>
     public class PolyConverter : JsonConverter
     {
+        private string nameSpace;
+
+        public PolyConverter() { }
+
+        public PolyConverter(string nameSpace = null)
+        {
+            this.nameSpace = nameSpace;
+        }
+
         public override bool CanConvert(Type objectType)
         {
             return true;
@@ -72,7 +95,11 @@ namespace XFramework.JsonConvter
 
             foreach (var item in jObject.Properties())
             {
-                Type type = Type.GetType(item.Name);
+                Type type;
+                if (string.IsNullOrEmpty(nameSpace))
+                    type = Type.GetType(item.Name);
+                else
+                    type = Type.GetType($"{nameSpace}.{item.Name}");
 
                 var value = item.Value.ToObject(type);
 
@@ -84,8 +111,8 @@ namespace XFramework.JsonConvter
         public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
         {
             JObject jObject = new JObject();
-
-            jObject.Add(value.GetType().FullName, JToken.FromObject(value));
+            string typeName = string.IsNullOrEmpty(nameSpace) ? value.GetType().FullName : value.GetType().Name;
+            jObject.Add(typeName, JToken.FromObject(value));
 
             serializer.Serialize(writer, jObject);
         }

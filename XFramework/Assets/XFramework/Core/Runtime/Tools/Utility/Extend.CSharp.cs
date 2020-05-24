@@ -298,7 +298,7 @@ namespace XFramework
         /// <param name="_sourList"></param>
         /// <param name="_exclude"></param>
         /// <returns></returns>
-        public static List<T> WithOut<T>(this List<T> _sourList, T _exclude) where T : class
+        public static IList<T> WithOut<T>(this IList<T> _sourList, T _exclude) where T : class
         {
             List<T> outList = new List<T>();
             foreach (var item in _sourList)
@@ -314,7 +314,7 @@ namespace XFramework
         /// <summary>
         /// 获取列表最后一个元素
         /// </summary>
-        public static T End<T>(this List<T> list)
+        public static T End<T>(this IList<T> list)
         {
             return list[list.Count - 1];
         }
@@ -325,7 +325,7 @@ namespace XFramework
         /// <typeparam name="T"></typeparam>
         /// <param name="list"></param>
         /// <param name="value"></param>
-        public static void MoveToEnd<T>(this List<T> list, T value)
+        public static void MoveToEnd<T>(this IList<T> list, T value)
         {
             list.Remove(value);
             list.Add(value);
