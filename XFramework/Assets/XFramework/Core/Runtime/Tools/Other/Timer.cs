@@ -32,19 +32,15 @@ namespace XFramework
         /// <summary>
         /// 是否执行
         /// </summary>
-        private bool _isRunning;
+        private bool m_isRunning;
         /// <summary>
         /// 已执行时间（每次满足运行间隔就会加这个）
         /// </summary>
-        private float _useTime;
+        private float m_useTime;
         /// <summary>
-        /// 运行时间
+        /// 时间运行速度
         /// </summary>
-        public float RunTime { get; private set; }
-        /// <summary>
-        /// 已运行次数
-        /// </summary>
-        public int UseCount { get; private set; }
+        private float m_timeScale;
         /// <summary>
         /// 运行间隔
         /// </summary>
@@ -53,6 +49,14 @@ namespace XFramework
         /// 设置的运行次数
         /// </summary>
         private readonly int repeatCount;
+        /// <summary>
+        /// 运行时间
+        /// </summary>
+        public float RunTime { get; private set; }
+        /// <summary>
+        /// 已运行次数
+        /// </summary>
+        public int UseCount { get; private set; }
 
         /// <summary>
         /// <param name="interval">时间间隔，单位是毫秒</param>
@@ -74,14 +78,14 @@ namespace XFramework
         {
             get
             {
-                return _isRunning;
+                return m_isRunning;
             }
             set
             {
-                if (_isRunning != value)
+                if (m_isRunning != value)
                 {
-                    _isRunning = value;
-                    if (_isRunning)
+                    m_isRunning = value;
+                    if (m_isRunning)
                     {
                         Manager.AddTimer(this);
                     }
@@ -95,6 +99,23 @@ namespace XFramework
         }
 
         /// <summary>
+        /// 时间运行速度
+        /// </summary>
+        public float timeScale
+        {
+            get
+            {
+                return m_timeScale;
+            }
+            set
+            {
+                if (value < 0)
+                    throw new FrameworkException("Timer的时间运行速度不能小于0");
+                m_timeScale = value;
+            }
+        }
+
+        /// <summary>
         /// 每帧执行
         /// </summary>
         /// <param name="deltaTime"></param>
@@ -102,11 +123,11 @@ namespace XFramework
         {
             if (IsRunning && UseCount < repeatCount)
             {
-                RunTime += deltaTime;
-                while (RunTime - _useTime > interval && UseCount < repeatCount)
+                RunTime += deltaTime * m_timeScale;
+                while (RunTime - m_useTime > interval && UseCount < repeatCount)
                 {
                     UseCount++;
-                    _useTime += interval;
+                    m_useTime += interval;
                     timeUpDel?.Invoke();
                 }
             }
@@ -161,7 +182,7 @@ namespace XFramework
         {
             IsRunning = false;
             RunTime = 0f;
-            _useTime = 0f;
+            m_useTime = 0f;
             UseCount = 0;
         }
 
@@ -204,6 +225,8 @@ namespace XFramework
             }
             set
             {
+                if (value < 0)
+                    throw new FrameworkException("Timer的时间运行速度不能小于0");
                 Manager.timeScale = value;
             }
         }
