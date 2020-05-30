@@ -83,7 +83,7 @@ namespace XFramework
 
             // 将模块添加到链表中
 
-            LinkedListNode < IGameModule > current = m_GameModules.First;
+            LinkedListNode<IGameModule> current = m_GameModules.First;
             while (current != null)
             {
                 if (module.Priority > current.Value.Priority)

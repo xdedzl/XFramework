@@ -68,6 +68,26 @@ namespace XFramework
                 }
                 return types;
             }
+
+            /// <summary>
+            /// 判断一个类是否继承自一个泛型类型
+            /// </summary>
+            /// <param name="sonType">子类类型</param>
+            /// <param name="genericType">泛型类型</param>
+            /// <returns></returns>
+            public static bool IsSubclassOfGeneric(Type sonType, Type genericType)
+            {
+                while (sonType != null && sonType != typeof(object))
+                {
+                    var cur = sonType.IsGenericType ? sonType.GetGenericTypeDefinition() : sonType;
+                    if (genericType == cur)
+                    {
+                        return true;
+                    }
+                    sonType = sonType.BaseType;
+                }
+                return false;
+            }
         }
     }
 }
