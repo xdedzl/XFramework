@@ -18,14 +18,24 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 获取当前流程
+        /// 当前流程
         /// </summary>
-        /// <returns>当前流程</returns>
         public ProcedureBase CurrentProcedure
         {
             get
             {
                 return m_Fsm.CurrentState;
+            }
+        }
+
+        /// <summary>
+        /// 当前的子流程
+        /// </summary>
+        public SubProcedureBase CurrenSubProcedure
+        {
+            get
+            {
+                return m_Fsm.CurrentState?.CurrentSubProcedure;
             }
         }
 

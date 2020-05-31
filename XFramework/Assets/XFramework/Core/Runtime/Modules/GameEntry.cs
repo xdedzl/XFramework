@@ -81,8 +81,21 @@ namespace XFramework
 
             IGameModule module = CreateModule(moduleType, args);
 
-            // 将模块添加到链表中
+            // 特殊处理
+            var tempType = moduleType.BaseType;
+            var genericTypeDefinition = typeof(GameModuleBase<>);
+            while(tempType != typeof(object))
+            {
+                if (tempType.IsGenericType && tempType.GetGenericTypeDefinition() == genericTypeDefinition)
+                {
+                    var field = tempType.GetField("m_instance", BindingFlags.Static | BindingFlags.NonPublic);
+                    field.SetValue(null, module);
+                    break;
+                }
+                tempType = tempType.BaseType;
+            }
 
+            // 将模块添加到链表中
             LinkedListNode<IGameModule> current = m_GameModules.First;
             while (current != null)
             {
@@ -174,6 +187,21 @@ namespace XFramework
 
             m_GameModules.Remove(gameModule);
 
+            // 特殊处理
+            var tempType = moduleType.BaseType;
+            var genericTypeDefinition = typeof(GameModuleBase<>);
+            while (tempType != typeof(object))
+            {
+                if (tempType.IsGenericType && tempType.GetGenericTypeDefinition() == genericTypeDefinition)
+                {
+                    var field = tempType.GetField("m_instance", BindingFlags.Static | BindingFlags.NonPublic);
+                    field.SetValue(null, null);
+                    break;
+                }
+                tempType = tempType.BaseType;
+            }
+
+            // 依赖模块处理
             if (m_DependenceDic.TryGetValue(moduleType.Name, out List<Type> dependentModules))
             {
                 m_DependenceDic.Remove(moduleType.Name);
