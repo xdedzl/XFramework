@@ -6,7 +6,7 @@ namespace XFramework.Fsm
     /// <summary>
     /// 状态机管理类
     /// </summary>
-    public class FsmManager : IGameModule
+    public class FsmManager : GameModuleBase<FsmManager>
     {
         /// <summary>
         /// 存储所有状态机的字典
@@ -162,20 +162,15 @@ namespace XFramework.Fsm
 
         #region 接口实现
 
-        public int Priority { get { return 0; } }
+        public override int Priority { get { return 0; } }
 
-        public void Update(float elapseSeconds, float realElapseSeconds)
+        public override void Update(float elapseSeconds, float realElapseSeconds)
         {
             foreach (var fsm in m_FsmDic.Values)
             {
                 if (fsm.IsActive)
                     fsm.OnUpdate();
             }
-        }
-
-        public void Shutdown()
-        {
-
         }
 
         #endregion

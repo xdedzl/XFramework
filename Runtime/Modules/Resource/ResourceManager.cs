@@ -8,7 +8,7 @@ namespace XFramework.Resource
     /// 资源管理器
     /// 若加载路径以 Res/ 开头，则会使用unity Resource.xxx 方式加载）
     /// </summary>
-    public class ResourceManager : IGameModule
+    public class ResourceManager : GameModuleBase<ResourceManager>
     {
         private IResourceLoadHelper m_LoadHelper;
         /// <summary>
@@ -298,11 +298,9 @@ namespace XFramework.Resource
 
         #region 接口实现
 
-        public int Priority { get { return 100; } }
+        public override int Priority { get { return 100; } }
 
-        public void Update(float elapseSeconds, float realElapseSeconds) { }
-
-        public void Shutdown()
+        public override void Shutdown()
         {
             m_LoadHelper.UnLoadAll();
             m_AssetDic.Clear();
