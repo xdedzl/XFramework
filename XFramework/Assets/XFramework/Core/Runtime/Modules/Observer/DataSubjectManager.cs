@@ -6,7 +6,7 @@ namespace XFramework.Event
     /// <summary>
     /// 数据主题管理类
     /// </summary>
-    public class DataSubjectManager : IGameModule
+    public class DataSubjectManager : GameModuleBase<DataSubjectManager>
     {
         /// <summary>
         /// 每一个Subject都是一个被观察的对象
@@ -71,17 +71,7 @@ namespace XFramework.Event
 
         #region 接口实现
 
-        public int Priority { get { return 3000; } }
-
-        public void Update(float elapseSeconds, float realElapseSeconds)
-        {
-
-        }
-
-        public void Shutdown()
-        {
-
-        }
+        public override int Priority { get { return 3000; } }
 
         #endregion
     }

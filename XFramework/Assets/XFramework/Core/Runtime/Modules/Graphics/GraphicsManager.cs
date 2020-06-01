@@ -7,7 +7,7 @@ namespace XFramework.Draw
     /// <summary>
     /// GL管理器
     /// </summary>
-    public class GraphicsManager : IGameModule
+    public class GraphicsManager : GameModuleBase<GraphicsManager>
     {
         /// <summary>
         /// 渲染列表
@@ -120,16 +120,11 @@ namespace XFramework.Draw
 
         #region 接口实现
 
-        public int Priority { get { return 10; } }
+        public override int Priority { get { return 10; } }
 
-        public void Shutdown()
+        public override void Shutdown()
         {
             m_GraphicsDic.Clear();
-        }
-
-        public void Update(float elapseSeconds, float realElapseSeconds)
-        {
-
         }
 
         #endregion

@@ -1,6 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 using XFramework;
 
@@ -16,7 +14,7 @@ public class UIDemo : ProcedureBase
         Transform trans = Object.Instantiate(obj, GameObject.Find("Canvas").transform).transform;
         startBtn = trans.GetComponent<Button>();
         Screen.SetResolution(1920, 1080, true);
-        startBtn.onClick.AddListener(()=> 
+        startBtn.onClick.AddListener(() =>
         {
             Game.UIModule.Open(UIName.Main);
         });

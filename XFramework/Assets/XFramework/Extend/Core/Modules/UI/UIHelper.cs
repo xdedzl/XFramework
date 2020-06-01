@@ -7,7 +7,7 @@ using XFramework;
 /// <summary>
 /// UI管理助手
 /// </summary>
-public class UIHelper : IGameModule
+public class UIHelper : GameModuleBase<UIHelper>
 {
     /// <summary>
     /// UI管理器
@@ -120,14 +120,14 @@ public class UIHelper : IGameModule
         Open(UIName.Verify, false, showText);
     }
 
-    public int Priority { get { return m_UIManager.Priority; } }
+    public override int Priority { get { return m_UIManager.Priority; } }
 
-    public void Update(float elapseSeconds, float realElapseSeconds)
+    public override void Update(float elapseSeconds, float realElapseSeconds)
     {
         m_UIManager.Update(elapseSeconds, realElapseSeconds);
     }
 
-    public void Shutdown()
+    public override void Shutdown()
     {
         m_UIManager.Shutdown();
     }

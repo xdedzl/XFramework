@@ -15,11 +15,11 @@ public class Game : MonoBehaviour
 {
     // 框架模块
     // Start0
-    public static EntityManager EntityModule { get; private set; }
-    public static FsmManager FsmModule { get; private set; }
-    public static GraphicsManager GraphicsModule { get; private set; }
-    public static ResourceManager ResModule { get; private set; }
-    public static DataSubjectManager ObserverModule { get; private set; }
+    public static EntityManager EntityModule { get { return EntityManager.Instance; } }
+    public static FsmManager FsmModule { get { return FsmManager.Instance; } }
+    public static GraphicsManager GraphicsModule { get { return GraphicsManager.Instance; } }
+    public static ResourceManager ResModule { get { return ResourceManager.Instance; } }
+    public static DataSubjectManager ObserverModule { get { return DataSubjectManager.Instance; } }
     public static MessageManager MessageModule { get { return MessageManager.Instance; } }
     public static ProcedureManager ProcedureModule { get { return ProcedureManager.Instance; } }
     public static ObjectPoolManager ObjectPool { get { return ObjectPoolManager.Instance; } }
@@ -27,8 +27,8 @@ public class Game : MonoBehaviour
 
     // 框架扩展模块
     // Start1
-    public static UIHelper UIModule { get; private set; }
-    public static MeshManager MeshModule { get; private set; }
+    public static UIHelper UIModule { get { return UIHelper.Instance; } }
+    public static MeshManager MeshModule { get { return MeshManager.Instance; } }
     // End1
 
     // 初始流程
@@ -48,7 +48,6 @@ public class Game : MonoBehaviour
         }
 
         InitAllModel();
-        Refresh();
 
         // 设置运行形后第一个进入的流程
         System.Type type = System.Type.GetType(TypeName);
@@ -84,34 +83,18 @@ public class Game : MonoBehaviour
     public void InitAllModel()
     {
         // Start2
-        EntityModule = GameEntry.AddModule<EntityManager>();
-        FsmModule = GameEntry.AddModule<FsmManager>();
-        GraphicsModule = GameEntry.AddModule<GraphicsManager>();
-        ObserverModule = GameEntry.AddModule<DataSubjectManager>();
+        GameEntry.AddModule<EntityManager>();
+        GameEntry.AddModule<FsmManager>();
+        GameEntry.AddModule<GraphicsManager>();
+        GameEntry.AddModule<DataSubjectManager>();
 #if UNITY_EDITOR
-        ResModule = GameEntry.AddModule<ResourceManager>(new AssetDataBaseLoadHelper());
+        GameEntry.AddModule<ResourceManager>(new AssetDataBaseLoadHelper());
 #else
-        ResModule = GameEntry.AddModule<ResourceManager>(new AssetBundleLoadHelper());
+        GameEntry.AddModule<ResourceManager>(new AssetBundleLoadHelper());
 #endif
-        UIModule = GameEntry.AddModule<UIHelper>();
-        MeshModule = GameEntry.AddModule<MeshManager>();
+        GameEntry.AddModule<UIHelper>();
+        GameEntry.AddModule<MeshManager>();
         // End2
-    }
-
-    /// <summary>
-    /// 刷新静态引用
-    /// </summary>
-    public void Refresh()
-    {
-        // Start3
-        EntityModule = GameEntry.GetModule<EntityManager>();
-        FsmModule = GameEntry.GetModule<FsmManager>();
-        GraphicsModule = GameEntry.GetModule<GraphicsManager>();
-        ObserverModule = GameEntry.GetModule<DataSubjectManager>();
-        UIModule = GameEntry.GetModule<UIHelper>();
-        MeshModule = GameEntry.GetModule<MeshManager>();
-        ResModule = GameEntry.GetModule<ResourceManager>();
-        // End3
     }
 
     public static void ShutdownModule<T>() where T : IGameModule

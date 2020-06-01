@@ -13,7 +13,7 @@ namespace XFramework.Draw
     /// <summary>
     /// 所有的MeshPrefab 的管理类, 单例
     /// </summary>
-    public class MeshManager : IGameModule
+    public class MeshManager : GameModuleBase<MeshManager>
     {
         private GraphicsManager m_GrahicsManager;
 
@@ -231,13 +231,9 @@ namespace XFramework.Draw
             });
         }
 
-        public int Priority => 200;
+        public override int Priority => 200;
 
-        public void Update(float elapseSeconds, float realElapseSeconds)
-        {
-        }
-
-        public void Shutdown()
+        public override void Shutdown()
         {
             m_LineMaterial = null;
             m_QuadeMaterial = null;

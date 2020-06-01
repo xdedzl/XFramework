@@ -6,7 +6,7 @@ namespace XFramework.Entity
     /// <summary>
     /// 实体管理器
     /// </summary>
-    public partial class EntityManager : IGameModule
+    public partial class EntityManager : GameModuleBase<EntityManager>
     {
         /// <summary>
         /// 存储对应实体容器的字典
@@ -428,16 +428,16 @@ namespace XFramework.Entity
 
         #region 接口实现
 
-        public int Priority => 10000;
+        public override int Priority => 10000;
 
-        public void Shutdown()
+        public override void Shutdown()
         {
             m_EntityContainerDic.Clear();
             m_EntityDic.Clear();
             m_EntityInfoDic.Clear();
         }
 
-        public void Update(float elapseSeconds, float realElapseSeconds)
+        public override void Update(float elapseSeconds, float realElapseSeconds)
         {
             foreach (var item in m_EntityContainerDic.Values)
             {
