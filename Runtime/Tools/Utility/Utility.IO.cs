@@ -139,6 +139,8 @@ namespace XFramework
             {
                 if (!File.Exists(path))
                 {
+                    string dirPath = Utility.Text.SplitPathName(path)[0];
+                    CreateFolder(dirPath);
                     File.Create(path).Close();
                 }
                 else
