@@ -97,16 +97,6 @@ public class Game : MonoBehaviour
         // End2
     }
 
-    public static void ShutdownModule<T>() where T : IGameModule
-    {
-        GameEntry.ShutdownModule<T>();
-    }
-
-    public static void StartModule<T>() where T : IGameModule
-    {
-        GameEntry.AddModule<T>();
-    }
-
     /// <summary>
     /// 根据存储的byte数值给流程赋值
     /// </summary>

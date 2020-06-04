@@ -230,7 +230,7 @@ namespace XFramework
             {
                 if (item.Value.Contains(moduleType))
                 {
-                    throw new FrameworkException($"[Module] {item.Key}依赖于{moduleType.Name}, 请检查卸载时机或顺序");
+                    throw new XFrameworkException($"[Module] {item.Key}依赖于{moduleType.Name}, 请检查卸载时机或顺序");
                 }
             }
         }

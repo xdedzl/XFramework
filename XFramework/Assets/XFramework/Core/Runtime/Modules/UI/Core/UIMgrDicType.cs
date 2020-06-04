@@ -48,7 +48,7 @@ namespace XFramework.UI
             m_ResMgr = GameEntry.GetModule<ResourceManager>();
             if (m_ResMgr == null)
             {
-                throw new FrameworkException("[UIMgr] 加载UI模块之前需要加载Resource模块");
+                throw new XFrameworkException("[UIMgr] 加载UI模块之前需要加载Resource模块");
             }
         }
 
@@ -134,7 +134,7 @@ namespace XFramework.UI
             if(m_PanelDict.TryGetValue(uiname, out PanelBase panel))
             {
                 if (panel == null)
-                    throw new FrameworkException("[UI] 面板已被卸载");
+                    throw new XFrameworkException("[UI] 面板已被卸载");
                 return panel;
             }
             else
@@ -149,7 +149,7 @@ namespace XFramework.UI
 
                 if (type == null || !type.IsSubclassOf(typeof(PanelBase)))
                 {
-                    throw new FrameworkException("[UI] 面板类名错误 | 没有继承BasePanel");
+                    throw new XFrameworkException("[UI] 面板类名错误 | 没有继承BasePanel");
                 }
 
                 PanelBase basePanel = instPanel.AddComponent(type) as PanelBase;

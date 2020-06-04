@@ -110,7 +110,7 @@ namespace XFramework
             set
             {
                 if (value < 0)
-                    throw new FrameworkException("Timer的时间运行速度不能小于0");
+                    throw new XFrameworkException("Timer的时间运行速度不能小于0");
                 m_timeScale = value;
             }
         }
@@ -226,7 +226,7 @@ namespace XFramework
             set
             {
                 if (value < 0)
-                    throw new FrameworkException("Timer的时间运行速度不能小于0");
+                    throw new XFrameworkException("Timer的时间运行速度不能小于0");
                 Manager.timeScale = value;
             }
         }

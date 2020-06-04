@@ -5,10 +5,10 @@ namespace XFramework
     /// <summary>
     /// 框架异常
     /// </summary>
-    public class FrameworkException : Exception
+    public class XFrameworkException : Exception
     {
-        public FrameworkException() : base() { }
+        public XFrameworkException() : base() { }
 
-        public FrameworkException(string message) : base(message) { }
+        public XFrameworkException(string message) : base(message) { }
     }
 }

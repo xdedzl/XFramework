@@ -49,7 +49,7 @@ namespace XFramework
             /// <param name="typeBase">基类型</param>
             /// <param name="assemblyName">程序集</param>
             /// <returns></returns>
-            public static List<Type> GetSonClass(Type typeBase, string assemblyName = "Assembly-CSharp")
+            public static IEnumerable<Type> GetSonClass(Type typeBase, string assemblyName = "Assembly-CSharp")
             {
                 List<Type> types = new List<Type>();
                 Assembly assembly = Assembly.Load(assemblyName);
@@ -67,6 +67,42 @@ namespace XFramework
                     }
                 }
                 return types;
+            }
+
+            /// <summary>
+            /// 获取所有实现了typeBase的Type
+            /// </summary>
+            /// <param name="typeBase">基类或者接口</param>
+            /// <param name="assemblyName"></param>
+            /// <returns></returns>
+            public static IEnumerable<Type> GetAssignableTypes(Type typeBase, string assemblyName = "Assembly-CSharp")
+            {
+                List<Type> typeNames = new List<Type>();
+                Assembly assembly;
+                try
+                {
+                    assembly = Assembly.Load(assemblyName);
+                }
+                catch
+                {
+                    return new Type[0];
+                }
+
+                if (assembly == null)
+                {
+                    return new Type[0];
+                }
+
+                Type[] types = assembly.GetTypes();
+                foreach (Type type in types)
+                {
+                    if ((type.IsClass || type.IsValueType) && !type.IsAbstract && typeBase.IsAssignableFrom(type))
+                    {
+                        typeNames.Add(type);
+                    }
+                }
+
+                return typeNames;
             }
 
             /// <summary>

@@ -314,7 +314,7 @@ namespace XFramework.UI
             }
             else
             {
-                throw new FrameworkException("节点不能把自己设为自己的父物体");
+                throw new XFrameworkException("节点不能把自己设为自己的父物体");
             }
         }
 

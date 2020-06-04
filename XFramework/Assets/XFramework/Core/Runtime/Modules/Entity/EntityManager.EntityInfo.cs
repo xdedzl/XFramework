@@ -26,7 +26,7 @@ namespace XFramework.Entity
 
             public EntityInfo(Entity entity)
             {
-                m_Entity = entity ?? throw new FrameworkException("Null Entity");
+                m_Entity = entity ?? throw new XFrameworkException("Null Entity");
             }
 
             /// <summary>
@@ -77,7 +77,7 @@ namespace XFramework.Entity
                 {
                     if (index >= ChildCount || index < 0)
                     {
-                        throw new FrameworkException($"[EntityError] entity没有index为{index}的子实体, entity {m_Entity.ToString()}");
+                        throw new XFrameworkException($"[EntityError] entity没有index为{index}的子实体, entity {m_Entity.ToString()}");
                     }
                     return m_ChildEntities[index];
                 }
@@ -109,7 +109,7 @@ namespace XFramework.Entity
 
                 if (m_ChildEntities.Contains(childEntity))
                 {
-                    throw new FrameworkException("[Entity] Can not add child which is already exist.");
+                    throw new XFrameworkException("[Entity] Can not add child which is already exist.");
                 }
                 m_ChildEntities.Add(childEntity);
             }
@@ -122,7 +122,7 @@ namespace XFramework.Entity
             {
                 if (m_ChildEntities == null || !m_ChildEntities.Remove(childEntity))
                 {
-                    throw new FrameworkException("[Entity] Can not remove child which is not exist.");
+                    throw new XFrameworkException("[Entity] Can not remove child which is not exist.");
                 }
             }
         }
