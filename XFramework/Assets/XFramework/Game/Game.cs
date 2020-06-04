@@ -88,9 +88,11 @@ public class Game : MonoBehaviour
         GameEntry.AddModule<GraphicsManager>();
         GameEntry.AddModule<DataSubjectManager>();
 #if UNITY_EDITOR
-        GameEntry.AddModule<ResourceManager>(new AssetDataBaseLoadHelper());
+        string mapInfoPath = $"{Application.streamingAssetsPath}/pathMap.info";
+        ResourceManager.GeneratePathMap(mapInfoPath, "Assets/Res");
+        GameEntry.AddModule<ResourceManager>(new AssetDataBaseLoadHelper(), mapInfoPath);
 #else
-        GameEntry.AddModule<ResourceManager>(new AssetBundleLoadHelper());
+        GameEntry.AddModule<ResourceManager>(new AssetBundleLoadHelper(), mapInfoPath);
 #endif
         GameEntry.AddModule<UIHelper>();
         GameEntry.AddModule<MeshManager>();

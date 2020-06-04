@@ -23,28 +23,34 @@ namespace XFramework.Resource
         public bool HasPathMap { get; }
 
         /// <summary>
-        /// 构造一个资源管理器
+        /// 构造一个资源管理器，如果存在路径映射文件则使用文件名加载资源
         /// </summary>
         /// <param name="loadHelper">资源加载辅助类</param>
+        /// <param name="mapInfoPath">路径映射文件</param>
         public ResourceManager(IResourceLoadHelper loadHelper, string mapInfoPath)
         {
             m_LoadHelper = loadHelper;
             m_AssetDic = new Dictionary<string, Object>();
 
-            if (string.IsNullOrEmpty(mapInfoPath))
+            if (File.Exists(mapInfoPath))
             {
-                HasPathMap = false;
+                m_PathMap = new Dictionary<string, string>();
+                InitPathMapWithText(mapInfoPath);
+                HasPathMap = true;
             }
             else
             {
-                if (File.Exists(mapInfoPath))
-                {
-                    m_PathMap = new Dictionary<string, string>();
-                }
+                HasPathMap = false;
             }
         }
 
-        private void LoadWithText(string mapInfoPath)
+        /// <summary>
+        /// 构造一个资源管理器,加载资源时不使用路径映射
+        /// </summary>
+        /// <param name="loadHelper">资源加载辅助类</param>
+        public ResourceManager(IResourceLoadHelper loadHelper) : this(loadHelper, null) { }
+
+        private void InitPathMapWithText(string mapInfoPath)
         {
             string pathMapInfo = File.ReadAllText(mapInfoPath);
             string[] keyValues = pathMapInfo.Split('\n');
