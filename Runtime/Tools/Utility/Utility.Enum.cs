@@ -32,13 +32,40 @@ namespace XFramework
                     }
                     else
                     {
-                        throw new FrameworkException($"{type.Name} 的 {item.Name} 没有设置EnumStrAttribute特性");
+                        throw new XFrameworkException($"{type.Name} 的 {item.Name} 没有设置EnumStrAttribute特性");
                     }
                 }
 
                 return strArray;
             }
+
+            /// <summary>
+            /// 
+            /// </summary>
+            /// <typeparam name="T"></typeparam>
+            /// <param name="args"></param>
+            /// <returns></returns>
+            public static int CombineTag<T>(params T[] args) where T : System.Enum
+            {
+                int v = 0;
+                foreach (var item in args)
+                {
+                    v |= Convert.ToInt32(item);
+                }
+                return v;
+            }
+
+            /// <summary>
+            /// 
+            /// </summary>
+            /// <typeparam name="T"></typeparam>
+            /// <param name="tag_0"></param>
+            /// <param name="tag_1"></param>
+            /// <returns></returns>
+            public static bool HasTag<T>(T tag_0, T tag_1) where T : System.Enum
+            {
+                return (Convert.ToInt32(tag_0) & Convert.ToInt32(tag_1)) != 0;
+            }
         }
     }
-
 }

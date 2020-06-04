@@ -82,7 +82,7 @@ namespace XFramework.Mathematics
         {
             if (max - min < count - 1)
             {
-                throw new FrameworkException("取值范围不够");
+                throw new XFrameworkException("取值范围不够");
             }
 
             int[] a = new int[max - min + 1];

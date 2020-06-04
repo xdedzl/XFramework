@@ -6,6 +6,7 @@
 // ==========================================
 using System;
 using System.Collections;
+using UnityEngine;
 
 namespace XFramework
 {
@@ -40,9 +41,23 @@ namespace XFramework
             LATEUPDATE?.Invoke();
         }
 
-        public void StartCoroutine(Func<IEnumerator> func)
+        /// <summary>
+        /// 延迟n帧调用
+        /// </summary>
+        /// <param name="action">事件</param>
+        /// <param name="delayFrameCount">延迟帧数</param>
+        public void DoInNextFrame(Action action, int delayFrameCount = 1)
         {
-            StartCoroutine(func);
+            StartCoroutine(Do(action, delayFrameCount));
+        }
+
+        private IEnumerator Do(Action action, int delayFrameCount = 1)
+        {
+            for (int i = 0; i < delayFrameCount; i++)
+            {
+                yield return new WaitForEndOfFrame();
+            }
+            action?.Invoke();
         }
     }
 }

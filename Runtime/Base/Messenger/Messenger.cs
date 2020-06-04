@@ -370,9 +370,9 @@ namespace XFramework.Event
             return false;
         }
 
-        private FrameworkException CreateBroadcastSignatureException(Enum eventType)
+        private XFrameworkException CreateBroadcastSignatureException(Enum eventType)
         {
-            return new FrameworkException(string.Format("Broadcasting message \"{0}\" but listeners have a different signature than the broadcaster.", eventType));
+            return new XFrameworkException(string.Format("Broadcasting message \"{0}\" but listeners have a different signature than the broadcaster.", eventType));
         }
 
         #endregion CheckEventListener

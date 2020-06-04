@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
-using XFramework.Tasks;
+using System.IO;
 using UnityEngine;
+using XFramework.Tasks;
 
 namespace XFramework.Resource
 {
@@ -8,22 +9,50 @@ namespace XFramework.Resource
     /// 资源管理器
     /// 若加载路径以 Res/ 开头，则会使用unity Resource.xxx 方式加载）
     /// </summary>
-    public class ResourceManager : GameModuleBase<ResourceManager>
+    public partial class ResourceManager : GameModuleBase<ResourceManager>
     {
-        private IResourceLoadHelper m_LoadHelper;
+        private readonly IResourceLoadHelper m_LoadHelper;
         /// <summary>
         /// 需要实例化的资源
         /// </summary>
-        private Dictionary<string, Object> m_AssetDic;
+        private readonly Dictionary<string, Object> m_AssetDic;
+        /// <summary>
+        /// 资源路径映射
+        /// </summary>
+        private readonly Dictionary<string, string> m_PathMap;
+        public bool HasPathMap { get; }
 
         /// <summary>
         /// 构造一个资源管理器
         /// </summary>
         /// <param name="loadHelper">资源加载辅助类</param>
-        public ResourceManager(IResourceLoadHelper loadHelper)
+        public ResourceManager(IResourceLoadHelper loadHelper, string mapInfoPath)
         {
             m_LoadHelper = loadHelper;
             m_AssetDic = new Dictionary<string, Object>();
+
+            if (string.IsNullOrEmpty(mapInfoPath))
+            {
+                HasPathMap = false;
+            }
+            else
+            {
+                if (File.Exists(mapInfoPath))
+                {
+                    m_PathMap = new Dictionary<string, string>();
+                }
+            }
+        }
+
+        private void LoadWithText(string mapInfoPath)
+        {
+            string pathMapInfo = File.ReadAllText(mapInfoPath);
+            string[] keyValues = pathMapInfo.Split('\n');
+            foreach (var item in keyValues)
+            {
+                string[] keyValue = item.Split(':');
+                m_PathMap.Add(keyValue[0], keyValue[1]);
+            }
         }
 
         /// <summary>
@@ -66,6 +95,8 @@ namespace XFramework.Resource
                 assetName = assetName.Substring(4, assetName.Length - 4);
                 return Resources.Load<T>(assetName);
             }
+
+            assetName = Path2RealPath(assetName);
             return m_LoadHelper.Load<T>(assetName);
         }
 
@@ -115,6 +146,7 @@ namespace XFramework.Resource
 
             else
             {
+                assetName = Path2RealPath(assetName);
                 return m_LoadHelper.LoadAsync<T>(assetName, callBack);
             }
         }
@@ -130,10 +162,29 @@ namespace XFramework.Resource
         {
             if (IsResources(path))
             {
-                throw new FrameworkException("Res: 不能用Resource的方式异步加载所有资源");
+                throw new XFrameworkException("Res: 不能用Resource的方式异步加载所有资源");
             }
 
             return m_LoadHelper.LoadAllSync<T>(path, isTopOnly, callback);
+        }
+
+        private string Path2RealPath(string path)
+        {
+            if (HasPathMap)
+            {
+                if(m_PathMap.TryGetValue(path, out string realPath))
+                {
+                    return realPath;
+                }
+                else
+                {
+                    throw new XFrameworkException($"[Resource] 没有名为{path}的资源或PathMapInfo文件已过时");
+                }
+            }
+            else
+            {
+                return path;
+            }
         }
 
         #endregion

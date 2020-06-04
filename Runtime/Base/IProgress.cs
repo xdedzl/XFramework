@@ -90,7 +90,7 @@
         {
             if (ratios == null || count != ratios.Length)
             {
-                throw new FrameworkException("[DynamicMultiProgress] 需传入正确的参数");
+                throw new XFrameworkException("[DynamicMultiProgress] 需传入正确的参数");
             }
 
             float plus = 0;
@@ -100,7 +100,7 @@
             }
             if (plus != 1)
             {
-                throw new FrameworkException("[DynamicMultiProgress] 需传入争取的比例");
+                throw new XFrameworkException("[DynamicMultiProgress] 需传入争取的比例");
             }
             progresses = new IProgress[count];
             this.ratios = ratios;

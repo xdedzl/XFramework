@@ -1,7 +1,4 @@
-﻿using System.Runtime.CompilerServices;
-using XFramework;
-
-namespace XFramework
+﻿namespace XFramework
 {
     public abstract class GameModuleBase<T> : IGameModule where T : GameModuleBase<T>
     {
@@ -14,6 +11,9 @@ namespace XFramework
         // 该变量名称和GameEntry有联系, 不要随意修改
         private static T m_instance;
 
+        /// <summary>
+        /// 获取由GameEntry管理的模块T
+        /// </summary>
         public static T Instance
         {
             get
@@ -23,7 +23,7 @@ namespace XFramework
                     return m_instance;
                 }
 
-                throw new FrameworkException($"使用{typeof(T).Name}前需先加载模块");
+                throw new XFrameworkException($"使用{typeof(T).Name}前需先加载模块 use --> GameEntry.AddModule ");
             }
         }
         /// <summary>

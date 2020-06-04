@@ -125,7 +125,7 @@ namespace XFramework.UI
                 Type type = asmb.GetType(uiname);
                 if (type == null || type.IsSubclassOf(typeof(PanelBase)))
                 {
-                    throw new FrameworkException("[UI] 面板类名错误 | 没有继承BasePanel");
+                    throw new XFrameworkException("[UI] 面板类名错误 | 没有继承BasePanel");
                 }
                 PanelBase basePanel = instPanel.AddComponent(type) as PanelBase;
                 basePanel.Init(uiname);

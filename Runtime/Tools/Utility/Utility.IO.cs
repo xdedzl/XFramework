@@ -138,7 +138,9 @@ namespace XFramework
             public static void CreateFile(string path, CreatType type = CreatType.KeepOld)
             {
                 if (!File.Exists(path))
+                {
                     File.Create(path).Close();
+                }
                 else
                 {
                     switch (type)

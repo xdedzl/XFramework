@@ -165,7 +165,7 @@ namespace XFramework.Entity
             if (m_EntityDic.ContainsKey(id))
             {
                 Entity e = m_EntityDic[id];
-                throw new FrameworkException($"[EntityError] id已被占用  Entity {e.ToString()}");
+                throw new XFrameworkException($"[EntityError] id已被占用  Entity {e.ToString()}");
             }
 
             var entity = m_EntityContainerDic[key].Allocate(id, pos, quaternion, entityData, parent);
@@ -189,7 +189,7 @@ namespace XFramework.Entity
                 }
                 else
                 {
-                    throw new FrameworkException("[Entity] this entity is not created by manager");
+                    throw new XFrameworkException("[Entity] this entity is not created by manager");
                 }
             }
             return false;
@@ -278,7 +278,7 @@ namespace XFramework.Entity
             }
             else
             {
-                throw new FrameworkException($"[EntityError]没有名为{containerName}的实体容器");
+                throw new XFrameworkException($"[EntityError]没有名为{containerName}的实体容器");
             }
         }
 
@@ -310,7 +310,7 @@ namespace XFramework.Entity
             }
             else
             {
-                throw new FrameworkException($"[Entity]没有id为{entityId}的实体");
+                throw new XFrameworkException($"[Entity]没有id为{entityId}的实体");
             }
         }
 
@@ -415,7 +415,7 @@ namespace XFramework.Entity
             }
             else
             {
-                throw new FrameworkException("[EntityContainer] null container");
+                throw new XFrameworkException("[EntityContainer] null container");
             }
         }
 
