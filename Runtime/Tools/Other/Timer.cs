@@ -6,6 +6,7 @@ namespace XFramework
 {
     public class Timer
     {
+        private const string DefaultKey = "default";
         private static TimerManager s_Manager;
         private static TimerManager Manager
         {
@@ -42,6 +43,10 @@ namespace XFramework
         /// </summary>
         private float m_timeScale;
         /// <summary>
+        /// 计时器所属组名
+        /// </summary>
+        private string m_key;
+        /// <summary>
         /// 运行间隔
         /// </summary>
         private readonly float interval;
@@ -59,14 +64,25 @@ namespace XFramework
         public int UseCount { get; private set; }
 
         /// <summary>
+        /// 构造一个计时器
+        /// </summary>
         /// <param name="interval">时间间隔，单位是毫秒</param>
         /// <param name="repeatCount">运行次数，一秒一次的话MaxValue可以执行68年</param>
+        public Timer(float interval, int repeatCount = 1) : this("default", interval, repeatCount) { }
+
+        /// <summary>
+        /// 构造一个计时器
         /// </summary>
-        public Timer(float interval, int repeatCount = 1)
+        /// <param name="key">计时器所属组名</param>
+        /// <param name="interval">时间间隔，单位是毫秒</param>
+        /// <param name="repeatCount">运行次数，一秒一次的话MaxValue可以执行68年</param>
+        public Timer(string key, float interval, int repeatCount = 1)
         {
             RunTime = 0f;
             if (interval <= 0)
                 interval = 0.01f;
+            this.m_key = key;
+            this.m_timeScale = 1;
             this.interval = interval;
             this.repeatCount = repeatCount;
         }
@@ -87,11 +103,11 @@ namespace XFramework
                     m_isRunning = value;
                     if (m_isRunning)
                     {
-                        Manager.AddTimer(this);
+                        Manager.AddTimer(this.key, this);
                     }
                     else
                     {
-                        Manager.RemoveTimer(this);
+                        Manager.RemoveTimer(this.key, this);
                     }
                     // TODO 这里可以加一个计时器状态变换的委托
                 }
@@ -112,6 +128,23 @@ namespace XFramework
                 if (value < 0)
                     throw new XFrameworkException("Timer的时间运行速度不能小于0");
                 m_timeScale = value;
+            }
+        }
+
+        /// <summary>
+        /// 计时器所属组名
+        /// </summary>
+        private string key
+        {
+            get
+            {
+                return m_key;
+            }
+            set
+            {
+                Manager.RemoveTimer(m_key, this);
+                m_key = value;
+                Manager.AddTimer(m_key, this);
             }
         }
 
@@ -195,6 +228,7 @@ namespace XFramework
         /// </summary>
         /// <param name="interval">间隔时间</param>
         /// <param name="action">任务</param>
+        /// <returns>计时器</returns>
         public static Timer Register(float interval, Action action)
         {
             return Register(interval, 1, action);
@@ -206,12 +240,55 @@ namespace XFramework
         /// <param name="interval">时间间隔</param>
         /// <param name="repeatCount">重复次数</param>
         /// <param name="action">任务</param>
+        /// <returns>计时器</returns>
         public static Timer Register(float interval, int repeatCount, Action action)
         {
-            Timer timer = new Timer(interval, repeatCount);
+            return Register(DefaultKey, interval, repeatCount, action);
+        }
+
+        /// <summary>
+        /// 注册一个延时执行的任务
+        /// </summary>
+        /// <param name="key">计时器所属组名</param>
+        /// <param name="interval">间隔时间</param>
+        /// <param name="action">任务</param>
+        /// <returns>计时器</returns>
+        public static Timer Register(string key, float interval, Action action)
+        {
+            return Register(key, interval, 1, action);
+        }
+
+        /// <summary>
+        /// 注册一个每隔一段时间执行一次的任务
+        /// </summary>
+        /// <param name="key">计时器所属组名</param>
+        /// <param name="interval">时间间隔</param>
+        /// <param name="repeatCount">重复次数</param>
+        /// <param name="action">任务</param>
+        /// <returns>计时器</returns>
+        public static Timer Register(string key, float interval, int repeatCount, Action action)
+        {
+            Timer timer = new Timer(key, interval, repeatCount);
             timer.AddListener(action);
             timer.Start();
             return timer;
+        }
+
+        /// <summary>
+        /// 清空一组计时器
+        /// </summary>
+        /// <param name="key"></param>
+        public static void ClearTimers(string key)
+        {
+            Manager.ClearTimers(key);
+        }
+
+        /// <summary>
+        /// 清空默认计数器组
+        /// </summary>
+        public static void ClearDefaultTimers()
+        {
+            ClearTimers(DefaultKey);
         }
 
         /// <summary>
@@ -231,6 +308,11 @@ namespace XFramework
             }
         }
 
+        public static void SetGroupTimerScale(string groupKey, float timeScale)
+        {
+
+        }
+
         #endregion
 
         /// <summary>
@@ -239,38 +321,63 @@ namespace XFramework
         /// </summary>
         private class TimerManager : MonoBehaviour
         {
-            private readonly List<Timer> m_timers = new List<Timer>();
+            private readonly Dictionary<string, List<Timer>> m_timerDic = new Dictionary<string, List<Timer>>();
             internal float timeScale = 1;
 
             private void Update()
             {
                 float deltaTime = Time.unscaledDeltaTime * timeScale;
 
-                for (var i = 0; i < m_timers.Count; i++)
+                foreach (var timers in m_timerDic.Values)
                 {
-                    if (m_timers[i].IsRunning)
+                    for (var i = 0; i < timers.Count; i++)
                     {
-                        // unscaledDeltaTime和deltaTime一样，但是不受TimeScale影响
-                        m_timers[i].Update(deltaTime);
+
+                        if (timers[i].IsRunning)
+                        {
+                            // unscaledDeltaTime和deltaTime一样，但是不受TimeScale影响
+                            timers[i].Update(deltaTime);
+                        }
                     }
                 }
             }
 
-            public void AddTimer(Timer timer)
+            public void AddTimer(string key, Timer timer)
             {
-                if (m_timers.Contains(timer) == false)
+                if (m_timerDic.TryGetValue(key, out List<Timer> timers))
                 {
-                    m_timers.Add(timer);
+                    if (!timers.Contains(timer))
+                    {
+                        timers.Add(timer);
+                    }
+                }
+                else
+                {
+                    timers = new List<Timer>
+                    {
+                        timer
+                    };
+                    m_timerDic.Add(key, timers);
                 }
             }
 
-            public void RemoveTimer(Timer timer)
+            public void RemoveTimer(string key, Timer timer)
             {
-                if (m_timers.Contains(timer))
+                if (!m_timerDic[key].Remove(timer))
                 {
-                    m_timers.Remove(timer);
+                    throw new XFrameworkException("[Timer] 逻辑有误，试图删除一个不受Timemanager管理的Timer");
                 }
             }
+
+            public void ClearTimers(string key)
+            {
+                m_timerDic.Remove(key);
+            }
+
+            //public IEnumerable<Timer> GetTimers(string key)
+            //{
+            //    if(m_timerDic.TryGetValue(key, out List<Timer> timers))
+            //}
         }
     }
 }
