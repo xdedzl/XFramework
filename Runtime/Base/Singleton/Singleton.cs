@@ -41,13 +41,4 @@ namespace XFramework
             }
         }
     }
-
-    public static class SingletonCreator
-    {
-        public static T CreatSingleton<T>() where T : class
-        {
-            T instance = Activator.CreateInstance(typeof(T)) as T;
-            return instance;
-        }
-    }
 }

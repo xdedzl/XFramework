@@ -6,6 +6,7 @@ namespace XFramework
     {
         protected override void OnStateChange(ProcedureBase oldState, ProcedureBase newState)
         {
+            oldState?.CurrentSubProcedure?.OnExit();
             newState.OnEnter(oldState);
         }
     }

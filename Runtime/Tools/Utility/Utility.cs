@@ -18,28 +18,14 @@ namespace XFramework
         /// <summary>
         /// 发射射线并返回RaycastInfo
         /// </summary>
-        public static RaycastHit SendRay(int layer = -1)
+        public static bool SendRay(out RaycastHit raycastHit, int layer = -1)
         {
-            if (Physics.Raycast(Camera.main.ScreenPointToRay(Input.mousePosition), out RaycastHit hitInfo, float.MaxValue, layer))
-            {
-                return hitInfo;
-            }
-            else
-            {
-                return default;
-            }
+            return Physics.Raycast(Camera.main.ScreenPointToRay(Input.mousePosition), out raycastHit, float.MaxValue, layer);
         }
-        public static RaycastHit SendRayDown(Vector3 start, int layer = -1)
+        public static bool SendRayDown(Vector3 start, out RaycastHit raycastHit, int layer = -1)
         {
             start.y += 10000;
-            if (Physics.Raycast(start, Vector3.down, out RaycastHit hitInfo, float.MaxValue, layer))
-            {
-                return hitInfo;
-            }
-            else
-            {
-                return default;
-            }
+            return Physics.Raycast(start, Vector3.down, out raycastHit, float.MaxValue, layer);
         }
 
         /// <summary>
@@ -65,16 +51,7 @@ namespace XFramework
         /// <summary>
         /// 获取一组位置
         /// </summary>
-        public static Vector3[] GetPositions(Transform[] trans)
-        {
-            Vector3[] poses = new Vector3[trans.Length];
-            for (int i = 0, length = trans.Length; i < length; i++)
-            {
-                poses[i] = trans[i].position;
-            }
-            return poses;
-        }
-        public static Vector3[] GetPositions(List<Transform> trans)
+        public static Vector3[] GetPositions(IList<Transform> trans)
         {
             Vector3[] poses = new Vector3[trans.Count];
             for (int i = 0, length = trans.Count; i < length; i++)
@@ -87,16 +64,7 @@ namespace XFramework
         /// <summary>
         /// 获取一组欧拉角
         /// </summary>
-        public static Vector3[] GetAngles(Transform[] trans)
-        {
-            Vector3[] angles = new Vector3[trans.Length];
-            for (int i = 0, length = trans.Length; i < length; i++)
-            {
-                angles[i] = trans[i].localEulerAngles;
-            }
-            return angles;
-        }
-        public static Vector3[] GetAngles(List<Transform> trans)
+        public static Vector3[] GetAngles(IList<Transform> trans)
         {
             Vector3[] angles = new Vector3[trans.Count];
             for (int i = 0, length = trans.Count; i < length; i++)
@@ -110,12 +78,24 @@ namespace XFramework
         /// 执行一个方法并返回它的执行时间
         /// </summary>
         /// <param name="action"></param>
-        /// <returns></returns>
-        public static float DebugActionRunTime(Action action)
+        /// <returns>执行时间</returns>
+        public static float GetActionRunTime(Action action)
         {
             float time = DateTime.Now.Millisecond + DateTime.Now.Second * 1000;
             action();
             return DateTime.Now.Millisecond + DateTime.Now.Second * 1000 - time;
+        }
+
+        /// <summary>
+        /// 打印一个方法执行时间
+        /// </summary>
+        /// <param name="action"></param>
+        /// <returns>执行时间</returns>
+        public static float DebugActionRuntime(Action action)
+        {
+            float time = GetActionRunTime(action);
+            Debug.Log(time);
+            return time;
         }
     }
 }

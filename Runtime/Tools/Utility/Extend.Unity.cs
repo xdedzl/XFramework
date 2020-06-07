@@ -128,18 +128,18 @@ namespace XFramework
         /// <summary>
         /// 获取Transform的所有 名为 _name 的 子物体
         /// </summary>
-        public static Transform[] GetChilds(this Transform _transform, string _name)
+        public static Transform[] GetChilds(this Transform transform, string name)
         {
-            int count = _transform.childCount;
+            int count = transform.childCount;
             List<Transform> childs = new List<Transform>();
             for (int i = 0; i < count; i++)
             {
-                Transform tmpChild = _transform.GetChild(i);
-                if (tmpChild.name == _name)
+                Transform tmpChild = transform.GetChild(i);
+                if (tmpChild.name == name)
                 {
                     childs.Add(tmpChild);
                 }
-                childs.AddRange(tmpChild.GetChilds(_name));
+                childs.AddRange(tmpChild.GetChilds(name));
             }
             return childs.ToArray();
         }
@@ -166,19 +166,19 @@ namespace XFramework
             switch (type)
             {
                 case VectorType.LocalPos:
-                    transform.localPosition = new Vector3(x, transform.position.y, transform.position.z);
+                    transform.localPosition = new Vector3(x, transform.localPosition.y, transform.localPosition.z);
                     break;
                 case VectorType.Pos:
                     transform.position = new Vector3(x, transform.position.y, transform.position.z);
                     break;
                 case VectorType.LocalAngle:
-                    transform.localEulerAngles = new Vector3(x, transform.position.y, transform.position.z);
+                    transform.localEulerAngles = new Vector3(x, transform.localEulerAngles.y, transform.localEulerAngles.z);
                     break;
                 case VectorType.Angle:
-                    transform.eulerAngles = new Vector3(x, transform.position.y, transform.position.z);
+                    transform.eulerAngles = new Vector3(x, transform.eulerAngles.y, transform.eulerAngles.z);
                     break;
                 case VectorType.LocalScale:
-                    transform.localScale = new Vector3(x, transform.position.y, transform.position.z);
+                    transform.localScale = new Vector3(x, transform.localScale.y, transform.localScale.z);
                     break;
             }
         }
@@ -191,19 +191,19 @@ namespace XFramework
             switch (type)
             {
                 case VectorType.LocalPos:
-                    transform.localPosition = new Vector3(transform.position.x, y, transform.position.z);
+                    transform.localPosition = new Vector3(transform.localPosition.x, y, transform.localPosition.z);
                     break;
                 case VectorType.Pos:
                     transform.position = new Vector3(transform.position.x, y, transform.position.z);
                     break;
                 case VectorType.LocalAngle:
-                    transform.localEulerAngles = new Vector3(transform.position.x, y, transform.position.z);
+                    transform.localEulerAngles = new Vector3(transform.localEulerAngles.x, y, transform.localEulerAngles.z);
                     break;
                 case VectorType.Angle:
-                    transform.eulerAngles = new Vector3(transform.position.x, y, transform.position.z);
+                    transform.eulerAngles = new Vector3(transform.eulerAngles.x, y, transform.eulerAngles.z);
                     break;
                 case VectorType.LocalScale:
-                    transform.localScale = new Vector3(transform.position.x, y, transform.position.z);
+                    transform.localScale = new Vector3(transform.localScale.x, y, transform.localScale.z);
                     break;
             }
         }
@@ -216,19 +216,19 @@ namespace XFramework
             switch (type)
             {
                 case VectorType.LocalPos:
-                    transform.localPosition = new Vector3(transform.position.x, transform.position.y, z);
+                    transform.localPosition = new Vector3(transform.localPosition.x, transform.localPosition.y, z);
                     break;
                 case VectorType.Pos:
                     transform.position = new Vector3(transform.position.x, transform.position.y, z);
                     break;
                 case VectorType.LocalAngle:
-                    transform.localEulerAngles = new Vector3(transform.position.x, transform.position.y, z);
+                    transform.localEulerAngles = new Vector3(transform.localEulerAngles.x, transform.localEulerAngles.y, z);
                     break;
                 case VectorType.Angle:
-                    transform.eulerAngles = new Vector3(transform.position.x, transform.position.y, z);
+                    transform.eulerAngles = new Vector3(transform.eulerAngles.x, transform.eulerAngles.y, z);
                     break;
                 case VectorType.LocalScale:
-                    transform.localScale = new Vector3(transform.position.x, transform.position.y, z);
+                    transform.localScale = new Vector3(transform.localScale.x, transform.localScale.y, z);
                     break;
             }
         }
