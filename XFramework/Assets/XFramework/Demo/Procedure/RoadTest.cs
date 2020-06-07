@@ -107,7 +107,7 @@ public class RoadTest : ProcedureBase
 
         if (Input.GetKeyDown(KeyCode.J))
         {
-            hit = Utility.SendRay(LayerMask.GetMask("Terrain"));
+            Utility.SendRay(out hit, LayerMask.GetMask("Terrain"));
         }
 
 
