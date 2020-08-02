@@ -7,7 +7,7 @@ namespace XFramework.UI
     /// <summary>
     /// 红点系统管理器
     /// </summary>
-    public class ReddotManager : Singleton<ReddotManager>
+    public partial class ReddotManager : Singleton<ReddotManager>
     {
         private Dictionary<string, ReddotNode> m_ReddotNodeDic;
 
@@ -124,7 +124,7 @@ namespace XFramework.UI
             string content = "";
             foreach (var item in m_ReddotNodeDic.Values)
             {
-                content += $"key:{item.key}, state:{item.IsActive}";
+                content += $"key:{item.Key}, state:{item.IsActive}";
                 content += "\n";
             }
             Debug.Log(content);
@@ -141,7 +141,7 @@ namespace XFramework.UI
             {
                 if (item.IsLeafNode)
                 {
-                    keys.Add(item.key);
+                    keys.Add(item.Key);
                 }
             }
             return keys;

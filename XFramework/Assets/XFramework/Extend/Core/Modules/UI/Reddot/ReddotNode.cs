@@ -5,161 +5,164 @@ using UnityEngine;
 
 namespace XFramework.UI
 {
-    /// <summary>
-    /// 红点树节点
-    /// </summary>
-    public class ReddotNode
+    public partial class ReddotManager
     {
-        private bool m_isActive;
-        private List<ReddotNode> m_children;
-        private List<ReddotNode> m_parents;
-        private List<ReddotTag> m_tags;
-        private List<Reddot> m_Reddots;
-        public string key { get; private set; }
-
-        public bool IsActive
+        /// <summary>
+        /// 红点树节点
+        /// </summary>
+        private class ReddotNode
         {
-            get
+            private bool m_isActive;
+            private List<ReddotNode> m_children;
+            private List<ReddotNode> m_parents;
+            private List<ReddotTag> m_tags;
+            private List<Reddot> m_Reddots;
+            public string Key { get; private set; }
+
+            public bool IsActive
             {
-                return m_isActive;
-            }
-            private set
-            {
-                if (m_isActive != value)
+                get
                 {
-                    m_isActive = value;
-
-                    if (m_Reddots != null)
+                    return m_isActive;
+                }
+                private set
+                {
+                    if (m_isActive != value)
                     {
-                        foreach (var reddot in m_Reddots)
-                        {
-                            reddot.SetActive(IsActive);
-                        }
-                    }
+                        m_isActive = value;
 
-                    if (m_parents != null)
-                    {
-                        foreach (var node in m_parents)
+                        if (m_Reddots != null)
                         {
-                            if (value)
+                            foreach (var reddot in m_Reddots)
                             {
-                                node.IsActive = true;
+                                reddot.SetActive(IsActive);
                             }
-                            else
+                        }
+
+                        if (m_parents != null)
+                        {
+                            foreach (var node in m_parents)
                             {
-                                if(node.m_children != null)
+                                if (value)
                                 {
-                                    foreach (var item in node.m_children)
+                                    node.IsActive = true;
+                                }
+                                else
+                                {
+                                    if (node.m_children != null)
                                     {
-                                        if (item.IsActive)
+                                        foreach (var item in node.m_children)
                                         {
-                                            return;
+                                            if (item.IsActive)
+                                            {
+                                                return;
+                                            }
                                         }
+                                        node.IsActive = false;
                                     }
-                                    node.IsActive = false;
                                 }
                             }
                         }
                     }
                 }
             }
-        }
 
-        public bool IsLeafNode
-        {
-            get
+            public bool IsLeafNode
             {
-                return m_children == null || m_children.Count == 0;
-            }
-        }
-
-        public ReddotNode(string key)
-        {
-            this.key = key;
-        }
-
-        public void Mark(bool state, string tag)
-        {
-            if (!IsLeafNode)
-            {
-                throw new XFrameworkException($"[红点系统] 不允许标记非叶子节点 节点key为[{key}]");
-            }
-
-            if(m_tags is null)
-            {
-                m_tags = new List<ReddotTag>();
-            }
-
-
-            ReddotTag reddotState = null;
-            for (int i = 0; i < m_tags.Count; i++)
-            {
-                if (m_tags[i].tag == tag)
+                get
                 {
-                    reddotState = m_tags[i];
-                    reddotState.state = state;
+                    return m_children == null || m_children.Count == 0;
                 }
             }
 
-            if (reddotState is null)
+            public ReddotNode(string key)
             {
-                reddotState = new ReddotTag
-                {
-                    tag = tag,
-                    state = state,
-                };
-                m_tags.Add(reddotState);
+                this.Key = key;
             }
 
-
-            foreach (var item in m_tags)
+            public void Mark(bool state, string tag)
             {
-                if (item.state)
+                if (!IsLeafNode)
                 {
-                    IsActive = true;
-                    return;
+                    throw new XFrameworkException($"[红点系统] 不允许标记非叶子节点 节点key为[{Key}]");
+                }
+
+                if (m_tags is null)
+                {
+                    m_tags = new List<ReddotTag>();
+                }
+
+
+                ReddotTag reddotState = null;
+                for (int i = 0; i < m_tags.Count; i++)
+                {
+                    if (m_tags[i].tag == tag)
+                    {
+                        reddotState = m_tags[i];
+                        reddotState.state = state;
+                    }
+                }
+
+                if (reddotState is null)
+                {
+                    reddotState = new ReddotTag
+                    {
+                        tag = tag,
+                        state = state,
+                    };
+                    m_tags.Add(reddotState);
+                }
+
+
+                foreach (var item in m_tags)
+                {
+                    if (item.state)
+                    {
+                        IsActive = true;
+                        return;
+                    }
+                }
+                IsActive = false;
+            }
+
+            public void RegisterReddot(Reddot reddot)
+            {
+                if (m_Reddots is null)
+                {
+                    m_Reddots = new List<Reddot>();
+                }
+
+                if (!m_Reddots.Contains(reddot))
+                {
+                    m_Reddots.Add(reddot);
                 }
             }
-            IsActive = false;
-        }
 
-        public void RegisterReddot(Reddot reddot)
-        {
-            if (m_Reddots is null)
+            public void UnRegisterReddot(Reddot reddot)
             {
-                m_Reddots = new List<Reddot>();
+                m_Reddots?.Remove(reddot);
             }
 
-            if (!m_Reddots.Contains(reddot))
+            public void AddChild(ReddotNode node)
             {
-                m_Reddots.Add(reddot);
+                if (m_children is null)
+                {
+                    m_children = new List<ReddotNode>();
+                }
+                m_children.Add(node);
+
+                if (node.m_parents is null)
+                {
+                    node.m_parents = new List<ReddotNode>();
+                }
+                node.m_parents.Add(this);
             }
-        }
 
-        public void UnRegisterReddot(Reddot reddot)
-        {
-            m_Reddots?.Remove(reddot);
-        }
-
-        public void AddChild(ReddotNode node)
-        {
-            if(m_children is null)
+            private class ReddotTag
             {
-                m_children = new List<ReddotNode>();
+                public bool state;
+                public string tag;
             }
-            m_children.Add(node);
-
-            if (node.m_parents is null)
-            {
-                node.m_parents = new List<ReddotNode>();
-            }
-            node.m_parents.Add(this);
-        }
-
-        private class ReddotTag
-        {
-            public bool state;
-            public string tag;
         }
     }
 }

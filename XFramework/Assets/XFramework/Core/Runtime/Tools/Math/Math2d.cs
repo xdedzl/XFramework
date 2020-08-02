@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -815,7 +815,7 @@ namespace XFramework.Mathematics
             }
 
             // 计算回转数并判断点和多边形的几何关系
-            return Mathf.RoundToInt((float)(sum / Math.PI)) == 0 ? false : true;
+            return Mathf.RoundToInt((float)(sum / Math.PI)) != 0;
         }
 
         /// <summary>
