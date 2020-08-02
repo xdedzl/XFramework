@@ -1,4 +1,4 @@
-﻿using UnityEngine.UI;
+using UnityEngine.UI;
 using UnityEngine;
 using UnityEngine.Events;
 using System.Collections.Generic;
@@ -14,7 +14,7 @@ namespace XFramework.UI
         /// <summary>
         /// 实体模板
         /// </summary>
-        private GameObject m_EntityTemplate;
+        public GameObject m_EntityTemplate;
         private Transform m_PoolParnet;
         /// <summary>
         /// 实体池
@@ -40,6 +40,11 @@ namespace XFramework.UI
             onEntityCreate = new EntityEvent();
             onEntityAdd = new EntityEvent();
             m_EntityPool = new Stack<GameObject>();
+
+            if (m_EntityTemplate != null)
+            {
+                SetEntity(m_EntityTemplate);
+            }
         }
 
         private void Reset()

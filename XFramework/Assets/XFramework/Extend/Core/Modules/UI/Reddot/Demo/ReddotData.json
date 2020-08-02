@@ -1,0 +1,97 @@
+[
+  {
+    "key": "Task",
+    "children": [
+      "NewTask",
+      "UnfinishedTask"
+    ],
+    "name": "任务",
+    "position": "583,16"
+  },
+  {
+    "key": "NewTask",
+    "children": null,
+    "name": "新任务",
+    "position": "866,-75"
+  },
+  {
+    "key": "UnfinishedTask",
+    "children": [
+      "FaildTask",
+      "DoingTask"
+    ],
+    "name": "未完成任务",
+    "position": "869,68"
+  },
+  {
+    "key": "Root",
+    "children": [
+      "Mail",
+      "Message",
+      "Task"
+    ],
+    "name": "红点树",
+    "position": "175,282"
+  },
+  {
+    "key": "Message",
+    "children": [
+      "Stranger",
+      "Friend",
+      "System"
+    ],
+    "name": "消息",
+    "position": "577,281"
+  },
+  {
+    "key": "SystemMail",
+    "children": null,
+    "name": "系统邮件",
+    "position": "883,538"
+  },
+  {
+    "key": "Stranger",
+    "children": null,
+    "name": "陌生人",
+    "position": "880,188"
+  },
+  {
+    "key": "Mail",
+    "children": [
+      "SystemMail",
+      "PlayerMail"
+    ],
+    "name": "邮件",
+    "position": "588,614"
+  },
+  {
+    "key": "Friend",
+    "children": null,
+    "name": "好友",
+    "position": "882,284"
+  },
+  {
+    "key": "PlayerMail",
+    "children": null,
+    "name": "玩家邮件",
+    "position": "891,719"
+  },
+  {
+    "key": "System",
+    "children": null,
+    "name": "系统",
+    "position": "880,406"
+  },
+  {
+    "key": "FaildTask",
+    "children": null,
+    "name": "失败任务",
+    "position": "1156,-9"
+  },
+  {
+    "key": "DoingTask",
+    "children": null,
+    "name": "正在进行",
+    "position": "1163,144"
+  }
+]
