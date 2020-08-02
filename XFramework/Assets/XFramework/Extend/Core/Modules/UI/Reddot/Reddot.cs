@@ -26,7 +26,7 @@ namespace XFramework.UI
         private ReddotSetter reddotSetter;
         private bool m_isActive;
 
-        public void Awake()
+        public void Start()
         {
             if(target is null)
             {

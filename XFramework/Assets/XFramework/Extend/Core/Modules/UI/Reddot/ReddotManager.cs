@@ -1,6 +1,5 @@
 using Newtonsoft.Json;
 using System.Collections.Generic;
-using System.IO;
 using UnityEngine;
 
 namespace XFramework.UI
@@ -10,12 +9,17 @@ namespace XFramework.UI
     /// </summary>
     public class ReddotManager : Singleton<ReddotManager>
     {
-        private readonly Dictionary<string, ReddotNode> m_ReddotNodeDic = new Dictionary<string, ReddotNode>();
+        private Dictionary<string, ReddotNode> m_ReddotNodeDic;
 
-        private ReddotManager()
+        private ReddotManager() { }
+
+        /// <summary>
+        /// 初始化
+        /// </summary>
+        /// <param name="datas">一般应由红点编辑生成的json文件获得，也可以自定义</param>
+        public void Init(ReddotData[] datas)
         {
-            string path = @"D:\Projects\XDEDZL\XFramework\XFramework\Assets\XFramework\Extend\Core\Modules\UI\Reddot\Demo\ReddotData.json";
-            var datas = JsonConvert.DeserializeObject<ReddotData[]>(File.ReadAllText(path));
+            m_ReddotNodeDic = new Dictionary<string, ReddotNode>();
             foreach (var data in datas)
             {
                 if (!m_ReddotNodeDic.TryGetValue(data.key, out ReddotNode node))
@@ -39,8 +43,15 @@ namespace XFramework.UI
             }
         }
 
+        /// <summary>
+        /// 编辑节点状态
+        /// </summary>
+        /// <param name="key"></param>
+        /// <param name="state"></param>
+        /// <param name="tag"></param>
         public void MarkReddot(string key, bool state, string tag = "default")
         {
+            CheckInit();
             if (!m_ReddotNodeDic.TryGetValue(key, out ReddotNode reddotNode))
             {
                 throw new XFrameworkException($"[红点系统] 红点树中没有key为[{key}]的节点，请添加对应节点或更改key");
@@ -49,11 +60,18 @@ namespace XFramework.UI
             reddotNode.Mark(state, tag);
         }
 
+        /// <summary>
+        /// 注册UI
+        /// </summary>
+        /// <param name="key">键值</param>
+        /// <param name="reddot">红点组件</param>
         public void RegisterReddot(string key, Reddot reddot)
         {
+            CheckInit();
             if (m_ReddotNodeDic.TryGetValue(key, out ReddotNode reddotNode))
             {
                 reddotNode.RegisterReddot(reddot);
+                reddot.SetActive(reddotNode.IsActive);
             }
             else
             {
@@ -61,11 +79,18 @@ namespace XFramework.UI
             }
         }
 
+        /// <summary>
+        /// 移除UI
+        /// </summary>
+        /// <param name="key">键值</param>
+        /// <param name="reddot">红点组件</param>
         public void UnRegisterReddot(string key, Reddot reddot)
         {
+            CheckInit();
             if (m_ReddotNodeDic.TryGetValue(key, out ReddotNode reddotNode))
             {
                 reddotNode.UnRegisterReddot(reddot);
+                reddot.SetActive(false);
             }
             else
             {
@@ -73,6 +98,27 @@ namespace XFramework.UI
             }
         }
 
+        /// <summary>
+        /// 获取键值对应的节点状态
+        /// </summary>
+        /// <param name="key">键值</param>
+        /// <returns>状态</returns>
+        public bool GetKeyState(string key)
+        {
+            CheckInit();
+            if (m_ReddotNodeDic.TryGetValue(key, out ReddotNode reddotNode))
+            {
+                return reddotNode.IsActive;
+            }
+            else
+            {
+                throw new XFrameworkException($"[红点系统] 红点树中没有key为[{key}]的节点，请添加对应节点或更改key");
+            }
+        }
+
+        /// <summary>
+        /// 在控制台打印状态
+        /// </summary>
         public void DebugState()
         {
             string content = "";
@@ -84,6 +130,10 @@ namespace XFramework.UI
             Debug.Log(content);
         }
 
+        /// <summary>
+        /// 获取所有的叶节点键值
+        /// </summary>
+        /// <returns></returns>
         public IEnumerable<string> GetLeafKeys()
         {
             List<string> keys = new List<string>();
@@ -96,15 +146,29 @@ namespace XFramework.UI
             }
             return keys;
         }
+
+        /// <summary>
+        /// 检查是否初始化
+        /// </summary>
+        private void CheckInit()
+        {
+            if (m_ReddotNodeDic is null)
+            {
+                throw new System.Exception("请先初试话红点系统-->  ReddotManager.Instance.Init()");
+            }
+        }
     }
 
+    /// <summary>
+    /// 红点数据
+    /// </summary>
     public class ReddotData
     {
         public string key;
         public string[] children;
 #if UNITY_EDITOR
         // 仅用于节点编辑器
-        public string name;    
+        public string name;
         [JsonConverter(typeof(JsonConvter.Vector2Converter))]
         public Vector2 position;
 #endif
