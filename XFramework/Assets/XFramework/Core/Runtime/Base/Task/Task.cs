@@ -40,6 +40,11 @@ namespace XFramework.Tasks
                 IsDone = true;
             }
         }
+
+        public static SingleTask Create(Func<bool> action)
+        {
+            return new SingleTask(action);
+        }
     }
 
     /// <summary>
@@ -118,5 +123,13 @@ namespace XFramework.Tasks
                 IsDone = isDone;
             }
         }
+    }
+
+    public class Task
+    {
+        public static ITask First()
+        {
+            return new SingleTask(() => { return true; });
+        } 
     }
 }

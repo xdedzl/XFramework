@@ -81,6 +81,18 @@ namespace XFramework.Tasks
         }
 
         /// <summary>
+        /// 创建一个触发事件
+        /// </summary>
+        /// <param name="task"></param>
+        /// <param name="callback"></param>
+        /// <returns>nextTask</returns>
+        public static ITask Then(this ITask task, Action callback)
+        {
+            task.Next = new SingleTask(()=> { callback.Invoke(); return true; });
+            return task.Next;
+        }
+
+        /// <summary>
         /// 任务开始
         /// </summary>
         /// <param name="task">任务</param>

@@ -44,6 +44,16 @@ namespace XFramework.UI
         }
 
         /// <summary>
+        /// 初始化
+        /// </summary>
+        /// <param name="jsonText">ReddotData的json字符串</param>
+        public void Init(string jsonText)
+        {
+            var datas = JsonConvert.DeserializeObject<ReddotData[]>(jsonText);
+            Init(datas);
+        }
+
+        /// <summary>
         /// 编辑节点状态
         /// </summary>
         /// <param name="key"></param>
@@ -154,7 +164,7 @@ namespace XFramework.UI
         {
             if (m_ReddotNodeDic is null)
             {
-                throw new System.Exception("请先初试话红点系统-->  ReddotManager.Instance.Init()");
+                throw new System.Exception("请先初始化红点系统-->  ReddotManager.Instance.Init()");
             }
         }
     }

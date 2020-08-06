@@ -174,6 +174,11 @@ namespace XFramework.Resource
             return m_LoadHelper.LoadAllSync<T>(path, isTopOnly, callback);
         }
 
+        /// <summary>
+        /// 将传入路径转为Assets路径
+        /// </summary>
+        /// <param name="path"></param>
+        /// <returns></returns>
         private string Path2RealPath(string path)
         {
             if (HasPathMap)

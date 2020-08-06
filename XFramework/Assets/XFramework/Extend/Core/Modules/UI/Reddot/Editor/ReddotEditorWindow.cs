@@ -101,19 +101,25 @@ namespace XFramework.UI.Editor
         private void SaveData(string path)
         {
             UQueryState<GraphElement> query = graphView.graphElements;
-            List<ReddotData> nodes = new List<ReddotData>();
+            Dictionary<string, ReddotData> nodes = new Dictionary<string, ReddotData>();
 
             query.ForEach((element) =>
             {
                 if (element is ReddotNode node)
                 {
-                    nodes.Add(new ReddotData 
+                    if (nodes.ContainsKey(node.Key))
+                    {
+                        throw new System.Exception($"´æÔÚÖØ¸´µÄkey ¡¾{node.Key}¡¿");
+                    }
+
+                    nodes.Add(node.Key, new ReddotData 
                     {
                         key = node.Key,
                         children = node.RedotChildren,
 
                         name = node.ReddotName,
-                        position = node.GetPosition().position,
+
+                        position = node.transform.position
                     });
                 }
             });
@@ -125,8 +131,12 @@ namespace XFramework.UI.Editor
 
     public class ReddotGraphView : GraphView
     {
+        private EditorWindow m_editorWindow;
+
         public ReddotGraphView(EditorWindow editorWindow)
         {
+            ReddotPort.graphView = this;
+            m_editorWindow = editorWindow;
             var nodeStyle = AssetDatabase.LoadAssetAtPath<StyleSheet>(@"Assets\XFramework\Extend\Core\Modules\UI\Reddot\Editor\NarrativeGraph.uss");
             styleSheets.Add(nodeStyle);
 
@@ -143,32 +153,19 @@ namespace XFramework.UI.Editor
 
             nodeCreationRequest += context =>
             {
-                var mousePosition = editorWindow.rootVisualElement.ChangeCoordinatesTo(editorWindow.rootVisualElement.parent,
-                   context.screenMousePosition - editorWindow.position.position);
-                var graphMousePosition = this.contentViewContainer.WorldToLocal(mousePosition);
-
                 var node = new ReddotNode();
-                this.AddElement(node);
-                node.transform.position = graphMousePosition;
+                AddNode(node, context.screenMousePosition);
             };
+        }
 
-            //canPasteSerializedData += (a) =>
-            //{
-            //    //Debug.Log(a);
-            //    return true;
-            //};
+        public void AddNode(ReddotNode node, Vector2 screenMousePosition)
+        {
+            var mousePosition = m_editorWindow.rootVisualElement.ChangeCoordinatesTo(m_editorWindow.rootVisualElement.parent,
+                   screenMousePosition - m_editorWindow.position.position);
+            var graphMousePosition = this.contentViewContainer.WorldToLocal(mousePosition);
 
-            //serializeGraphElements += (dsa) =>
-            //{
-            //    List<GraphElement> nodes = new List<GraphElement>();
-            //    foreach (var item in dsa)
-            //    {
-            //        var node = item as ReddotNode;
-            //        Debug.Log(node.Key);
-            //        var newNode = new ReddotNode(node.Key);
-            //    }
-            //    return "dasdasdas";
-            //};
+            this.AddElement(node);
+            node.transform.position = graphMousePosition;
         }
 
         public override List<Port> GetCompatiblePorts(Port startPort, NodeAdapter nodeAdapter)
@@ -177,7 +174,7 @@ namespace XFramework.UI.Editor
 
             foreach (var port in ports.ToList())
             {
-                if (startPort.node == port.node || startPort.direction == port.direction || startPort.portType != port.portType)
+                if (startPort.direction == port.direction || startPort.portType != port.portType)
                 {
                     continue;
                 }
