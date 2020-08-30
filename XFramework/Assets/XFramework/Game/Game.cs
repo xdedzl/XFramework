@@ -90,7 +90,7 @@ public class Game : MonoBehaviour
 #if UNITY_EDITOR
         string mapInfoPath = $"{Application.streamingAssetsPath}/pathMap.info";
         ResourceManager.GeneratePathMap(mapInfoPath, "Assets/Res");
-        GameEntry.AddModule<ResourceManager>(new AssetDataBaseLoadHelper(), mapInfoPath);
+        GameEntry.AddModule<ResourceManager>(new AssetDataBaseLoadHelper());
 #else
         GameEntry.AddModule<ResourceManager>(new AssetBundleLoadHelper(), mapInfoPath);
 #endif
