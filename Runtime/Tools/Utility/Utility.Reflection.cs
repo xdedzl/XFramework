@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 
@@ -103,6 +103,44 @@ namespace XFramework
                 }
 
                 return typeNames;
+            }
+
+            /// <summary>
+            /// 从当前程序域的所有程序集中获取所有类型
+            /// </summary>
+            /// <returns>所有类型集合</returns>
+            public static List<Type> GetTypesInAllAssemblies()
+            {
+                List<Type> types = new List<Type>();
+                Assembly[] assemblys = AppDomain.CurrentDomain.GetAssemblies();
+                for (int i = 0; i < assemblys.Length; i++)
+                {
+                    types.AddRange(assemblys[i].GetTypes());
+                }
+                return types;
+            }
+
+            /// <summary>
+            /// 从当前程序域的所有程序集中获取所有类型
+            /// </summary>
+            /// <param name="filter">类型筛选器</param>
+            /// <returns>所有类型集合</returns>
+            public static List<Type> GetTypesInAllAssemblies(Func<Type, bool> filter)
+            {
+                List<Type> types = new List<Type>();
+                Assembly[] assemblys = AppDomain.CurrentDomain.GetAssemblies();
+                for (int i = 0; i < assemblys.Length; i++)
+                {
+                    Type[] ts = assemblys[i].GetTypes();
+                    foreach (var t in ts)
+                    {
+                        if (filter(t))
+                        {
+                            types.Add(t);
+                        }
+                    }
+                }
+                return types;
             }
 
             /// <summary>
