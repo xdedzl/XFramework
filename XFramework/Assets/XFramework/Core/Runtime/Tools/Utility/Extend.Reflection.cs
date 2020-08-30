@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 
@@ -48,6 +48,70 @@ namespace XFramework
             }
             typeNames.Sort();
             return typeNames.ToArray();
+        }
+           
+
+        /// <summary>
+        /// 从当前类型中获取所有字段
+        /// </summary>
+        /// <param name="type">类型</param>
+        /// <param name="filter">字段筛选器</param>
+        /// <returns>所有字段集合</returns>
+        public static List<FieldInfo> GetFields(this Type type, Func<FieldInfo, bool> filter)
+        {
+            List<FieldInfo> fields = new List<FieldInfo>();
+            FieldInfo[] infos = type.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+            for (int i = 0; i < infos.Length; i++)
+            {
+                if (filter(infos[i]))
+                {
+                    fields.Add(infos[i]);
+                }
+            }
+            return fields;
+        }
+
+        /// <summary>
+        /// 从当前程序域的所有程序集中获取所有类型
+        /// </summary>
+        /// <param name="filter">类型筛选器</param>
+        /// <returns>所有类型集合</returns>
+        public static List<Type> GetTypesInAllAssemblies(Func<Type, bool> filter)
+        {
+            List<Type> types = new List<Type>();
+            Assembly[] assemblys = AppDomain.CurrentDomain.GetAssemblies();
+            for (int i = 0; i < assemblys.Length; i++)
+            {
+                Type[] ts = assemblys[i].GetTypes();
+                foreach (var t in ts)
+                {
+                    if (filter(t))
+                    {
+                        types.Add(t);
+                    }
+                }
+            }
+            return types;
+        }
+
+        /// <summary>
+        /// 从当前类型中获取所有方法
+        /// </summary>
+        /// <param name="type">类型</param>
+        /// <param name="filter">方法筛选器</param>
+        /// <returns>所有方法集合</returns>
+        public static List<MethodInfo> GetMethods(this Type type, Func<MethodInfo, bool> filter)
+        {
+            List<MethodInfo> methods = new List<MethodInfo>();
+            MethodInfo[] infos = type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+            for (int i = 0; i < infos.Length; i++)
+            {
+                if (filter(infos[i]))
+                {
+                    methods.Add(infos[i]);
+                }
+            }
+            return methods;
         }
     }
 }
