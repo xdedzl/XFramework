@@ -1,44 +1,38 @@
 using System;
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
-public abstract class GMCommandBase
+namespace XFramework.Console
 {
-    public abstract int Order { get; }
-    public abstract string TabName { get; }
-}
-
-public class XGMCommand : GMCommandBase
-{
-    public override int Order => -1;
-
-    public override string TabName => "";
-
-    [GMCommand]
-    public static void Test1()
+    public abstract class GMCommandBase
     {
-        Debug.Log("hahaha");
+        public abstract int Order { get; }
+        public abstract string TabName { get; }
     }
 
-    [GMCommand]
-    public static Vector3 Test2(string parm)
+    public class XGMCommand : GMCommandBase
     {
-        Debug.Log(parm);
-        return Vector3.zero;
-    }
-}
+        public override int Order => -1;
 
-[AttributeUsage(AttributeTargets.Method, Inherited = true, AllowMultiple = false)]
-public class GMCommandAttribute : Attribute
-{
-    public string name;
-    public string cmd;
-    public int order;
-    public GMCommandAttribute(string name = null, string cmd = null, int order = -1)
+        public override string TabName => "";
+
+        [GMCommand("clear")]
+        public static void ClearConsole()
+        {
+            XConsole.Clear();
+        }
+    }
+
+    [AttributeUsage(AttributeTargets.Method, Inherited = true, AllowMultiple = false)]
+    public class GMCommandAttribute : Attribute
     {
-        this.name = name;
-        this.cmd = cmd;
-        this.order = order;
+        public string cmd;
+        public string name;
+        public int order;
+        public GMCommandAttribute(string cmd = null, string name = null, int order = -1)
+        {
+            this.cmd = cmd;
+            this.name = name;
+            this.order = order;
+        }
     }
 }

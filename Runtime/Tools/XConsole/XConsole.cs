@@ -132,6 +132,11 @@ namespace XFramework.Console
             XConsole.Instance.console.OnExcuteCmd(cmd, value);
             return value;
         }
+
+        public static void Clear()
+        {
+            Instance.console.OnClear();
+        }
     }
 
     public interface IConsole
@@ -145,6 +150,8 @@ namespace XFramework.Console
         void OnLogMessage(Message message);
 
         void OnExcuteCmd(string cmd, object value);
+
+        void OnClear();
     }
 
     public enum MessageType : int
