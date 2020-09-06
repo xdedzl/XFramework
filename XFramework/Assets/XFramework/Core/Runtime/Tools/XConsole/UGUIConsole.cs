@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -11,6 +12,9 @@ namespace XFramework.Console
         ScrollRect sr_content = null;
         InputField input = null;
         Text text_pageCount = null;
+
+        private LinkedList<string> cmdCache = new LinkedList<string>();
+        private LinkedListNode<string> currentCmd;
 
         public UGUIConsole()
         {
@@ -181,6 +185,8 @@ namespace XFramework.Console
             if (!string.IsNullOrEmpty(str))
             {
                 XConsole.Excute(str);
+                cmdCache.AddLast(str);
+                currentCmd = null;
             }
         }
 
@@ -194,11 +200,13 @@ namespace XFramework.Console
         public void OnOpen()
         {
             consoleRoot.SetActive(true);
+            MonoEvent.Instance.UPDATE += OnUpdate;
         }
 
         public void OnClose()
         {
             consoleRoot.SetActive(false);
+            MonoEvent.Instance.UPDATE -= OnUpdate;
         }
 
         public void OnLogMessage(Message message)
@@ -218,6 +226,44 @@ namespace XFramework.Console
             input.text = "";
 
             input.ActivateInputField();
+        }
+
+        public void OnClear()
+        {
+            text_content.text = "";
+            cmdCache.Clear();
+        }
+
+        private void OnUpdate()
+        {
+            if (Input.GetKeyDown(KeyCode.UpArrow))
+            {
+                if (currentCmd == null)
+                {
+                    currentCmd = cmdCache.Last;
+                }
+                else if (currentCmd.Previous != null)
+                {
+                    currentCmd = currentCmd.Previous;
+                }
+                else
+                {
+                    return;
+                }
+                input.text = currentCmd?.Value;
+            }
+            else if (Input.GetKeyDown(KeyCode.DownArrow))
+            {
+                if (currentCmd != null && currentCmd.Next != null)
+                {
+                    currentCmd = currentCmd.Next;
+                }
+                else
+                {
+                    return;
+                }
+                input.text = currentCmd?.Value;
+            }
         }
     }
 }
