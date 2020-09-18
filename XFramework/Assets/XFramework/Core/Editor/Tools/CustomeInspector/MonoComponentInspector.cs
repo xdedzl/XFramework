@@ -179,8 +179,6 @@ namespace XFramework.Editor
 
             public EventInspector(FieldInfo field)
             {
-                Debug.Log("Generate");
-
                 Field = field;
                 Attribute = field.GetCustomAttribute<EventAttribute>(true);
                 Name = string.IsNullOrEmpty(Attribute.Text) ? field.Name : Attribute.Text;

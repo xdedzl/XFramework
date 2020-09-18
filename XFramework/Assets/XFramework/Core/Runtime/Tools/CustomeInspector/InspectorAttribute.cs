@@ -19,23 +19,18 @@ namespace XFramework
     [Conditional("UNITY_EDITOR")]
     public sealed class DropdownAttribute : InspectorAttribute
     {
-#if UNITY_EDITOR
         public Type ValueType { get; private set; }
         public object[] Values { get; private set; }
         public string[] DisplayOptions { get; private set; }
-#endif
 
         public DropdownAttribute(params string[] values)
         {
-#if UNITY_EDITOR
             ValueType = typeof(string);
             Values = values;
             DisplayOptions = values;
-#endif
         }
         public DropdownAttribute(params int[] values)
         {
-#if UNITY_EDITOR
             ValueType = typeof(int);
             Values = new object[values.Length];
             DisplayOptions = new string[values.Length];
@@ -44,11 +39,9 @@ namespace XFramework
                 Values[i] = values[i];
                 DisplayOptions[i] = values[i].ToString();
             }
-#endif
         }
         public DropdownAttribute(params float[] values)
         {
-#if UNITY_EDITOR
             ValueType = typeof(float);
             Values = new object[values.Length];
             DisplayOptions = new string[values.Length];
@@ -57,7 +50,6 @@ namespace XFramework
                 Values[i] = values[i];
                 DisplayOptions[i] = values[i].ToString();
             }
-#endif
         }
     }
 

@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.UI;
 using XFramework;
 
@@ -16,7 +16,7 @@ public class UIDemo : ProcedureBase
         Screen.SetResolution(1920, 1080, true);
         startBtn.onClick.AddListener(() =>
         {
-            Game.UIModule.Open(UIName.Main);
+            Game.UIModule.Open(UIName.Main, true);
         });
         trans.GetComponent<Image>().alphaHitTestMinimumThreshold = 0.1f;
     }

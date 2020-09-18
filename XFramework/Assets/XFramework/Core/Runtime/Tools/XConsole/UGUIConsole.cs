@@ -4,6 +4,9 @@ using UnityEngine.UI;
 
 namespace XFramework.Console
 {
+    /// <summary>
+    /// UGUI版控制台
+    /// </summary>
     public class UGUIConsole : IConsole
     {
         private GameObject consoleRoot;
