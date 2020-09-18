@@ -262,10 +262,13 @@ namespace XFramework.Console
             if (!string.IsNullOrEmpty(formatted))
                 return formatted;
 
+            var hexColor = ColorToHex(this.color);
+            string prefix;
+            string logText = text;
             switch (type)
             {
                 case MessageType.INPUT:
-                    formatted = "<color=#" + ColorToHex(this.color) + ">" + ">>> " + text + "</color>\n";
+                    prefix = ">>>";
                     break;
                 case MessageType.OUTPUT:
                     var lines = text.Trim('\n').Split('\n');
@@ -275,26 +278,27 @@ namespace XFramework.Console
                     {
                         output.AppendLine("= " + lines[i]);
                     }
-
-                    formatted = "<color=#" + ColorToHex(this.color) + ">" + output.ToString() + "</color>";
+                    prefix = "";
+                    logText = output.ToString();
                     break;
                 case MessageType.SYSTEM:
-                    formatted = "<color=#" + ColorToHex(this.color) + ">" + "# " + text + "</color>\n";
+                    prefix = "#";
                     break;
                 case MessageType.WARNING:
-                    formatted = "<color=#" + ColorToHex(this.color) + ">" + "* " + text + "</color>\n";
+                    prefix = "*";
                     break;
                 case MessageType.ERROR:
-                    formatted = "<color=#" + ColorToHex(this.color) + ">" + "** " + text + "</color>\n";
+                    prefix = "**";
                     break;
                 case MessageType.UNITY:
-                    formatted = "<color=#" + ColorToHex(this.color) + ">" + "*** " + text + "</color>\n";
+                    prefix = "***";
                     break;
                 default:
-                    formatted = "<color=#" + ColorToHex(this.color) + ">" + text + "</color>\n";
+                    prefix = "";
                     break;
             }
 
+            formatted = $"<color=#{hexColor}>{prefix} {logText}</color>\n";
             return formatted;
         }
 

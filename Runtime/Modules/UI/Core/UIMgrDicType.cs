@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
@@ -65,7 +65,7 @@ namespace XFramework.UI
             {
                 if (m_OnDisplayPanelDic[panel.Level].Contains(panel))
                 {
-                    if (closable)
+                    if (closable) 
                         ClosePanel(uiname);
                     return;
                 }
