@@ -286,7 +286,7 @@ namespace XFramework.UI
             {
                 if (!m_SelectedNodes.Remove(node))
                 {
-                    throw new XFrameworkException("多选状态时存在逻辑隐患");
+                    throw new XFrameworkException("[UITree] 多选状态时存在逻辑隐患");
                 }
 
                 for (int i = 0; i < node.ChildCount; i++)
@@ -296,7 +296,7 @@ namespace XFramework.UI
             }
             else if (node != m_SelectedNode)
             {
-                throw new XFrameworkException("单选状态时存在逻辑隐患");
+                throw new XFrameworkException("[UITree] 单选状态时存在逻辑隐患");
             }
             else
             {

@@ -32,7 +32,7 @@ namespace XFramework
                     }
                     else
                     {
-                        throw new XFrameworkException($"{type.Name} 的 {item.Name} 没有设置EnumStrAttribute特性");
+                        throw new XFrameworkException($"{type.Name} 的 {item.Name} has no attribute which type is EnumStrAttribute");
                     }
                 }
 

@@ -119,7 +119,7 @@ namespace XFramework.UI
             {
                 if (mUIDic.ContainsKey(uis[i].name))
                 {
-                    throw new XFrameworkException($"{this.name}已有名为{uis[i].name}的GUBase组件");
+                    throw new XFrameworkException($"{this.name} already have a GUIBase component named {uis[i].name}");
                 }
                 mUIDic.Add(uis[i].name, uis[i]);
             }

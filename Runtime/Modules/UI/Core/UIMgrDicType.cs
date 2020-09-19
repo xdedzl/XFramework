@@ -134,7 +134,7 @@ namespace XFramework.UI
             if(m_PanelDict.TryGetValue(uiname, out PanelBase panel))
             {
                 if (panel == null)
-                    throw new XFrameworkException("[UI] 面板已被卸载");
+                    throw new XFrameworkException("[UI] The panel you want has been unloaded");
                 return panel;
             }
             else
@@ -149,7 +149,7 @@ namespace XFramework.UI
 
                 if (type == null || !type.IsSubclassOf(typeof(PanelBase)))
                 {
-                    throw new XFrameworkException("[UI] 面板类名错误 | 没有继承BasePanel");
+                    throw new XFrameworkException("[UI] wrong panel name or panel is not inherit BasePanel");
                 }
 
                 PanelBase basePanel = instPanel.AddComponent(type) as PanelBase;

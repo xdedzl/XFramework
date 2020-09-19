@@ -23,7 +23,7 @@
                     return m_instance;
                 }
 
-                throw new XFrameworkException($"使用{typeof(T).Name}前需先加载模块 use --> GameEntry.AddModule ");
+                throw new XFrameworkException($"must load model before use it. ModuleName: {typeof(T).Name} use --> GameEntry.AddModule ");
             }
         }
         /// <summary>

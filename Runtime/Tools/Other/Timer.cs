@@ -126,7 +126,7 @@ namespace XFramework
             set
             {
                 if (value < 0)
-                    throw new XFrameworkException("Timer的时间运行速度不能小于0");
+                    throw new XFrameworkException("the timeScale of Timer can not less than 0");
                 m_timeScale = value;
             }
         }
@@ -144,7 +144,7 @@ namespace XFramework
             {
                 if (IsRunning)
                 {
-                    throw new XFrameworkException("[Timer] 计时器正在运行时不允许修改其组名");
+                    throw new XFrameworkException("[Timer] running timer can not modify group name");
                 }
                 m_groupName = value;
             }
@@ -305,7 +305,7 @@ namespace XFramework
             set
             {
                 if (value < 0)
-                    throw new XFrameworkException("Timer的时间运行速度不能小于0");
+                    throw new XFrameworkException("the timeScale of Timer can not less than 0");
                 Manager.timeScale = value;
             }
         }
@@ -364,7 +364,7 @@ namespace XFramework
                             continue;
                         }
                     }
-                    throw new XFrameworkException("[Timer] 逻辑有误，试图删除一个不受Timemanager管理的Timer");
+                    throw new XFrameworkException("[Timer] try to delete a timer whitch is not managerd by TimeManager");
                 }
                 m_toRemveTimers.Clear();
             }
@@ -404,7 +404,7 @@ namespace XFramework
                 {
                     return timers;
                 }
-                throw new XFrameworkException($"[Timer] 逻辑有误，没有名为{groupName}的计时器组");
+                throw new XFrameworkException($"[Timer] there is no timer group which name is {groupName}");
             }
         }
     }
