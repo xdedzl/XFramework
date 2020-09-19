@@ -136,7 +136,7 @@ namespace XFramework.UI
                     return mUIDic[key];
                 else
                 {
-                    throw new System.Exception(this + " : 没有名为" + key + "的UI组件");
+                    throw new XFramework($"there is no ui component named '{key}' in {this}");
                 }
             }
         }

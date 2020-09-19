@@ -105,7 +105,7 @@ namespace XFramework.Fsm
         {
             if (!typeFsm.IsSubclassOf(typeof(IFsm)) || !typeState.IsSubclassOf(typeof(FsmState)))
             {
-                throw new System.Exception("类型传入错误");
+                throw new System.Exception("[FSM] type error");
             }
 
             if (!HasFsm(typeFsm))

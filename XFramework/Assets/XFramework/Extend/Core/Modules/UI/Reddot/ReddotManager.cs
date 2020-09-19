@@ -164,7 +164,7 @@ namespace XFramework.UI
         {
             if (m_ReddotNodeDic is null)
             {
-                throw new System.Exception("请先初始化红点系统-->  ReddotManager.Instance.Init()");
+                throw new XFrameworkException("[Reddot System] please init reddot system before use it  -->  ReddotManager.Instance.Init()");
             }
         }
     }

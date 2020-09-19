@@ -90,7 +90,7 @@ namespace XFramework.Fsm
             FsmState state = Utility.Reflection.CreateInstance<TState>(type);
 
             if (!(state is TState))
-                throw new System.Exception("状态类型设置错误");
+                throw new XFrameworkException("[FSM] state type error");
 
             state.Init();
             return state;
