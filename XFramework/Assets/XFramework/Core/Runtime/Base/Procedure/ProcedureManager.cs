@@ -73,7 +73,7 @@ namespace XFramework
             }
             else
             {
-                throw new XFrameworkException($"[Procedure] 当前流程不是{typeof(TProcedure).Name}");
+                throw new XFrameworkException($"[Procedure] current procedure is not {typeof(TProcedure).Name}");
             }
         }
 

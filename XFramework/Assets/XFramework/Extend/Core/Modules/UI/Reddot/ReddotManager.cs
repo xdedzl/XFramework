@@ -64,7 +64,7 @@ namespace XFramework.UI
             CheckInit();
             if (!m_ReddotNodeDic.TryGetValue(key, out ReddotNode reddotNode))
             {
-                throw new XFrameworkException($"[红点系统] 红点树中没有key为[{key}]的节点，请添加对应节点或更改key");
+                throw new XFrameworkException($"[Reddot System] there is no node which key is '{key}' in reddot tree，please add node to reddot tree or modify key");
             }
 
             reddotNode.Mark(state, tag);
@@ -85,7 +85,7 @@ namespace XFramework.UI
             }
             else
             {
-                throw new XFrameworkException($"[红点系统] 红点树中没有key为[{key}]的节点，请添加对应节点或更改key");
+                throw new XFrameworkException($"[Reddot System] there is no node which key is '{key}' in reddot tree，please add node to reddot tree or modify key");
             }
         }
 
@@ -104,7 +104,7 @@ namespace XFramework.UI
             }
             else
             {
-                throw new XFrameworkException($"[红点系统] 红点树中没有key为[{key}]的节点，请添加对应节点或更改key");
+                throw new XFrameworkException($"[Reddot System] there is no node which key is '{key}' in reddot tree，please add node to reddot tree or modify key");
             }
         }
 
@@ -122,7 +122,7 @@ namespace XFramework.UI
             }
             else
             {
-                throw new XFrameworkException($"[红点系统] 红点树中没有key为[{key}]的节点，请添加对应节点或更改key");
+                throw new XFrameworkException($"[Reddot System] there is no node which key is '{key}' in reddot tree，please add node to reddot tree or modify key");
             }
         }
 

@@ -77,7 +77,7 @@ namespace XFramework.Entity
                 {
                     if (index >= ChildCount || index < 0)
                     {
-                        throw new XFrameworkException($"[EntityError] entity没有index为{index}的子实体, entity {m_Entity.ToString()}");
+                        throw new XFrameworkException($"[EntityError] There is no child which index is {index} in {m_Entity.ToString()}");
                     }
                     return m_ChildEntities[index];
                 }

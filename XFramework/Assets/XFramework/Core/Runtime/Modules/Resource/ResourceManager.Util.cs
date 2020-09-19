@@ -45,7 +45,7 @@ namespace XFramework.Resource
 
                 if (pathMap.ContainsKey(item.Name))
                 {
-                    throw new XFrameworkException("使用路径映射加载资源时不能用同名文件(文件名相同后缀名不同时不算同名)");
+                    throw new XFrameworkException($"tow asset have same name, name is {item.Name}");
                 }
                 pathMap.Add(item.Name, assetPath);
             }

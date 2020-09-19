@@ -165,7 +165,7 @@ namespace XFramework.Entity
             if (m_EntityDic.ContainsKey(id))
             {
                 Entity e = m_EntityDic[id];
-                throw new XFrameworkException($"[EntityError] id已被占用  Entity {e.ToString()}");
+                throw new XFrameworkException($"[EntityError] id is already occupied.  Entity {e.ToString()}");
             }
 
             var entity = m_EntityContainerDic[key].Allocate(id, pos, quaternion, entityData, parent);
@@ -278,7 +278,7 @@ namespace XFramework.Entity
             }
             else
             {
-                throw new XFrameworkException($"[EntityError]没有名为{containerName}的实体容器");
+                throw new XFrameworkException($"[EntityError] There is no entity container named {containerName}");
             }
         }
 
@@ -310,7 +310,7 @@ namespace XFramework.Entity
             }
             else
             {
-                throw new XFrameworkException($"[Entity]没有id为{entityId}的实体");
+                throw new XFrameworkException($"[Entity] There is no entity with an id of {entityId}");
             }
         }
 

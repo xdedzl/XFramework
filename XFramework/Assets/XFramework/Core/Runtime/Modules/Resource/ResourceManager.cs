@@ -94,7 +94,7 @@ namespace XFramework.Resource
         {
             if (string.IsNullOrEmpty(assetName))
             {
-                throw new System.Exception("加载资源路径不能为空");
+                throw new XFrameworkException("load path is null");
             }
             if (IsResources(assetName))
             {
@@ -168,7 +168,7 @@ namespace XFramework.Resource
         {
             if (IsResources(path))
             {
-                throw new XFrameworkException("Res: 不能用Resource的方式异步加载所有资源");
+                throw new XFrameworkException("Resource not support LoadAllAsync");
             }
 
             return m_LoadHelper.LoadAllSync<T>(path, isTopOnly, callback);
@@ -189,7 +189,7 @@ namespace XFramework.Resource
                 }
                 else
                 {
-                    throw new XFrameworkException($"[Resource] 没有名为{path}的资源或PathMapInfo文件已过时");
+                    throw new XFrameworkException($"[Resource] There is no resoure whitch path is {path} or PathMapInfo is obsolete");
                 }
             }
             else
