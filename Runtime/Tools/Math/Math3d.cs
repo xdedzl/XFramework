@@ -652,14 +652,14 @@ namespace XFramework.Mathematics
             {
                 for (float i = 0; i <= _count; i++)
                 {
-                    outList.Add(Math3d.GetBezierPoint(i / _count, _points[0], _points[1], _points[2]));
+                    outList.Add(Math3d.Bezier2Point(i / _count, _points[0], _points[1], _points[2]));
                 }
             }
             if (_points.Length == 4)
             {
                 for (float i = 0; i <= _count; i++)
                 {
-                    outList.Add(Math3d.GetBezierPoint(i / _count, _points[0], _points[1], _points[2], _points[3]));
+                    outList.Add(Math3d.Bezier3Point(i / _count, _points[0], _points[1], _points[2], _points[3]));
                 }
             }
             return outList;
@@ -668,30 +668,38 @@ namespace XFramework.Mathematics
         /// <summary>
         /// 获取二次贝塞尔曲线上点
         /// </summary>
-        /// <param name="_t">间隔</param>
-        /// <param name="_P0">起始点</param>
-        /// <param name="_P1">控制点</param>
-        /// <param name="_P2">末尾点</param>
+        /// <param name="t">间隔</param>
+        /// <param name="p0">起始点</param>
+        /// <param name="p1">控制点</param>
+        /// <param name="p2">末尾点</param>
         /// <returns></returns>
-        public static Vector3 GetBezierPoint(float _t, Vector3 _P0, Vector3 _P1, Vector3 _P2)
+        public static Vector3 Bezier2Point(float t, Vector3 p0, Vector3 p1, Vector3 p2)
         {
-            float u = 1 - _t;
-            return u * u * _P0 + 2 * _t * u * _P1 + _t * _t * _P2;
+            t = Mathf.Clamp01(t);
+            float u = 1 - t;
+            return u * u * p0 + 2 * t * u * p1 + t * t * p2;
         }
 
         /// <summary>
         /// 获取三次贝塞尔曲线上点
         /// </summary>
-        /// <param name="_t">间隔</param>
-        /// <param name="_P0">起始点</param>
-        /// <param name="_P1">控制点1</param>
-        /// <param name="_P2">控制点2</param>
-        /// <param name="_P3">末尾点</param>
+        /// <param name="t">间隔</param>
+        /// <param name="p0">起始点</param>
+        /// <param name="p1">控制点1</param>
+        /// <param name="p2">控制点2</param>
+        /// <param name="p3">末尾点</param>
         /// <returns></returns>
-        public static Vector3 GetBezierPoint(float _t, Vector3 _P0, Vector3 _P1, Vector3 _P2, Vector3 _P3)
+        public static Vector3 Bezier3Point(float t, Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3)
         {
-            float u = 1 - _t;
-            return u * u * u * _P0 + 3 * u * u * _t * _P1 + 3 * _t * _t * u * _P2 + _t * _t * _t * _P3;
+            t = Mathf.Clamp01(t);
+            float u = 1 - t;
+            return u * u * u * p0 + 3 * u * u * t * p1 + 3 * t * t * u * p2 + t * t * t * p3;
+        }
+
+        public static Vector3 BezierTangent3(float t, Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3)
+        {
+            t = Mathf.Clamp01(t);
+            return (-3f * p0 + 9f * p1 - 9f * p2 + 3f * p3) * t * t + (6f * p0 - 12f * p1 + 6f * p2) * t - 3f * p0 + 3f * p1;
         }
 
         #endregion

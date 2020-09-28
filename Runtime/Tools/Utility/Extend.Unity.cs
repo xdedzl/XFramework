@@ -79,6 +79,22 @@ namespace XFramework
 
         #endregion
 
+        /// <summary>
+        /// 分别对三个分离取觉得值
+        /// </summary>
+        public static Vector3 Abs(this Vector3 v)
+        {
+            return new Vector3(Mathf.Abs(v.x), Mathf.Abs(v.y), Mathf.Abs(v.z));
+        }
+
+        /// <summary>
+        /// 是否趋近于0
+        /// </summary>
+        public static bool AlmostZero(this Vector3 v)
+        {
+            return v.sqrMagnitude < 9.999999E-09f;
+        }
+
         #endregion
 
         #region Transform
