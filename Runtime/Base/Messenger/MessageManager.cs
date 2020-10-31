@@ -151,7 +151,7 @@ namespace XFramework.Event
         public void RemoveListener(string eventKey, Delegate handler)
         {
             string id = eventKey;
-            OnListenerAdding(id, handler);
+            OnListenerRemoving(id, handler);
             Delegate old = m_eventDictionary[id];
             m_eventDictionary[id] = Delegate.Remove(old, handler);
             OnListenerRemoved(id);

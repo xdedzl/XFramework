@@ -136,7 +136,7 @@ namespace XFramework.UI
                     return mUIDic[key];
                 else
                 {
-                    throw new XFramework($"there is no ui component named '{key}' in {this}");
+                    throw new XFrameworkException($"there is no ui component named '{key}' in {this}");
                 }
             }
         }
@@ -159,6 +159,45 @@ namespace XFramework.UI
             m_SubPanels.Add(subPanel);
 
             return subPanel;
+        }
+
+        public T Find<T>(string path) where T : UIObjectBase, new()
+        {
+            var child = transform.Find(path);
+            var uiObj = new T();
+            uiObj.Init(child, this);
+            return uiObj;
+        }
+    }
+
+    public class UIObjectBase
+    {
+        protected Transform transform;
+        protected PanelBase panel;
+
+        /// <summary>
+        /// Find UI组件的索引器
+        /// </summary>
+        public GUIBase this[string key]
+        {
+            get
+            {
+                return panel[key];
+            }
+        }
+
+        internal void Init(Transform transform, PanelBase panel)
+        {
+            this.transform = transform;
+            this.panel = panel;
+        }
+
+        public T Find<T>(string path) where T : UIObjectBase, new()
+        {
+            var child = transform.Find(path);
+            var uiObj = new T();
+            uiObj.Init(child, panel);
+            return uiObj;
         }
     }
 }
