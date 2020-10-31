@@ -31,5 +31,13 @@ namespace XFramework.UI
         public virtual void Reg() { }
         public virtual void OnOpen() { }
         public virtual void OnClose() { }
+
+        public T Find<T>(string path) where T : UIObjectBase, new()
+        {
+            var child = transform.Find(path);
+            var uiObj = new T();
+            uiObj.Init(child, parentPanel);
+            return uiObj;
+        }
     }
 }
