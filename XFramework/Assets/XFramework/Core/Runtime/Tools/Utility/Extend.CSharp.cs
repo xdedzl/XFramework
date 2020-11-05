@@ -18,6 +18,11 @@ namespace XFramework
             return target as T;
         }
 
+        public static bool Is(this object selfObj, object obj)
+        {
+            return selfObj == obj;
+        }
+
         #endregion
 
         #region Collection
@@ -346,6 +351,18 @@ namespace XFramework
             list.Add(value);
         }
 
+        /// <summary>
+        /// 快速移除列表中某一元素（适用于对列表元素顺序没有要求时）
+        /// </summary>
+        /// <param name="list">目标列表</param>
+        /// <param name="index">索引</param>
+        public static void FastRemoveAt<T>(this IList<T> list, int index)
+        {
+            int lastIndex = list.Count - 1;
+            list[index] = list[lastIndex];
+            list.RemoveAt(lastIndex);
+        }
+
         #endregion
 
         #region String
@@ -397,6 +414,23 @@ namespace XFramework
             }
 
             return new string(ret);
+        }
+
+        #endregion
+
+        #region bool
+
+        public static void Do(this bool value, Action action)
+        {
+            if (value)
+            {
+                action();
+            }
+        }
+
+        public static void Do(this bool value, Action<bool> action)
+        {
+            action(value);
         }
 
         #endregion

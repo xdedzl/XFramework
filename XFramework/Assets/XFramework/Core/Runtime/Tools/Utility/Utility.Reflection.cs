@@ -162,6 +162,96 @@ namespace XFramework
                 }
                 return false;
             }
+
+            #region 反射性能优化
+
+            public static PropertyWrapper<T> PropertyWrapper<T>(object target, PropertyInfo propertyInfo)
+            {
+                return new PropertyWrapper<T>(target, propertyInfo);
+            }
+
+            public static Action MethodWrapperAction(object target, MethodInfo methodInfo)
+            {
+                return (Action)Delegate.CreateDelegate(typeof(Action), target, methodInfo);
+            }
+
+            public static Action<T> MethodWrapperAction<T>(object target, MethodInfo methodInfo)
+            {
+                return (Action<T>)Delegate.CreateDelegate(typeof(Action<T>), target, methodInfo);
+            }
+
+            public static Action<T1, T2> MethodWrapperAction<T1, T2>(object target, MethodInfo methodInfo)
+            {
+                return (Action<T1, T2>)Delegate.CreateDelegate(typeof(Action<T1, T2>), target, methodInfo);
+            }
+
+            public static Action<T1, T2, T3> MethodWrapperAction<T1, T2, T3>(object target, MethodInfo methodInfo)
+            {
+                return (Action<T1, T2, T3>)Delegate.CreateDelegate(typeof(Action<T1, T2, T3>), target, methodInfo);
+            }
+
+            public static Func<TReslut> MethodWrapperFunc<TReslut>(object target, MethodInfo methodInfo)
+            {
+                return (Func<TReslut>)Delegate.CreateDelegate(typeof(Func<TReslut>), target, methodInfo);
+            }
+
+            public static Func<T1, TReslut> MethodWrapperFunc<T1, TReslut>(object target, MethodInfo methodInfo)
+            {
+                return (Func<T1, TReslut>)Delegate.CreateDelegate(typeof(Func<T1, TReslut>), target, methodInfo);
+            }
+
+            public static Func<T1, T2, TReslut> MethodWrapperFunc<T1, T2, TReslut>(object target, MethodInfo methodInfo)
+            {
+                return (Func<T1, T2, TReslut>)Delegate.CreateDelegate(typeof(Func<T1, T2, TReslut>), target, methodInfo);
+            }
+
+            public static Func<T1, T2, T3, Reslut> MethodWrapperFunc<T1, T2, T3, Reslut>(object target, MethodInfo methodInfo)
+            {
+                return (Func<T1, T2, T3, Reslut>)Delegate.CreateDelegate(typeof(Func<T1, T2, T3, Reslut>), target, methodInfo);
+            }
+
+            #endregion
+        }
+
+        /// <summary>
+        /// PropertyInfo优化适配器
+        /// </summary>
+        /// <typeparam name="T">属性类型</typeparam>
+        public class PropertyWrapper<T>
+        {
+            private Action<T> setter;
+            private Func<T> getter;
+
+            /// <summary>
+            /// 属性的值
+            /// </summary>
+            public T Value
+            {
+                get
+                {
+                    return getter();
+                }
+                set
+                {
+                    setter(value);
+                }
+            }
+
+            /// <summary>
+            /// 构造一个用于优化PropertyInfo的适配器
+            /// </summary>
+            /// <param name="target">propertyInfo属于的对应</param>
+            /// <param name="propertyInfo">propertyInfo属于的对应</param>
+            public PropertyWrapper(object target, PropertyInfo propertyInfo)
+            {
+                var methodInfo = propertyInfo.GetSetMethod();
+                var @delegate = Delegate.CreateDelegate(typeof(Action<T>), target, methodInfo);
+                setter = (Action<T>)@delegate;
+
+                methodInfo = propertyInfo.GetGetMethod();
+                @delegate = Delegate.CreateDelegate(typeof(Func<T>), target, methodInfo);
+                getter = (Func<T>)@delegate;
+            }
         }
     }
 }
