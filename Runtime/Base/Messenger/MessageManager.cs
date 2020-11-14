@@ -21,9 +21,8 @@ namespace XFramework.Event
         /// <param name="handler">事件</param>
         public void AddListener(string eventKey, Action handler)
         {
-            string id = eventKey;
-            OnListenerAdding(id, handler);
-            m_eventDictionary[id] = (Action)m_eventDictionary[id] + handler;
+            OnListenerAdding(eventKey, handler);
+            m_eventDictionary[eventKey] = (Action)m_eventDictionary[eventKey] + handler;
         }
 
         /// <summary>
@@ -34,9 +33,8 @@ namespace XFramework.Event
         /// <param name="handler">事件</param>
         public void AddListener<T>(string eventKey, Action<T> handler)
         {
-            string id = eventKey;
-            OnListenerAdding(id, handler);
-            m_eventDictionary[id] = (Action<T>)m_eventDictionary[id] + handler;
+            OnListenerAdding(eventKey, handler);
+            m_eventDictionary[eventKey] = (Action<T>)m_eventDictionary[eventKey] + handler;
         }
 
         /// <summary>
@@ -48,9 +46,8 @@ namespace XFramework.Event
         /// <param name="handler">事件</param>
         public void AddListener<T, U>(string eventKey, Action<T, U> handler)
         {
-            string id = eventKey;
-            OnListenerAdding(id, handler);
-            m_eventDictionary[id] = (Action<T, U>)m_eventDictionary[id] + handler;
+            OnListenerAdding(eventKey, handler);
+            m_eventDictionary[eventKey] = (Action<T, U>)m_eventDictionary[eventKey] + handler;
         }
 
         /// <summary>
@@ -63,9 +60,8 @@ namespace XFramework.Event
         /// <param name="handler">事件</param>
         public void AddListener<T, U, V>(string eventKey, Action<T, U, V> handler)
         {
-            string id = eventKey;
-            OnListenerAdding(id, handler);
-            m_eventDictionary[id] = (Action<T, U, V>)m_eventDictionary[id] + handler;
+            OnListenerAdding(eventKey, handler);
+            m_eventDictionary[eventKey] = (Action<T, U, V>)m_eventDictionary[eventKey] + handler;
         }
 
         /// <summary>
@@ -75,10 +71,9 @@ namespace XFramework.Event
         /// <param name="handler">事件</param>
         public void AddListener(string eventKey, Delegate handler)
         {
-            string id = eventKey;
-            OnListenerAdding(id, handler);
-            Delegate old = m_eventDictionary[id];
-            m_eventDictionary[id] = Delegate.Combine(old, handler);
+            OnListenerAdding(eventKey, handler);
+            Delegate old = m_eventDictionary[eventKey];
+            m_eventDictionary[eventKey] = Delegate.Combine(old, handler);
         }
 
         #endregion
@@ -92,10 +87,9 @@ namespace XFramework.Event
         /// <param name="handler">事件</param>
         public void RemoveListener(string eventKey, Action handler)
         {
-            string id = eventKey;
-            OnListenerRemoving(id, handler);
-            m_eventDictionary[id] = (Action)m_eventDictionary[id] - handler;
-            OnListenerRemoved(id);
+            OnListenerRemoving(eventKey, handler);
+            m_eventDictionary[eventKey] = (Action)m_eventDictionary[eventKey] - handler;
+            OnListenerRemoved(eventKey);
         }
 
         /// <summary>
@@ -106,10 +100,9 @@ namespace XFramework.Event
         /// <param name="handler">事件</param>
         public void RemoveListener<T>(string eventKey, Action<T> handler)
         {
-            string id = eventKey;
-            OnListenerRemoving(id, handler);
-            m_eventDictionary[id] = (Action<T>)m_eventDictionary[id] - handler;
-            OnListenerRemoved(id);
+            OnListenerRemoving(eventKey, handler);
+            m_eventDictionary[eventKey] = (Action<T>)m_eventDictionary[eventKey] - handler;
+            OnListenerRemoved(eventKey);
         }
 
         /// <summary>
@@ -121,10 +114,9 @@ namespace XFramework.Event
         /// <param name="handler">事件</param>
         public void RemoveListener<T, U>(string eventKey, Action<T, U> handler)
         {
-            string id = eventKey;
-            OnListenerRemoving(id, handler);
-            m_eventDictionary[id] = (Action<T, U>)m_eventDictionary[id] - handler;
-            OnListenerRemoved(id);
+            OnListenerRemoving(eventKey, handler);
+            m_eventDictionary[eventKey] = (Action<T, U>)m_eventDictionary[eventKey] - handler;
+            OnListenerRemoved(eventKey);
         }
 
         /// <summary>
@@ -137,10 +129,9 @@ namespace XFramework.Event
         /// <param name="handler">事件</param>
         public void RemoveListener<T, U, V>(string eventKey, Action<T, U, V> handler)
         {
-            string id = eventKey;
-            OnListenerRemoving(id, handler);
-            m_eventDictionary[id] = (Action<T, U, V>)m_eventDictionary[id] - handler;
-            OnListenerRemoved(id);
+            OnListenerRemoving(eventKey, handler);
+            m_eventDictionary[eventKey] = (Action<T, U, V>)m_eventDictionary[eventKey] - handler;
+            OnListenerRemoved(eventKey);
         }
 
         /// <summary>
@@ -150,11 +141,10 @@ namespace XFramework.Event
         /// <param name="handler">事件</param>
         public void RemoveListener(string eventKey, Delegate handler)
         {
-            string id = eventKey;
-            OnListenerRemoving(id, handler);
-            Delegate old = m_eventDictionary[id];
-            m_eventDictionary[id] = Delegate.Remove(old, handler);
-            OnListenerRemoved(id);
+            OnListenerRemoving(eventKey, handler);
+            Delegate old = m_eventDictionary[eventKey];
+            m_eventDictionary[eventKey] = Delegate.Remove(old, handler);
+            OnListenerRemoved(eventKey);
         }
 
         #endregion
@@ -215,8 +205,7 @@ namespace XFramework.Event
         /// <param name="eventKey">事件类型</param>
         public void BroadCast(string eventKey)
         {
-            string id = eventKey;
-            if (m_eventDictionary.TryGetValue(id, out Delegate d))
+            if (m_eventDictionary.TryGetValue(eventKey, out Delegate d))
             {
                 if (d is Action callback)
                 {
@@ -237,8 +226,7 @@ namespace XFramework.Event
         /// <param name="arg1">参数</param>
         public void BroadCast<T>(string eventKey, T arg1)
         {
-            string id = eventKey;
-            if (m_eventDictionary.TryGetValue(id, out Delegate d))
+            if (m_eventDictionary.TryGetValue(eventKey, out Delegate d))
             {
                 if (d is Action<T> callback)
                 {
@@ -261,8 +249,7 @@ namespace XFramework.Event
         /// <param name="arg2">参数2</param>
         public void BroadCast<T, U>(string eventKey, T arg1, U arg2)
         {
-            string id = eventKey;
-            if (m_eventDictionary.TryGetValue(id, out Delegate d))
+            if (m_eventDictionary.TryGetValue(eventKey, out Delegate d))
             {
 
                 if (d is Action<T, U> callback)
@@ -288,8 +275,7 @@ namespace XFramework.Event
         /// <param name="arg3">参数3</param>
         public void BroadCast<T, U, V>(string eventKey, T arg1, U arg2, V arg3)
         {
-            string id = eventKey;
-            if (m_eventDictionary.TryGetValue(id, out Delegate d))
+            if (m_eventDictionary.TryGetValue(eventKey, out Delegate d))
             {
                 if (d is Action<T, U, V> callback)
                 {
