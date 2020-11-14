@@ -28,21 +28,20 @@ namespace XFramework.UI
         /// <summary>
         /// 存储所有面板Prefab的路径
         /// </summary>
-        private Dictionary<string, string> m_PanelPathDict;
+        private Dictionary<string, string> m_PanelPathDict = new Dictionary<string, string>();
         /// <summary>
         /// 保存所有实例化面板的游戏物体身上的BasePanel组件
         /// </summary>
-        private Dictionary<string, PanelBase> m_PanelDict;
+        private Dictionary<string, PanelBase> m_PanelDict = new Dictionary<string, PanelBase>();
         /// <summary>
         /// 处于打开状态的面板字典，key为层级
         /// </summary>
-        private Dictionary<int, List<PanelBase>> m_OnDisplayPanelDic;
+        private Dictionary<int, List<PanelBase>> m_OnDisplayPanelDic = new Dictionary<int, List<PanelBase>>();
 
         private ResourceManager m_ResMgr;
 
         public UIMgrDicType()
         {
-            m_OnDisplayPanelDic = new Dictionary<int, List<PanelBase>>();
             InitPathDic();
 
             m_ResMgr = GameEntry.GetModule<ResourceManager>();
@@ -126,11 +125,6 @@ namespace XFramework.UI
         /// </summary>
         public PanelBase GetPanel(string uiname)
         {
-            if (m_PanelDict == null)
-            {
-                m_PanelDict = new Dictionary<string, PanelBase>();
-            }
-
             if(m_PanelDict.TryGetValue(uiname, out PanelBase panel))
             {
                 if (panel == null)
@@ -237,7 +231,6 @@ namespace XFramework.UI
         /// </summary>
         private void InitPathDic()
         {
-            m_PanelPathDict = new Dictionary<string, string>();
             string uipaths = Resources.Load<TextAsset>("UIPath").text;
             uipaths = uipaths.Replace("\"", "");
             uipaths = uipaths.Replace("\n", "");
