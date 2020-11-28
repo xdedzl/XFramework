@@ -1,0 +1,9 @@
+{
+    "name": "com.xdedzl.xframework",
+    "displayName": "XFramework",
+    "description": "lit framework",
+    "version": "1.0.0",
+    "unity": "2018.3",
+    "license": "Apache",
+    "dependencies": {}
+}
