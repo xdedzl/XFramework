@@ -90,7 +90,7 @@ namespace XFramework.Entity
             /// <param name="entityData">实体数据</param>
             /// <param name="parent">父物体</param>
             /// <returns>实体</returns>
-            internal Entity Allocate(int id, Vector3 pos, Quaternion quaternion, EntityData entityData, Transform parent)
+            internal Entity Allocate(int id, Vector3 pos, Quaternion quaternion, IEntityData entityData, Transform parent)
             {
                 Entity entity;
                 if (m_Pool.Count > 0)
@@ -128,7 +128,7 @@ namespace XFramework.Entity
             }
 
             /// <summary>
-            /// 获取容器中的所有实体
+            /// 获取容器中的所有正在使用的实体
             /// </summary>
             public Entity[] GetEntities()
             {

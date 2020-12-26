@@ -9,7 +9,9 @@
         public abstract int Priority { get; }
 
         // 该变量名称和GameEntry有联系, 不要随意修改
+#pragma warning disable IDE0044
         private static T m_instance;
+#pragma warning restore IDE0044
 
         /// <summary>
         /// 获取由GameEntry管理的模块T
