@@ -17,7 +17,7 @@ namespace XFramework.Entity
         /// </summary>
         private readonly Dictionary<int, Entity> m_EntityDic;
         /// <summary>
-        /// 存储实体父子关系的字典
+        /// 存储实体父子关系的字典(从实际经验看大多数entity都不需要attach/detach,所以不直接存在Entity中)
         /// </summary>
         private readonly Dictionary<int, EntityInfo> m_EntityInfoDic;
 
@@ -70,7 +70,9 @@ namespace XFramework.Entity
         /// <param name="key">key</param>
         public void RemoveTemplate(string key)
         {
-            var entitys = GetEntities(key);
+            var container = GetContainer(key);
+            container.Clean(0);
+            var entitys = container.GetEntities();
             if (entitys != null)
             {
                 foreach (var item in entitys)
@@ -108,7 +110,7 @@ namespace XFramework.Entity
         /// <param name="quaternion">朝向</param>
         /// <param name="parent">实体父物体</param>
         /// <returns>实体</returns>
-        public T Allocate<T>(int id, EntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
+        public T Allocate<T>(int id, IEntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
             string key = typeof(T).Name;
             return Allocate(id, key, entityData, pos, quaternion, parent) as T;
@@ -125,7 +127,7 @@ namespace XFramework.Entity
         /// <param name="quaternion">朝向</param>
         /// <param name="parent">实体父物体</param>
         /// <returns>实体</returns>
-        public T Allocate<T>(int id, string key, EntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
+        public T Allocate<T>(int id, string key, IEntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
             return Allocate(id, key, entityData, pos, quaternion, parent) as T;
         }
@@ -154,7 +156,7 @@ namespace XFramework.Entity
         /// <param name="quaternion">角度</param>
         /// <param name="parent">实体父物体</param>
         /// <returns></returns>
-        public Entity Allocate(int id, string key, EntityData entityData, Vector3 pos, Quaternion quaternion, Transform parent)
+        public Entity Allocate(int id, string key, IEntityData entityData, Vector3 pos, Quaternion quaternion, Transform parent)
         {
             if (!m_EntityContainerDic.ContainsKey(key))
             {
@@ -184,6 +186,8 @@ namespace XFramework.Entity
                 EntityContainer container = GetContainer(entity.ContainerName);
                 if (container != null)
                 {
+                    Detach(entity);
+                    m_EntityInfoDic.Remove(entity.Id);
                     m_EntityDic.Remove(entity.Id);
                     return container.Recycle(entity);
                 }
@@ -204,8 +208,6 @@ namespace XFramework.Entity
             Entity entity = GetEntity(id);
             if (entity != null)
             {
-                Detach(entity);
-                m_EntityInfoDic.Remove(id);
                 return Recycle(entity);
             }
             return false;
@@ -397,7 +399,7 @@ namespace XFramework.Entity
         {
             foreach (var item in m_EntityContainerDic.Values)
             {
-                InternalClean(item, count);
+                item.Clean(count);
             }
         }
 
@@ -411,17 +413,12 @@ namespace XFramework.Entity
             EntityContainer container = GetContainer(containerName);
             if (container != null)
             {
-                InternalClean(container, count);
+                container.Clean(count);
             }
             else
             {
                 throw new XFrameworkException("[EntityContainer] null container");
             }
-        }
-
-        private void InternalClean(EntityContainer entityContainer, int count)
-        {
-            entityContainer.Clean(count);
         }
 
         #endregion
