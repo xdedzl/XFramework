@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace XFramework
@@ -93,6 +93,16 @@ namespace XFramework
         public static bool AlmostZero(this Vector3 v)
         {
             return v.sqrMagnitude < 9.999999E-09f;
+        }
+
+        public static Vector3 ToVector3(this Vector3Int v)
+        {
+            return new Vector3(v.x, v.y, v.z);
+        }
+
+        public static Vector2 ToVector2(this Vector2Int v)
+        {
+            return new Vector2(v.x, v.y);
         }
 
         #endregion
