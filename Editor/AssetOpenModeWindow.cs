@@ -156,16 +156,8 @@ namespace XFramework.Editor
 
             var strs = fileFullPath.Split('.');
 
-            foreach (var item in strs)
-            {
-                Debug.Log(item);
-            }
             if (strs.Length > 1)
             {
-                foreach (var item in FileOpenType)
-                {
-                    Debug.Log(item.Key + "  " + item.Value);
-                }
                 if(FileOpenType.TryGetValue(strs.End(), out string openType))
                 {
                     OpenFileWithExe(openType, fileFullPath);
