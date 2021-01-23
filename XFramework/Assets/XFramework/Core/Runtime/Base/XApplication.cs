@@ -1,3 +1,5 @@
+using System.IO;
+
 namespace XFramework
 {
     public static class XApplication
@@ -6,7 +8,10 @@ namespace XFramework
         {
             get
             {
-                return $"{System.IO.Directory.GetCurrentDirectory()}/Library/XFramework";
+                string path = $"{Directory.GetCurrentDirectory()}/Library/XFramework";
+                if (!Directory.Exists(path))
+                    Directory.CreateDirectory(path);
+                return path;
             }
         }
     }
