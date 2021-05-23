@@ -131,7 +131,15 @@ namespace XFramework
                 Assembly[] assemblys = AppDomain.CurrentDomain.GetAssemblies();
                 for (int i = 0; i < assemblys.Length; i++)
                 {
-                    Type[] ts = assemblys[i].GetTypes();
+                    Type[] ts;
+                    try
+                    {
+                        ts = assemblys[i].GetTypes();
+                    }
+                    catch (Exception)
+                    {
+                        continue;
+                    }
                     foreach (var t in ts)
                     {
                         if (filter(t))

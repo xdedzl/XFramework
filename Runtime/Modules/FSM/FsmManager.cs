@@ -168,8 +168,7 @@ namespace XFramework.Fsm
         {
             foreach (var fsm in m_FsmDic.Values)
             {
-                if (fsm.IsActive)
-                    fsm.OnUpdate();
+                fsm.OnUpdate();
             }
         }
 

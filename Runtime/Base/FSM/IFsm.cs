@@ -8,10 +8,6 @@ namespace XFramework.Fsm
     public interface IFsm
     {
         /// <summary>
-        /// 状态机是否激活
-        /// </summary>
-        bool IsActive { get; }
-        /// <summary>
         /// 每帧调用
         /// </summary>
         void OnUpdate();

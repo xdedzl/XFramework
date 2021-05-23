@@ -18,6 +18,8 @@ namespace XFramework
             ApplicationIsQuitting = false;
         }
 
+        public static bool IsValid { get { return _instance != null; } }
+
         public static T Instance
         {
             get
