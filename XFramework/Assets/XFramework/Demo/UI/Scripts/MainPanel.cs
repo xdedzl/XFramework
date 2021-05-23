@@ -17,6 +17,6 @@ public class MainPanel : PanelBase {
     /// <param name="_type"></param>
     private void OnClick(string _type)
     {
-        Game.UIModule.Open(_type);
+        UIHelper.Instance.Open(_type);
     }
 }

@@ -60,7 +60,7 @@ public class CreatePanel : PanelBase {
     /// <param name="panelType"></param>
     private void OnClick(string panelType)
     {
-        Game.UIModule.Open(panelType);
+        UIHelper.Instance.Open(panelType);
         
 
         Vector2 rectSize = rect.sizeDelta;

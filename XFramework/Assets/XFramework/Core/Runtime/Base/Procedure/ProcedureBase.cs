@@ -6,11 +6,11 @@ namespace XFramework
     /// <summary>
     /// 流程基类
     /// </summary>
+    [System.Serializable]
     public abstract class ProcedureBase : FsmState 
     {
         private List<SubProcedureBase> m_subProcedureBases;
         private SubProcedureBase m_currentSubProcedure;
-
         public SubProcedureBase CurrentSubProcedure
         {
             get

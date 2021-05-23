@@ -61,7 +61,7 @@ public class BattleSystem
         // 。。。。。。。。。。。。。
 
         // 通知所有观察者并传递数据
-        Game.ObserverModule.Notify(btData, (int)BattleDataType.Win);
+        DataSubjectManager.Instance.Notify(btData, (int)BattleDataType.Win);
     }
 
     public void BattleLose()
@@ -69,7 +69,7 @@ public class BattleSystem
         // 处理战斗失败要做的事情
         // 。。。。。。。。。。。。。
 
-        Game.ObserverModule.Notify(btData, (int)BattleDataType.Lose);
+        DataSubjectManager.Instance.Notify(btData, (int)BattleDataType.Lose);
     }
 }
 
@@ -111,13 +111,13 @@ public class PlayerDataMgr : IObserver
     // 在合适的时添加除观察者
     public PlayerDataMgr()
     {
-        Game.ObserverModule.AddListener(DataType.BATTLE, this);
+        DataSubjectManager.Instance.AddListener(DataType.BATTLE, this);
     }
 
     // 在合适的时候移除观察者
     ~PlayerDataMgr()
     {
-        Game.ObserverModule.RemoverListener(DataType.BATTLE, this);
+        DataSubjectManager.Instance.RemoverListener(DataType.BATTLE, this);
     }
 
     // 固定写法

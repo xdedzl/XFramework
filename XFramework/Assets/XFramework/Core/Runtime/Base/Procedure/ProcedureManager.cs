@@ -60,6 +60,15 @@ namespace XFramework
         }
 
         /// <summary>
+        /// 新增一个流程
+        /// </summary>
+        /// <param name="procedure">流程</param>
+        public void UpdateProcedure(ProcedureBase procedure)
+        {
+            m_Fsm.UpdateState(procedure);
+        }
+
+        /// <summary>
         /// 获取当前流程
         /// </summary>
         /// <typeparam name="TProcedure">流程类型</typeparam>

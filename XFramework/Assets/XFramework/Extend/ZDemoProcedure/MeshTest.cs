@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using XFramework;
 using UnityEngine;
 using XFramework.Mathematics;
+using XFramework.Draw;
 
 public class MeshTest : ProcedureBase
 {
@@ -148,38 +149,38 @@ public class MeshTest : ProcedureBase
 
     private void CreateCylinder()
     {
-        Game.MeshModule.CreateCylinder(positions[0], 2500, 1500, cylinderColor);
+        MeshManager.Instance.CreateCylinder(positions[0], 2500, 1500, cylinderColor);
     }
 
     private void CreatePolygon()
     {
-        Game.MeshModule.CreatePolygon(positions, 1000f, polygonColor);
+        MeshManager.Instance.CreatePolygon(positions, 1000f, polygonColor);
     }
 
     private void CreateAirCorridorSpace()
     {
-        Game.MeshModule.CreateAirCorridorSpace(positions, AirSpaceWidth, AirSpaceHeight, airCorridorSpaceColor);
+        MeshManager.Instance.CreateAirCorridorSpace(positions, AirSpaceWidth, AirSpaceHeight, airCorridorSpaceColor);
     }
 
     private void CreatSector_2()
     {
         Vector3[] points = PhysicsMath.GetSectorPoints_2(positions[0], new Vector3(positions[1].x, positions[0].y, positions[1].z), alpha, theta);
-        Game.MeshModule.CreateSector(positions[0], positions[1], alpha, theta, sectorColor);
+        MeshManager.Instance.CreateSector(positions[0], positions[1], alpha, theta, sectorColor);
     }
 
     private void CreateHemisphere()
     {
-        Game.MeshModule.CreateHemisphere(positions[0] - Vector3.up * 1500, 7000, new Color(0.784f, 0.784f, 1));
+        MeshManager.Instance.CreateHemisphere(positions[0] - Vector3.up * 1500, 7000, new Color(0.784f, 0.784f, 1));
     }
 
     private void CreatKillBox()
     {
-        Game.MeshModule.CreateKillBox(positions, 3400, 6000, new Color(0.706f, 0.235f, 1));
+        MeshManager.Instance.CreateKillBox(positions, 3400, 6000, new Color(0.706f, 0.235f, 1));
     }
 
     private void CreatDoubleCylinder()
     {
-        Game.MeshModule.DoubleCylinder(positions[0], 2500, 1500, 1000, new Color(1, 0.392f, 0));
+        MeshManager.Instance.DoubleCylinder(positions[0], 2500, 1500, 1000, new Color(1, 0.392f, 0));
     }
 
     /// <summary>

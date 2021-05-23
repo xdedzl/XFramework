@@ -21,7 +21,7 @@ public class TeamPanel : PanelBase {
 
     public override void OnOpen(params object[] args)
     {
-        CreatePanel createPanel = (CreatePanel)Game.UIModule.GetPanel(UIName.Create);
+        CreatePanel createPanel = (CreatePanel)UIHelper.Instance.GetPanel(UIName.Create);
         // 设父物体以及自己在子物体中的顺序
         transform.SetParent(createPanel.teamBtn.transform.parent, true);
         transform.SetSiblingIndex(createPanel.teamBtn.transform.GetSiblingIndex() + 1);

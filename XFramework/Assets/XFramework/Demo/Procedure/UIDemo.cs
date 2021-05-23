@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using XFramework;
+using XFramework.Resource;
 
 public class UIDemo : ProcedureBase
 {
@@ -10,13 +11,13 @@ public class UIDemo : ProcedureBase
     {
         base.Init();
 
-        GameObject obj = Game.ResModule.Load<GameObject>("Assets/XFramework/Demo/UI/PanelPrefab/RootBtn.prefab");
+        GameObject obj = ResourceManager.Instance.Load<GameObject>("Assets/XFramework/Demo/UI/PanelPrefab/RootBtn.prefab");
         Transform trans = Object.Instantiate(obj, GameObject.Find("Canvas").transform).transform;
         startBtn = trans.GetComponent<Button>();
         Screen.SetResolution(1920, 1080, true);
         startBtn.onClick.AddListener(() =>
         {
-            Game.UIModule.Open(UIName.Main, true);
+            UIHelper.Instance.Open(UIName.Main, true);
         });
         trans.GetComponent<Image>().alphaHitTestMinimumThreshold = 0.1f;
     }
@@ -26,7 +27,7 @@ public class UIDemo : ProcedureBase
         // 打开/关闭设置界面
         if (Input.GetKeyDown(KeyCode.Escape))
         {
-            Game.UIModule.Open(UIName.Setting);
+            UIHelper.Instance.Open(UIName.Setting);
         }
     }
 

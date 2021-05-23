@@ -5,6 +5,8 @@
     /// </summary>
     public abstract class FsmState
     {
+        internal bool isInit = false;
+
         /// <summary>
         /// 初始化
         /// </summary>

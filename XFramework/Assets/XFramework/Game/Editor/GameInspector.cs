@@ -14,8 +14,7 @@ public class GameInspector : Editor
     private int entranceProcedureIndex = 0;
 
     private Game game;
-    private Type currentType;
-    private ProcedureBase startPrcedureTemplate;
+    public ProcedureBase startPrcedureTemplate;
     private ProtocolBytes p = new ProtocolBytes();
     private string savePath;
 
@@ -34,10 +33,7 @@ public class GameInspector : Editor
             entranceProcedureIndex = 0;
 
         game = target as Game;
-        game.TypeName = typeNames[entranceProcedureIndex];
-
-        startPrcedureTemplate = Utility.Reflection.CreateInstance<ProcedureBase>(GetType(typeNames[entranceProcedureIndex]));
-        game.DeSerialize(startPrcedureTemplate);
+        game.typeName = typeNames[entranceProcedureIndex];
 
         savePath = Application.persistentDataPath + "/" + UnityEngine.SceneManagement.SceneManager.GetActiveScene().name + "Procedure";
 
@@ -64,35 +60,14 @@ public class GameInspector : Editor
         int lastIndex = entranceProcedureIndex;
         entranceProcedureIndex = EditorGUILayout.Popup("Entrance Procedure", entranceProcedureIndex, typeNames);
 
+        GUILayout.EndVertical();
+
         if (lastIndex != entranceProcedureIndex)
         {
-            game.TypeName = typeNames[entranceProcedureIndex];
-            currentType = GetType(typeNames[entranceProcedureIndex]);
-
-            startPrcedureTemplate = Utility.Reflection.CreateInstance<ProcedureBase>(GetType(typeNames[entranceProcedureIndex]));
-            if (File.Exists(savePath + currentType.Name))
-            {
-                ProtocolBytes p = new ProtocolBytes(File.ReadAllBytes(savePath + currentType.Name));
-                p.GetString();
-                p.DeSerialize(startPrcedureTemplate);
-            }
+            game.startProcedure = Utility.Reflection.CreateInstance<ProcedureBase>(GetType(typeNames[entranceProcedureIndex]));
         }
 
-        currentType = currentType ?? GetType(typeNames[entranceProcedureIndex]);
-        startPrcedureTemplate = startPrcedureTemplate ?? Utility.Reflection.CreateInstance<ProcedureBase>(GetType(typeNames[entranceProcedureIndex]));
-
-        // 可视化当前流程的变量
-        if (!Application.isPlaying)
-        {
-            XEditorUtility.SerializableObj(startPrcedureTemplate);
-            Serialize();
-        }
-        else
-        {
-            XEditorUtility.SerializableObj(Game.ProcedureModule.CurrentProcedure);
-        }
-
-        GUILayout.EndVertical();
+        base.OnInspectorGUI();
     }
 
     private void OnDestroy()
@@ -111,16 +86,6 @@ public class GameInspector : Editor
                 return type;
         }
         return null;
-    }
-
-    private void Serialize()
-    {
-        p.Clear();
-        p.AddString(currentType.Name);
-
-        p.Serialize(startPrcedureTemplate);
-
-        File.WriteAllBytes(savePath + currentType.Name, p.Encode());
     }
 
     private string[] GetSonNames()

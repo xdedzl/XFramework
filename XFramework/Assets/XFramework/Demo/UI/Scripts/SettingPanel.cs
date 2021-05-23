@@ -38,7 +38,7 @@ public class SettingPanel : PanelBase {
 
         (this["Back"] as GUButton).button.onClick.AddListener(() =>
         {
-            Game.UIModule.Close(UIName.Setting);
+            UIHelper.Instance.Close(UIName.Setting);
         });
     }
 

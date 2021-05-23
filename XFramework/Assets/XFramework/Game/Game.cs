@@ -1,39 +1,22 @@
+using System.IO;
 using UnityEngine;
 using XFramework;
 using XFramework.Draw;
 using XFramework.Entity;
 using XFramework.Event;
 using XFramework.Fsm;
-using XFramework.Pool;
 using XFramework.Resource;
 
 /// <summary>
 /// 这个类挂在初始场景中,是整个游戏的入口
-/// StartX和EndX为刷新代码时的标志位
 /// </summary>
 public class Game : MonoBehaviour
 {
-    // 框架模块
-    // Start0
-    public static EntityManager EntityModule { get { return EntityManager.Instance; } }
-    public static FsmManager FsmModule { get { return FsmManager.Instance; } }
-    public static GraphicsManager GraphicsModule { get { return GraphicsManager.Instance; } }
-    public static ResourceManager ResModule { get { return ResourceManager.Instance; } }
-    public static DataSubjectManager ObserverModule { get { return DataSubjectManager.Instance; } }
-    public static MessageManager MessageModule { get { return MessageManager.Instance; } }
-    public static ProcedureManager ProcedureModule { get { return ProcedureManager.Instance; } }
-    public static ObjectPoolManager ObjectPool { get { return ObjectPoolManager.Instance; } }
-    // End0
-
-    // 框架扩展模块
-    // Start1
-    public static UIHelper UIModule { get { return UIHelper.Instance; } }
-    public static MeshManager MeshModule { get { return MeshManager.Instance; } }
-    // End1
-
     // 初始流程
-    public string TypeName;
+    [HideInInspector] public string typeName;
+    [SerializeReference] public ProcedureBase startProcedure;
 
+    public ProcedureBase ccc;
     public static Game activeGame { get; private set; }
 
     void Awake()
@@ -50,13 +33,11 @@ public class Game : MonoBehaviour
         InitAllModel();
 
         // 设置运行形后第一个进入的流程
-        System.Type type = System.Type.GetType(TypeName);
-        if (type != null)
+        System.Type type = System.Type.GetType(typeName);
+        if (startProcedure != null)
         {
-            ProcedureModule.ChangeProcedure(type);
-
-            ProcedureBase procedure = ProcedureModule.CurrentProcedure;
-            DeSerialize(procedure);
+            ProcedureManager.Instance.UpdateProcedure(startProcedure);
+            ProcedureManager.Instance.ChangeProcedure(startProcedure.GetType());
         }
         else
             Debug.LogError("当前工程还没有任何流程");
@@ -99,25 +80,11 @@ public class Game : MonoBehaviour
         // End2
     }
 
-    /// <summary>
-    /// 根据存储的byte数值给流程赋值
-    /// </summary>
-    /// <param name="procedure"></param>
-    public void DeSerialize(ProcedureBase procedure)
+    private void OnValidate()
     {
-        System.Type type = procedure.GetType();
-        string path = Application.persistentDataPath + "/" + UnityEngine.SceneManagement.SceneManager.GetActiveScene().name + "Procedure/" + type.Name;
-        if (!System.IO.File.Exists(path))
-            return;
-
-        ProtocolBytes p = new ProtocolBytes(System.IO.File.ReadAllBytes(path));
-
-        if (p.GetString() != type.Name)
+        if (ProcedureManager.IsValid)
         {
-            Debug.LogError("类型不匹配");
-            return;
+            ProcedureManager.Instance.UpdateProcedure(startProcedure);
         }
-
-        p.DeSerialize(procedure);
     }
 }

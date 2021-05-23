@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using XFramework;
+using XFramework.Draw;
 
 [System.Serializable]
 public class GraphicsTest : ProcedureBase
@@ -27,9 +28,9 @@ public class GraphicsTest : ProcedureBase
         {
             Material mat = new Material(Shader.Find("Standard"));
             Mesh mesh = GameObject.CreatePrimitive(PrimitiveType.Cube).GetComponent<MeshFilter>().mesh;
-            Game.GraphicsModule.AddGraphics(Camera.main, () =>
+            GraphicsManager.Instance.AddGraphics(Camera.main, () =>
             {
-                Game.MeshModule.LineMaterial.SetPass(0);
+                MeshManager.Instance.LineMaterial.SetPass(0);
                 GL.Begin(GL.LINES);
                 GL.Color(Color.red);
                 GL.Vertex(Vector3.zero);
@@ -49,10 +50,5 @@ public class GraphicsTest : ProcedureBase
                 }
             });
         }
-    }
-
-    public override void OnUpdate()
-    {
-        Debug.Log(activeDrawMesh); 
     }
 }

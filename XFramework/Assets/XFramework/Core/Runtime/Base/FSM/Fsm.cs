@@ -9,7 +9,6 @@ namespace XFramework.Fsm
     /// <typeparam name="TState">子类状态机对应的状态基类</typeparam>
     public class Fsm<TState> : IFsm where TState : FsmState
     {
-        private bool m_IsActive;
         private TState m_CurrentState;
 
         /// <summary>
@@ -18,10 +17,6 @@ namespace XFramework.Fsm
         protected Dictionary<string, TState> m_StateDic;
 
         /// <summary>
-        /// 是否处于激活状态
-        /// </summary>
-        public bool IsActive { get { return m_IsActive; } }
-        /// <summary>
         /// 当前状态
         /// </summary>
         public TState CurrentState { get { return m_CurrentState; } }
@@ -29,7 +24,6 @@ namespace XFramework.Fsm
         public Fsm()
         {
             m_StateDic = new Dictionary<string, TState>();
-            m_IsActive = false;
         }
 
         /// <summary>
@@ -39,7 +33,7 @@ namespace XFramework.Fsm
         {
             if (CurrentState != null)
             {
-                CurrentState.OnUpdate();
+                CurrentState.OnUpdate(); 
             }
         }
 
@@ -61,7 +55,6 @@ namespace XFramework.Fsm
         protected TState GetState(Type type)
         {
             m_StateDic.TryGetValue(type.Name, out TState state);
-
             if (state == null)
             {
                 state = CreateState(type) as TState;
@@ -92,7 +85,6 @@ namespace XFramework.Fsm
             if (!(state is TState))
                 throw new XFrameworkException("[FSM] state type error");
 
-            state.Init();
             return state;
         }
 
@@ -114,29 +106,13 @@ namespace XFramework.Fsm
         }
 
         /// <summary>
-        /// 开启状态机
-        /// </summary>
-        /// <param name="type">状态类型</param>
-        /// <param name="parms">启动参数</param>
-        private void StartFsm(Type type, params object[] parms)
-        {
-            if (!IsActive)
-            {
-                m_CurrentState = GetState(type);
-                OnStateChange(null, m_CurrentState);
-                m_CurrentState.OnEnter(parms);
-                m_IsActive = true;
-            }
-        }
-
-        /// <summary>
         /// 状态切换
         /// </summary>
-        /// <typeparam name="KState">状态类型</typeparam>
+        /// <typeparam name="T">状态类型</typeparam>
         /// <param name="parms">启动参数</param>
-        public void ChangeState<KState>(params object[] parms) where KState : FsmState
+        public void ChangeState<T>(params object[] parms) where T : FsmState
         {
-            ChangeState(typeof(KState), parms);
+            ChangeState(typeof(T), parms);
         }
 
         /// <summary>
@@ -146,21 +122,33 @@ namespace XFramework.Fsm
         /// <param name="parms">启动参数</param>
         public void ChangeState(Type type, params object[] parms)
         {
-            if (IsActive)
+            TState newState = GetState(type);
+            if (m_CurrentState != newState)
             {
-                TState newState = GetState(type);
-
-                if (m_CurrentState != newState)
+                m_CurrentState?.OnExit();
+                if (!newState.isInit)
                 {
-                    m_CurrentState?.OnExit();
-                    OnStateChange(m_CurrentState, newState);
-                    m_CurrentState = newState;
-                    m_CurrentState.OnEnter(parms);
+                    newState.Init();
+                    newState.isInit = true;
                 }
+                OnStateChange(m_CurrentState, newState);
+                m_CurrentState = newState;
+                m_CurrentState.OnEnter(parms);
             }
-            else
+        }
+
+        /// <summary>
+        /// 新增一个状态
+        /// </summary>
+        /// <param name="state">状态</param>
+        public void UpdateState(TState state)
+        {
+            var key = state.GetType().Name;
+            m_StateDic[key] = state;
+
+            if (m_CurrentState != null && key == m_CurrentState.GetType().Name)
             {
-                StartFsm(type, parms);
+                m_CurrentState = state;
             }
         }
 
