@@ -75,8 +75,6 @@ public class Game : MonoBehaviour
 #else
         GameEntry.AddModule<ResourceManager>(new AssetBundleLoadHelper(), mapInfoPath);
 #endif
-        GameEntry.AddModule<UIHelper>();
-        GameEntry.AddModule<MeshManager>();
         // End2
     }
 
