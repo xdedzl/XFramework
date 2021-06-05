@@ -132,9 +132,17 @@ namespace XFramework
         /// <summary>
         /// 获取RectTransform
         /// </summary>
-        public static RectTransform RectTransform(this Transform transform)
+        public static RectTransform RectTransform(this Component component)
         {
-            return transform.GetComponent<RectTransform>();
+            return component.GetComponent<RectTransform>();
+        }
+
+        /// <summary>
+        /// 获取RectTransform
+        /// </summary>
+        public static RectTransform RectTransform(this GameObject obj)
+        {
+            return obj.GetComponent<RectTransform>();
         }
 
         /// <summary>
