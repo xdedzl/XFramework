@@ -19,9 +19,9 @@ namespace XFramework.UI
 
         protected RectTransform rect;
 
-        private Dictionary<string, GUIBase> mUIDic;
-
         private List<SubPanelBase> m_SubPanels;
+
+        private ComponentFindHelper<GUIBase> m_ComponentFindHelper;
 
         /// <summary>
         /// 面板初始化，只会执行一次，在Awake后start前执行
@@ -29,7 +29,7 @@ namespace XFramework.UI
         internal void Init(string name)
         {
             Name = name;
-            InitGUIDic();
+            m_ComponentFindHelper = ComponentFindHelper<GUIBase>.CreateHelper(this.gameObject);
             rect = transform.GetComponent<RectTransform>();
             Vector3 rectSize = rect.localScale;
             rect.localScale = rectSize;
@@ -109,35 +109,13 @@ namespace XFramework.UI
         }
 
         /// <summary>
-        /// 初始化UI组件字典
-        /// </summary>
-        private void InitGUIDic()
-        {
-            mUIDic = new Dictionary<string, GUIBase>();
-            GUIBase[] uis = transform.GetComponentsInChildren<GUIBase>();
-            for (int i = 0; i < uis.Length; i++)
-            {
-                if (mUIDic.ContainsKey(uis[i].name))
-                {
-                    throw new XFrameworkException($"{this.name} already have a GUIBase component named {uis[i].name}");
-                }
-                mUIDic.Add(uis[i].name, uis[i]);
-            }
-        }
-
-        /// <summary>
         /// Find UI组件的索引器
         /// </summary>
         public GUIBase this[string key]
         {
             get
             {
-                if (mUIDic.ContainsKey(key))
-                    return mUIDic[key];
-                else
-                {
-                    throw new XFrameworkException($"there is no ui component named '{key}' in {this}");
-                }
+                return m_ComponentFindHelper[key];
             }
         }
 
