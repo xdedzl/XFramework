@@ -125,7 +125,7 @@ namespace XFramework.Resource
                 task.Then(() => { callback(request.asset as T); return true; });
                 task.Start();
 
-                SingleResProgress resProgress = new SingleResProgress(request);
+                AsyncOperationProgress resProgress = new AsyncOperationProgress(request);
                 progress.Add(resProgress);
             });
             progress.Add(abProgress);
@@ -140,7 +140,7 @@ namespace XFramework.Resource
         /// <param name="path">资源路径</param>
         /// <param name="isTopOnly">是否是仅加载本层级的资源</param>
         /// <returns>资源</returns>
-        public IProgress LoadAllSync<T>(string path, bool isTopOnly, Action<T[]> callback) where T : UnityEngine.Object
+        public IProgress LoadAllSync<T>(string path, bool isTopOnly, Action<IList<T>> callback) where T : UnityEngine.Object
         {
             if (isTopOnly)
             {
@@ -152,6 +152,7 @@ namespace XFramework.Resource
                         return request.isDone;
                     });
                     task.Then(() => { callback(request.allAssets.Convert<T>()); return true; });
+                    task.Start();
                 });
             }
             else
@@ -166,6 +167,8 @@ namespace XFramework.Resource
                 void OnAssetBundleLoadComplate(IEnumerable<AssetBundle> assetBundles)
                 {
                     List<IProgress> progresses = new List<IProgress>();
+                    SingleTask startTask = SingleTask.Create(() => true);
+                    ITask currentEndTask = startTask;
                     foreach (var ab in assetBundles)
                     {
                         var request = ab.LoadAllAssetsAsync<T>();
@@ -173,10 +176,19 @@ namespace XFramework.Resource
                         {
                             return request.isDone;
                         });
-                        task.Then(() => { assets.AddRange(request.allAssets.Convert<T>()); return true; });
-                        progresses.Add(new SingleResProgress(request));
+                        var endTask = task.Then(() => { assets.AddRange(request.allAssets.Convert<T>()); return true; });
+                        progresses.Add(new AsyncOperationProgress(request));
+
+                        if(currentEndTask != null)
+                        {
+                            currentEndTask.Then(task);
+                        }
+                        currentEndTask = endTask;
                     }
                     dynamicProgress.Add(new MultiProgress(progresses.ToArray()));
+
+                    currentEndTask.Then(() => { callback(assets); });
+                    startTask.Start();
                 }
             }
         }
@@ -308,7 +320,7 @@ namespace XFramework.Resource
                 }));
                 abTask.Start();
 
-                return new ResProgress(requests.ToArray());
+                return new AsyncOperationsProgress(requests.ToArray());
             }
             else
             {

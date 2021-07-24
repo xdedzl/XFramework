@@ -7,8 +7,8 @@ namespace XFramework
     /// </summary>
     public class XFrameworkException : Exception
     {
-        public XFrameworkException() : base() { }
+        public XFrameworkException() : base($"[XFramework]") { }
 
-        public XFrameworkException(string message) : base(message) { }
+        public XFrameworkException(string message) : base($"[XFramework] {message}") { }
     }
 }
