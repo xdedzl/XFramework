@@ -2,11 +2,11 @@
 
 namespace XFramework.Resource
 {
-    public class ResProgress : IProgress
+    public class AsyncOperationsProgress : IProgress
     {
         private AsyncOperation[] m_Operations;
 
-        public ResProgress(AsyncOperation[] asyncOperations)
+        public AsyncOperationsProgress(AsyncOperation[] asyncOperations)
         {
             m_Operations = asyncOperations;
         }
@@ -40,11 +40,11 @@ namespace XFramework.Resource
         }
     }
 
-    public class SingleResProgress : IProgress
+    public class AsyncOperationProgress : IProgress
     {
         private AsyncOperation m_Operation;
 
-        public SingleResProgress(AsyncOperation asyncOperation)
+        public AsyncOperationProgress(AsyncOperation asyncOperation)
         {
             m_Operation = asyncOperation;
         }
@@ -64,5 +64,19 @@ namespace XFramework.Resource
                 return m_Operation.progress;
             }
         }
+    }
+
+    public class ResourceRequestProgress : IProgress
+    {
+        private ResourceRequest m_ResourceRequest;
+
+        public ResourceRequestProgress(ResourceRequest resourceRequest)
+        {
+            m_ResourceRequest = resourceRequest;
+        }
+
+        public bool IsDone => m_ResourceRequest.asset != null;
+
+        public float Progress => m_ResourceRequest.asset != null ? 1 : 0;
     }
 }

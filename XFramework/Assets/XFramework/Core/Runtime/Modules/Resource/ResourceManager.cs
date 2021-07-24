@@ -27,7 +27,7 @@ namespace XFramework.Resource
         /// </summary>
         /// <param name="loadHelper">资源加载辅助类</param>
         /// <param name="mapInfoPath">路径映射文件</param>
-        public ResourceManager(IResourceLoadHelper loadHelper, string mapInfoPath)
+        public ResourceManager(IResourceLoadHelper loadHelper, string mapInfoPath="")
         {
             m_LoadHelper = loadHelper;
             m_AssetDic = new Dictionary<string, Object>();
@@ -147,7 +147,7 @@ namespace XFramework.Resource
                     return true;
                 });
                 task.Start();
-                return null;
+                return new ResourceRequestProgress(request);
             }
 
             else
@@ -164,7 +164,7 @@ namespace XFramework.Resource
         /// <param name="path">资源路径</param>
         /// <param name="isTopOnly">是否是仅加载本层级的资源</param>
         /// <returns>资源组</returns>
-        public IProgress LoadAllAsync<T>(string path, bool isTopOnly, System.Action<T[]> callback) where T : Object
+        public IProgress LoadAllAsync<T>(string path, bool isTopOnly, System.Action<IList<T>> callback) where T : Object
         {
             if (IsResources(path))
             {

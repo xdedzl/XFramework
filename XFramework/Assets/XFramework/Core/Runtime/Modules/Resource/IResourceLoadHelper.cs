@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using System.Collections.Generic;
 
 namespace XFramework.Resource
 {
@@ -42,7 +43,7 @@ namespace XFramework.Resource
         /// <param name="isTopOnly">是否是仅加载本层级的资源</param>
         /// <param name="callback">回调</param>
         /// <returns>加载进度</returns>
-        IProgress LoadAllSync<T>(string path, bool isTopOnly, System.Action<T[]> callback) where T : Object;
+        IProgress LoadAllSync<T>(string path, bool isTopOnly, System.Action<IList<T>> callback) where T : Object;
         /// <summary>
         /// 卸载某个资源
         /// </summary>

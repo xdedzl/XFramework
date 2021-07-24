@@ -20,6 +20,8 @@ namespace XFramework.Event
     {
         private readonly Dictionary<string, Delegate> m_delegates = new Dictionary<string, Delegate>();
 
+        public RegersterHelper() { }
+
         public RegersterHelper(object listener)
         {
             InitEvent(listener);
