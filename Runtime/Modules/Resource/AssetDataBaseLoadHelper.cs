@@ -72,7 +72,7 @@ namespace XFramework.Resource
         /// <param name="path">资源路径</param>
         /// <param name="isTopOnly">是否是仅加载本层级的资源</param>
         /// <returns>资源</returns>
-        public IProgress LoadAllSync<T>(string path, bool isTopOnly, System.Action<T[]> callback) where T : UnityEngine.Object
+        public IProgress LoadAllSync<T>(string path, bool isTopOnly, System.Action<IList<T>> callback) where T : UnityEngine.Object
         {
             var assets = LoadAll<T>(path, isTopOnly);
             callback.Invoke(assets);
