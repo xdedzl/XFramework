@@ -6,15 +6,17 @@ using UnityEngine;
 
 namespace XFramework.Console
 {
-    public class XConsole : Singleton<XConsole>
+    public static partial class XConsole
     {
-        private readonly Queue<Message> m_messages = new Queue<Message>();
-        private readonly IConsole console = new UGUIConsole();
+        private static Action<string> LogMessageReceived;
 
-        private bool m_isOpen;
-        private bool m_isInit;
+        private static readonly Queue<Message> m_messages = new Queue<Message>();
+        private static readonly IConsole console = new UGUIConsole();
 
-        public bool IsOpen
+        private static bool m_isOpen;
+        private static bool m_isInit;
+
+        public static bool IsOpen
         {
             get
             {
@@ -43,7 +45,7 @@ namespace XFramework.Console
             }
         }
 
-        public XConsole()
+        static XConsole()
         {
             var typeBase = typeof(GMCommandBase);
             var sonTypes = Utility.Reflection.GetTypesInAllAssemblies((type) =>
@@ -91,51 +93,52 @@ namespace XFramework.Console
             }
         }
 
-        public void LogMessage(Message message)
+        public static void LogMessage(Message message)
         {
-            XConsole.Instance.console.OnLogMessage(message);
+            console.OnLogMessage(message);
+            LogMessageReceived?.Invoke(message.text);
         }
 
         public static object Log(object message)
         {
-            XConsole.Instance.LogMessage(Message.Log(message, ""));
+            LogMessage(Message.Log(message, ""));
             return message;
         }
 
         public static object Log(object message, Color col)
         {
-            XConsole.Instance.LogMessage(Message.Log(message, "", col));
+            LogMessage(Message.Log(message, "", col));
             return message;
         }
 
         public static object Log(object message, MessageType messageType)
         {
-            XConsole.Instance.LogMessage(Message.Log(message, messageType));
+            LogMessage(Message.Log(message, messageType));
             return message;
         }
 
         public static object LogWarning(object message)
         {
-            XConsole.Instance.LogMessage(Message.Warning(message, ""));
+            LogMessage(Message.Warning(message, ""));
             return message;
         }
 
         public static object LogError(object message)
         {
-            XConsole.Instance.LogMessage(Message.Error(message, ""));
+            LogMessage(Message.Error(message, ""));
             return message;
         }
 
         public static object Excute(string cmd)
         {
             var value = CSharpInterpreter.Instance.Excute(cmd);
-            XConsole.Instance.console.OnExcuteCmd(cmd, value);
+            console.OnExcuteCmd(cmd, value);
             return value;
         }
 
         public static void Clear()
         {
-            Instance.console.OnClear();
+            console.OnClear();
         }
     }
 
@@ -167,7 +170,7 @@ namespace XFramework.Console
 
     public struct Message
     {
-        string text;
+        public string text;
         string formatted;
         public string customType;
         public MessageType type;

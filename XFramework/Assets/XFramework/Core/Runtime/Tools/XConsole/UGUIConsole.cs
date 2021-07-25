@@ -197,7 +197,7 @@ namespace XFramework.Console
         {
             CreateConsoleWindow();
 
-            XConsole.Instance.LogMessage(Message.System("strat XConsle"));
+            XConsole.LogMessage(Message.System("strat XConsle"));
         }
 
         public void OnOpen()
@@ -220,7 +220,7 @@ namespace XFramework.Console
 
         public void OnExcuteCmd(string cmd, object value)
         {
-            XConsole.Instance.LogMessage(Message.Input(cmd));
+            XConsole.LogMessage(Message.Input(cmd));
             if (value != null)
             {
                 XConsole.Log(value);
