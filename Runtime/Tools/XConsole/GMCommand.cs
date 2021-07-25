@@ -20,6 +20,24 @@ namespace XFramework.Console
         {
             XConsole.Clear();
         }
+
+        [GMCommand("enable_hunter")]
+        public static void StartHunter()
+        {
+            XConsole.ConnetHunter();
+        }
+
+        [GMCommand("disable_hunter")]
+        public static void StopHunter()
+        {
+            XConsole.DisConnetHunter();
+        }
+
+        [GMCommand("log")]
+        public static void UnityLog(string content)
+        {
+            Debug.Log(content);
+        }
     }
 
     [AttributeUsage(AttributeTargets.Method, Inherited = true, AllowMultiple = false)]
