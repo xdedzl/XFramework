@@ -18,6 +18,9 @@ namespace XFramework.Console
         static readonly string IP = "127.0.0.1";
         static readonly int PORT = 10002;
 
+        /// <summary>
+        /// 连接hunter
+        /// </summary>
         public static void ConnetHunter()
         {
             if (client != null)
@@ -34,28 +37,9 @@ namespace XFramework.Console
             AsyncReceive();
         }
 
-        static async void AsyncReceive()
-        {
-            string strs = "";
-            try
-            {
-                UdpReceiveResult result = await client.ReceiveAsync();
-                strs = Encoding.UTF8.GetString(result.Buffer);
-            }
-            catch (Exception e)
-            {
-                if (!(e is SocketException))
-                {
-                    return;
-                }
-            }
-            AsyncReceive();
-            if (!string.IsNullOrEmpty(strs))
-            {
-                OnHunterMessageRecived(strs);
-            }
-        }
-
+        /// <summary>
+        /// 断开hunter
+        /// </summary>
         public static void DisConnetHunter()
         {
             if (client is null)
@@ -66,6 +50,25 @@ namespace XFramework.Console
             client = null;
             LogMessageReceived -= OnLogMessageReceived;
             Application.logMessageReceived -= OnUnityLogMessageReceived;
+        }
+
+        static async void AsyncReceive()
+        {
+            UdpReceiveResult result;
+            try
+            {
+                result = await client.ReceiveAsync();
+            }
+            catch (Exception e)
+            {
+                if (!(e is SocketException))
+                {
+                    return;
+                }
+            }
+            OnHunterMessageRecived(result.Buffer);
+            AsyncReceive();
+            
         }
 
         private static void OnLogMessageReceived(string content)
@@ -80,9 +83,15 @@ namespace XFramework.Console
             client.Send(sendData, sendData.Length, hunterEndPoint);
         }
 
-        private static void OnHunterMessageRecived(string cmd)
+        private static void OnHunterMessageRecived(byte[] buffer)
         {
-
+            if (buffer is null)
+                return;
+            var command = Encoding.UTF8.GetString(buffer);
+            if (!string.IsNullOrEmpty(command))
+            {
+                Excute(command);
+            }
         }
     }
 
