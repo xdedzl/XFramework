@@ -13,7 +13,7 @@ namespace XFramework
         /// <typeparam name="T">强转的类型</typeparam>
         /// <param name="target">强转的对象</param>
         /// <returns>转换后的对象</returns>
-        public static T Cast<T>(this object target) where T : class
+        public static T CastTo<T>(this object target) where T : class
         {
             return target as T;
         }

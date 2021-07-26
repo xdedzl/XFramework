@@ -84,7 +84,7 @@ namespace XFramework.Editor
                 {
                     if (iattributes[i] is EnableAttribute)
                     {
-                        EnableCondition = property.serializedObject.targetObject.GetType().GetMethod(iattributes[i].Cast<EnableAttribute>().Condition, flags);
+                        EnableCondition = property.serializedObject.targetObject.GetType().GetMethod(iattributes[i].CastTo<EnableAttribute>().Condition, flags);
                         if (EnableCondition != null && EnableCondition.ReturnType != typeof(bool))
                         {
                             EnableCondition = null;
@@ -92,7 +92,7 @@ namespace XFramework.Editor
                     }
                     else if (iattributes[i] is DisplayAttribute)
                     {
-                        DisplayCondition = property.serializedObject.targetObject.GetType().GetMethod(iattributes[i].Cast<DisplayAttribute>().Condition, flags);
+                        DisplayCondition = property.serializedObject.targetObject.GetType().GetMethod(iattributes[i].CastTo<DisplayAttribute>().Condition, flags);
                         if (DisplayCondition != null && DisplayCondition.ReturnType != typeof(bool))
                         {
                             DisplayCondition = null;
@@ -100,7 +100,7 @@ namespace XFramework.Editor
                     }
                     else if (iattributes[i] is LabelAttribute)
                     {
-                        Label = iattributes[i].Cast<LabelAttribute>().Name;
+                        Label = iattributes[i].CastTo<LabelAttribute>().Name;
                     }
                     else if (iattributes[i] is ColorAttribute)
                     {

@@ -1,5 +1,9 @@
+using Microsoft.CSharp;
 using System;
+using System.CodeDom.Compiler;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using UnityEngine;
 
 
@@ -10,8 +14,8 @@ namespace XFramework.Console
     /// </summary>
     public class CSharpInterpreter : Singleton<CSharpInterpreter>
     {
-        private List<string> nameSpaces = new List<string>();
         private Dictionary<string, Func<string, object>> cmds = new Dictionary<string, Func<string, object>>();
+        private CodeGenerater codeGenerater = new CodeGenerater();
 
         private CSharpInterpreter()
         {
@@ -21,21 +25,21 @@ namespace XFramework.Console
 
         public object Excute(string cmd)
         {
-            for (int i = 0; i < cmd.Length; i++)
+            var strs = cmd.Split(' ');
+            if (cmds.ContainsKey(strs[0]))
             {
-                if (cmd[i] == '.')
+
+                if (strs.Length == 1)
                 {
-                    return ExcuteCSharp(cmd);
+                    return ExcuteCmd(cmd, "");
                 }
-                else if (cmd[i] == ' ')
+                else
                 {
-                    string cmdName = cmd.Substring(0, i);
-                    string arg = cmd.Substring(i + 1, cmd.Length - (i + 1));
-                    return ExcuteCmd(cmdName, arg);
+                    return ExcuteCmd(strs[0], strs[1]);
                 }
             }
 
-            return ExcuteCmd(cmd, "");
+            return ExcuteCSharp(cmd);
         }
 
         public void AddCmd(string cmd, Func<string, object> fun)
@@ -64,9 +68,9 @@ namespace XFramework.Console
             return arg;
         }
 
-        private object Using(string arg)
+        private object Using(string name)
         {
-            nameSpaces.Add(arg);
+            codeGenerater.AddNameSpace(name);
             return null;
         }
 
@@ -76,8 +80,32 @@ namespace XFramework.Console
 
         private object ExcuteCSharp(string cmd)
         {
-            var cmds = cmd.Split('.');
-            var className = cmds[0];
+            CSharpCodeProvider codeProvider = new CSharpCodeProvider();
+            CompilerParameters compilerParameters= new CompilerParameters();
+            Assembly[] assemblys = AppDomain.CurrentDomain.GetAssemblies();
+            foreach (var item in assemblys)
+            {
+                compilerParameters.ReferencedAssemblies.Add(item.Location);
+            }
+            compilerParameters.GenerateExecutable = false;
+            compilerParameters.GenerateInMemory = true;
+            compilerParameters.OutputAssembly = "DynamicAssembly";
+
+            Class dynamicClass = new Class("DynamicClass");
+
+            codeGenerater.AddClass(dynamicClass);
+
+            CompilerResults cr = codeProvider.CompileAssemblyFromSource(compilerParameters, codeGenerater.Code);
+            if (cr.Errors.HasErrors)
+            {
+                var msg = string.Join(Environment.NewLine, cr.Errors.Cast<CompilerError>().First().ErrorText);
+                Debug.LogError(msg);
+            }
+            else
+            {
+                Assembly objAssembly = cr.CompiledAssembly;
+                object dyClass = objAssembly.CreateInstance("DynamicClass");
+            }
 
             return null;
         }
