@@ -220,11 +220,6 @@ namespace XFramework.Console
 
         public void OnExcuteCmd(string cmd, object value)
         {
-            XConsole.LogMessage(Message.Input(cmd));
-            if (value != null)
-            {
-                XConsole.Log(value);
-            }
 
             input.text = "";
 
