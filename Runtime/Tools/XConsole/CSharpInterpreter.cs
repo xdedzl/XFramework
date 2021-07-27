@@ -17,25 +17,13 @@ namespace XFramework.Console
     {
         private Dictionary<string, Func<string, object>> cmds = new Dictionary<string, Func<string, object>>();
         private CodeGenerater codeGenerater = new CodeGenerater();
-        private CSharpCodeProvider codeProvider = new CSharpCodeProvider();
-        private CompilerParameters compilerParameters = new CompilerParameters();
-        private Dictionary<string, object> dynamicValues = new Dictionary<string, object>();
         private readonly string ExpressionPattern = @"[^!=]=[^=]";
+        private Dictionary<string, object> dynamicValues = new Dictionary<string, object>();
 
         private CSharpInterpreter()
         {
             AddCmd("print", Print);
             AddCmd("using", Using);
-
-
-            Assembly[] assemblys = AppDomain.CurrentDomain.GetAssemblies();
-            foreach (var item in assemblys)
-            {
-                compilerParameters.ReferencedAssemblies.Add(item.Location);
-            }
-            compilerParameters.GenerateExecutable = false;
-            compilerParameters.GenerateInMemory = true;
-            compilerParameters.OutputAssembly = "DynamicAssembly";
         }
 
         /// <summary>
@@ -141,10 +129,10 @@ namespace XFramework.Console
             codeGenerater.AddClass(dynamicClass);
 
             var value = ExcuteCode(codeGenerater.Code, className, "DynamicFunction");
-
             if (match.Success)
             {
                 string variableName = cmd.Substring(0, match.Index + 1).Trim();
+                dynamicValues[variableName] = value;
                 return $"{variableName } = {value}";
             }
             else
@@ -155,7 +143,17 @@ namespace XFramework.Console
 
         public object ExcuteCode(string code, string className, string method)
         {
+            CSharpCodeProvider codeProvider = new CSharpCodeProvider();
+            CompilerParameters compilerParameters = new CompilerParameters();
+            Assembly[] assemblys = AppDomain.CurrentDomain.GetAssemblies();
+            foreach (var item in assemblys)
+            {
+                compilerParameters.ReferencedAssemblies.Add(item.Location);
+            }
+            compilerParameters.GenerateExecutable = false;
+            compilerParameters.GenerateInMemory = true;
             CompilerResults cr = codeProvider.CompileAssemblyFromSource(compilerParameters, code);
+
             if (cr.Errors.HasErrors)
             {
                 var msg = string.Join(Environment.NewLine, cr.Errors.Cast<CompilerError>().First().ErrorText);
@@ -166,8 +164,21 @@ namespace XFramework.Console
             {
                 Assembly objAssembly = cr.CompiledAssembly;
                 object dyClass = objAssembly.CreateInstance(className);
-                var value = dyClass.GetType().GetMethod(method).Invoke(dyClass, null);
-                return value;
+
+                var methodInfo = dyClass.GetType().GetMethod(method);
+
+                if (methodInfo.ReturnType != typeof(void))
+                {
+                    var @delegate = Utility.Reflection.MethodWrapperFunc<object>(dyClass, methodInfo);
+                    var value = @delegate.Invoke();
+                    return value;
+                }
+                else
+                {
+                    var @delegate = Utility.Reflection.MethodWrapperAction(dyClass, methodInfo);
+                    @delegate.Invoke();
+                    return null;
+                }
             }
         }
 

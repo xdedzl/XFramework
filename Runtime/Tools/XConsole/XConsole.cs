@@ -140,9 +140,9 @@ namespace XFramework.Console
             }
             catch (Exception e)
             {
-                LogError(e.StackTrace);
+                LogError($"{e.Message}\n{e.StackTrace}");
             }
-            
+
             if (value != null)
             {
                 Log(value);
