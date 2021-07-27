@@ -4,6 +4,7 @@ using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using UnityEngine;
 
 
@@ -16,19 +17,40 @@ namespace XFramework.Console
     {
         private Dictionary<string, Func<string, object>> cmds = new Dictionary<string, Func<string, object>>();
         private CodeGenerater codeGenerater = new CodeGenerater();
+        private CSharpCodeProvider codeProvider = new CSharpCodeProvider();
+        private CompilerParameters compilerParameters = new CompilerParameters();
+        private Dictionary<string, object> dynamicValues = new Dictionary<string, object>();
+        private readonly string ExpressionPattern = @"[^!=]=[^=]";
 
         private CSharpInterpreter()
         {
             AddCmd("print", Print);
             AddCmd("using", Using);
+
+
+            Assembly[] assemblys = AppDomain.CurrentDomain.GetAssemblies();
+            foreach (var item in assemblys)
+            {
+                compilerParameters.ReferencedAssemblies.Add(item.Location);
+            }
+            compilerParameters.GenerateExecutable = false;
+            compilerParameters.GenerateInMemory = true;
+            compilerParameters.OutputAssembly = "DynamicAssembly";
         }
 
+        /// <summary>
+        /// 执行一行代码
+        /// </summary>
+        /// <param name="cmd"></param>
         public object Excute(string cmd)
         {
             var strs = cmd.Split(' ');
-            if (cmds.ContainsKey(strs[0]))
+            if (dynamicValues.TryGetValue(cmd, out object value))
             {
-
+                return value;
+            }
+            else if (cmds.ContainsKey(strs[0]))
+            {
                 if (strs.Length == 1)
                 {
                     return ExcuteCmd(cmd, "");
@@ -42,6 +64,11 @@ namespace XFramework.Console
             return ExcuteCSharp(cmd);
         }
 
+        /// <summary>
+        /// 添加一个指令
+        /// </summary>
+        /// <param name="cmd">命令关键字</param>
+        /// <param name="fun">指令调用内容</param>
         public void AddCmd(string cmd, Func<string, object> fun)
         {
             if (cmds.ContainsKey(cmd))
@@ -80,34 +107,68 @@ namespace XFramework.Console
 
         private object ExcuteCSharp(string cmd)
         {
-            CSharpCodeProvider codeProvider = new CSharpCodeProvider();
-            CompilerParameters compilerParameters= new CompilerParameters();
-            Assembly[] assemblys = AppDomain.CurrentDomain.GetAssemblies();
-            foreach (var item in assemblys)
+            codeGenerater.ClearClasses();
+
+            Function function = new Function
             {
-                compilerParameters.ReferencedAssemblies.Add(item.Location);
+                name = "DynamicFunction",
+            };
+
+            Match match = Regex.Match(cmd, ExpressionPattern);
+            if (match.Success)
+            {
+                string variableName = cmd.Substring(0, match.Index + 1).Trim();
+                string variableValue = cmd.Substring(match.Index + 2, cmd.Length - (match.Index + 2)).Trim();
+                function.returnType = typeof(object);
+                function.contents = new string[]
+                {
+                    $"var {variableName} = {variableValue}",
+                    $"return {variableName}"
+                };
             }
-            compilerParameters.GenerateExecutable = false;
-            compilerParameters.GenerateInMemory = true;
-            compilerParameters.OutputAssembly = "DynamicAssembly";
+            else
+            {
+                function.returnType = null;
+                function.contents = new string[]
+                {
+                    cmd
+                };
+            }
 
-            Class dynamicClass = new Class("DynamicClass");
-
+            string className = "DynamicClass_" + Utility.Time.GetCurrentTimeStamp();
+            Class dynamicClass = new Class(className);
+            dynamicClass.AddFunction(function);
             codeGenerater.AddClass(dynamicClass);
 
-            CompilerResults cr = codeProvider.CompileAssemblyFromSource(compilerParameters, codeGenerater.Code);
+            var value = ExcuteCode(codeGenerater.Code, className, "DynamicFunction");
+
+            if (match.Success)
+            {
+                string variableName = cmd.Substring(0, match.Index + 1).Trim();
+                return $"{variableName } = {value}";
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        public object ExcuteCode(string code, string className, string method)
+        {
+            CompilerResults cr = codeProvider.CompileAssemblyFromSource(compilerParameters, code);
             if (cr.Errors.HasErrors)
             {
                 var msg = string.Join(Environment.NewLine, cr.Errors.Cast<CompilerError>().First().ErrorText);
                 Debug.LogError(msg);
+                return null;
             }
             else
             {
                 Assembly objAssembly = cr.CompiledAssembly;
-                object dyClass = objAssembly.CreateInstance("DynamicClass");
+                object dyClass = objAssembly.CreateInstance(className);
+                var value = dyClass.GetType().GetMethod(method).Invoke(dyClass, null);
+                return value;
             }
-
-            return null;
         }
 
         #endregion

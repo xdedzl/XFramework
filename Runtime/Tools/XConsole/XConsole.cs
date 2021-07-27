@@ -131,7 +131,22 @@ namespace XFramework.Console
 
         public static object Excute(string cmd)
         {
-            var value = CSharpInterpreter.Instance.Excute(cmd);
+            LogMessage(Message.Input(cmd));
+
+            object value = null;
+            try
+            {
+                value = CSharpInterpreter.Instance.Excute(cmd);
+            }
+            catch (Exception e)
+            {
+                LogError(e.StackTrace);
+            }
+            
+            if (value != null)
+            {
+                Log(value);
+            }
             console.OnExcuteCmd(cmd, value);
             return value;
         }

@@ -8,7 +8,7 @@ namespace XFramework.Console
 {
     public class CodeGenerater
     {
-        private List<string> nameSpaces = new List<string>();
+        private HashSet<string> nameSpaces = new HashSet<string>();
         private List<Class> classes = new List<Class>();
 
         public void AddNameSpace(string name)
@@ -18,12 +18,20 @@ namespace XFramework.Console
 
         public void AddNameSpace(IList<string> names)
         {
-            nameSpaces.AddRange(names);
+            foreach (var item in names)
+            {
+                AddNameSpace(item);
+            }
         }
 
         public void AddClass(Class @class)
         {
             classes.Add(@class);
+        }
+
+        public void ClearClasses()
+        {
+            classes.Clear();
         }
 
         public string Code
