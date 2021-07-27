@@ -114,7 +114,14 @@ namespace XFramework.Console
             get
             {
                 StringBuilder stringBuilder = new StringBuilder();
-                var returnStr = returnType == null ? "void" : returnType.Name;
+                string returnStr = "void";
+                if (returnType != null)
+                {
+                    if (returnType == typeof(object))
+                        returnStr = "object";
+                    else
+                        returnStr = returnType.Name;
+                }
                 stringBuilder.Append($"\tpublic {returnStr} {name}()\n\t{{\n");
                 foreach (var item in contents)
                 {
