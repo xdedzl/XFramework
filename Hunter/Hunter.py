@@ -1,6 +1,20 @@
+# --*-- coding: utf-8 --*--
+
 import socket
 import struct
 import _thread
+import colorama
+from colorama import init,Fore,Back,Style
+init(autoreset=True)
+
+class Color(object):
+	red = '31'
+	green = '32'
+	yellow = '33'
+	blue = '34'
+
+def get_color_text(text, color):
+	return '\033[{}m{}\033[0m'.format(color, text)
 
 def start_hunter(ip, port, game_port):
 	s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
