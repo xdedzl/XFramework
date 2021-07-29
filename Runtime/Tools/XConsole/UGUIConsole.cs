@@ -27,16 +27,15 @@ namespace XFramework.Console
         private void CreateConsoleWindow()
         {
             //canvas
-            GameObject windows = new GameObject("UGUIConsole");
-            windows.transform.parent = new GameObject("XConsole").transform;
-            consoleRoot = windows;
+            GameObject consoleRoot = new GameObject("UGUIConsole");
+            consoleRoot.transform.parent = new GameObject("XConsole").transform;
 
-            Canvas canvas = windows.AddComponent<Canvas>();
+            Canvas canvas = consoleRoot.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.pixelPerfect = false;
             canvas.sortingOrder = 88888;
 
-            CanvasScaler cs = windows.AddComponent<CanvasScaler>();
+            CanvasScaler cs = consoleRoot.AddComponent<CanvasScaler>();
 
             //only mobile platform should use screen size.
             if (!Application.isEditor)
@@ -48,15 +47,16 @@ namespace XFramework.Console
             }
 
 
-            GraphicRaycaster gr = windows.AddComponent<GraphicRaycaster>();
+            GraphicRaycaster gr = consoleRoot.AddComponent<GraphicRaycaster>();
             gr.blockingObjects = GraphicRaycaster.BlockingObjects.All;
             //gr.
 
             InitEventSystem();
-            InitBlackground(windows);
-            InitScrollView(windows);
+            InitBlackground(consoleRoot);
+            InitScrollView(consoleRoot);
             InitScrollContent(sr_content.gameObject);
-            InitInput(windows);
+            InitInput(consoleRoot);
+            InitCodeEditor(consoleRoot);
         }
 
         ///Init the event system if not exist.
@@ -72,11 +72,11 @@ namespace XFramework.Console
             }
         }
 
-        void InitBlackground(GameObject windows)
+        void InitBlackground(GameObject parent)
         {
             //background
             GameObject background = new GameObject("blackground");
-            background.transform.parent = windows.transform;
+            background.transform.parent = parent.transform;
             Image img_bgm = background.AddComponent<Image>();
             img_bgm.rectTransform.SetInsetAndSizeFromParentEdge(RectTransform.Edge.Left, 0, 0);
             img_bgm.rectTransform.SetInsetAndSizeFromParentEdge(RectTransform.Edge.Top, 0, 0);
@@ -86,11 +86,11 @@ namespace XFramework.Console
             img_bgm.color = new Color(0, 0, 0, 0.8f);
         }
 
-        void InitScrollView(GameObject windows)
+        void InitScrollView(GameObject parent)
         {
             //content_scroll_view
             GameObject scrollView = new GameObject("scrollview");
-            scrollView.transform.parent = windows.transform;
+            scrollView.transform.parent = parent.transform;
             sr_content = scrollView.AddComponent<ScrollRect>();
             sr_content.horizontal = false;
             sr_content.scrollSensitivity = 20;
@@ -126,10 +126,10 @@ namespace XFramework.Console
             scrollView.GetComponent<ScrollRect>().content = text_content.rectTransform;
         }
 
-        void InitInput(GameObject windows)
+        void InitInput(GameObject parent)
         {
             GameObject input_obj = new GameObject("input");
-            input_obj.transform.parent = windows.transform;
+            input_obj.transform.parent = parent.transform;
             Image img_input = input_obj.AddComponent<Image>();
             img_input.rectTransform.SetInsetAndSizeFromParentEdge(RectTransform.Edge.Left, 0, 0);
             img_input.rectTransform.SetInsetAndSizeFromParentEdge(RectTransform.Edge.Bottom, -15, 30);
@@ -180,6 +180,10 @@ namespace XFramework.Console
 
             ///Init event
             input.onEndEdit.AddListener(ProcessInput);
+        }
+
+        public void InitCodeEditor(GameObject parent)
+        {
 
         }
 
@@ -203,6 +207,7 @@ namespace XFramework.Console
         public void OnOpen()
         {
             consoleRoot.SetActive(true);
+            UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(input.gameObject);
             MonoEvent.Instance.UPDATE += OnUpdate;
         }
 
