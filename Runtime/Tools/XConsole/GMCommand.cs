@@ -24,12 +24,14 @@ namespace XFramework.Console
         [GMCommand("enable_hunter")]
         public static void StartHunter()
         {
+            XConsole.Log("已成功打开Hunter");
             XConsole.ConnetHunter();
         }
 
         [GMCommand("disable_hunter")]
         public static void StopHunter()
         {
+            XConsole.Log("已成功关闭Hunter");
             XConsole.DisConnetHunter();
         }
 

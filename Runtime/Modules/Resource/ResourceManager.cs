@@ -99,6 +99,7 @@ namespace XFramework.Resource
             if (IsResources(assetName))
             {
                 assetName = assetName.Substring(4, assetName.Length - 4);
+                assetName = assetName.Split('.')[0];
                 return Resources.Load<T>(assetName);
             }
 
