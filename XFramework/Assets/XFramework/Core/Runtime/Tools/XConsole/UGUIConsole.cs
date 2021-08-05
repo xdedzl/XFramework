@@ -27,7 +27,7 @@ namespace XFramework.Console
         private void CreateConsoleWindow()
         {
             //canvas
-            GameObject consoleRoot = new GameObject("UGUIConsole");
+            consoleRoot = new GameObject("UGUIConsole");
             consoleRoot.transform.parent = new GameObject("XConsole").transform;
 
             Canvas canvas = consoleRoot.AddComponent<Canvas>();

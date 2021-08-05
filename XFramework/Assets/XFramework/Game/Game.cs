@@ -6,6 +6,7 @@ using XFramework.Entity;
 using XFramework.Event;
 using XFramework.Fsm;
 using XFramework.Resource;
+using XFramework.Console;
 
 /// <summary>
 /// 这个类挂在初始场景中,是整个游戏的入口
@@ -48,6 +49,15 @@ public class Game : MonoBehaviour
     void Update()
     {
         GameEntry.ModuleUpdate(Time.deltaTime, Time.unscaledDeltaTime);
+    }
+
+    public void OnGUI()
+    {
+        if (GUI.Button(new Rect(10, Screen.height - 60, 100, 50), "调试"))
+        {
+            Debug.LogError(Screen.height);
+            XConsole.IsOpen = !XConsole.IsOpen;
+        }
     }
 
     private void OnDestroy()
