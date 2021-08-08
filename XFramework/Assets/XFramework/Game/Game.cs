@@ -55,8 +55,20 @@ public class Game : MonoBehaviour
     {
         if (GUI.Button(new Rect(10, Screen.height - 60, 100, 50), "调试"))
         {
-            Debug.LogError(Screen.height);
             XConsole.IsOpen = !XConsole.IsOpen;
+        }
+
+        string buttonName = XConsole.IsHunterEnable ? "关闭Hunter" : "打开Hunter";
+        if (GUI.Button(new Rect(120, Screen.height - 60, 100, 50), buttonName))
+        {
+            if (XConsole.IsHunterEnable)
+            {
+                XConsole.Excute("disable_hunter");
+            }
+            else
+            {
+                XConsole.Excute("enable_hunter");
+            }
         }
     }
 

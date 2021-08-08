@@ -23,6 +23,10 @@ class MessageType(object):
 	OUTPUT = 5
 	UNITY = 6
 
+class MessageSource(object):
+	XCONSOLE = 0
+	UNITY = 1
+
 TYPE_2_COLOR = {
 	MessageType.WARNING: Color.YELLOW,
 	MessageType.ERROR: Color.RED,
@@ -31,8 +35,8 @@ TYPE_2_COLOR = {
 }
 		
 
-port = ''
-game_port = ''
+port = None
+game_port = None
 game_ip = '127.0.0.1'
 
 logger = Logger('client_log')
@@ -61,6 +65,7 @@ def listen_game_connect(s):
 	m, = struct.unpack_from('{}s'.format(length), m, 0)
 	global game_ip
 	game_ip = m.decode('utf-8','ignore')
+	print('客户端已连接：'+ game_ip)
 
 def receive_message(s):
 	"""
@@ -75,9 +80,9 @@ def receive_input(s, game_port):
 	"""
 	接收控制台输入，向客户端发送命令
 	"""
-	a = get_color_text('>>>', Color.GREEN)
+	# a = get_color_text('>>>', Color.GREEN)
 	while True:
-		strs = input(a)
+		strs = input('>>>')
 		command = encode_message(strs)
 		s.sendto(command, (game_ip, game_port))
 
@@ -85,9 +90,8 @@ def decode_message(message):
 	"""
 	消息解码
 	"""
-	length = len(message)
-	message_type, message_source  = struct.unpack_from('2i', message, 0)
-	message, = struct.unpack_from('{}s'.format(length), message, 8)
+	message_type, message_source, length = struct.unpack_from('3i', message, 0)
+	message, = struct.unpack_from('{}s'.format(length), message, 12)
 	message = message.decode('utf-8','ignore')
 	return message_type, message_source, message
 
@@ -109,8 +113,9 @@ def log_message(m_type, m_source, m):
 	print(m)
 
 def main(args):
-	global port, game_port
-	prot = args.port
+	global port
+	global game_port
+	port = args.port
 	game_port = args.game_port
 	start_hunter()
 

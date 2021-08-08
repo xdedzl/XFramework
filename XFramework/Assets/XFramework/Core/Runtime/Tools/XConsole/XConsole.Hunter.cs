@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -8,15 +9,37 @@ using UnityEngine;
 
 namespace XFramework.Console
 {
+    enum MessageSource
+    {
+        XConsole = 0,
+        Unity = 1
+    }
+
     public partial class XConsole
     {
-        public static UdpClient client;
-        public static IPEndPoint hunterEndPoint;
-        static readonly string HUNTER_IP = "127.0.0.1";
-        static readonly string HUNTER_PORT = "10001";
+        private static UdpClient client;
+        private static UdpClient sendClient;
+        private static IPEndPoint hunterEndPoint;
+        private static readonly string HUNTER_IP = "192.168.199.105";
+        private static readonly string HUNTER_PORT = "10001";
 
-        static readonly string IP = "127.0.0.1";
-        static readonly int PORT = 10002;
+        private static readonly int GAME_PORT = 10002;
+        private static readonly Dictionary<LogType, MessageType> LogType_To_MessageType = new Dictionary<LogType, MessageType>
+        {
+            {LogType.Log, MessageType.NORMAL },
+            {LogType.Warning, MessageType.WARNING },
+            {LogType.Error, MessageType.ERROR },
+            {LogType.Assert, MessageType.ERROR},
+            {LogType.Exception, MessageType.ERROR }
+        };
+
+        public static bool IsHunterEnable
+        {
+            get
+            {
+                return client != null;
+            }
+        }
 
         /// <summary>
         /// 连接hunter
@@ -29,11 +52,13 @@ namespace XFramework.Console
             IPAddress remoteIP = IPAddress.Parse(HUNTER_IP);
             hunterEndPoint = new IPEndPoint(remoteIP, Convert.ToInt32(HUNTER_PORT));
 
-            client = new UdpClient(PORT);
+            client = new UdpClient(GAME_PORT);
+            sendClient = new UdpClient(0);
 
             LogMessageReceived += OnLogMessageReceived;
             Application.logMessageReceived += OnUnityLogMessageReceived;
 
+            SendInitData();
             AsyncReceive();
         }
 
@@ -48,6 +73,9 @@ namespace XFramework.Console
             client.Close();
             client.Dispose();
             client = null;
+            sendClient.Close();
+            sendClient.Dispose();
+            sendClient = null;
             LogMessageReceived -= OnLogMessageReceived;
             Application.logMessageReceived -= OnUnityLogMessageReceived;
         }
@@ -68,19 +96,44 @@ namespace XFramework.Console
             }
             OnHunterMessageRecived(result.Buffer);
             AsyncReceive();
-            
+
         }
 
-        private static void OnLogMessageReceived(string content)
+        private static void SendInitData()
         {
-            byte[] sendData = Encoding.UTF8.GetBytes(content);
-            client.Send(sendData, sendData.Length, hunterEndPoint);
+            byte[] buffer = Encoding.UTF8.GetBytes(GetLocalIP());
+            client.Send(buffer, buffer.Length, hunterEndPoint);
+        }
+
+        private static void OnLogMessageReceived(Message message)
+        {
+            ProtocolBytes protocolBytes = new ProtocolBytes();
+            protocolBytes.AddInt32((int)message.type);
+            protocolBytes.AddInt32((int)MessageSource.XConsole);
+            protocolBytes.AddString(message.text);
+
+            //List<byte> buffter = new List<byte>();
+            //byte[] sendData = Encoding.UTF8.GetBytes(message.text);
+            //byte[] logType = BitConverter.GetBytes((int)message.type);
+            //byte[] sourceType = BitConverter.GetBytes((int)MessageSource.XConsole);
+            //buffter.AddRange(logType);
+            //buffter.AddRange(sourceType);
+            //buffter.AddRange(sendData);
+            var buffer = protocolBytes.Encode();
+            client.Send(buffer, buffer.Length, hunterEndPoint);
         }
 
         private static void OnUnityLogMessageReceived(string condition, string stackTrace, LogType type)
         {
-            byte[] sendData = Encoding.UTF8.GetBytes(condition);
-            client.Send(sendData, sendData.Length, hunterEndPoint);
+            var messageType = LogType_To_MessageType[type];
+
+            ProtocolBytes protocolBytes = new ProtocolBytes();
+            protocolBytes.AddInt32((int)messageType);
+            protocolBytes.AddInt32((int)MessageSource.Unity);
+            string message = messageType != MessageType.ERROR ? condition : $"{condition}\n{stackTrace}";
+            protocolBytes.AddString(message);
+            var buffer = protocolBytes.Encode();
+            client.Send(buffer, buffer.Length, hunterEndPoint);
         }
 
         private static void OnHunterMessageRecived(byte[] buffer)
@@ -92,6 +145,24 @@ namespace XFramework.Console
             {
                 Excute(command);
             }
+        }
+
+        public static string GetLocalIP()
+        {
+            //获取主机名
+            string HostName = Dns.GetHostName();
+            IPHostEntry IpEntry = Dns.GetHostEntry(HostName);
+            for (int i = 0; i < IpEntry.AddressList.Length; i++)
+            {
+                //从IP地址列表中筛选出IPv4类型的IP地址
+                //AddressFamily.InterNetwork表示此IP为IPv4,
+                //AddressFamily.InterNetworkV6表示此地址为IPv6类型
+                if (IpEntry.AddressList[i].AddressFamily == AddressFamily.InterNetwork)
+                {
+                    return IpEntry.AddressList[i].ToString();
+                }
+            }
+            return "";
         }
     }
 
