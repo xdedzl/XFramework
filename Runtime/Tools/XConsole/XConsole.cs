@@ -8,7 +8,7 @@ namespace XFramework.Console
 {
     public static partial class XConsole
     {
-        private static Action<string> LogMessageReceived;
+        private static Action<Message> LogMessageReceived;
 
         private static readonly Queue<Message> m_messages = new Queue<Message>();
         private static readonly IConsole console = new UGUIConsole();
@@ -96,7 +96,7 @@ namespace XFramework.Console
         public static void LogMessage(Message message)
         {
             console.OnLogMessage(message);
-            LogMessageReceived?.Invoke(message.text);
+            LogMessageReceived?.Invoke(message);
         }
 
         public static object Log(object message)
