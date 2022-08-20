@@ -1,4 +1,4 @@
-# --*-- coding: utf-8 --*--
+	# --*-- coding: utf-8 --*--
 
 import socket
 import struct
@@ -37,7 +37,7 @@ TYPE_2_COLOR = {
 
 port = None
 game_port = None
-game_ip = '127.0.0.1'
+game_ip = ''
 
 logger = Logger('client_log')
 
@@ -51,30 +51,25 @@ def start_hunter():
 	"""
 	s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 	s.bind(('', port))
-	listen_game_connect(s)
 	_thread.start_new_thread(receive_input, (s, game_port,))
-	receive_message(s)
+	
 
-def listen_game_connect(s):
-	"""
-	监听客户端的第一条消息，设置游戏端ip
-	"""
-	recv_data = s.recvfrom(1024)
-	m = recv_data[0]
-	length = len(m)
-	m, = struct.unpack_from('{}s'.format(length), m, 0)
-	global game_ip
-	game_ip = m.decode('utf-8','ignore')
-	print('客户端已连接：'+ game_ip)
+	print('dsadada')
+	receive_message(s)
 
 def receive_message(s):
 	"""
 	监听客户端log
 	"""
 	while True:
-		recv_data = s.recvfrom(1024)
+		recv_data = s.recvfrom(2048)
 		m_type, m_source, m = decode_message(recv_data[0])
-		log_message(m_type, m_source, m)
+		if m_type < 0 and m_source < 0:
+			global game_ip
+			game_ip = m
+			print('客户端已连接  ' + game_ip)
+		else:
+			log_message(m_type, m_source, m)
 
 def receive_input(s, game_port):
 	"""
@@ -83,8 +78,11 @@ def receive_input(s, game_port):
 	# a = get_color_text('>>>', Color.GREEN)
 	while True:
 		strs = input('>>>')
-		command = encode_message(strs)
-		s.sendto(command, (game_ip, game_port))
+		if game_ip:
+			command = encode_message(strs)
+			s.sendto(command, (game_ip, game_port))
+		else:
+			print('客户端hunter未开启')
 
 def decode_message(message):
 	"""
