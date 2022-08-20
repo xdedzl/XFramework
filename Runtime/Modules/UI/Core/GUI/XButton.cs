@@ -1,8 +1,8 @@
 ﻿namespace XFramework.UI
 {
     [UnityEngine.RequireComponent(typeof(UnityEngine.UI.Button))]
-    [UnityEngine.AddComponentMenu("XFramework/GUButton")]
-    public class GUButton : GUIBase
+    [UnityEngine.AddComponentMenu("XFramework/XButton")]
+    public class XButton : GUIBase
     {
         public UnityEngine.UI.Button button;
 

@@ -14,7 +14,7 @@ namespace XFramework.Editor
 {
     public class AssetOpenModeWindow : EditorWindow
     {
-        private readonly static string FILE_PATH = $"{XApplication.CachePath}/FileOpenInfo.xml";
+        private readonly static string FILE_PATH = $"{XApplication.cachePath}/FileOpenInfo.xml";
 
         private static Dictionary<string, string> s_fileOpenType;
 

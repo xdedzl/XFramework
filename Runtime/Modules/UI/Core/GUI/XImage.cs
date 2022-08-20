@@ -3,8 +3,8 @@
 namespace XFramework.UI
 {
     [UnityEngine.RequireComponent(typeof(UnityEngine.UI.Image))]
-    [UnityEngine.AddComponentMenu("XFramework/GUImage")]
-    public class GUImage : GUIBase
+    [UnityEngine.AddComponentMenu("XFramework/XImage")]
+    public class XImage : GUIBase
     {
         public UnityEngine.UI.Image image;
 

@@ -4,7 +4,7 @@ using UnityEngine.UI;
 namespace XFramework.UI
 {
     [RequireComponent(typeof(RawImage))]
-    public class GURawImage : GUIBase
+    public class XRawImage : GUIBase
     {
         public RawImage image;
 

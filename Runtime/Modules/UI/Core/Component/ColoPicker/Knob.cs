@@ -88,7 +88,7 @@ namespace XFramework.UI
             if (RectTransformUtility.ScreenPointToWorldPointInRectangle(rectTransform, eventData.position, eventData.pressEventCamera, out globalMousePos))
             {
                 var rect = rectTransform.rect;
-                //rect.size *= rectTransform.lossyScale;
+                rect.size *= rectTransform.lossyScale;
                 rect.center = (Vector2)rectTransform.position;
 
                 Vector3 newPos = rectTransform.position;

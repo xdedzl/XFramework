@@ -4,8 +4,8 @@ using UnityEngine.Events;
 namespace XFramework.UI
 {
     [UnityEngine.RequireComponent(typeof(InputField))]
-    [UnityEngine.AddComponentMenu("XFramework/GUInputField")]
-    public class GUInputField : GUIBase
+    [UnityEngine.AddComponentMenu("XFramework/XInputField")]
+    public class XInputField : GUIBase
     {
         public InputField inputField;
 

@@ -99,6 +99,7 @@ namespace XFramework.UI
             text.anchorMin = new Vector2(0, 0.5f);
             text.anchorMax = new Vector2(0, 0.5f);
             text.sizeDelta = new Vector2(50, 25);
+            text.pivot = new Vector2(0, 0.5f);
             text.anchoredPosition = new Vector2(25, 0);
             text.GetComponent<Text>().text = "Name";
             text.GetComponent<Text>().alignment = TextAnchor.MiddleCenter;

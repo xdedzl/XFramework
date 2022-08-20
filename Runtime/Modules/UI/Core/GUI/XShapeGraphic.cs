@@ -6,7 +6,7 @@ namespace XFramework.UI
     /// 仅用于实现 Tree 的查找
     /// </summary>
     [RequireComponent(typeof(ShapeGraphic))]
-    public class GUShapeGraphic : GUIBase
+    public class XShapeGraphic : GUIBase
     {
         /// <summary>
         /// Tree 实体

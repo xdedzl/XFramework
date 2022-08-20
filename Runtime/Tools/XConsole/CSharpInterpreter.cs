@@ -49,6 +49,9 @@ namespace XFramework.Console
                 }
             }
 
+            if (Application.platform == RuntimePlatform.Android)
+                throw new XFrameworkException("平台不支持动态生成代码");
+
             return ExcuteCSharp(cmd);
         }
 
@@ -148,6 +151,8 @@ namespace XFramework.Console
             Assembly[] assemblys = AppDomain.CurrentDomain.GetAssemblies();
             foreach (var item in assemblys)
             {
+                if (item.Location.Contains("Unity.Plastic.Newtonsoft.Json.dll"))
+                    continue;
                 compilerParameters.ReferencedAssemblies.Add(item.Location);
             }
             compilerParameters.GenerateExecutable = false;
@@ -166,6 +171,7 @@ namespace XFramework.Console
                 object dyClass = objAssembly.CreateInstance(className);
 
                 var methodInfo = dyClass.GetType().GetMethod(method);
+                
 
                 if (methodInfo.ReturnType != typeof(void))
                 {
