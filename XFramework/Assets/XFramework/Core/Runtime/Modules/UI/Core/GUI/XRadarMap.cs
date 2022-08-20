@@ -3,7 +3,7 @@
 namespace XFramework.UI
 {
     [RequireComponent(typeof(RadarMap))]
-    public class GURadarMap : GUIBase
+    public class XRadarMap : GUIBase
     {
         public RadarMap radarMap;
 

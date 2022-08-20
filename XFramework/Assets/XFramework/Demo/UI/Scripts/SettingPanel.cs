@@ -10,24 +10,24 @@ public class SettingPanel : PanelBase {
     {
         Level = 10;
 
-        (this["ConfirmBtn"] as GUButton).AddListener(() =>
+        (this["ConfirmBtn"] as XButton).AddListener(() =>
         {
             int width, height;
-            if (!regex.IsMatch((this["Width"] as GUInputField).inputField.text) || !regex.IsMatch((this["Height"] as GUInputField).inputField.text))
+            if (!regex.IsMatch((this["Width"] as XInputField).inputField.text) || !regex.IsMatch((this["Height"] as XInputField).inputField.text))
             {
                 Debug.Log("请输出数字");
                 return;
             }
 
-            width = int.Parse((this["Width"] as GUInputField).inputField.text);
-            height = int.Parse((this["Height"] as GUInputField).inputField.text);
+            width = int.Parse((this["Width"] as XInputField).inputField.text);
+            height = int.Parse((this["Height"] as XInputField).inputField.text);
 
-            bool isFullScreen = (this["FullScreen"] as GUToggle).toggle.isOn;
+            bool isFullScreen = (this["FullScreen"] as XToggle).toggle.isOn;
 
             Screen.SetResolution(width, height, isFullScreen);
         });
 
-        (this["Esc"] as GUButton).button.onClick.AddListener(() =>
+        (this["Esc"] as XButton).button.onClick.AddListener(() =>
         {
 #if UNITY_EDITOR
             UnityEditor.EditorApplication.isPlaying = false;
@@ -36,7 +36,7 @@ public class SettingPanel : PanelBase {
 #endif
         });
 
-        (this["Back"] as GUButton).button.onClick.AddListener(() =>
+        (this["Back"] as XButton).button.onClick.AddListener(() =>
         {
             UIHelper.Instance.Close(UIName.Setting);
         });

@@ -6,9 +6,9 @@ public class MainPanel : PanelBase {
     public override void Reg()
     {
         Level = 1;
-        (this["CreateBtn"] as GUButton).button.onClick.AddListener(() => { OnClick(UIName.Create); });
-        (this["PowerBtn"] as GUButton).button.onClick.AddListener(() => { OnClick(UIName.ShowPower); });
-        (this["AdjustBtn"] as GUButton).button.onClick.AddListener(() => { OnClick(UIName.Adjust); });
+        (this["CreateBtn"] as XButton).button.onClick.AddListener(() => { OnClick(UIName.Create); });
+        (this["PowerBtn"] as XButton).button.onClick.AddListener(() => { OnClick(UIName.ShowPower); });
+        (this["AdjustBtn"] as XButton).button.onClick.AddListener(() => { OnClick(UIName.Adjust); });
     }
 
     /// <summary>

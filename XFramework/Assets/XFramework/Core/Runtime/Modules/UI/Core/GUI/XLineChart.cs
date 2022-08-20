@@ -3,7 +3,7 @@
 namespace XFramework.UI
 {
     [UnityEngine.RequireComponent(typeof(LineChart))]
-    public class GULineChat : GUIBase
+    public class XLineChat : GUIBase
     {
         public LineChart lineChat;
 

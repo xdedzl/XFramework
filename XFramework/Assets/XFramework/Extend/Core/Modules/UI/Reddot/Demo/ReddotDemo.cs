@@ -6,7 +6,7 @@ using XFramework.UI;
 
 public class ReddotDemo : MonoBehaviour
 {
-    public GULayoutGroup toggles;
+    public XLayoutGroup toggles;
     void Awake()
     {
         // 初始化

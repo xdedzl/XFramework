@@ -23,9 +23,9 @@ public class CreatePanel : PanelBase {
     {
         Level = 2;
         // 按钮赋值
-        groupBtn = ((this["GroupBtn"] as GUButton).button) as Button;
-        teamBtn = ((this["TeamBtn"] as GUButton).button) as Button;
-        commandPostBtn = ((this["CommandPostBtn"] as GUButton).button) as Button;
+        groupBtn = ((this["GroupBtn"] as XButton).button) as Button;
+        teamBtn = ((this["TeamBtn"] as XButton).button) as Button;
+        commandPostBtn = ((this["CommandPostBtn"] as XButton).button) as Button;
 
         // 注册鼠标点击事件
         groupBtn.onClick.AddListener(() => { OnClick(UIName.Group); });

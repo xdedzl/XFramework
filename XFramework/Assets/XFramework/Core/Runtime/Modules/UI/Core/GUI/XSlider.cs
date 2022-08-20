@@ -4,8 +4,8 @@ using UnityEngine.UI;
 namespace XFramework.UI
 {
     [RequireComponent(typeof(Slider))]
-    [UnityEngine.AddComponentMenu("XFramework/GUSlider")]
-    public class GUSlider : GUIBase
+    [UnityEngine.AddComponentMenu("XFramework/XSlider")]
+    public class XSlider : GUIBase
     {
         public Slider slider;
 

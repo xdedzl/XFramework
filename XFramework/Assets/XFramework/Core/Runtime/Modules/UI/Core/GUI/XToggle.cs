@@ -6,7 +6,7 @@ namespace XFramework.UI
 {
     [RequireComponent(typeof(Toggle))]
     [AddComponentMenu("XFramework/GUToggle")]
-    public class GUToggle : GUIBase
+    public class XToggle : GUIBase
     {
         public Toggle toggle;
 

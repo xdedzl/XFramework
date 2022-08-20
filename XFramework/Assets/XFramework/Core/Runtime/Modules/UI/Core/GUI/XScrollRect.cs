@@ -5,8 +5,8 @@ using UnityEngine;
 namespace XFramework.UI
 {
     [RequireComponent(typeof(ScrollRect))]
-    [UnityEngine.AddComponentMenu("XFramework/GUScrollRect")]
-    public class GUScrollRect : GUIBase
+    [UnityEngine.AddComponentMenu("XFramework/XScrollRect")]
+    public class XScrollRect : GUIBase
     {
         public ScrollRect scrollRect;
 

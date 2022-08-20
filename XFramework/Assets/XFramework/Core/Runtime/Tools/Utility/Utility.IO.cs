@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System.Collections.Generic;
+using System.IO;
 using System.IO.Compression;
 using System.Runtime.Serialization.Formatters.Binary;
 using UnityEngine;
@@ -183,6 +184,35 @@ namespace XFramework
                         else
                         {
                             File.Delete(fsi.FullName);
+                        }
+                    }
+                }
+            }
+
+            public static IEnumerable<FileSystemInfo> Foreach(string fullPath)
+            {
+                DirectoryInfo directoryInfo = new DirectoryInfo(fullPath);
+                return Foreach(directoryInfo);
+            }
+
+            public static IEnumerable<FileSystemInfo> Foreach(DirectoryInfo directoryInfo)
+            {
+                if (directoryInfo.Exists)
+                {
+                    FileSystemInfo[] fileSysInfo = directoryInfo.GetFileSystemInfos();
+                    foreach (FileSystemInfo fsi in fileSysInfo)
+                    {
+                        if (fsi is DirectoryInfo info)
+                        {
+                            yield return fsi;
+                            foreach (var item in Foreach(info))
+                            {
+                                yield return item;
+                            }
+                        }
+                        else
+                        {
+                            yield return fsi;
                         }
                     }
                 }

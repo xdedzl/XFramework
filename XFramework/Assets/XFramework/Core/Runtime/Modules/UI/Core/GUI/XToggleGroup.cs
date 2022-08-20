@@ -4,8 +4,8 @@ using UnityEngine.UI;
 namespace XFramework.UI
 {
     [RequireComponent(typeof(ToggleGroup))]
-    [AddComponentMenu("XFramework/GUToggleGroup")]
-    public class GUToggleGroup : GUIBase
+    [AddComponentMenu("XFramework/XToggleGroup")]
+    public class XToggleGroup : GUIBase
     {
         public ToggleGroup toggleGroup;
         private void Reset()

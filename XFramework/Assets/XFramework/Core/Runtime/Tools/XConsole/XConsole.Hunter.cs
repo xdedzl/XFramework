@@ -101,7 +101,12 @@ namespace XFramework.Console
 
         private static void SendInitData()
         {
-            byte[] buffer = Encoding.UTF8.GetBytes(GetLocalIP());
+            ProtocolBytes protocolBytes = new ProtocolBytes();
+            protocolBytes.AddInt32(-1);
+            protocolBytes.AddInt32(-1);
+            protocolBytes.AddString(GetLocalIP());
+
+            var buffer = protocolBytes.Encode();
             client.Send(buffer, buffer.Length, hunterEndPoint);
         }
 
@@ -112,13 +117,6 @@ namespace XFramework.Console
             protocolBytes.AddInt32((int)MessageSource.XConsole);
             protocolBytes.AddString(message.text);
 
-            //List<byte> buffter = new List<byte>();
-            //byte[] sendData = Encoding.UTF8.GetBytes(message.text);
-            //byte[] logType = BitConverter.GetBytes((int)message.type);
-            //byte[] sourceType = BitConverter.GetBytes((int)MessageSource.XConsole);
-            //buffter.AddRange(logType);
-            //buffter.AddRange(sourceType);
-            //buffter.AddRange(sendData);
             var buffer = protocolBytes.Encode();
             client.Send(buffer, buffer.Length, hunterEndPoint);
         }

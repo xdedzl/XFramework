@@ -5,7 +5,7 @@ namespace XFramework.UI
 {
     [RequireComponent(typeof(LongOrDoubleBtn))]
     [UnityEngine.AddComponentMenu("XFramework/GULongOrDoubleBtn")]
-    public class GULongOrDoubleBtn : GUIBase
+    public class XLongOrDoubleBtn : GUIBase
     {
         public LongOrDoubleBtn longOrDoubleBtn;
 

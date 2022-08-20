@@ -4,7 +4,7 @@ using TMPro;
 namespace XFramework.UI
 {
     [UnityEngine.RequireComponent(typeof(TMP_Dropdown))]
-    public class GUTMPDropdown : GUIBase
+    public class XTMPDropdown : GUIBase
     {
         public TMP_Dropdown dropdown;
 

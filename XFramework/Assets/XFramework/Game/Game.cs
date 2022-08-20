@@ -7,6 +7,7 @@ using XFramework.Event;
 using XFramework.Fsm;
 using XFramework.Resource;
 using XFramework.Console;
+using XFramework.UI;
 
 /// <summary>
 /// 这个类挂在初始场景中,是整个游戏的入口
@@ -97,6 +98,7 @@ public class Game : MonoBehaviour
 #else
         GameEntry.AddModule<ResourceManager>(new AssetBundleLoadHelper(), mapInfoPath);
 #endif
+        GameEntry.AddModule<UIHelper>();
         // End2
     }
 
