@@ -75,27 +75,13 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 执行一个方法并返回它的执行时间
-        /// </summary>
-        /// <param name="action"></param>
-        /// <returns>执行时间</returns>
-        public static long GetActionRunTime(Action action)
-        {
-            System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
-            sw.Start();
-            action();
-            sw.Stop();
-            return sw.ElapsedMilliseconds;
-        }
-
-        /// <summary>
         /// 打印一个方法的执行时间
         /// </summary>
         /// <param name="action"></param>
         /// <param name="format">控制台输出格式</param>
         public static void DebugActionRuntime(Action action, string format = null)
         {
-            float time = GetActionRunTime(action);
+            float time = Time.GetActionRunTime(action);
             if (string.IsNullOrEmpty(format))
             {
                 format = "{0}";
