@@ -2,7 +2,7 @@
 {
     [UnityEngine.RequireComponent(typeof(UnityEngine.UI.Button))]
     [UnityEngine.AddComponentMenu("XFramework/XButton")]
-    public class XButton : GUIBase
+    public class XButton : XUIBase
     {
         public UnityEngine.UI.Button button;
 

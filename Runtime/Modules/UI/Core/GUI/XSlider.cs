@@ -5,7 +5,7 @@ namespace XFramework.UI
 {
     [RequireComponent(typeof(Slider))]
     [UnityEngine.AddComponentMenu("XFramework/XSlider")]
-    public class XSlider : GUIBase
+    public class XSlider : XUIBase
     {
         public Slider slider;
 

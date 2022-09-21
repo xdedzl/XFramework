@@ -5,7 +5,7 @@ namespace XFramework.UI
 {
     [RequireComponent(typeof(Scrollbar))]
     [UnityEngine.AddComponentMenu("XFramework/XScrollbar")]
-    public class XScrollbar : GUIBase
+    public class XScrollbar : XUIBase
     {
         public Scrollbar scrollbar;
 

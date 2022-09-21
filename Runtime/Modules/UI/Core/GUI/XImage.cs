@@ -4,7 +4,7 @@ namespace XFramework.UI
 {
     [UnityEngine.RequireComponent(typeof(UnityEngine.UI.Image))]
     [UnityEngine.AddComponentMenu("XFramework/XImage")]
-    public class XImage : GUIBase
+    public class XImage : XUIBase
     {
         public UnityEngine.UI.Image image;
 

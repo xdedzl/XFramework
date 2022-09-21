@@ -5,7 +5,7 @@ namespace XFramework.UI
 {
     [RequireComponent(typeof(ToggleGroup))]
     [AddComponentMenu("XFramework/XToggleGroup")]
-    public class XToggleGroup : GUIBase
+    public class XToggleGroup : XUIBase
     {
         public ToggleGroup toggleGroup;
         private void Reset()

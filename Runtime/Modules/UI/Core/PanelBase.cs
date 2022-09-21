@@ -21,7 +21,7 @@ namespace XFramework.UI
 
         private List<SubPanelBase> m_SubPanels;
 
-        private ComponentFindHelper<GUIBase> m_ComponentFindHelper;
+        private ComponentFindHelper<XUIBase> m_ComponentFindHelper;
 
         /// <summary>
         /// 面板初始化，只会执行一次，在Awake后start前执行
@@ -29,7 +29,7 @@ namespace XFramework.UI
         internal void Init(string name)
         {
             Name = name;
-            m_ComponentFindHelper = ComponentFindHelper<GUIBase>.CreateHelper(this.gameObject);
+            m_ComponentFindHelper = ComponentFindHelper<XUIBase>.CreateHelper(this.gameObject);
             rect = transform.GetComponent<RectTransform>();
             Vector3 rectSize = rect.localScale;
             rect.localScale = rectSize;
@@ -111,7 +111,7 @@ namespace XFramework.UI
         /// <summary>
         /// Find UI组件的索引器
         /// </summary>
-        public GUIBase this[string key]
+        public XUIBase this[string key]
         {
             get
             {
@@ -156,7 +156,7 @@ namespace XFramework.UI
         /// <summary>
         /// Find UI组件的索引器
         /// </summary>
-        public GUIBase this[string key]
+        public XUIBase this[string key]
         {
             get
             {

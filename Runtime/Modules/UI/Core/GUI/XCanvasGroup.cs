@@ -4,7 +4,7 @@ namespace XFramework.UI
 {
     [RequireComponent(typeof(CanvasGroup))]
 
-    public class XCanvasGroup : GUIBase
+    public class XCanvasGroup : XUIBase
     {
         public CanvasGroup canvasGroup;
 

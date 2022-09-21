@@ -4,7 +4,7 @@ namespace XFramework.UI
 {
     [UnityEngine.RequireComponent(typeof(Text))]
     [UnityEngine.AddComponentMenu("XFramework/XText")]
-    public class XText : GUIBase
+    public class XText : XUIBase
     {
         public Text text;
         private void Reset()

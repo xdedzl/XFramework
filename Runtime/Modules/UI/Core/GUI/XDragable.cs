@@ -5,7 +5,7 @@ namespace XFramework.UI
 {
     [UnityEngine.RequireComponent(typeof(Draggable))]
     [UnityEngine.AddComponentMenu("XFramework/GUDraggable")]
-    public class XDragable : GUIBase
+    public class XDragable : XUIBase
     {
         public Draggable draggable;
 
