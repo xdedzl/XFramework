@@ -4,7 +4,7 @@ using UnityEngine.Events;
 namespace XFramework.UI
 {
     [UnityEngine.RequireComponent(typeof(TMP_InputField))]
-    public class XTMPInputField : GUIBase
+    public class XTMPInputField : XUIBase
     {
         public TMP_InputField inputField;
 
