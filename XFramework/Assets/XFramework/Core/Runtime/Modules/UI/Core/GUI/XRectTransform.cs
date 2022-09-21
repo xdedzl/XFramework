@@ -2,7 +2,7 @@
 {
     [UnityEngine.RequireComponent(typeof(UnityEngine.RectTransform))]
     [UnityEngine.AddComponentMenu("XFramework/XRectTransform")]
-    public class XRectTransform : GUIBase
+    public class XRectTransform : XUIBase
     {
         public UnityEngine.RectTransform rect;
 

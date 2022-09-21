@@ -7,7 +7,7 @@ namespace XFramework.UI
 {
     [RequireComponent(typeof(LayoutGroup))]
     [UnityEngine.AddComponentMenu("XFramework/XLayoutGroup")]
-    public class XLayoutGroup : GUIBase
+    public class XLayoutGroup : XUIBase
     {
         public LayoutGroup layoutGroup;
 

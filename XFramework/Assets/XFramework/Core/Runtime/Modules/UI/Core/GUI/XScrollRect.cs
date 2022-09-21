@@ -6,7 +6,7 @@ namespace XFramework.UI
 {
     [RequireComponent(typeof(ScrollRect))]
     [UnityEngine.AddComponentMenu("XFramework/XScrollRect")]
-    public class XScrollRect : GUIBase
+    public class XScrollRect : XUIBase
     {
         public ScrollRect scrollRect;
 

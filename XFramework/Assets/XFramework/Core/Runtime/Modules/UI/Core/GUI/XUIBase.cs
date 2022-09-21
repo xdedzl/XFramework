@@ -2,7 +2,7 @@
 
 namespace XFramework.UI
 {
-    public abstract class GUIBase : MonoBehaviour
+    public abstract class XUIBase : MonoBehaviour
     {
     }
 }

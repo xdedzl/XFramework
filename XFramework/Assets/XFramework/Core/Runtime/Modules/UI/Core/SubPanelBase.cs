@@ -15,7 +15,7 @@ namespace XFramework.UI
         /// <summary>
         /// Find UI组件的索引器
         /// </summary>
-        public GUIBase this[string key]
+        public XUIBase this[string key]
         {
             get
             {

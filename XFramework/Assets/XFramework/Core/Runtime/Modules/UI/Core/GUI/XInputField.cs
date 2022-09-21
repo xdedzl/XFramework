@@ -5,7 +5,7 @@ namespace XFramework.UI
 {
     [UnityEngine.RequireComponent(typeof(InputField))]
     [UnityEngine.AddComponentMenu("XFramework/XInputField")]
-    public class XInputField : GUIBase
+    public class XInputField : XUIBase
     {
         public InputField inputField;
 
