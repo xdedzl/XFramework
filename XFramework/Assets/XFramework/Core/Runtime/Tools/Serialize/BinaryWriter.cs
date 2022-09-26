@@ -1,15 +1,27 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Text;
+using XFramework.Console;
 
 namespace XFramework
 {
+    public class SerializeMethodAttribute : Attribute
+    {
+        public string typeName;
+        public SerializeMethodAttribute(string typeName)
+        {
+            this.typeName = typeName;
+        }
+    }
+
+
     public class BinaryWriter
     {
         /// <summary>
         /// 用于编码时
         /// </summary>
-        private List<byte> bufferList;
+        protected List<byte> bufferList;
 
         /// <summary>
         /// 构造成编码器
@@ -48,6 +60,7 @@ namespace XFramework
         /// 将字符转转为字节数组加入字节流
         /// </summary>
         /// <param name="str">要添加的字符串</param>
+        [SerializeMethod("String")]
         public void AddString(string str)
         {
             byte[] strBytes = Encoding.UTF8.GetBytes(str);
@@ -61,6 +74,7 @@ namespace XFramework
         /// 将Int32转化成字节数组加入字节流
         /// </summary>
         /// <param name="num">要转化的Int32</param>
+        [SerializeMethod("Int32")]
         public void AddInt32(int num)
         {
             bufferList.Add((byte)num);
@@ -73,6 +87,7 @@ namespace XFramework
         /// 将float转化成字节数组加入字节流
         /// </summary>
         /// <param name="num">要转化的float</param>
+        [SerializeMethod("Single")]
         public unsafe void AddFloat(float num)
         {
             uint temp = *(uint*)&num;
@@ -86,6 +101,7 @@ namespace XFramework
         /// 将double转化成字节数组加入字节流
         /// </summary>
         /// <param name="num">要转化的double</param>
+        [SerializeMethod("Double")]
         public unsafe void AddDouble(double num)
         {
             ulong temp = *(ulong*)&num;
@@ -99,9 +115,16 @@ namespace XFramework
             bufferList.Add((byte)(temp >> 56));
         }
 
+        [SerializeMethod("Boolean")]
         public void AddBoolen(bool value)
         {
             bufferList.Add((byte)(value ? 1 : 0));
+        }
+
+        [SerializeMethod("Enum")]
+        public void AddEnum(Enum value)
+        {
+            AddInt32(Convert.ToInt32(value));
         }
 
         #region 数组
@@ -210,6 +233,39 @@ namespace XFramework
         public void Clear()
         {
             bufferList.Clear();
+        }
+
+        /// <summary>
+        /// 序列化
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <param name="bindingAttr"></param>
+        public void Serialize(object obj)
+        {
+            var methods = GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            Dictionary<string, MethodInfo> map = new Dictionary<string, MethodInfo>();
+            foreach (var method in methods)
+            {
+                var attr = method.GetCustomAttribute<SerializeMethodAttribute>();
+                if (attr != null)
+                {
+                    map.Add(attr.typeName, method);
+                }
+            }
+
+            Type type = obj.GetType();
+            foreach (var field in obj.GetType().GetFields())
+            {
+                if (map.TryGetValue(field.FieldType.Name, out MethodInfo methodInfo))
+                {
+                    var arg = type.GetField(field.Name).GetValue(obj);
+                    methodInfo.Invoke(obj, new object[] { arg });
+                }
+                else
+                {
+                    XConsole.LogWarning(($"can not find serialize method {field.FieldType.Name}"));
+                }
+            }
         }
     }
 }

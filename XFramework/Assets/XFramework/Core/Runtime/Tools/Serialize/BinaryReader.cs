@@ -5,10 +5,22 @@
 // 版本： V 1.0
 // ==========================================
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Text;
 
 namespace XFramework
 {
+    public class DeserializeMethodAttribute : Attribute
+    {
+        public string typeName;
+        public DeserializeMethodAttribute(string typeName)
+        {
+            this.typeName = typeName;
+        }
+    }
+
+
     /// <summary>
     /// 提供了一种基于字节流的协议
     /// </summary>
@@ -17,8 +29,8 @@ namespace XFramework
         /// <summary>
         /// 传输的字节流
         /// </summary>
-        private readonly byte[] buffer;
-        private int index;
+        protected readonly byte[] buffer;
+        protected int index;
 
         /// <summary>
         /// 构造成解码器
@@ -51,6 +63,7 @@ namespace XFramework
         /// <param name="index">索引起点</param>
         /// <param name="end">为下一个转换提供索引起点</param>
         /// <returns></returns>
+        [DeserializeMethod("String")]
         public string GetString()
         {
             if (buffer == null)
@@ -68,6 +81,7 @@ namespace XFramework
         /// <summary>
         /// 将字节数组转化成Int32
         /// </summary>
+        [DeserializeMethod("Int32")]
         public int GetInt32()
         {
             if (buffer == null)
@@ -81,6 +95,7 @@ namespace XFramework
         /// <summary>
         /// 将字节数组转化成float
         /// </summary>
+        [DeserializeMethod("Float")]
         public unsafe float GetFloat()
         {
             if (buffer == null)
@@ -94,6 +109,7 @@ namespace XFramework
         /// <summary>
         /// 将字节数组转化成double
         /// </summary>
+        [DeserializeMethod("Double")]
         public unsafe double GetDouble()
         {
             if (buffer == null)
@@ -110,9 +126,17 @@ namespace XFramework
             return *((double*)&temp);
         }
 
-        public bool GetBoolen()
+        [DeserializeMethod("Boolean")]
+        public bool GetBoolean()
         {
             return (buffer[index++] == 1);
+        }
+
+        [DeserializeMethod("Enum")]
+        public Enum GetEnum()
+        {
+            var vlue = GetInt32();
+            return default;
         }
 
         #region 数组
@@ -218,5 +242,38 @@ namespace XFramework
             return array;
         }
         #endregion
+
+        /// <summary>
+        /// 反序列化
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <param name="bindingAttr"></param>
+        public void Deserialize(object obj)
+        {
+            var methods = GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            Dictionary<string, MethodInfo> map = new Dictionary<string, MethodInfo>();
+            foreach (var method in methods)
+            {
+                var attr = method.GetCustomAttribute<DeserializeMethodAttribute>();
+                if (attr != null)
+                {
+                    map.Add(attr.typeName, method);
+                }
+            }
+
+            Type type = obj.GetType();
+            foreach (var field in type.GetFields())
+            {
+                if (map.TryGetValue(field.FieldType.Name, out MethodInfo methodInfo))
+                {
+                    object arg = methodInfo.Invoke(obj, null);
+                    field.SetValue(obj, arg);
+                }
+                else
+                {
+                    throw new XFrameworkException($"can not find deserialize method {field.FieldType.Name}");
+                }
+            }
+        }
     }
 }
