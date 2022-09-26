@@ -57,7 +57,7 @@ namespace XFramework.Event
                     }
                     else
                     {
-                        throw new XFrameworkException("[Messenge] do not spport more than 3 parameter，please redesign listener");
+                        throw new XFrameworkException("[Message] do not spport more than 3 parameter，please redesign listener");
                     }
 
                     Delegate @delegate;

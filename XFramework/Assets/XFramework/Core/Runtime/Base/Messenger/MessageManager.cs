@@ -21,7 +21,7 @@ namespace XFramework.Event
         /// <param name="handler">事件</param>
         public void AddListener(string eventKey, Action handler)
         {
-            OnListenerAdding(eventKey, handler);
+            OnPreListenerAdd(eventKey, handler);
             m_eventDictionary[eventKey] = (Action)m_eventDictionary[eventKey] + handler;
         }
 
@@ -33,7 +33,7 @@ namespace XFramework.Event
         /// <param name="handler">事件</param>
         public void AddListener<T>(string eventKey, Action<T> handler)
         {
-            OnListenerAdding(eventKey, handler);
+            OnPreListenerAdd(eventKey, handler);
             m_eventDictionary[eventKey] = (Action<T>)m_eventDictionary[eventKey] + handler;
         }
 
@@ -46,7 +46,7 @@ namespace XFramework.Event
         /// <param name="handler">事件</param>
         public void AddListener<T, U>(string eventKey, Action<T, U> handler)
         {
-            OnListenerAdding(eventKey, handler);
+            OnPreListenerAdd(eventKey, handler);
             m_eventDictionary[eventKey] = (Action<T, U>)m_eventDictionary[eventKey] + handler;
         }
 
@@ -60,7 +60,7 @@ namespace XFramework.Event
         /// <param name="handler">事件</param>
         public void AddListener<T, U, V>(string eventKey, Action<T, U, V> handler)
         {
-            OnListenerAdding(eventKey, handler);
+            OnPreListenerAdd(eventKey, handler);
             m_eventDictionary[eventKey] = (Action<T, U, V>)m_eventDictionary[eventKey] + handler;
         }
 
@@ -71,7 +71,7 @@ namespace XFramework.Event
         /// <param name="handler">事件</param>
         public void AddListener(string eventKey, Delegate handler)
         {
-            OnListenerAdding(eventKey, handler);
+            OnPreListenerAdd(eventKey, handler);
             Delegate old = m_eventDictionary[eventKey];
             m_eventDictionary[eventKey] = Delegate.Combine(old, handler);
         }
@@ -87,9 +87,9 @@ namespace XFramework.Event
         /// <param name="handler">事件</param>
         public void RemoveListener(string eventKey, Action handler)
         {
-            OnListenerRemoving(eventKey, handler);
+            OnPreListenerRemove(eventKey, handler);
             m_eventDictionary[eventKey] = (Action)m_eventDictionary[eventKey] - handler;
-            OnListenerRemoved(eventKey);
+            OnPostListenerRemove(eventKey);
         }
 
         /// <summary>
@@ -100,9 +100,9 @@ namespace XFramework.Event
         /// <param name="handler">事件</param>
         public void RemoveListener<T>(string eventKey, Action<T> handler)
         {
-            OnListenerRemoving(eventKey, handler);
+            OnPreListenerRemove(eventKey, handler);
             m_eventDictionary[eventKey] = (Action<T>)m_eventDictionary[eventKey] - handler;
-            OnListenerRemoved(eventKey);
+            OnPostListenerRemove(eventKey);
         }
 
         /// <summary>
@@ -114,9 +114,9 @@ namespace XFramework.Event
         /// <param name="handler">事件</param>
         public void RemoveListener<T, U>(string eventKey, Action<T, U> handler)
         {
-            OnListenerRemoving(eventKey, handler);
+            OnPreListenerRemove(eventKey, handler);
             m_eventDictionary[eventKey] = (Action<T, U>)m_eventDictionary[eventKey] - handler;
-            OnListenerRemoved(eventKey);
+            OnPostListenerRemove(eventKey);
         }
 
         /// <summary>
@@ -129,9 +129,9 @@ namespace XFramework.Event
         /// <param name="handler">事件</param>
         public void RemoveListener<T, U, V>(string eventKey, Action<T, U, V> handler)
         {
-            OnListenerRemoving(eventKey, handler);
+            OnPreListenerRemove(eventKey, handler);
             m_eventDictionary[eventKey] = (Action<T, U, V>)m_eventDictionary[eventKey] - handler;
-            OnListenerRemoved(eventKey);
+            OnPostListenerRemove(eventKey);
         }
 
         /// <summary>
@@ -141,17 +141,17 @@ namespace XFramework.Event
         /// <param name="handler">事件</param>
         public void RemoveListener(string eventKey, Delegate handler)
         {
-            OnListenerRemoving(eventKey, handler);
+            OnPreListenerRemove(eventKey, handler);
             Delegate old = m_eventDictionary[eventKey];
             m_eventDictionary[eventKey] = Delegate.Remove(old, handler);
-            OnListenerRemoved(eventKey);
+            OnPostListenerRemove(eventKey);
         }
 
         #endregion
 
-        #region OnListenerAdding OnListenerRemoving OnListenerRemoved
+        #region OnPreListenerAdd OnPreListenerRemove OnPostListenerRemove
 
-        private void OnListenerAdding(string eventKey, Delegate listenerBeingAdded)
+        private void OnPreListenerAdd(string eventKey, Delegate listenerBeingAdded)
         {
             if (!m_eventDictionary.ContainsKey(eventKey))
             {
@@ -166,7 +166,7 @@ namespace XFramework.Event
             }
         }
 
-        private void OnListenerRemoving(string eventKey, Delegate listenerBeingRemoved)
+        private void OnPreListenerRemove(string eventKey, Delegate listenerBeingRemoved)
         {
             if (m_eventDictionary.ContainsKey(eventKey))
             {
@@ -187,7 +187,7 @@ namespace XFramework.Event
             }
         }
 
-        private void OnListenerRemoved(string eventKey)
+        private void OnPostListenerRemove(string eventKey)
         {
             if (m_eventDictionary[eventKey] == null)
             {
