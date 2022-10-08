@@ -33,7 +33,7 @@ namespace XFramework
         [DeserializeMethod("Color32")]
         public Color32 GetColor32()
         {
-            return new Color(buffer[index++], buffer[index++], buffer[index++], buffer[index++]);
+            return new Color32(buffer[index++], buffer[index++], buffer[index++], buffer[index++]);
         }
 
         [DeserializeMethod("GameObject")]
@@ -48,6 +48,7 @@ namespace XFramework
             string tranStr = this.GetString();
             if (string.IsNullOrEmpty(tranStr))
                 return null;
+
             return GameObject.Find(tranStr).transform;
         }
     }

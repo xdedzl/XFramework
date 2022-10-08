@@ -15,7 +15,6 @@ public class GameInspector : Editor
 
     private Game game;
     public ProcedureBase startPrcedureTemplate;
-    private ProtocolBytes p = new ProtocolBytes();
     private string savePath;
 
     /// <summary>
