@@ -1,0 +1,20 @@
+{
+    "name": "XFrameworkEditor",
+    "references": [
+        "GUID:f0c72a23030b2dd40804ae41281fe458",
+        "GUID:6055be8ebefd69e48b49212b09b47b2f",
+        "GUID:6546d7765b4165b40850b3667f981c26",
+        "GUID:67f0cb28be5afe1499d5d3cb75e83852"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
