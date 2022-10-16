@@ -10,7 +10,7 @@ namespace XFramework.Editor
 {
     public static class CmdHandler
     {
-        private static readonly Dictionary<string, Action<string[]>> cmdDic = new Dictionary<string, Func<string[]>>;
+        private static readonly Dictionary<string, Action<string[]>> cmdDic = new Dictionary<string, Action<string[]>>();
 
         static CmdHandler()
         {

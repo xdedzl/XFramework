@@ -5,7 +5,7 @@ using UnityEngine.Events;
 namespace XFramework.UI
 {
     [RequireComponent(typeof(Toggle))]
-    [AddComponentMenu("XFramework/GUToggle")]
+    [AddComponentMenu("XFramework/XUToggle")]
     public class XToggle : XUIBase
     {
         public Toggle toggle;
