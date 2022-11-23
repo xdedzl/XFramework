@@ -123,11 +123,6 @@ namespace XFramework.Collections
                 paths[tempIndex].ensure = true;
                 count++;
             }
-
-            foreach (var item in paths)
-            {
-                UnityEngine.Debug.Log(item.length);
-            }
         }
 
         /// <summary>
