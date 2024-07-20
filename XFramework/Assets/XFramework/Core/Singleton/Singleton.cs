@@ -29,7 +29,6 @@ namespace XFramework
                             if (ctor == null)
                             {
                                 _instance = Activator.CreateInstance(typeof(T)) as T;
-                                UnityEngine.Debug.LogWarning("[Singleton] Make the constructor private");
                             }
 
                             else
