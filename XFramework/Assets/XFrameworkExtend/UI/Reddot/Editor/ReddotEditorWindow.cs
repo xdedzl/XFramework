@@ -137,7 +137,7 @@ namespace XFramework.UI.Editor
         {
             ReddotPort.graphView = this;
             m_editorWindow = editorWindow;
-            var nodeStyle = AssetDatabase.LoadAssetAtPath<StyleSheet>(@"Assets\XFramework\Extend\Core\Modules\UI\Reddot\Editor\NarrativeGraph.uss");
+            var nodeStyle = AssetDatabase.LoadAssetAtPath<StyleSheet>(@"Assets\XFrameworkExtend\UI\Reddot\Editor\NarrativeGraph.uss");
             styleSheets.Add(nodeStyle);
 
             SetupZoom(ContentZoomer.DefaultMinScale, ContentZoomer.DefaultMaxScale);

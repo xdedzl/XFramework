@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using UnityEngine;
 
 namespace XFramework
 {
@@ -49,7 +50,7 @@ namespace XFramework
             /// <param name="typeBase">基类型</param>
             /// <param name="assemblyName">程序集</param>
             /// <returns></returns>
-            public static IEnumerable<Type> GetSonClass(Type typeBase, string assemblyName = "Assembly-CSharp")
+            public static IEnumerable<Type> GetSonTypes(Type typeBase, string assemblyName = "Assembly-CSharp")
             {
                 List<Type> types = new List<Type>();
                 Assembly assembly = Assembly.Load(assemblyName);
@@ -262,6 +263,8 @@ namespace XFramework
             }
         }
 
+
+        #region Extend
         /// <summary>
         /// 通过反射和函数名调用非公有方法
         /// </summary>
@@ -369,5 +372,6 @@ namespace XFramework
             }
             return methods;
         }
+        #endregion
     }
 }

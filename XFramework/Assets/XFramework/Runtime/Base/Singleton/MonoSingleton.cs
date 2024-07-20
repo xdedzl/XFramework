@@ -41,9 +41,9 @@ namespace XFramework
                     if (_instance == null)
                     {
                         // 先在场景中找寻这个单例
-                        _instance = (T)FindObjectOfType(typeof(T));
+                        _instance = FindFirstObjectByType<T>();
 
-                        if (FindObjectsOfType(typeof(T)).Length > 1)
+                        if (FindObjectsByType<T>(FindObjectsSortMode.None).Length > 1)
                         {
                             if (Debug.isDebugBuild)
                             {

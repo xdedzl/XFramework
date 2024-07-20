@@ -33,6 +33,7 @@ public class GameInspector : Editor
 
         game = target as Game;
         game.typeName = typeNames[entranceProcedureIndex];
+        game.startProcedure = Utility.Reflection.CreateInstance<ProcedureBase>(GetType(typeNames[entranceProcedureIndex]));
 
         savePath = Application.persistentDataPath + "/" + UnityEngine.SceneManagement.SceneManager.GetActiveScene().name + "Procedure";
 
@@ -63,6 +64,7 @@ public class GameInspector : Editor
 
         if (lastIndex != entranceProcedureIndex)
         {
+            game.typeName = typeNames[entranceProcedureIndex];
             game.startProcedure = Utility.Reflection.CreateInstance<ProcedureBase>(GetType(typeNames[entranceProcedureIndex]));
         }
 

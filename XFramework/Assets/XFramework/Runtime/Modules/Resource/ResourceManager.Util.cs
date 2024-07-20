@@ -25,7 +25,10 @@ namespace XFramework.Resource
                     stringBuilder.Append(item.Value);
                     stringBuilder.Append('\n');
                 }
-                stringBuilder.Remove(stringBuilder.Length - 1, 1);
+                if (stringBuilder.Length > 0)
+                {
+                    stringBuilder.Remove(stringBuilder.Length - 1, 1);
+                }
 
                 File.WriteAllText(outPath, stringBuilder.ToString());
             }
@@ -34,6 +37,10 @@ namespace XFramework.Resource
         private static void ConfigPathMap(string path, Dictionary<string, string> pathMap)
         {
             DirectoryInfo info = new DirectoryInfo(Application.dataPath.Replace("Assets", "") + path);
+            if (!info.Exists)
+            {
+                return;
+            }
             foreach (var item in info.GetFiles("*", SearchOption.AllDirectories))
             {
                 var fullName = item.FullName;

@@ -225,7 +225,7 @@ public class RoadTest : ProcedureBase
 
         meshFilter.mesh.RecalculateBounds();     // 重置范围
         meshFilter.mesh.RecalculateNormals();    // 重置法线
-        meshFilter.mesh.RecalculateTangents();    // 重置切线
+        meshFilter.mesh.RecalculateTangents();   // 重置切线
     }
 
     /// <summary>
@@ -235,7 +235,7 @@ public class RoadTest : ProcedureBase
     /// <param name="points">路面点集</param>
     public static List<float> PointsFitToTerrain(Terrain terrain, ref List<Vector3> points)
     {
-        List<Vector3> roadPointDoub = new List<Vector3>();     // 两侧路面高度
+        List<Vector3> roadPointDoub = new List<Vector3>();  // 两侧路面高度
         List<float> roadHeightSing = new List<float>();     // 两侧路面高度min
         RaycastHit hit;
         for (int i = 0, length = points.Count; i < length; i++)

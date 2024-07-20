@@ -90,6 +90,7 @@ public class Game : MonoBehaviour
         GameEntry.AddModule<EntityManager>();
         GameEntry.AddModule<FsmManager>();
         GameEntry.AddModule<GraphicsManager>();
+        GameEntry.AddModule<MeshManager>();
         GameEntry.AddModule<DataSubjectManager>();
 #if UNITY_EDITOR
         string mapInfoPath = $"{Application.streamingAssetsPath}/pathMap.info";
