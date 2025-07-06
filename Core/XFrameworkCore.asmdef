@@ -1,5 +1,6 @@
 {
-    "name": "NewAssembly",
+    "name": "XFrameworkCore",
+    "rootNamespace": "",
     "references": [],
     "includePlatforms": [],
     "excludePlatforms": [],

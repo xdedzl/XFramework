@@ -26,6 +26,11 @@ namespace XFramework
                 float z = System.Convert.ToSingle(temp[2].Trim());
                 return new Vector3(x, y, z);
             }
+
+            public static Vector2 Slerp(Vector2 v1, Vector2 v2, float t)
+            {
+                return Vector3.Slerp(v1, v2, t);
+            }
         }
     }
 }
