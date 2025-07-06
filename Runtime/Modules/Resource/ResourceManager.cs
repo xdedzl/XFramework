@@ -79,7 +79,7 @@ namespace XFramework.Resource
         /// <returns></returns>
         private bool IsResources(string assetName)
         {
-            return assetName.Substring(0, 3).Equals("Res");
+            return assetName.StartsWith("Res");
         }
 
         #region 资源加载

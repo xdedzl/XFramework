@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace XFramework.Entity
@@ -90,7 +91,7 @@ namespace XFramework.Entity
             /// <param name="entityData">实体数据</param>
             /// <param name="parent">父物体</param>
             /// <returns>实体</returns>
-            internal Entity Allocate(int id, Vector3 pos, Quaternion quaternion, IEntityData entityData, Transform parent)
+            internal Entity Allocate(string id, Vector3 pos, Quaternion quaternion, IEntityData entityData, Transform parent)
             {
                 Entity entity;
                 if (m_Pool.Count > 0)

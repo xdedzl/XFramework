@@ -10,7 +10,7 @@ namespace XFramework.Entity
         /// <summary>
         /// 实体编号
         /// </summary>
-        public int Id { get; internal set; }
+        public string Id { get; internal set; }
 
         /// <summary>
         /// 所属容器名
@@ -83,6 +83,14 @@ namespace XFramework.Entity
         public void DetachChilds()
         {
             EntityManager.Instance.DetachChilds(this);
+        }
+
+        /// <summary>
+        /// 回收
+        /// </summary>
+        public void Recycle()
+        {
+            EntityManager.Instance.Recycle(this);
         }
 
         /// <summary>

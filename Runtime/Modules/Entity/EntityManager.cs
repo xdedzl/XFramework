@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
@@ -16,17 +17,17 @@ namespace XFramework.Entity
         /// <summary>
         /// 存储所有在使用的实体字典
         /// </summary>
-        private readonly Dictionary<int, Entity> m_EntityDic;
+        private readonly Dictionary<string, Entity> m_EntityDic;
         /// <summary>
         /// 存储实体父子关系的字典(从实际经验看大多数entity都不需要attach/detach,所以不直接存在Entity中)
         /// </summary>
-        private readonly Dictionary<int, EntityInfo> m_EntityInfoDic;
+        private readonly Dictionary<string, EntityInfo> m_EntityInfoDic;
 
         public EntityManager()
         {
             m_EntityContainerDic = new Dictionary<string, EntityContainer>();
-            m_EntityDic = new Dictionary<int, Entity>();
-            m_EntityInfoDic = new Dictionary<int, EntityInfo>();
+            m_EntityDic = new Dictionary<string, Entity>();
+            m_EntityInfoDic = new Dictionary<string, EntityInfo>();
         }
 
         #region 增删改
@@ -96,9 +97,9 @@ namespace XFramework.Entity
         /// <param name="quaternion">朝向</param>
         /// <param name="parent">实体父物体</param>
         /// <returns>实体</returns>
-        public T Allocate<T>(int id, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
+        public T Allocate<T>(Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null) where T : Entity
         {
-            return Allocate(id, typeof(T).Name, null, pos, quaternion, parent) as T;
+            return Allocate<T>(null, pos, quaternion, parent, id) as T;
         }
 
         /// <summary>
@@ -111,10 +112,15 @@ namespace XFramework.Entity
         /// <param name="quaternion">朝向</param>
         /// <param name="parent">实体父物体</param>
         /// <returns>实体</returns>
-        public T Allocate<T>(int id, IEntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
+        public T Allocate<T>(IEntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null) where T : Entity
         {
             string key = typeof(T).Name;
-            return Allocate(id, key, entityData, pos, quaternion, parent) as T;
+            if(!TryGetContainer(key, out EntityContainer _))
+            {
+                var obj = new GameObject(key + "templete");
+                AddTemplate<T>(obj);
+            }
+            return Allocate(key, entityData, pos, quaternion, parent, id) as T;
         }
 
         /// <summary>
@@ -128,9 +134,9 @@ namespace XFramework.Entity
         /// <param name="quaternion">朝向</param>
         /// <param name="parent">实体父物体</param>
         /// <returns>实体</returns>
-        public T Allocate<T>(int id, string key, IEntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
+        public T Allocate<T>(string key, IEntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null) where T : Entity
         {
-            return Allocate(id, key, entityData, pos, quaternion, parent) as T;
+            return Allocate(key, entityData, pos, quaternion, parent, id) as T;
         }
 
         /// <summary>
@@ -142,9 +148,9 @@ namespace XFramework.Entity
         /// <param name="quaternion">朝向</param>
         /// <param name="parent">实体父物体</param>
         /// <returns>实体</returns>
-        public Entity Allocate(int id, string key, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null)
+        public Entity Allocate(string key, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null)
         {
-            return Allocate(id, key, null, pos, quaternion, parent);
+            return Allocate(key, null, pos, quaternion, parent, id);
         }
 
         /// <summary>
@@ -157,13 +163,10 @@ namespace XFramework.Entity
         /// <param name="quaternion">角度</param>
         /// <param name="parent">实体父物体</param>
         /// <returns></returns>
-        public Entity Allocate(int id, string key, IEntityData entityData, Vector3 pos, Quaternion quaternion, Transform parent)
+        public Entity Allocate(string key, IEntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null)
         {
-            if (!m_EntityContainerDic.ContainsKey(key))
-            {
-                Debug.LogWarning($"没有名为{key}的实体容器");
-                return null;
-            }
+            var entityContainer = GetContainer(key);
+            id ??= Guid.NewGuid().ToString();
 
             if (m_EntityDic.ContainsKey(id))
             {
@@ -171,7 +174,7 @@ namespace XFramework.Entity
                 throw new XFrameworkException($"[EntityError] id is already occupied.  Entity {e.ToString()}");
             }
 
-            var entity = m_EntityContainerDic[key].Allocate(id, pos, quaternion, entityData, parent);
+            var entity = entityContainer.Allocate(id, pos, quaternion, entityData, parent);
             m_EntityDic.Add(entity.Id, entity);
             return entity;
         }
@@ -204,7 +207,7 @@ namespace XFramework.Entity
         /// 回收实体
         /// </summary>
         /// <param name="id">目标实体Id</param>
-        public bool Recycle(int id)
+        public bool Recycle(string id)
         {
             Entity entity = GetEntity(id);
             if (entity != null)
@@ -212,6 +215,22 @@ namespace XFramework.Entity
                 return Recycle(entity);
             }
             return false;
+        }
+
+        public void RecycleContainer<T>() where T : Entity
+        {
+            RecycleConatiner(typeof(T).Name);
+        }
+
+        public void RecycleConatiner(string containerName)
+        {
+            if (TryGetContainer(containerName, out var container))
+            {
+                foreach (var entity in container.GetEntities())
+                {
+                    Recycle(entity);
+                }
+            }
         }
 
         /// <summary>
@@ -287,13 +306,26 @@ namespace XFramework.Entity
         /// <param name="containerName">实体名</param>
         private EntityContainer GetContainer(string containerName)
         {
-            if (m_EntityContainerDic.TryGetValue(containerName, out EntityContainer entityContainer))
+            if (TryGetContainer(containerName, out EntityContainer entityContainer))
             {
                 return entityContainer;
             }
             else
             {
                 throw new XFrameworkException($"[EntityError] There is no entity container named {containerName}");
+            }
+        }
+
+        private bool TryGetContainer(string containerName, out EntityContainer entityContainer)
+        {
+            if (m_EntityContainerDic.TryGetValue(containerName, out entityContainer))
+            {
+                return true;
+            }
+            else
+            {
+                entityContainer = null;
+                return false;
             }
         }
 
@@ -317,7 +349,7 @@ namespace XFramework.Entity
         /// 获取实体
         /// </summary>
         /// <param name="entityId">实体Id</param>
-        public Entity GetEntity(int entityId)
+        public Entity GetEntity(string entityId)
         {
             if (m_EntityDic.TryGetValue(entityId, out Entity entity))
             {
@@ -363,7 +395,7 @@ namespace XFramework.Entity
         /// <param name="entityId">父实体编号</param>
         /// <param name="index">子实体索引</param>
         /// <returns>子实体</returns>
-        public Entity GetChildEntity(int entityId, int index)
+        public Entity GetChildEntity(string entityId, int index)
         {
             Entity entity = GetEntity(entityId);
             return GetChildEntity(entity, index);

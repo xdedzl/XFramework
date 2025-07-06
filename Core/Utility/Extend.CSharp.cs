@@ -332,11 +332,11 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 获取列表最后一个元素
+        /// 获取列表从后往前第Index个元素
         /// </summary>
-        public static T End<T>(this IList<T> list)
+        public static T End<T>(this IList<T> list, int index=1)
         {
-            return list[list.Count - 1];
+            return list[list.Count - index];
         }
 
         /// <summary>
