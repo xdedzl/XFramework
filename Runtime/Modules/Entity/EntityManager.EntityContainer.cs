@@ -75,10 +75,18 @@ namespace XFramework.Entity
             {
                 GameObject gameObject = GameObject.Instantiate(m_Template, pos, quaternion, parent);
 
-                Entity entity = gameObject.AddComponent(type) as Entity;
-                entity.name = name;
-                entity.ContainerName = this.name;
-                entity.OnInit();
+                Entity entity;
+                if(gameObject.TryGetComponent(type, out Component c))
+                {
+                    entity = c as Entity; 
+                }
+                else
+                {
+                    entity = gameObject.AddComponent(type) as Entity;
+                    entity.name = name;
+                    entity.ContainerName = this.name;
+                    entity.OnInit();
+                }
                 return entity;
             }
 
