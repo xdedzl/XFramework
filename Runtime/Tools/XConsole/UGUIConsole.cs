@@ -62,7 +62,7 @@ namespace XFramework.Console
         ///Init the event system if not exist.
         private void InitEventSystem()
         {
-            UnityEngine.EventSystems.EventSystem es = GameObject.FindObjectOfType<UnityEngine.EventSystems.EventSystem>();
+            UnityEngine.EventSystems.EventSystem es = GameObject.FindFirstObjectByType<UnityEngine.EventSystems.EventSystem>();
             if (es == null)
             {
                 GameObject eventsystem = new GameObject("EventSystem");
@@ -118,7 +118,7 @@ namespace XFramework.Console
             text_content.rectTransform.anchorMax = new Vector2(1, 1);
             text_content.rectTransform.pivot = new Vector2(0f, 0f);
             text_content.color = new Color(1, 1, 1, 1f);
-            text_content.font = Resources.GetBuiltinResource(typeof(Font), "Arial.ttf") as Font;
+            //text_content.font = Resources.GetBuiltinResource(typeof(Font), "Arial.ttf") as Font;
             text_content.fontSize = 12;
             text_content.alignment = TextAnchor.LowerLeft;
 
@@ -146,7 +146,7 @@ namespace XFramework.Console
             text_holder.rectTransform.anchorMin = new Vector2(0, 0);
             text_holder.rectTransform.anchorMax = new Vector2(1, 1);
             text_holder.rectTransform.pivot = new Vector2(0.5f, 0.5f);
-            text_holder.font = Resources.GetBuiltinResource(typeof(Font), "Arial.ttf") as Font;
+            //text_holder.font = Resources.GetBuiltinResource(typeof(Font), "Arial.ttf") as Font;
             text_holder.color = Color.grey;
             text_holder.text = ">";
 
@@ -158,7 +158,7 @@ namespace XFramework.Console
             text_pageCount.rectTransform.anchorMin = new Vector2(0, 0);
             text_pageCount.rectTransform.anchorMax = new Vector2(1, 1);
             text_pageCount.rectTransform.pivot = new Vector2(0.5f, 0.5f);
-            text_pageCount.font = Resources.GetBuiltinResource(typeof(Font), "Arial.ttf") as Font;
+            //text_pageCount.font = Resources.GetBuiltinResource(typeof(Font), "Arial.ttf") as Font;
             text_pageCount.color = Color.grey;
             text_pageCount.text = "%";
             text_pageCount.alignment = TextAnchor.MiddleRight;
@@ -171,7 +171,7 @@ namespace XFramework.Console
             text_input.rectTransform.anchorMin = new Vector2(0, 0);
             text_input.rectTransform.anchorMax = new Vector2(1, 1);
             text_input.rectTransform.pivot = new Vector2(0.5f, 0.5f);
-            text_input.font = Resources.GetBuiltinResource(typeof(Font), "Arial.ttf") as Font;
+            //text_input.font = Resources.GetBuiltinResource(typeof(Font), "Arial.ttf") as Font;
             text_input.color = Color.white;
             text_input.supportRichText = false;
 
@@ -239,34 +239,35 @@ namespace XFramework.Console
 
         private void OnUpdate()
         {
-            if (Input.GetKeyDown(KeyCode.UpArrow))
-            {
-                if (currentCmd == null)
-                {
-                    currentCmd = cmdCache.Last;
-                }
-                else if (currentCmd.Previous != null)
-                {
-                    currentCmd = currentCmd.Previous;
-                }
-                else
-                {
-                    return;
-                }
-                input.text = currentCmd?.Value;
-            }
-            else if (Input.GetKeyDown(KeyCode.DownArrow))
-            {
-                if (currentCmd != null && currentCmd.Next != null)
-                {
-                    currentCmd = currentCmd.Next;
-                }
-                else
-                {
-                    return;
-                }
-                input.text = currentCmd?.Value;
-            }
+            
+            //if (Input.GetKeyDown(KeyCode.UpArrow))
+            //{
+            //    if (currentCmd == null)
+            //    {
+            //        currentCmd = cmdCache.Last;
+            //    }
+            //    else if (currentCmd.Previous != null)
+            //    {
+            //        currentCmd = currentCmd.Previous;
+            //    }
+            //    else
+            //    {
+            //        return;
+            //    }
+            //    input.text = currentCmd?.Value;
+            //}
+            //else if (Input.GetKeyDown(KeyCode.DownArrow))
+            //{
+            //    if (currentCmd != null && currentCmd.Next != null)
+            //    {
+            //        currentCmd = currentCmd.Next;
+            //    }
+            //    else
+            //    {
+            //        return;
+            //    }
+            //    input.text = currentCmd?.Value;
+            //}
         }
     }
 }

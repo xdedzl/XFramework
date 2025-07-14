@@ -81,7 +81,7 @@ namespace XFramework.Entity
                 {
                     m_EntityDic.Remove(item.Id);
                     m_EntityInfoDic.Remove(item.Id);
-                    GameObject.Destroy(item.gameObject);
+                    UnityEngine.Object.Destroy(item.gameObject);
                 }
                 m_EntityContainerDic.Remove(key);
             }
@@ -134,7 +134,7 @@ namespace XFramework.Entity
         /// <param name="quaternion">朝向</param>
         /// <param name="parent">实体父物体</param>
         /// <returns>实体</returns>
-        public T Allocate<T>(string key, IEntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null) where T : Entity
+        public T Allocate<T>(string key, IEntityData entityData=null, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null) where T : Entity
         {
             return Allocate(key, entityData, pos, quaternion, parent, id) as T;
         }
@@ -163,15 +163,20 @@ namespace XFramework.Entity
         /// <param name="quaternion">角度</param>
         /// <param name="parent">实体父物体</param>
         /// <returns></returns>
-        public Entity Allocate(string key, IEntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null)
+        public Entity Allocate(string key, IEntityData entityData=null, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null)
         {
+            if (!TryGetContainer(key, out EntityContainer _))
+            {
+                var obj = new GameObject(key + "templete");
+                AddTemplate<CommonEntity>(obj);
+            }
             var entityContainer = GetContainer(key);
             id ??= Guid.NewGuid().ToString();
 
             if (m_EntityDic.ContainsKey(id))
             {
                 Entity e = m_EntityDic[id];
-                throw new XFrameworkException($"[EntityError] id is already occupied.  Entity {e.ToString()}");
+                throw new XFrameworkException($"[EntityError] id is already occupied.  Entity {e}");
             }
 
             var entity = entityContainer.Allocate(id, pos, quaternion, entityData, parent);

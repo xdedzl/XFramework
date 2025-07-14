@@ -28,4 +28,29 @@
         /// </summary>
         public virtual void OnExit() { }
     }
+
+    public abstract class FsmStateTowLevel : FsmState
+    {
+        protected int currentSubState { get; private set; } = -1;
+        protected void ChangeSubState(int state)
+        {
+            if(currentSubState == state)
+            {
+                return;
+            }
+            OnSubStateExit(currentSubState);
+            currentSubState = state;
+            OnSubStateEnter(currentSubState);
+        }
+
+        protected virtual void OnSubStateExit(int state)
+        {
+
+        }
+
+        protected virtual void OnSubStateEnter(int state)
+        {
+
+        }
+    }
 }

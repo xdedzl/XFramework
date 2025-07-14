@@ -101,7 +101,7 @@ namespace XFramework.Fsm
         /// <param name="typeFsm">状态机类型</param>
         /// <param name="typeState">目标状态</param>
         /// <param name="parms">参数</param>
-        public void ChanegState(Type typeFsm, Type typeState, params object[] parms)
+        public void ChangeState(Type typeFsm, Type typeState, params object[] parms)
         {
             if (!typeFsm.IsSubclassOf(typeof(IFsm)) || !typeState.IsSubclassOf(typeof(FsmState)))
             {
