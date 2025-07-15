@@ -78,13 +78,13 @@ namespace XFramework.Entity
                 Entity entity;
                 if(gameObject.TryGetComponent(type, out Component c))
                 {
-                    entity = c as Entity; 
+                    entity = c as Entity;
+                    entity.name = name;
+                    entity.ContainerName = this.name;
                 }
                 else
                 {
                     entity = gameObject.AddComponent(type) as Entity;
-                    entity.name = name;
-                    entity.ContainerName = this.name;
                     entity.OnInit();
                 }
                 return entity;
