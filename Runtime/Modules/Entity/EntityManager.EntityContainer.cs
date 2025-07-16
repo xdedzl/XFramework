@@ -85,6 +85,8 @@ namespace XFramework.Entity
                 else
                 {
                     entity = gameObject.AddComponent(type) as Entity;
+                    entity.name = name;
+                    entity.ContainerName = this.name;
                     entity.OnInit();
                 }
                 return entity;

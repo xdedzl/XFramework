@@ -105,6 +105,26 @@ namespace XFramework
             return new Vector2(v.x, v.y);
         }
 
+        public static Vector2Int Top(this Vector2Int v)
+        {
+            return new Vector2Int(v.x, v.y + 1);
+        }
+
+        public static Vector2Int Bottom(this Vector2Int v)
+        {
+            return new Vector2Int(v.x, v.y - 1);
+        }
+
+        public static Vector2Int Left(this Vector2Int v)
+        {
+            return new Vector2Int(v.x - 1, v.y);
+        }
+
+        public static Vector2Int Right(this Vector2Int v)
+        {
+            return new Vector2Int(v.x + 1, v.y);
+        }
+
         public static Vector2 Rotate90(this Vector2 v)
         {
             return new Vector2(v.y, -v.x);
