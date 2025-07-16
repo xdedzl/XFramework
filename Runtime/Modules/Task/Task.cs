@@ -1,4 +1,5 @@
 ﻿using System;
+using UnityEngine;
 
 namespace XFramework.Tasks
 {
@@ -122,6 +123,31 @@ namespace XFramework.Tasks
                 }
                 IsDone = isDone;
             }
+        }
+    }
+
+    public class TimeTask: TaskBase
+    {
+        private readonly float time;
+        private float pastTime;
+
+        public TimeTask(float time)
+        {
+            this.time = time;
+        }
+
+        public override void Update()
+        {
+            pastTime += Time.deltaTime;
+            if (pastTime >= time)
+            {
+                IsDone = true;
+            }
+        }
+
+        public static TimeTask Create(float time)
+        {
+            return new TimeTask(time);
         }
     }
 
