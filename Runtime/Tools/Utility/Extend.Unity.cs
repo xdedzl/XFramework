@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -123,6 +124,11 @@ namespace XFramework
         public static Vector2Int Right(this Vector2Int v)
         {
             return new Vector2Int(v.x + 1, v.y);
+        }
+
+        public static Vector2Int Normalize(this Vector2Int v)
+        {
+            return new Vector2Int(Math.Sign(v.x), Math.Sign(v.y));
         }
 
         public static Vector2 Rotate90(this Vector2 v)
