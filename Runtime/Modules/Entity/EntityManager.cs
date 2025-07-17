@@ -54,14 +54,14 @@ namespace XFramework.Entity
         /// <param name="key">key</param>
         /// <param name="type">类型</param>
         /// <param name="template">模板</param>
-        public void AddTemplate(string key, System.Type type, GameObject template)
+        public void AddTemplate(string key, System.Type type, GameObject template, bool createEntityRoot=true)
         {
             if (m_EntityContainerDic.ContainsKey(key))
             {
                 Debug.LogWarning("请勿重复添加");
                 return;
             }
-            EntityContainer container = new EntityContainer(type, key, template);
+            EntityContainer container = new(type, key, template, createEntityRoot);
 
             m_EntityContainerDic.Add(key, container);
         }

@@ -32,6 +32,10 @@ namespace XFramework.Entity
             /// 实体池
             /// </summary>
             private readonly Stack<Entity> m_Pool;
+            /// <summary>
+            /// 所有entity的父物体
+            /// </summary>
+            private Transform entityRoot;
 
             /// <summary>
             /// 构造一个实体容器
@@ -39,7 +43,7 @@ namespace XFramework.Entity
             /// <param name="type">实体类型</param>
             /// <param name="name">容器名</param>
             /// <param name="template">实体模板</param>
-            public EntityContainer(Type type, string name, GameObject template)
+            public EntityContainer(Type type, string name, GameObject template, bool cretaeEntityRoot)
             {
                 if (!type.IsSubclassOf(typeof(Entity)))
                 {
@@ -51,6 +55,10 @@ namespace XFramework.Entity
                 m_Template = template;
                 m_Entities = new List<Entity>();
                 m_Pool = new Stack<Entity>();
+                if (cretaeEntityRoot)
+                {
+                    entityRoot = new GameObject(name).transform;
+                }
             }
 
             /// <summary>
@@ -74,7 +82,10 @@ namespace XFramework.Entity
             private Entity Instantiate(Vector3 pos, Quaternion quaternion, Transform parent)
             {
                 GameObject gameObject = GameObject.Instantiate(m_Template, pos, quaternion, parent);
-
+                if (entityRoot)
+                {
+                    gameObject.transform.parent = entityRoot;
+                }
                 Entity entity;
                 if(gameObject.TryGetComponent(type, out Component c))
                 {
@@ -132,6 +143,10 @@ namespace XFramework.Entity
                 {
                     m_Entities.Remove(entity);
                     m_Pool.Push(entity);
+                    if(entityRoot != entity.transform.parent)
+                    {
+                        entity.transform.parent = entityRoot;
+                    }
                     entity.OnRecycle();
                     return true;
                 }

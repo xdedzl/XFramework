@@ -1,4 +1,6 @@
-﻿namespace XFramework
+﻿using XFramework.Event;
+
+namespace XFramework
 {
     public abstract class GameModuleBase<T> : IGameModule where T : GameModuleBase<T>
     {
@@ -25,7 +27,7 @@
                     return m_instance;
                 }
 
-                throw new XFrameworkException($"must load model before use it. ModuleName: {typeof(T).Name} use --> GameEntry.AddModule ");
+                throw new XFrameworkException($"must load module before use it. ModuleName: {typeof(T).Name} use --> GameEntry.AddModule ");
             }
         }
         /// <summary>
@@ -38,5 +40,21 @@
         /// <param name="elapseSeconds">逻辑运行时间，以秒为单位</param>
         /// <param name="realElapseSeconds">真实运行时间，以秒为单位</param>
         public virtual void Update(float elapseSeconds, float realElapseSeconds) { }
+    }
+
+    public abstract class GameModuleWithEvent<T> : GameModuleBase<T> where T : GameModuleBase<T>
+    {
+        private readonly RegersterHelper regersterHelper;
+
+        public GameModuleWithEvent()
+        {
+            regersterHelper = RegersterHelper.Create(this);
+            regersterHelper.Register();
+        }
+
+        public override void Shutdown()
+        {
+            regersterHelper.UnRegister();
+        }
     }
 }

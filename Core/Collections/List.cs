@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace XFramework.Collections
 {
-    public class List<T> : IList<T>
+    public class XList<T> : IList<T>
     {
         ListNode<T> firstNode;
         ListNode<T> lastNode;
