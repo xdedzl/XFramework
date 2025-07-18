@@ -33,20 +33,36 @@ namespace XFramework
                 return Vector3.Slerp(v1, v2, t);
             }
 
-            public static bool IsBetweenPoints(Vector2Int p1, Vector2Int p2, Vector2Int p)
+            public static bool IsBetweenPoints(Vector2Int p1, Vector2Int p2, Vector2Int p, bool containP1=false, bool containP2=false)
             {
                 if(p1.x == p2.x && p2.x == p.x)
                 {
                     var minX = Math.Min(p1.x, p2.x);
                     var maxX = Math.Max(p1.x, p2.x);
-                    return p.x >= minX && p.x <= maxX;
+                    if(p.x > minX && p.x < maxX)
+                    {
+                        return true;
+                    }
                 }
-
-                if (p1.y == p2.y && p2.y == p.y)
+                else if (p1.y == p2.y && p2.y == p.y)
                 {
                     var minY = Math.Min(p1.y, p2.y);
                     var maxY = Math.Max(p1.y, p2.y);
-                    return p.y >= minY && p.y <= maxY;
+                    if(p.y > minY && p.y < maxY)
+                    {
+                        return true;
+                    }
+                }
+
+                if(containP1 && p1==p)
+                {
+                    return true;
+                }
+
+
+                if (containP2 && p2 == p)
+                {
+                    return true;
                 }
 
                 return false;
