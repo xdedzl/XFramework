@@ -35,20 +35,24 @@ namespace XFramework
 
             public static bool IsBetweenPoints(Vector2Int p1, Vector2Int p2, Vector2Int p, bool containP1=false, bool containP2=false)
             {
+                if(p.x == 9 && p.y == -1)
+                {
+                    var a = 1;
+                }
                 if(p1.x == p2.x && p2.x == p.x)
                 {
-                    var minX = Math.Min(p1.x, p2.x);
-                    var maxX = Math.Max(p1.x, p2.x);
-                    if(p.x > minX && p.x < maxX)
+                    var minY = Math.Min(p1.y, p2.y);
+                    var maxY = Math.Max(p1.y, p2.y);
+                    if (p.y > minY && p.y < maxY)
                     {
                         return true;
                     }
                 }
                 else if (p1.y == p2.y && p2.y == p.y)
                 {
-                    var minY = Math.Min(p1.y, p2.y);
-                    var maxY = Math.Max(p1.y, p2.y);
-                    if(p.y > minY && p.y < maxY)
+                    var minX = Math.Min(p1.y, p2.x);
+                    var maxX = Math.Max(p1.x, p2.x);
+                    if (p.x > minX && p.x < maxX)
                     {
                         return true;
                     }
