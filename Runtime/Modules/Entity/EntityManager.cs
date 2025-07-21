@@ -49,19 +49,27 @@ namespace XFramework.Entity
         }
 
         /// <summary>
+        /// 添加模板
+        /// </summary>
+        public void AddTemplate<T>(string key, GameObject template, string entityRootName) where T : Entity
+        {
+            AddTemplate(key, typeof(T), template, true, entityRootName);
+        }
+
+        /// <summary>
         /// 设置模板
         /// </summary>
         /// <param name="key">key</param>
         /// <param name="type">类型</param>
         /// <param name="template">模板</param>
-        public void AddTemplate(string key, System.Type type, GameObject template, bool createEntityRoot=true)
+        public void AddTemplate(string key, System.Type type, GameObject template, bool createEntityRoot=true, string entityRootName="")
         {
             if (m_EntityContainerDic.ContainsKey(key))
             {
                 Debug.LogWarning("请勿重复添加");
                 return;
             }
-            EntityContainer container = new(type, key, template, createEntityRoot);
+            EntityContainer container = new(type, key, template, createEntityRoot, "");
 
             m_EntityContainerDic.Add(key, container);
         }
@@ -99,7 +107,7 @@ namespace XFramework.Entity
         /// <returns>实体</returns>
         public T Allocate<T>(Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null) where T : Entity
         {
-            return Allocate<T>(null, pos, quaternion, parent, id) as T;
+            return Allocate<T>(entityData:null, pos, quaternion, parent, id) as T;
         }
 
         /// <summary>
@@ -137,6 +145,21 @@ namespace XFramework.Entity
         public T Allocate<T>(string key, IEntityData entityData=null, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null) where T : Entity
         {
             return Allocate(key, entityData, pos, quaternion, parent, id) as T;
+        }
+
+        /// <summary>
+        /// 分配实体
+        /// </summary>
+        /// <typeparam name="T">实体子类型</typeparam>
+        /// <param name="id">实体编号</param>
+        /// <param name="key">键值</param>
+        /// <param name="pos">位置</param>
+        /// <param name="quaternion">朝向</param>
+        /// <param name="parent">实体父物体</param>
+        /// <returns>实体</returns>
+        public T Allocate<T>(string key, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null) where T : Entity
+        {
+            return Allocate(key, null, pos, quaternion, parent, id) as T;
         }
 
         /// <summary>

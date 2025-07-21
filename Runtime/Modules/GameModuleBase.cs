@@ -57,4 +57,9 @@ namespace XFramework
             regersterHelper.UnRegister();
         }
     }
+
+    public abstract class GameModuleBaseNoTick
+    {
+
+    }
 }

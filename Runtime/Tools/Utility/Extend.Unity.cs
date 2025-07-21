@@ -325,10 +325,14 @@ namespace XFramework
         {
             Vector3 zero = Vector3.zero;
             body.angularVelocity = zero;
+#if UNITY_6000
             body.linearVelocity = zero;
+#else
+            body.velocity = zero;
+#endif
         }
 
-        #endregion
+#endregion
 
         #region Quaternion 加减貌似只在其他两个轴为0的时候起作用
 

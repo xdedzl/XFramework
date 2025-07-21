@@ -17,6 +17,18 @@ namespace XFramework.Entity
         /// </summary>
         public string ContainerName { get; internal set; }
 
+        public Vector3 position
+        {
+            get
+            {
+                return transform.position;
+            }
+            set
+            {
+                transform.position = value;
+            }
+        }
+
         /// <summary>
         /// 初始化
         /// </summary>
