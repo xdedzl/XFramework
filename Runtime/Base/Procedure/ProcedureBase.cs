@@ -29,6 +29,11 @@ namespace XFramework
             m_currentSubProcedure?.OnUpdate();
         }
 
+        public override void OnExit()
+        {
+            m_currentSubProcedure?.OnExit();
+        }
+
         /// <summary>
         /// 切换子流程
         /// </summary>
@@ -36,9 +41,13 @@ namespace XFramework
         /// <param name="args">参数列表</param>
         public void ChangeSubProcedure<T>(params object[] args) where T : SubProcedureBase, new()
         {
-            m_subProcedureBases = m_subProcedureBases ?? new List<SubProcedureBase>();
+            m_subProcedureBases ??= new List<SubProcedureBase>();
 
             m_currentSubProcedure?.OnExit();
+            if(typeof(T) == m_currentSubProcedure?.GetType())
+            {
+                return;
+            }
 
             foreach (var item in m_subProcedureBases)
             {
@@ -51,6 +60,8 @@ namespace XFramework
             }
 
             m_currentSubProcedure = new T();
+            m_currentSubProcedure._parent = this;
+            m_currentSubProcedure.OnInit();
             m_currentSubProcedure.OnEnter(args);
             m_subProcedureBases.Add(m_currentSubProcedure);
         }
@@ -68,5 +79,36 @@ namespace XFramework
     /// <summary>
     /// 子流程基类
     /// </summary>
-    public abstract class SubProcedureBase : FsmState { }
+    public abstract class SubProcedureBase
+    {
+        internal ProcedureBase _parent;
+
+        public virtual void OnInit() { }
+        /// <summary>
+        /// 进入该状态
+        /// </summary>
+        /// <param name="parms">启动参数</param>
+        public virtual void OnEnter(params object[] parms) { }
+
+        /// <summary>
+        /// 每帧运行
+        /// </summary>
+        public virtual void OnUpdate() { }
+
+        /// <summary>
+        /// 离开该状态
+        /// </summary>
+        public virtual void OnExit() { }
+    }
+
+    public abstract class SubProcedureBase<T>: SubProcedureBase where T : ProcedureBase
+    {
+        public T Parent
+        {
+            get
+            {
+                return _parent as T;
+            }
+        }
+    }
 }

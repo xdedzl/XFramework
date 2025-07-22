@@ -6,6 +6,7 @@
     "unity": "2018.3",
     "license": "Apache",
     "dependencies": {
-        "com.unity.textmeshpro":"2.0.1"
+        "com.unity.textmeshpro":"2.0.1",
+        "com.unity.nuget.newtonsoft-json": "3.2.1"
     }
 }

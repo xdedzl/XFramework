@@ -100,5 +100,14 @@ namespace XFramework.Tasks
         {
             TaskManager.Instance.StartTask(task);
         }
+
+        /// <summary>
+        /// 任务终止
+        /// </summary>
+        /// <param name="task">任务</param>
+        public static void Stop(this ITask task)
+        {
+            TaskManager.Instance.StopTask(task);
+        }
     }
 }

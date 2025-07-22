@@ -151,11 +151,11 @@ namespace XFramework.Tasks
         }
     }
 
-    public class Task
-    {
-        public static ITask First()
-        {
-            return new SingleTask(() => { return true; });
-        } 
-    }
+    //public class Task
+    //{
+    //    public static ITask First()
+    //    {
+    //        return new SingleTask(() => { return true; });
+    //    } 
+    //}
 }

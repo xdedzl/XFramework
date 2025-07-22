@@ -26,6 +26,15 @@ namespace XFramework.Tasks
             m_Tasks.Add(task);
         }
 
+        /// <summary>
+        /// 终止一个任务
+        /// </summary>
+        /// <param name="task"></param>
+        public void StopTask(ITask task)
+        {
+            m_Tasks.Remove(task);
+        }
+
         public void Update()
         {
             m_ToRemove.Clear();
