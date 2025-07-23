@@ -6,11 +6,14 @@ using XFramework.Resource;
 
 namespace XFramework.UI
 {
-    [DependenceModule(typeof(ResourceManager))]
+    class MainPanelAttribute : Attribute { }
+
+
+
     /// <summary>
-    /// ä¸€ä¸ªä½¿ç”¨å­—å…¸ç®¡ç†çš„UIç®¡ç†å™¨
+    /// Ò»¸öÊ¹ÓÃ×Öµä¹ÜÀíµÄUI¹ÜÀíÆ÷
     /// </summary>
-    public class UIMgrDicType : IUIManager
+    public class UIManager : GameModuleBase<UIManager>
     {
         private RectTransform canvasTransform;
         private RectTransform CanvasTransform
@@ -26,35 +29,28 @@ namespace XFramework.UI
         }
 
         /// <summary>
-        /// å­˜å‚¨æ‰€æœ‰é¢æ¿Prefabçš„è·¯å¾„
+        /// ´æ´¢ËùÓĞÃæ°åPrefabµÄÂ·¾¶
         /// </summary>
         private Dictionary<string, string> m_PanelPathDict = new Dictionary<string, string>();
         /// <summary>
-        /// ä¿å­˜æ‰€æœ‰å®ä¾‹åŒ–é¢æ¿çš„æ¸¸æˆç‰©ä½“èº«ä¸Šçš„BasePanelç»„ä»¶
+        /// ±£´æËùÓĞÊµÀı»¯Ãæ°åµÄÓÎÏ·ÎïÌåÉíÉÏµÄBasePanel×é¼ş
         /// </summary>
         private Dictionary<string, PanelBase> m_PanelDict = new Dictionary<string, PanelBase>();
         /// <summary>
-        /// å¤„äºæ‰“å¼€çŠ¶æ€çš„é¢æ¿å­—å…¸ï¼Œkeyä¸ºå±‚çº§
+        /// ´¦ÓÚ´ò¿ª×´Ì¬µÄÃæ°å×Öµä£¬keyÎª²ã¼¶
         /// </summary>
         private Dictionary<int, List<PanelBase>> m_OnDisplayPanelDic = new Dictionary<int, List<PanelBase>>();
 
-        private ResourceManager m_ResMgr;
 
-        public UIMgrDicType()
+        public UIManager()
         {
             InitPathDic();
-
-            m_ResMgr = GameEntry.GetModule<ResourceManager>();
-            if (m_ResMgr == null)
-            {
-                throw new XFrameworkException("[UIMgr] åŠ è½½UIæ¨¡å—ä¹‹å‰éœ€è¦åŠ è½½Resourceæ¨¡å—");
-            }
         }
 
         /// <summary>
-        /// æ‰“å¼€é¢æ¿
+        /// ´ò¿ªÃæ°å
         /// </summary>
-        public void OpenPanel(string uiname, bool closable, params object[] args)
+        public void OpenPanel(string uiname, params object[] args)
         {
             PanelBase panel = GetPanel(uiname);
             if (null == panel)
@@ -64,8 +60,6 @@ namespace XFramework.UI
             {
                 if (m_OnDisplayPanelDic[panel.Level].Contains(panel))
                 {
-                    if (closable) 
-                        ClosePanel(uiname);
                     return;
                 }
             }
@@ -75,7 +69,7 @@ namespace XFramework.UI
             }
 
             m_OnDisplayPanelDic[panel.Level].Add(panel);
-            if (m_OnDisplayPanelDic.ContainsKey(panel.Level - 1)) // å¯ä»¥æ”¹ä¸º if(panel.level > 0)
+            if (m_OnDisplayPanelDic.ContainsKey(panel.Level - 1)) // ¿ÉÒÔ¸ÄÎª if(panel.level > 0)
             {
                 m_OnDisplayPanelDic[panel.Level - 1].End().OnPause();
             }
@@ -85,7 +79,7 @@ namespace XFramework.UI
         }
 
         /// <summary>
-        /// å…³é—­é¢æ¿
+        /// ¹Ø±ÕÃæ°å
         /// </summary>
         public void ClosePanel(string uiname)
         {
@@ -121,11 +115,11 @@ namespace XFramework.UI
         }
 
         /// <summary>
-        /// è·å–é¢æ¿
+        /// »ñÈ¡Ãæ°å
         /// </summary>
-        public PanelBase GetPanel(string uiname)
+        private PanelBase GetPanel(string uiname)
         {
-            if(m_PanelDict.TryGetValue(uiname, out PanelBase panel))
+            if (m_PanelDict.TryGetValue(uiname, out PanelBase panel))
             {
                 if (panel == null)
                     throw new XFrameworkException("[UI] The panel you want has been unloaded");
@@ -133,20 +127,10 @@ namespace XFramework.UI
             }
             else
             {
-                // æ ¹æ®prefabå»å®ä¾‹åŒ–é¢æ¿
+                // ¸ù¾İprefabÈ¥ÊµÀı»¯Ãæ°å
                 m_PanelPathDict.TryGetValue(uiname, out string path);
-                GameObject instPanel = GameObject.Instantiate(m_ResMgr.Load<GameObject>(path));
-
-                // UICoreä¸æ´¾ç”Ÿç±»ä¸ä¸€å®šåœ¨ä¸€ä¸ªç¨‹åºé›†ç±»ï¼Œæ‰€ä»¥ä¸èƒ½ç›´æ¥ç”¨Type.GetType
-                Assembly asmb = Assembly.Load("Assembly-CSharp");
-                Type type = asmb.GetType(uiname);
-
-                if (type == null || !type.IsSubclassOf(typeof(PanelBase)))
-                {
-                    throw new XFrameworkException("[UI] wrong panel name or panel is not inherit BasePanel");
-                }
-
-                PanelBase basePanel = instPanel.AddComponent(type) as PanelBase;
+                GameObject instPanel = DefaultPanelLoader(path);
+                PanelBase basePanel = instPanel.GetComponent<PanelBase>();
                 basePanel.Init(uiname);
                 m_PanelDict.Add(uiname, basePanel);
 
@@ -160,7 +144,7 @@ namespace XFramework.UI
                     for (int i = 0, length = CanvasTransform.childCount; i < length; i++)
                     {
                         string levelName = CanvasTransform.GetChild(i).name;
-                        if(int.TryParse(levelName[levelName.Length - 1].ToString(), out int level))
+                        if (int.TryParse(levelName[levelName.Length - 1].ToString(), out int level))
                         {
                             if (basePanel.Level < level)
                             {
@@ -185,7 +169,7 @@ namespace XFramework.UI
         }
 
         /// <summary>
-        /// å…³é—­æœ€ä¸Šå±‚ç•Œé¢
+        /// ¹Ø±Õ×îÉÏ²ã½çÃæ
         /// </summary>
         public void CloseTopPanel()
         {
@@ -195,15 +179,15 @@ namespace XFramework.UI
                 if (item > level)
                     level = item;
             }
-            if(m_OnDisplayPanelDic.TryGetValue(level, out List<PanelBase> panels))
+            if (m_OnDisplayPanelDic.TryGetValue(level, out List<PanelBase> panels))
             {
-                if(panels.Count > 0)
+                if (panels.Count > 0)
                 {
                     panels.End().OnClose();
                     panels.End().CloseSubPanels();
                 }
 
-                if(panels.Count == 1)
+                if (panels.Count == 1)
                 {
                     m_OnDisplayPanelDic.Remove(level);
                 }
@@ -211,11 +195,11 @@ namespace XFramework.UI
         }
 
         /// <summary>
-        /// å…³é—­æŸä¸€å±‚çº§çš„æ‰€æœ‰é¢æ¿
+        /// ¹Ø±ÕÄ³Ò»²ã¼¶µÄËùÓĞÃæ°å
         /// </summary>
         public void CloseLevelPanel(int level)
         {
-            if(m_OnDisplayPanelDic.TryGetValue(level, out List<PanelBase> panels))
+            if (m_OnDisplayPanelDic.TryGetValue(level, out List<PanelBase> panels))
             {
                 foreach (var item in panels)
                 {
@@ -227,11 +211,11 @@ namespace XFramework.UI
         }
 
         /// <summary>
-        /// åˆå§‹åŒ–é¢æ¿é¢„åˆ¶ä½“è·¯å¾„å­—å…¸
+        /// ³õÊ¼»¯Ãæ°åÔ¤ÖÆÌåÂ·¾¶×Öµä
         /// </summary>
         private void InitPathDic()
         {
-            string uipaths = Resources.Load<TextAsset>("UIPath").text;
+            string uipaths = Resources.Load<TextAsset>("Panels/UIPath").text;
             uipaths = uipaths.Replace("\"", "");
             uipaths = uipaths.Replace("\n", "");
             uipaths = uipaths.Replace("\r", "");
@@ -242,17 +226,26 @@ namespace XFramework.UI
                 nameAndPath = data[i].Split(':');
                 if (nameAndPath == null || nameAndPath.Length != 2)
                     continue;
-                string temp = nameAndPath[1] == "" ? nameAndPath[0] : nameAndPath[1] + "/" + nameAndPath[0];
-                //m_PanelPathDict.Add(nameAndPath[0], rootPath + temp);
-                m_PanelPathDict.Add(nameAndPath[0], nameAndPath[1] + "/" + nameAndPath[0] + ".prefab");
+                m_PanelPathDict.Add(nameAndPath[0].Trim(), nameAndPath[1].Trim());
             }
         }
 
-        #region æ¥å£å®ç°
+        internal void RegisterExistPanel(PanelBase panel)
+        {
 
-        public int Priority { get { return 200; } }
+        }
 
-        public void Update(float elapseSeconds, float realElapseSeconds)
+        private GameObject DefaultPanelLoader(string path)
+        {
+            var res = Resources.Load<GameObject>(path);
+            return GameObject.Instantiate(res);
+        }
+
+        #region ½Ó¿ÚÊµÏÖ
+
+        public override int Priority => 200;
+
+        public override void Update(float elapseSeconds, float realElapseSeconds)
         {
             foreach (var item in m_OnDisplayPanelDic.Values)
             {
@@ -263,7 +256,7 @@ namespace XFramework.UI
             }
         }
 
-        public void Shutdown()
+        public override void Shutdown()
         {
             m_PanelDict?.Clear();
             m_PanelPathDict.Clear();

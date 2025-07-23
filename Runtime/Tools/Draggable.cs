@@ -26,12 +26,13 @@ namespace XFramework
         /// </summary>
         private Vector3 differ;
 
-        public UnityEvent onBeginDrag = new UnityEvent();
-        public UnityEvent onDrag = new UnityEvent();
-        public UnityEvent onEndDrag = new UnityEvent();
+        public UnityEvent onBeginDrag = new();
+        public UnityEvent onDrag = new();
+        public UnityEvent onEndDrag = new();
 
         public void OnBeginDrag(PointerEventData eventData)
         {
+            Debug.Log("OnBeginDrag");
             if (cloneDrag)
             {
                 target = Instantiate(gameObject).transform;

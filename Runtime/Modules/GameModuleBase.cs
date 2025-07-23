@@ -44,11 +44,11 @@ namespace XFramework
 
     public abstract class GameModuleWithEvent<T> : GameModuleBase<T> where T : GameModuleBase<T>
     {
-        private readonly RegersterHelper regersterHelper;
+        private readonly EventRegersterHelper regersterHelper;
 
         public GameModuleWithEvent()
         {
-            regersterHelper = RegersterHelper.Create(this);
+            regersterHelper = EventRegersterHelper.Create(this);
             regersterHelper.Register();
         }
 

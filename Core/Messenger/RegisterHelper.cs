@@ -4,10 +4,10 @@ using System.Reflection;
 
 namespace XFramework.Event
 {
-    public class MessageListenerAttribute : Attribute
+    public class EventListenerAttribute : Attribute
     {
         public string eventName;
-        public MessageListenerAttribute(string eventName)
+        public EventListenerAttribute(string eventName)
         {
             this.eventName = eventName;
         }
@@ -16,13 +16,13 @@ namespace XFramework.Event
     /// <summary>
     /// 消息自动化注册机
     /// </summary>
-    public class RegersterHelper
+    public class EventRegersterHelper
     {
         private readonly Dictionary<string, Delegate> m_delegates = new Dictionary<string, Delegate>();
 
-        public RegersterHelper() { }
+        public EventRegersterHelper() { }
 
-        public RegersterHelper(object listener)
+        public EventRegersterHelper(object listener)
         {
             InitEvent(listener);
         }
@@ -33,7 +33,7 @@ namespace XFramework.Event
 
             foreach (var method in methods)
             {
-                var attr = method.GetCustomAttribute<MessageListenerAttribute>();
+                var attr = method.GetCustomAttribute<EventListenerAttribute>();
                 if (attr != null)
                 {
                     var parms = method.GetParameters();
@@ -97,9 +97,9 @@ namespace XFramework.Event
         /// </summary>
         /// <param name="listener">监听者</param>
         /// <returns></returns>
-        public static RegersterHelper Create(object listener)
+        public static EventRegersterHelper Create(object listener)
         {
-            return new RegersterHelper(listener);
+            return new EventRegersterHelper(listener);
         }
     }
 }

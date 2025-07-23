@@ -128,7 +128,7 @@ namespace XFramework.Fsm
                 m_CurrentState?.OnExit();
                 if (!newState.isInit)
                 {
-                    newState.Init();
+                    newState.OnInit();
                     newState.isInit = true;
                 }
                 OnStateChange(m_CurrentState, newState);

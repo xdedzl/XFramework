@@ -112,7 +112,7 @@ public class GameBase : MonoBehaviour
         return Assembly.Load("Assembly-CSharp"); ;
     }
 
-    void Update()
+    protected virtual void Update()
     {
         GameEntry.ModuleUpdate(Time.deltaTime, Time.unscaledDeltaTime);
     }

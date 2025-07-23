@@ -8,6 +8,7 @@ namespace XFramework.UI
     public class Draggable : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHandler
     {
         public RectTransform targetRect;
+
         /// <summary>
         /// 鼠标在UI坐标上的位置
         /// </summary>

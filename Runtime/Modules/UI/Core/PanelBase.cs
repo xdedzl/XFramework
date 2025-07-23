@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
+using XFramework.Event;
 
 namespace XFramework.UI
 {
@@ -23,6 +24,8 @@ namespace XFramework.UI
 
         private ComponentFindHelper<XUIBase> m_ComponentFindHelper;
 
+        private readonly EventRegersterHelper regersterHelper;
+
         /// <summary>
         /// 面板初始化，只会执行一次，在Awake后start前执行
         /// </summary>
@@ -34,13 +37,13 @@ namespace XFramework.UI
             Vector3 rectSize = rect.localScale;
             rect.localScale = rectSize;
 
-            Reg();
+            OnInit();
         }
 
         /// <summary>
         /// 初始化UI组件
         /// </summary>
-        public virtual void Reg()
+        public virtual void OnInit()
         {
 
         }
@@ -139,7 +142,12 @@ namespace XFramework.UI
             return subPanel;
         }
 
-        public T Find<T>(string path) where T : UIObjectBase, new()
+        public T Find<T>(string path) where T : XUIBase
+        {
+            return this[path] as T;
+        }
+
+        public T FindNode<T>(string path) where T : UINodeBase, new()
         {
             var child = transform.Find(path);
             var uiObj = new T();
@@ -148,7 +156,7 @@ namespace XFramework.UI
         }
     }
 
-    public class UIObjectBase
+    public class UINodeBase
     {
         protected Transform transform;
         protected PanelBase panel;
@@ -170,7 +178,7 @@ namespace XFramework.UI
             this.panel = panel;
         }
 
-        public T Find<T>(string path) where T : UIObjectBase, new()
+        public T Find<T>(string path) where T : UINodeBase, new()
         {
             var child = transform.Find(path);
             var uiObj = new T();

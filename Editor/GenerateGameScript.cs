@@ -18,8 +18,7 @@ public class GenerateGame
 {
     // 需要忽略的模块
     public static Type[] ingoreTypes = new Type[] {
-        typeof(UIMgrDicType),
-        typeof(UIMgrStackType),
+
     };
 
     // 自定义模块属性名

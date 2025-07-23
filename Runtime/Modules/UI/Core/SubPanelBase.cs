@@ -32,7 +32,7 @@ namespace XFramework.UI
         public virtual void OnOpen() { }
         public virtual void OnClose() { }
 
-        public T Find<T>(string path) where T : UIObjectBase, new()
+        public T Find<T>(string path) where T : UINodeBase, new()
         {
             var child = transform.Find(path);
             var uiObj = new T();

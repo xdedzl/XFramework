@@ -10,7 +10,7 @@
         /// <summary>
         /// 初始化
         /// </summary>
-        public virtual void Init() { }
+        public virtual void OnInit() { }
 
         /// <summary>
         /// 进入该状态
