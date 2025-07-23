@@ -7,6 +7,8 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
+using Microsoft.CodeAnalysis;
+
 
 namespace XFramework.Console
 {
@@ -146,6 +148,7 @@ namespace XFramework.Console
 
         public object ExcuteCode(string code, string className, string method)
         {
+            //CSharpSyntaxTree
 #if QQQ
             CSharpCodeProvider codeProvider = new CSharpCodeProvider();
             CompilerParameters compilerParameters = new CompilerParameters();

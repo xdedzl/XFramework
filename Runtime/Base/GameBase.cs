@@ -29,13 +29,13 @@ public class GameBase : MonoBehaviour
             activeGame = this;
         }
 
+        DontDestroyOnLoad(this);
+
         OnInit();
 
         InitAllModel();
 
         EnterFirstProcedure();
-
-        DontDestroyOnLoad(this);
     }
 
     protected virtual void OnInit()
@@ -138,10 +138,11 @@ public class GameBase : MonoBehaviour
         }
     }
 
-    private void OnDestroy()
+    private void OnApplicationQuit()
     {
         if (activeGame == this)
         {
+            ProcedureManager.Instance.ChangeProcedure(null);
             GameEntry.CleraAllModule();
         }
     }

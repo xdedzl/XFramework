@@ -1,18 +1,28 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using XFramework.UI;
 
-public class PanelRegister: MonoBehaviour
+namespace XFramework.UI
 {
-    private void Start()
+
+    public class PanelRegister : MonoBehaviour
     {
-        var panel = GetComponent<PanelBase>();
+        public string panelName;
+        public bool openPanel = true;
 
-        if(panel != null)
+        private void Start()
         {
-            UIManager.Instance.RegisterExistPanel(panel);
-        }
-    }
+            if (string.IsNullOrEmpty(panelName))
+            {
+                return;
+            }
 
+            if (TryGetComponent<PanelBase>(out var panel))
+            {
+                UIManager.Instance.RegisterExistPanel(panelName, panel, openPanel);
+                DestroyImmediate(this);
+            }
+        }
+
+    }
 }

@@ -42,7 +42,7 @@ namespace XFramework.Fsm
         /// </summary>
         /// <typeparam name="T">状态类型</typeparam>
         /// <returns>状态</returns>
-        protected FsmState GetState<T>()
+        protected TState GetState<T>() where T : TState
         {
             return GetState(typeof(T));
         }
@@ -58,7 +58,6 @@ namespace XFramework.Fsm
             if (state == null)
             {
                 state = CreateState(type) as TState;
-                m_StateDic.Add(type.Name, state);
             }
 
             return state;
@@ -69,7 +68,7 @@ namespace XFramework.Fsm
         /// </summary>
         /// <typeparam name="T">状态类型</typeparam>
         /// <returns>状态</returns>
-        protected FsmState CreateState<T>()
+        protected TState CreateState<T>()
         {
             return CreateState(typeof(T));
         }
@@ -78,13 +77,14 @@ namespace XFramework.Fsm
         /// 创建一个状态
         /// </summary>
         /// <param name="type">状态类型</param>
-        protected FsmState CreateState(Type type)
+        protected TState CreateState(Type type)
         {
-            FsmState state = Utility.Reflection.CreateInstance<TState>(type);
+            TState state = Utility.Reflection.CreateInstance<TState>(type);
+            m_StateDic.Add(type.Name, state);
 
             if (!(state is TState))
                 throw new XFrameworkException("[FSM] state type error");
-
+            state.OnInit();
             return state;
         }
 
@@ -122,19 +122,19 @@ namespace XFramework.Fsm
         /// <param name="parms">启动参数</param>
         public void ChangeState(Type type, params object[] parms)
         {
-            TState newState = GetState(type);
+            TState newState = type is null? null : GetState(type);
             if (m_CurrentState != newState)
             {
                 m_CurrentState?.OnExit();
-                if (!newState.isInit)
-                {
-                    newState.OnInit();
-                    newState.isInit = true;
-                }
                 OnStateChange(m_CurrentState, newState);
                 m_CurrentState = newState;
-                m_CurrentState.OnEnter(parms);
+                m_CurrentState?.OnEnter(parms);
             }
+        }
+
+        public void ClearState()
+        {
+
         }
 
         /// <summary>

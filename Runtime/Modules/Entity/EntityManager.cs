@@ -69,7 +69,7 @@ namespace XFramework.Entity
                 Debug.LogWarning("请勿重复添加");
                 return;
             }
-            EntityContainer container = new(type, key, template, createEntityRoot, "");
+            EntityContainer container = new(type, key, template, createEntityRoot, entityRootName);
 
             m_EntityContainerDic.Add(key, container);
         }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Xml.Linq;
 using UnityEngine;
 using XFramework.Resource;
 
@@ -119,53 +120,62 @@ namespace XFramework.UI
         /// </summary>
         private PanelBase GetPanel(string uiname)
         {
-            if (m_PanelDict.TryGetValue(uiname, out PanelBase panel))
+            if (m_PanelDict.TryGetValue(uiname, out PanelBase _panel))
             {
-                if (panel == null)
+                if (_panel == null)
                     throw new XFrameworkException("[UI] The panel you want has been unloaded");
-                return panel;
+                return _panel;
             }
             else
             {
                 // 根据prefab去实例化面板
                 m_PanelPathDict.TryGetValue(uiname, out string path);
-                GameObject instPanel = DefaultPanelLoader(path);
-                PanelBase basePanel = instPanel.GetComponent<PanelBase>();
-                basePanel.Init(uiname);
-                m_PanelDict.Add(uiname, basePanel);
+                PanelBase panel = DefaultPanelLoader(path);
+                AddPanel(uiname, panel);
+                return panel;
+            }
+        }
 
-                Transform uiGroup = CanvasTransform.Find("Level" + basePanel.Level);
-                if (uiGroup == null)
+        private void AddPanel(string uiname, PanelBase panel)
+        {
+            if (m_PanelDict.ContainsKey(uiname))
+            {
+                throw new XFrameworkException("[UI] The panel you want add is already exist");
+            }
+
+            panel.Init(uiname);
+            m_PanelDict.Add(uiname, panel);
+
+            Transform uiGroup = CanvasTransform.Find("Level" + panel.Level);
+            if (uiGroup == null)
+            {
+                RectTransform rect;
+                rect = (new GameObject("Level" + panel.Level)).AddComponent<RectTransform>();
+
+                int siblingIndex = CanvasTransform.childCount;
+                for (int i = 0, length = CanvasTransform.childCount; i < length; i++)
                 {
-                    RectTransform rect;
-                    rect = (new GameObject("Level" + basePanel.Level)).AddComponent<RectTransform>();
-
-                    int siblingIndex = CanvasTransform.childCount;
-                    for (int i = 0, length = CanvasTransform.childCount; i < length; i++)
+                    string levelName = CanvasTransform.GetChild(i).name;
+                    if (int.TryParse(levelName[levelName.Length - 1].ToString(), out int level))
                     {
-                        string levelName = CanvasTransform.GetChild(i).name;
-                        if (int.TryParse(levelName[levelName.Length - 1].ToString(), out int level))
+                        if (panel.Level < level)
                         {
-                            if (basePanel.Level < level)
-                            {
-                                siblingIndex = i;
-                                break;
-                            }
+                            siblingIndex = i;
+                            break;
                         }
                     }
-                    rect.SetParent(CanvasTransform);
-                    rect.SetSiblingIndex(siblingIndex);
-                    rect.sizeDelta = CanvasTransform.GetComponent<UnityEngine.UI.CanvasScaler>().referenceResolution;
-                    rect.anchorMin = Vector2.zero;
-                    rect.anchorMax = Vector2.one;
-                    rect.anchoredPosition3D = Vector3.zero;
-                    rect.sizeDelta = Vector2.zero;
-                    rect.localScale = Vector3.one;
-                    uiGroup = rect;
                 }
-                instPanel.transform.SetParent(uiGroup, false);
-                return basePanel;
+                rect.SetParent(CanvasTransform);
+                rect.SetSiblingIndex(siblingIndex);
+                rect.sizeDelta = CanvasTransform.GetComponent<UnityEngine.UI.CanvasScaler>().referenceResolution;
+                rect.anchorMin = Vector2.zero;
+                rect.anchorMax = Vector2.one;
+                rect.anchoredPosition3D = Vector3.zero;
+                rect.sizeDelta = Vector2.zero;
+                rect.localScale = Vector3.one;
+                uiGroup = rect;
             }
+            panel.transform.SetParent(uiGroup, false);
         }
 
         /// <summary>
@@ -230,15 +240,19 @@ namespace XFramework.UI
             }
         }
 
-        internal void RegisterExistPanel(PanelBase panel)
+        internal void RegisterExistPanel(string name, PanelBase panel, bool openPanel=true)
         {
-
+            AddPanel(name, panel);
+            if (openPanel)
+            {
+                OpenPanel(name);
+            }
         }
 
-        private GameObject DefaultPanelLoader(string path)
+        private PanelBase DefaultPanelLoader(string path)
         {
             var res = Resources.Load<GameObject>(path);
-            return GameObject.Instantiate(res);
+            return GameObject.Instantiate(res).GetComponent<PanelBase>();
         }
 
         #region 接口实现

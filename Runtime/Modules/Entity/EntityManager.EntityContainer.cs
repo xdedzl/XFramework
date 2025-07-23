@@ -57,7 +57,7 @@ namespace XFramework.Entity
                 m_Pool = new Stack<Entity>();
                 if (cretaeEntityRoot)
                 {
-                    entityRootName = string.IsNullOrEmpty(entityRootName)? entityRootName : name;
+                    entityRootName = string.IsNullOrEmpty(entityRootName)? name : entityRootName;
                     var obj = GameObject.Find(entityRootName);
                     if (obj)
                     {

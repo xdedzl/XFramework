@@ -35,10 +35,6 @@ namespace XFramework
 
             public static bool IsBetweenPoints(Vector2Int p1, Vector2Int p2, Vector2Int p, bool containP1=false, bool containP2=false)
             {
-                if(p.x == -6 && p.y == -1)
-                {
-                    var a = 1;
-                }
                 if(p1.x == p2.x && p2.x == p.x)
                 {
                     var minY = Math.Min(p1.y, p2.y);
