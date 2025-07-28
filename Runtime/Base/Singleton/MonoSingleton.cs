@@ -78,7 +78,11 @@ namespace XFramework
         /// <summary>
         /// 当工程运行结束，在退出时机时候，不允许访问单例
         /// </summary>
-        public void OnApplicationQuit()
+        //public void OnApplicationQuit()
+        //{
+        //}
+
+        public void OnDestroy()
         {
             ApplicationIsQuitting = true;
         }

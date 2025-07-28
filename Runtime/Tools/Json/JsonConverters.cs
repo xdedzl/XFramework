@@ -2,6 +2,7 @@
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 
 namespace XFramework.Json
 {
@@ -76,12 +77,20 @@ namespace XFramework.Json
     public class PolyConverter : JsonConverter
     {
         private readonly string nameSpace;
+        private readonly string assembly;
 
         public PolyConverter() { }
 
-        public PolyConverter(string nameSpace = null)
+        public PolyConverter(string nameSpace=null)
         {
             this.nameSpace = nameSpace;
+            this.assembly = "Assembly-CSharp";
+        }
+
+        public PolyConverter(string nameSpace, string assembly)
+        {
+            this.nameSpace = nameSpace;
+            this.assembly = assembly;
         }
 
         public override bool CanConvert(Type objectType)
@@ -96,12 +105,14 @@ namespace XFramework.Json
             {
                 return null;
             }
+
+            var assembly = Assembly.Load(this.assembly);
             string typeName = jObject["type"]?.Value<string>();
             Type type;
             if (string.IsNullOrEmpty(nameSpace))
-                type = Type.GetType(typeName);
+                type = assembly.GetType(typeName);
             else
-                type = Type.GetType($"{nameSpace}.{typeName}");
+                type = assembly.GetType($"{nameSpace}.{typeName}");
 
             JToken dataToken = jObject["data"];
             if (dataToken == null || dataToken.Type == JTokenType.Null)

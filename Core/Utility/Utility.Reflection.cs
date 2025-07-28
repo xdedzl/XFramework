@@ -172,6 +172,12 @@ namespace XFramework
                 return false;
             }
 
+            public static T GetStaticFiled<T>(Type type, string filedName)
+            {
+                var filed = type.GetField(filedName, BindingFlags.NonPublic | BindingFlags.Static);
+                return (T)filed.GetValue(null);
+            }
+
             #region 反射性能优化
 
             public static PropertyWrapper<T> PropertyWrapper<T>(object target, PropertyInfo propertyInfo)
