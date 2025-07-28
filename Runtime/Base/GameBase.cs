@@ -114,7 +114,7 @@ public class GameBase : MonoBehaviour
 
     protected virtual void Update()
     {
-        GameEntry.ModuleUpdate(Time.deltaTime, Time.unscaledDeltaTime);
+        GameEntry.ModuleUpdate();
     }
 
     public void OnGUI()

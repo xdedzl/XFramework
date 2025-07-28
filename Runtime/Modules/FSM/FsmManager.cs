@@ -164,7 +164,7 @@ namespace XFramework.Fsm
 
         public override int Priority { get { return 0; } }
 
-        public override void Update(float elapseSeconds, float realElapseSeconds)
+        public override void Update()
         {
             foreach (var fsm in m_FsmDic.Values)
             {

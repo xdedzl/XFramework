@@ -259,7 +259,7 @@ namespace XFramework.UI
 
         public override int Priority => 200;
 
-        public override void Update(float elapseSeconds, float realElapseSeconds)
+        public override void Update()
         {
             foreach (var item in m_OnDisplayPanelDic.Values)
             {

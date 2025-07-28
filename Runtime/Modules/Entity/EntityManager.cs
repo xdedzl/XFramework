@@ -538,11 +538,11 @@ namespace XFramework.Entity
             m_EntityInfoDic.Clear();
         }
 
-        public override void Update(float elapseSeconds, float realElapseSeconds)
+        public override void Update()
         {
             foreach (var item in m_EntityContainerDic.Values)
             {
-                item.OnUpdate(elapseSeconds, realElapseSeconds);
+                item.OnUpdate();
             }
         }
 

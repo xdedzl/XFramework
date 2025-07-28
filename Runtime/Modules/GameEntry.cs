@@ -19,14 +19,12 @@ namespace XFramework
         /// <summary>
         /// 每帧运行
         /// </summary>
-        /// <param name="elapseSeconds">逻辑运行时间</param>
-        /// <param name="realElapseSeconds">真实运行时间</param>
-        public static void ModuleUpdate(float elapseSeconds, float realElapseSeconds)
+        public static void ModuleUpdate()
         {
             m_CurrentModule = m_GameModules.First;
             while (m_CurrentModule != null)
             {
-                m_CurrentModule.Value.Update(elapseSeconds, realElapseSeconds);
+                m_CurrentModule.Value.Update();
                 m_CurrentModule = m_CurrentModule.Next;
             }
         }

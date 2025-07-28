@@ -64,9 +64,7 @@ namespace XFramework.Entity
         /// <summary>
         /// 轮询
         /// </summary>
-        /// <param name="elapseSeconds">逻辑运行时间</param>
-        /// <param name="realElapseSeconds">真实运行时间</param>
-        public virtual void OnUpdate(float elapseSeconds, float realElapseSeconds) { }
+        public virtual void OnUpdate() { }
         /// <summary>
         /// 销毁
         /// </summary>

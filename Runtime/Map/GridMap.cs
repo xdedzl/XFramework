@@ -1,86 +1,104 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 namespace XFramework
 {
-    public enum GridDirection : int
-    {
-        TOP = 0,
-        RIGHT = 1,
-        BOTTOM = 2,
-        LEFT = 3
-    }
-
     /// <summary>
     /// 网格坐标系
     /// 方块在笛卡尔坐标系中的位置为方块中心点的位置
+    /// 忽略Z轴，todo要支持忽略不同轴
     /// </summary>
     public struct GridCoordinate
     {
-        public Vector2Int position;
+        public Vector2 position;
         //public float angle;
+        public Vector2 size;
 
-        public float size;
+        public readonly Vector2 halfSize => size * 0.5f;
 
-        private static Dictionary<Vector2Int, GridDirection> _Vector2GridDirection = new()
+        /// <summary>
+        /// 笛卡尔转网格坐标
+        /// </summary>
+        public readonly Vector2Int DCToGrid(Vector3 pos)
         {
-            {new Vector2Int(0, 1), GridDirection.TOP},
-            {new Vector2Int(1, 0), GridDirection.RIGHT},
-            {new Vector2Int(0, -1), GridDirection.BOTTOM},
-            {new Vector2Int(-1, 0), GridDirection.LEFT},
-        };
-        private static Vector2Int[] _Grid2VectorDirection =
-        {
-            new(0, 1),
-            new(1, 0),
-            new(0, -1),
-            new(-1, 0),
-        };
-
-        public static Vector2Int GridToVectorDirection(GridDirection direction)
-        {
-            return _Grid2VectorDirection[(int)direction];
-        }
-
-        public static GridDirection Vector2GridDirection(Vector2Int direction)
-        {
-            return _Vector2GridDirection[direction];
+            return DcToGrid(pos.XY());
         }
 
         /// <summary>
         /// 笛卡尔转网格坐标
         /// </summary>
-        public static Vector2Int DCToGrid(Vector3 pos)
+        public readonly Vector2Int DcToGrid(Vector2 pos)
         {
-            return new Vector2Int(Mathf.FloorToInt(pos.x), Mathf.FloorToInt(pos.y));
+            return new Vector2Int(Mathf.FloorToInt(pos.x / size.x), Mathf.FloorToInt(pos.y / size.y));
         }
 
-        /// <summary>
-        /// 笛卡尔转网格坐标
-        /// </summary>
-        public static Vector2Int DcToGrid(Vector2 pos)
+        public readonly Vector2Int WorldDCToGrid(Vector3 pos)
         {
-            return new Vector2Int(Mathf.FloorToInt(pos.x), Mathf.FloorToInt(pos.y));
+            return WorldDCToGrid(pos.XY());
+        }
+
+        public readonly Vector2Int WorldDCToGrid(Vector2 pos)
+        {
+            return DCToGrid(pos - position);
+        }
+
+        public readonly Vector2 DcToCenterDC(Vector3 pos)
+        {
+            return DcToCenterDC(pos.XY());
+        }
+
+        public readonly Vector2 DcToCenterDC(Vector2 pos)
+        {
+            return GridToDC(DcToGrid(pos)); 
+        }
+
+        public readonly Vector2 WorldDCToCenterDC(Vector3 pos)
+        {
+            return WorldDCToCenterDC(pos.XY());
+        }
+
+        public readonly Vector2 WorldDCToCenterDC(Vector2 pos)
+        {
+            pos -= position;
+            var centerDC = DcToCenterDC(pos);
+            return centerDC += position;
         }
 
         /// <summary>
         /// 网格转笛卡尔坐标
         /// </summary>
-        public static Vector2 GridToDC(Vector2Int pos)
+        public readonly Vector2 GridToDC(Vector2Int pos)
         {
-            return new Vector2(pos.x + 0.5f, pos.y + 0.5f);
+            return GridToDC(pos.x, pos.y);
         }
 
         /// <summary>
-        /// 通过笛卡尔坐标获取对应网格的笛卡尔坐标
+        /// 网格转笛卡尔坐标
         /// </summary>
-        public static Vector2 WorldToWorld(Vector2 pos)
+        public readonly Vector2 GridToDC(int x, int y)
         {
-            return new Vector2(Mathf.Floor(pos.x) + 0.5f, Mathf.Floor(pos.y) + 0.5f);
+            return new Vector2(x * size.x + halfSize.x, y * size.y + halfSize.y);
+        }
+
+        /// <summary>
+        /// 网格转笛卡尔坐标(世界空间)
+        /// </summary>
+        public readonly Vector2 GridToWorldDC(Vector2Int pos)
+        {
+            return GridToDC(pos) + position;
+        }
+
+        /// <summary>
+        /// 网格转笛卡尔坐标(世界空间)
+        /// </summary>
+        public readonly Vector2 GridToWorldDC(int x, int y)
+        {
+            return GridToDC(x, y) + position;
         }
     }
 
-    public class GridMap<T>
+    public class Grid<T> : IEnumerable
     {
         protected T[,] map; // 二维数组地图（0无障碍，1有障碍）
         protected Vector2Int offset;
@@ -88,21 +106,39 @@ namespace XFramework
         public int width { get { return map.GetLength(0); } }
         public int height { get { return map.GetLength(1); } }
 
-        public GridMap(int width, int height)
+        public Grid(int width, int height)
         {
             map = new T[width, height];
             offset = new Vector2Int(width / 2, height / 2);
+        }
+
+        public Grid(int width, int height, Vector2Int offset)
+        {
+            map = new T[width, height];
+            this.offset = offset;
         }
 
         public T this[Vector2Int pos]
         {
             get
             {
-                return map[pos.x + offset.x, pos.y + offset.y];
+                return this[pos.x, pos.y];
             }
             set
             {
-                map[pos.x + offset.x, pos.y + offset.y] = value;
+                this[pos.x, pos.y] = value;
+            }
+        }
+
+        public T this[int x, int y]
+        {
+            get
+            {
+                return map[x + offset.x, y + offset.y];
+            }
+            set
+            {
+                map[x + offset.x, y + offset.y] = value;
             }
         }
 
@@ -113,6 +149,22 @@ namespace XFramework
             if (x < 0 || y < 0 || x >= width || y >= height) return false;
             return true;
         }
+
+        public IEnumerator GetEnumerator()
+        {
+            foreach (var item in map)
+            {
+                yield return item;
+            }
+        }
+    }
+
+    public class GridMap<T> : Grid<T>
+    {
+        public GridMap(int width, int height) : base(width, height) { }
+
+        public GridMap(int width, int height, Vector2Int offset) : base(width, height, offset) { }
+        
     }
 
     public class AStarPathfinder

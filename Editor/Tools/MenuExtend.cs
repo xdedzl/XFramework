@@ -68,4 +68,45 @@ namespace XFramework.Editor
 
         }
     }
+
+
+    public static class BoxCollider2DEditor
+    {
+        [MenuItem("GameObject/Adjust BoxCollider2D to Sprites")]
+        private static void AdjustBoxColliderToSprites()
+        {
+            GameObject selectedObject = Selection.activeGameObject;
+            if (selectedObject == null)
+            {
+                Debug.LogError("请先选择一个GameObject");
+                return;
+            }
+
+            BoxCollider2D boxCollider = selectedObject.GetComponent<BoxCollider2D>();
+            if (boxCollider == null)
+            {
+                Debug.LogError("选中的GameObject没有BoxCollider2D组件");
+                return;
+            }
+
+            SpriteRenderer[] spriteRenderers = selectedObject.GetComponentsInChildren<SpriteRenderer>(true);
+            if (spriteRenderers.Length == 0)
+            {
+                Debug.LogWarning("没有找到子物体的SpriteRenderer组件");
+                return;
+            }
+
+            if(UUtility.Physics2D.TryUpdateBoxColliderBySprites(selectedObject, false))
+            {
+                Debug.Log("成功调整BoxCollider2D大小以匹配所有子物体SpriteRenderer");
+            }
+
+        }
+
+        [MenuItem("GameObject/Adjust BoxCollider2D to Sprites", true)]
+        private static bool ValidateAdjustBoxColliderToSprites()
+        {
+            return Selection.activeGameObject != null && Selection.activeGameObject.GetComponent<BoxCollider2D>() != null;
+        }
+    }
 }

@@ -10,6 +10,7 @@ namespace XFramework.Mathematics
     /// </summary>
     public static class Math2d
     {
+
         #region 向量
 
         /// <summary>
@@ -666,6 +667,41 @@ namespace XFramework.Mathematics
             rect[3] = end - dir * width;
 
             return rect;
+        }
+
+        /// <summary>
+        /// 获取Rect边框上中离pos最近的点
+        /// </summary>
+        public static Vector3 GetClosestBorderPoint(Vector3 pos, Rect rect)
+        {
+            float left = rect.x;
+            float right = rect.x + rect.width;
+            float bottom = rect.y;
+            float top = rect.y + rect.height;
+
+            // 初始化为矩形边界内的点
+            float x = Mathf.Clamp(pos.x, left, right);
+            float y = Mathf.Clamp(pos.y, bottom, top);
+
+            // 如果点在矩形内部，找到最近的边
+            if (x == pos.x && y == pos.y)
+            {
+                // 计算到各边的距离
+                float distToLeft = pos.x - left;
+                float distToRight = right - pos.x;
+                float distToBottom = pos.y - bottom;
+                float distToTop = top - pos.y;
+
+                // 找到最近的边
+                float minDist = Mathf.Min(distToLeft, distToRight, distToBottom, distToTop);
+
+                if (minDist == distToLeft) x = left;
+                else if (minDist == distToRight) x = right;
+                else if (minDist == distToBottom) y = bottom;
+                else y = top;
+            }
+
+            return new Vector3(x, y, 0);
         }
 
         #endregion

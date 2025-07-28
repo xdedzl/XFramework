@@ -25,14 +25,17 @@ namespace XFramework
         /// 鼠标落在面板上的位置和面板位置差
         /// </summary>
         private Vector3 differ;
+        /// <summary>
+        /// 拖拽前的位置
+        /// </summary>
+        public Vector3 oldPosition { get; private set; }
 
-        public UnityEvent onBeginDrag = new();
-        public UnityEvent onDrag = new();
-        public UnityEvent onEndDrag = new();
+        public UnityEvent<PointerEventData, Draggable> onBeginDrag = new();
+        public UnityEvent<PointerEventData, Draggable> onDrag = new();
+        public UnityEvent<PointerEventData, Draggable> onEndDrag = new();
 
         public void OnBeginDrag(PointerEventData eventData)
         {
-            Debug.Log("OnBeginDrag");
             if (cloneDrag)
             {
                 target = Instantiate(gameObject).transform;
@@ -41,23 +44,23 @@ namespace XFramework
             {
                 target = transform;
             }
-
-            differ = Camera.main.ScreenToWorldPoint(Input.mousePosition) - target.position;
+            oldPosition = transform.position;
+            differ = Camera.main.ScreenToWorldPoint(eventData.position) - target.position;
             differ.z = 0;
-            onBeginDrag.Invoke();
+            onBeginDrag.Invoke(eventData, this);
         }
 
         public void OnDrag(PointerEventData eventData)
         {
             if (!is3D)
             {
-                target.transform.position = - differ + new Vector3(Camera.main.ScreenToWorldPoint(Input.mousePosition).x, Camera.main.ScreenToWorldPoint(Input.mousePosition).y, 0f);
+                target.transform.position = - differ + Camera.main.ScreenToWorldPoint(eventData.position).WithZ(target.position.z);
             }
             else
             {
 
             }
-            onDrag.Invoke();
+            onDrag.Invoke(eventData, this);
         }
 
         public void OnEndDrag(PointerEventData eventData)
@@ -66,7 +69,7 @@ namespace XFramework
             {
                 Destroy(target.gameObject);
             }
-            onEndDrag.Invoke();
+            onEndDrag.Invoke(eventData, this);
         }
     }
 }

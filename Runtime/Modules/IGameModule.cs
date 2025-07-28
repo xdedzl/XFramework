@@ -13,9 +13,7 @@
         /// <summary>
         /// 游戏框架模块轮询
         /// </summary>
-        /// <param name="elapseSeconds">逻辑运行时间，以秒为单位</param>
-        /// <param name="realElapseSeconds">真实运行时间，以秒为单位</param>
-        void Update(float elapseSeconds, float realElapseSeconds);
+        void Update();
         /// <summary>
         /// 关闭模块
         /// </summary> 

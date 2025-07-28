@@ -101,6 +101,7 @@ namespace XFramework.Entity
                     entity = c as Entity;
                     entity.name = name;
                     entity.ContainerName = this.name;
+                    entity.OnInit();
                 }
                 else
                 {
@@ -186,13 +187,11 @@ namespace XFramework.Entity
             /// <summary>
             /// 轮询
             /// </summary>
-            /// <param name="elapseSeconds">逻辑运行时间</param>
-            /// <param name="realElapseSeconds">实际运行时间</param>
-            internal void OnUpdate(float elapseSeconds, float realElapseSeconds)
+            internal void OnUpdate()
             {
                 for (int i = 0; i < m_Entities.Count; i++)
                 {
-                    m_Entities[i].OnUpdate(elapseSeconds, realElapseSeconds);
+                    m_Entities[i].OnUpdate();
                 }
             }
         }
