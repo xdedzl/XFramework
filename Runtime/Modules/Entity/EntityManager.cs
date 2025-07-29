@@ -356,7 +356,12 @@ namespace XFramework.Entity
 
         private bool TryGetContainer(string containerName, out EntityContainer entityContainer)
         {
-            if (m_EntityContainerDic.TryGetValue(containerName, out entityContainer))
+            if (containerName is null)
+            {
+                entityContainer = null;
+                return false;
+            }
+            else if (m_EntityContainerDic.TryGetValue(containerName, out entityContainer))
             {
                 return true;
             }
