@@ -150,6 +150,16 @@ namespace XFramework.Entity
         /// <summary>
         /// 分配实体
         /// </summary>
+        /// <param name="id">实体编号</param>
+        /// <returns>实体</returns>
+        public Entity Allocate(string key)
+        {
+            return Allocate(key, null);
+        }
+
+        /// <summary>
+        /// 分配实体
+        /// </summary>
         /// <param name="key">键值</param>
         /// <returns>实体</returns>
         public T Allocate<T>(string key) where T : Entity

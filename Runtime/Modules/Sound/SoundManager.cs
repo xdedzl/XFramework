@@ -1,9 +1,45 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
+using XFramework.Entity;
 
 namespace XFramework
 {
-    public class SoundManager : Singleton<SoundManager>
+    public class AudioEntity : Entity.Entity
+    {
+        private AudioSource source;
+
+        public override void OnInit()
+        {
+            source = GetComponent<AudioSource>();
+        }
+
+        public override void OnAllocate(IEntityData entityData)
+        {
+            gameObject.SetActive(true);
+        }
+
+        public override void OnRecycle()
+        {
+            gameObject.SetActive(false);
+        }
+
+        public void Play(string path)
+        {
+            AudioClip clip = Resources.Load<AudioClip>(path);
+            if(clip != null)
+            {
+                source.clip = clip;
+                source.Play();
+            }
+            else
+            {
+                Debug.LogWarning($"sound资源不存在， path={path}");
+            }
+        }
+    }
+
+    [DependenceModule(typeof(EntityManager))]
+    public class SoundManager : GameModuleBase<SoundManager>
     {
         /// <summary>
         /// 背景音乐
@@ -20,16 +56,13 @@ namespace XFramework
 
         private Dictionary<string, AudioClip> m_AudioClipDic;
 
-        public int Priority { get { return 100; } }
+        public override int Priority => 9999;
 
-        public void Shutdown()
+        public SoundManager()
         {
-
-        }
-
-        public void Update(float elapseSeconds, float realElapseSeconds)
-        {
-
+            var res = new GameObject("audio-templete");
+            res.AddComponent<AudioSource>();
+            EntityManager.Instance.AddTemplate<AudioEntity>("SoundManager_Audio", res);
         }
 
         /// <summary>
@@ -47,12 +80,24 @@ namespace XFramework
 
         }
 
+        public void PlaySound(string resPath)
+        {
+            var auidoEntity = EntityManager.Instance.Allocate<AudioEntity>("SoundManager_Audio");
+            auidoEntity.Play(resPath);
+            
+        }
+
         /// <summary>
         /// 获取音频
         /// </summary>
         public void GetAudioClip(string path)
         {
 
+        }
+
+        public override void Shutdown()
+        {
+            EntityManager.Instance.RemoveTemplate("SoundManager_Audio");
         }
     }
 }
