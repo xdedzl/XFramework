@@ -252,7 +252,16 @@ namespace XFramework.UI
         private PanelBase DefaultPanelLoader(string path)
         {
             var res = Resources.Load<GameObject>(path);
-            return GameObject.Instantiate(res).GetComponent<PanelBase>();
+            if(res == null)
+            {
+                throw new XFrameworkException($"[UI] The panel you want to load is not exist, path: {path}");
+            }
+            var panel = GameObject.Instantiate(res).GetComponent<PanelBase>();
+            if (panel == null)
+            {
+                throw new XFrameworkException($"[UI] The panel you want to load is has no PanelBase {path}");
+            }
+            return panel;
         }
 
         #region 接口实现

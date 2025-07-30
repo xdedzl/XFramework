@@ -98,7 +98,7 @@ namespace XFramework
         }
     }
 
-    public class Grid<T> : IEnumerable
+    public class Grid<T> : IEnumerable<T>
     {
         protected T[,] map; // 二维数组地图（0无障碍，1有障碍）
         protected Vector2Int offset;
@@ -150,12 +150,17 @@ namespace XFramework
             return true;
         }
 
-        public IEnumerator GetEnumerator()
+        public IEnumerator<T> GetEnumerator()
         {
             foreach (var item in map)
             {
                 yield return item;
             }
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
         }
     }
 

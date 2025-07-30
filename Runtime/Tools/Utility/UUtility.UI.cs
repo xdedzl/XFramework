@@ -1,4 +1,6 @@
-﻿using UnityEngine;
+﻿using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
 
 namespace XFramework
 {
@@ -42,6 +44,36 @@ namespace XFramework
                 }
 
                 return false;
+            }
+
+            public static void ShowTip(string text, float time=5)
+            {
+                Canvas canvas = GameObject.Find("Canvas").GetComponent<Canvas>();
+
+                var img = new GameObject("TempTip").AddComponent<Image>();
+                var rectTransform = img.rectTransform;
+                var canvasSize = canvas.GetComponent<RectTransform>().sizeDelta;
+                rectTransform.position = canvasSize * 0.5f;
+                rectTransform.sizeDelta = new Vector2(2000, 100);
+                rectTransform.SetParent(canvas.transform);
+                img.color = new Color(0, 0, 0, 0.7f);
+                
+
+                var tmp = new GameObject("text").AddComponent<Text>();
+                rectTransform = tmp.rectTransform;
+                rectTransform.SetParent(img.transform);
+                rectTransform.anchorMin = Vector2.zero; 
+                rectTransform.anchorMax = Vector2.one;  
+                rectTransform.offsetMin = Vector2.zero; 
+                rectTransform.offsetMax = Vector2.zero;
+                tmp.text = text;
+                tmp.font = Resources.GetBuiltinResource(typeof(Font), "LegacyRuntime.ttf") as Font;
+                tmp.alignment = TextAnchor.MiddleCenter;
+
+                Timer.Register(time, () =>
+                {
+                    Object.Destroy(img.gameObject);
+                });
             }
         }
     }

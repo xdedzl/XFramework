@@ -29,6 +29,14 @@ namespace XFramework.Entity
             }
         }
 
+        public bool IsValid
+        {
+            get
+            {
+                return EntityManager.Instance.IsEntityValid(Id);
+            }
+        }
+
         /// <summary>
         /// 初始化
         /// </summary>

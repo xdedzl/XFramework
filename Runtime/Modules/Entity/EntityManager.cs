@@ -372,6 +372,11 @@ namespace XFramework.Entity
             }
         }
 
+        public bool IsEntityValid(string id)
+        {
+            return m_EntityDic.ContainsKey(id);
+        }
+
         /// <summary>
         /// 获取实体
         /// </summary>
