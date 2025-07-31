@@ -80,18 +80,20 @@ namespace XFramework.Entity
         /// <param name="key">key</param>
         public void RemoveTemplate(string key)
         {
-            var container = GetContainer(key);
-            container.Clean(0);
-            var entitys = container.GetEntities();
-            if (entitys != null)
+            if(TryGetContainer(key, out var container))
             {
-                foreach (var item in entitys)
+                container.Clean(0);
+                var entitys = container.GetEntities();
+                if (entitys != null)
                 {
-                    m_EntityDic.Remove(item.Id);
-                    m_EntityInfoDic.Remove(item.Id);
-                    UnityEngine.Object.Destroy(item.gameObject);
+                    foreach (var item in entitys)
+                    {
+                        m_EntityDic.Remove(item.Id);
+                        m_EntityInfoDic.Remove(item.Id);
+                        UnityEngine.Object.Destroy(item.gameObject);
+                    }
+                    m_EntityContainerDic.Remove(key);
                 }
-                m_EntityContainerDic.Remove(key);
             }
         }
 
