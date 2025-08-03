@@ -1,16 +1,16 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine.Scripting;
 
 namespace XFramework.Event
 {
     /// <summary>
     /// 消息类 全局类消息
     /// </summary>
+    [Preserve]
     public class MessageManager : Singleton<MessageManager>
     {
         private readonly Dictionary<string, Delegate> m_eventDictionary = new Dictionary<string, Delegate>();
-
-        private MessageManager() { }
 
         #region AddEventListener
 

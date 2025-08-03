@@ -150,6 +150,10 @@ namespace XFramework.UI
         public T FindNode<T>(string path) where T : UINodeBase, new()
         {
             var child = transform.Find(path);
+            if (child == null)
+            {
+                throw new XFrameworkException($"[UI] FindNode, node not exist, path={path}");
+            }
             var uiObj = new T();
             uiObj.Init(child, this);
             return uiObj;
@@ -158,8 +162,8 @@ namespace XFramework.UI
 
     public class UINodeBase
     {
-        protected Transform transform;
-        protected PanelBase panel;
+        public Transform transform { get; private set; }
+        protected PanelBase parent { get; private set; }
 
         /// <summary>
         /// Find UI组件的索引器
@@ -168,22 +172,33 @@ namespace XFramework.UI
         {
             get
             {
-                return panel[key];
+                return parent[key];
             }
         }
 
         internal void Init(Transform transform, PanelBase panel)
         {
             this.transform = transform;
-            this.panel = panel;
+            this.parent = panel;
+            OnInit();
         }
 
         public T Find<T>(string path) where T : UINodeBase, new()
         {
             var child = transform.Find(path);
             var uiObj = new T();
-            uiObj.Init(child, panel);
+            uiObj.Init(child, parent);
             return uiObj;
+        }
+
+        protected virtual void OnInit()
+        {
+
+        }
+
+        public T GetComponent<T>() where T : Component
+        {
+            return transform.GetComponent<T>();
         }
     }
 }

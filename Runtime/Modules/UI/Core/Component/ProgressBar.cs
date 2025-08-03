@@ -6,26 +6,81 @@
 // ==========================================
 using UnityEngine.UI;
 using UnityEngine.Events;
+using UnityEngine;
 
 namespace XFramework.UI
 {
-    public class ProgressBar : Image
+    public enum ProgressBarType
     {
-        private ProgressEvent onValueChange = new ProgressEvent();
-        public Image targetImage;
+        FillImage,
+        ModifyRect
+    }
 
-        public float value = 0;
+    [ExecuteAlways]
+    [RequireComponent(typeof(RectTransform))]
+    public class ProgressBar : MonoBehaviour
+    {
+        [SerializeField]
+        private ProgressBarType progressBarType = ProgressBarType.ModifyRect;
 
-        public void ChangeValue(float _value)
+        [SerializeField]
+        private Image targetImage;
+        
+        [SerializeField]
+        [Range(0f, 1f)]
+        private float m_Value;
+
+
+        public readonly ProgressEvent onValueChange = new();
+
+        public float value
         {
-            if (value != _value)
+            get
             {
-                value = _value;
-                onValueChange.Invoke(_value);
-                targetImage.fillAmount = value;
+                return m_Value;
+            }
+            set
+            {
+                if(m_Value != value)
+                {
+                    m_Value = value;
+                    OnValueChange();
+                }
             }
         }
 
-        class ProgressEvent : UnityEvent<float> { }
+        private void OnValueChange()
+        {
+            onValueChange.Invoke(value);
+
+            Refresh();
+        }
+
+        private void Refresh()
+        {
+            if (progressBarType == ProgressBarType.FillImage)
+            {
+                targetImage.fillAmount = value;
+            }
+            else
+            {
+                targetImage.rectTransform.anchorMin = Vector2.zero;
+                targetImage.rectTransform.anchorMax = new Vector2(value, 1);
+                targetImage.rectTransform.offsetMin = Vector2.zero;
+                targetImage.rectTransform.offsetMax = Vector2.zero;
+            }
+        }
+
+#if UNITY_EDITOR
+        private void OnValidate()
+        {
+            Refresh();
+        }
+#endif
+
+
+
+        public class ProgressEvent : UnityEvent<float> { }
+
     }
 }

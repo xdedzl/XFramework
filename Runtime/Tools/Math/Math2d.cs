@@ -704,6 +704,29 @@ namespace XFramework.Mathematics
             return new Vector3(x, y, 0);
         }
 
+        /// <summary>
+        /// 计算点到矩形边框的最短距离
+        /// </summary>
+        /// <param name="point">二维点</param>
+        /// <param name="rect">矩形</param>
+        /// <returns>点到边框的最短距离，如果点在矩形内部则返回0</returns>
+        public static float GetDistancePointToRect(Vector2 point, Rect rect)
+        {
+            // 将点限制在矩形边界内，得到最近的边框点
+            float clampedX = Mathf.Clamp(point.x, rect.xMin, rect.xMax);
+            float clampedY = Mathf.Clamp(point.y, rect.yMin, rect.yMax);
+
+            // 如果点在矩形内部，距离为0
+            if (clampedX == point.x && clampedY == point.y)
+            {
+                return 0f;
+            }
+
+            // 计算点到最近边框点的距离
+            Vector2 closestPoint = new Vector2(clampedX, clampedY);
+            return Vector2.Distance(point, closestPoint);
+        }
+
         #endregion
 
         #region 多边形相关

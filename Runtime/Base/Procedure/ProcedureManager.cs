@@ -75,14 +75,31 @@ namespace XFramework
         /// <returns>当前流程</returns>
         public TProcedure GetCurrentProcedure<TProcedure>() where TProcedure : ProcedureBase
         {
-            var current = m_Fsm.CurrentState;
-            if (current is TProcedure procedure)
+            if (TryGetCurrentProcedure<TProcedure>(out var procedure))
             {
                 return procedure;
             }
             else
             {
-                throw new XFrameworkException($"[Procedure] current procedure is not {typeof(TProcedure).Name}");
+                throw new XFrameworkException($"[Procedure] current procedure is not {typeof(TProcedure).Name}, Please Use TryGetCurrentProcedure");
+            }
+        }
+
+        /// <summary>
+        /// 获取当前流程
+        /// </summary>
+        public bool TryGetCurrentProcedure<TProcedure>(out TProcedure procedure) where TProcedure : ProcedureBase
+        {
+            var current = m_Fsm.CurrentState;
+            if (current is TProcedure _procedure)
+            {
+                procedure = _procedure;
+                return true;
+            }
+            else
+            {
+                procedure = null;
+                return false;
             }
         }
 

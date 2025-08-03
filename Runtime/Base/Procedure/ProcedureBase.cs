@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using XFramework.Event;
 using XFramework.Fsm;
 
 namespace XFramework
@@ -76,6 +77,27 @@ namespace XFramework
         }
     }
 
+    public abstract class ProcedureWithEvent : ProcedureBase
+    {
+        private readonly EventRegersterHelper regersterHelper;
+
+        public ProcedureWithEvent()
+        {
+            regersterHelper = EventRegersterHelper.Create(this);
+        }
+
+        public override void OnEnter(params object[] parms)
+        {
+            regersterHelper.Register();
+        }
+
+        public override void OnExit()
+        {
+            regersterHelper.UnRegister();
+        }
+    }
+
+
     /// <summary>
     /// 子流程基类
     /// </summary>
@@ -109,6 +131,26 @@ namespace XFramework
             {
                 return _parent as T;
             }
+        }
+    }
+
+    public abstract class SubProcedureWithEvent<T> : SubProcedureBase<T> where T : ProcedureBase
+    {
+        private readonly EventRegersterHelper regersterHelper;
+
+        public SubProcedureWithEvent()
+        {
+            regersterHelper = EventRegersterHelper.Create(this);
+        }
+
+        public override void OnEnter(params object[] parms)
+        {
+            regersterHelper.Register();
+        }
+
+        public override void OnExit()
+        {
+            regersterHelper.UnRegister();
         }
     }
 }

@@ -2,8 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Xml.Linq;
+using TMPro;
 using UnityEngine;
+using UnityEngine.Video;
+using XFramework.Entity;
 using XFramework.Resource;
+using static XFramework.Utility;
 
 namespace XFramework.UI
 {
@@ -41,6 +45,9 @@ namespace XFramework.UI
         /// 处于打开状态的面板字典，key为层级
         /// </summary>
         private Dictionary<int, List<PanelBase>> m_OnDisplayPanelDic = new Dictionary<int, List<PanelBase>>();
+
+
+        private GameObject m_TipsPrefab;
 
 
         public UIManager()
@@ -264,6 +271,45 @@ namespace XFramework.UI
             return panel;
         }
 
+        #region Tips
+
+        public void ShowTips(string content, Vector3 position, Color color)
+        {
+            var point = Camera.main.WorldToScreenPoint(position).XY();
+            ShowTips(content, point, color);
+        }
+
+        public void ShowTips(string content, Vector2 position, Color color)
+        {
+            InitTipsTemplete();
+            var entity = EntityManager.Instance.Allocate<TipEntity>("ui-tip-entity");
+            entity.transform.SetParent(canvasTransform);
+            entity.position = position;
+            entity.text = content;
+            entity.color = color;
+        }
+
+        private void InitTipsTemplete()
+        {
+            if(!EntityManager.Instance.ContainsTemplete("ui-tip-entity"))
+            {
+                var root = new GameObject("ui-tip-templete");
+                root.transform.SetParent(canvasTransform);
+                var tmp = root.AddComponent<TextMeshProUGUI>();
+                var rectTransform = root.GetComponent<RectTransform>();
+                rectTransform.sizeDelta = new Vector2(200, 100);
+
+                tmp.font = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
+                tmp.alignment = TextAlignmentOptions.Center;
+
+                tmp.transform.position = new Vector3(0, 999999, 0);
+                GameObject.DontDestroyOnLoad(root);
+                EntityManager.Instance.AddTemplate<TipEntity>("ui-tip-entity", root, "");
+            }
+        }
+
+        #endregion
+
         #region 接口实现
 
         public override int Priority => 200;
@@ -284,6 +330,8 @@ namespace XFramework.UI
             m_PanelDict?.Clear();
             m_PanelPathDict.Clear();
             m_OnDisplayPanelDic.Clear();
+            EntityManager.Instance.RemoveTemplate("ui-tip-entity");
+
         }
 
         #endregion

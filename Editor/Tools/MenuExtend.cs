@@ -3,6 +3,7 @@ using UnityEditor;
 using UnityEngine;
 using XFramework;
 using System.Collections.Generic;
+using TMPro;
 
 namespace XFramework.Editor
 {
@@ -65,7 +66,16 @@ namespace XFramework.Editor
         [MenuItem("XFramework/UpdatePrefabScriptGUID")]
         public static void UpdatePrefabScriptGUID()
         {
+            Canvas canvas = GameObject.Find("Canvas").GetComponent<Canvas>();
 
+            var root = new GameObject();
+            root.transform.SetParent(canvas.transform);
+            var tmp = root.AddComponent<TextMeshProUGUI>();
+            var rectTransform = root.GetComponent<RectTransform>();
+            rectTransform.sizeDelta = new Vector2(200, 100);
+
+            tmp.font = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
+            tmp.alignment = TextAlignmentOptions.Center;
         }
     }
 

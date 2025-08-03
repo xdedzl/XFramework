@@ -9,7 +9,7 @@ namespace XFramework.Pool
     {
         private readonly Dictionary<string, PoolBase> m_ObjectPools;
 
-        private ObjectPoolManager()
+        public ObjectPoolManager()
         {
             m_ObjectPools = new Dictionary<string, PoolBase>();
         }

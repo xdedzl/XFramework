@@ -43,7 +43,7 @@ namespace XFramework.Entity
             /// <param name="type">实体类型</param>
             /// <param name="name">容器名</param>
             /// <param name="template">实体模板</param>
-            public EntityContainer(Type type, string name, GameObject template, bool cretaeEntityRoot, string entityRootName)
+            public EntityContainer(Type type, string name, GameObject template, string entityRootName)
             {
                 if (!type.IsSubclassOf(typeof(Entity)))
                 {
@@ -55,9 +55,8 @@ namespace XFramework.Entity
                 m_Template = template;
                 m_Entities = new List<Entity>();
                 m_Pool = new Stack<Entity>();
-                if (cretaeEntityRoot)
+                if (!string.IsNullOrEmpty(entityRootName))
                 {
-                    entityRootName = string.IsNullOrEmpty(entityRootName)? name : entityRootName;
                     var obj = GameObject.Find(entityRootName);
                     if (obj)
                     {
@@ -153,7 +152,7 @@ namespace XFramework.Entity
                 {
                     m_Entities.Remove(entity);
                     m_Pool.Push(entity);
-                    if(entityRoot != entity.transform.parent)
+                    if(entityRoot != null && entityRoot != entity.transform.parent)
                     {
                         entity.transform.parent = entityRoot;
                     }

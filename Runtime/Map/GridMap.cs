@@ -150,6 +150,17 @@ namespace XFramework
             return true;
         }
 
+        public void ResetValue(T value)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                for (int y = 0; y < height; y++)
+                {
+                    this[x, y] = value;
+                }
+            }
+        }
+
         public IEnumerator<T> GetEnumerator()
         {
             foreach (var item in map)

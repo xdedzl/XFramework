@@ -17,12 +17,12 @@ namespace XFramework.Console
     /// </summary>
     public class CSharpInterpreter : Singleton<CSharpInterpreter>
     {
-        private Dictionary<string, Func<string, object>> cmds = new Dictionary<string, Func<string, object>>();
-        private CodeGenerater codeGenerater = new CodeGenerater();
+        private readonly Dictionary<string, Func<string, object>> cmds = new();
+        private readonly CodeGenerater codeGenerater = new();
         private readonly string ExpressionPattern = @"[^!=]=[^=]";
-        private Dictionary<string, object> dynamicValues = new Dictionary<string, object>();
+        private readonly Dictionary<string, object> dynamicValues = new();
 
-        private CSharpInterpreter()
+        public CSharpInterpreter()
         {
             AddCmd("print", Print);
             AddCmd("using", Using);

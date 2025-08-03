@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json;
 using UnityEngine;
 
@@ -229,4 +230,18 @@ namespace XFramework.Json
             serializer.Serialize(writer, v4Str);
         }
     }
+
+    public class QueueConverter<T> : JsonConverter<Queue<T>>
+    {
+        public override Queue<T> ReadJson(JsonReader reader, Type objectType, Queue<T> existingValue, bool hasExistingValue, JsonSerializer serializer)
+        {
+            var list = serializer.Deserialize<List<T>>(reader);
+            return new Queue<T>(list ?? new List<T>());
+        }
+        public override void WriteJson(JsonWriter writer, Queue<T> value, JsonSerializer serializer)
+        {
+            serializer.Serialize(writer, value.ToList());
+        }
+    }
+
 }

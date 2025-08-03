@@ -1,5 +1,8 @@
-﻿using System.Collections.Generic;
+﻿using System.Collections;
+using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
+using UnityEngine.Networking;
 using XFramework.Entity;
 
 namespace XFramework
@@ -7,6 +10,7 @@ namespace XFramework
     public class AudioEntity : Entity.Entity
     {
         private AudioSource source;
+        private Timer timer;
 
         public override void OnInit()
         {
@@ -21,20 +25,22 @@ namespace XFramework
         public override void OnRecycle()
         {
             gameObject.SetActive(false);
+            timer?.Stop();
+            timer = null;
         }
 
-        public void Play(string path)
+        public void Play(AudioClip clip)
         {
-            AudioClip clip = Resources.Load<AudioClip>(path);
-            if(clip != null)
+            timer?.Stop();
+            timer = null;
+
+            source.clip = clip;
+            source.Play();
+            timer = Timer.Register(clip.length, () =>
             {
-                source.clip = clip;
-                source.Play();
-            }
-            else
-            {
-                Debug.LogWarning($"sound资源不存在， path={path}");
-            }
+                timer = null;
+                Recycle();
+            });
         }
     }
 
@@ -54,7 +60,7 @@ namespace XFramework
         /// </summary>
         private List<AudioSource> m_SFX3D;
 
-        private Dictionary<string, AudioClip> m_AudioClipDic;
+        private readonly Dictionary<string, AudioClip> m_AudioClipDic = new();
 
         public override int Priority => 9999;
 
@@ -68,31 +74,80 @@ namespace XFramework
         /// <summary>
         /// 播放背景音乐
         /// </summary>
-        /// <param name="bgmName">背景音乐名</param>
-        public void PlayBGM(string bgmName)
+        public void PlayBgm(string path)
         {
-
+            AudioClip clip = Resources.Load<AudioClip>(path);
+            PlayBgm(clip);
         }
 
-
-        public void PlayBGM(AudioClip audioSource)
+        public void PlayBgm(AudioClip clip)
         {
-
+            if (m_BGM == null)
+            {
+                var res = new GameObject("audio-bgm");
+                m_BGM = res.AddComponent<AudioSource>();
+                m_BGM.loop = true;
+            }
+            m_BGM.clip = clip;
+            m_BGM.Play();
         }
 
-        public void PlaySound(string resPath)
+        public void StopBgm()
         {
-            var auidoEntity = EntityManager.Instance.Allocate<AudioEntity>("SoundManager_Audio");
-            auidoEntity.Play(resPath);
-            
+            m_BGM?.Stop();
+        }
+
+        public void PlayWebBgm(string webPath)
+        {
+            MonoEvent.Instance.StartCoroutine(LoadAndPlayAudio(webPath));
+        }
+
+        private IEnumerator LoadAndPlayAudio(string url)
+        {
+            // 使用UnityWebRequest加载音频，指定AudioType为MPEG（MP3）或OGGVORBIS（OGG）
+            using UnityWebRequest request = UnityWebRequestMultimedia.GetAudioClip(url, AudioType.MPEG);
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                // 获取音频剪辑并播放
+                AudioClip clip = DownloadHandlerAudioClip.GetContent(request);
+                PlayBgm(clip);
+            }
+            else
+            {
+                Debug.LogError($"加载音频失败: {request.error}");
+            }
+        }
+
+        public void PlaySound(string path)
+        {
+            var clip = GetAudioClip(path);
+            if(clip == null)
+            {
+                Debug.LogWarning($"sound资源不存在， path={path}");
+
+            }
+            else
+            {
+                var auidoEntity = EntityManager.Instance.Allocate<AudioEntity>("SoundManager_Audio");
+                auidoEntity.Play(clip);
+            }
+
         }
 
         /// <summary>
         /// 获取音频
         /// </summary>
-        public void GetAudioClip(string path)
+        public AudioClip GetAudioClip(string path)
         {
+            if (!m_AudioClipDic.ContainsKey(path))
+            {
+                AudioClip clip = Resources.Load<AudioClip>(path);
+                m_AudioClipDic[path] = clip;
+            }
 
+            return m_AudioClipDic[path];
         }
 
         public override void Shutdown()

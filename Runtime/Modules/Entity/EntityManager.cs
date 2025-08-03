@@ -37,7 +37,7 @@ namespace XFramework.Entity
         /// </summary>
         public void AddTemplate<T>(GameObject template) where T : Entity
         {
-            AddTemplate(typeof(T).Name, typeof(T), template);
+            AddTemplate<T>(typeof(T).Name, template);
         }
 
         /// <summary>
@@ -45,7 +45,7 @@ namespace XFramework.Entity
         /// </summary>
         public void AddTemplate<T>(string key, GameObject template) where T : Entity
         {
-            AddTemplate(key, typeof(T), template);
+            AddTemplate<T>(key, template, key);
         }
 
         /// <summary>
@@ -53,7 +53,15 @@ namespace XFramework.Entity
         /// </summary>
         public void AddTemplate<T>(string key, GameObject template, string entityRootName) where T : Entity
         {
-            AddTemplate(key, typeof(T), template, true, entityRootName);
+            AddTemplate(key, typeof(T), template, entityRootName);
+        }
+
+        /// <summary>
+        /// 设置模板
+        /// </summary>
+        public void AddTemplate(string key, System.Type type, GameObject template)
+        {
+            AddTemplate(key, type, template, key);
         }
 
         /// <summary>
@@ -62,14 +70,14 @@ namespace XFramework.Entity
         /// <param name="key">key</param>
         /// <param name="type">类型</param>
         /// <param name="template">模板</param>
-        public void AddTemplate(string key, System.Type type, GameObject template, bool createEntityRoot=true, string entityRootName="")
+        public void AddTemplate(string key, System.Type type, GameObject template, string entityRootName)
         {
             if (m_EntityContainerDic.ContainsKey(key))
             {
                 Debug.LogWarning("请勿重复添加");
                 return;
             }
-            EntityContainer container = new(type, key, template, createEntityRoot, entityRootName);
+            EntityContainer container = new(type, key, template, entityRootName);
 
             m_EntityContainerDic.Add(key, container);
         }
@@ -92,9 +100,18 @@ namespace XFramework.Entity
                         m_EntityInfoDic.Remove(item.Id);
                         UnityEngine.Object.Destroy(item.gameObject);
                     }
-                    m_EntityContainerDic.Remove(key);
                 }
+                m_EntityContainerDic.Remove(key);
             }
+        }
+
+        /// <summary>
+        /// 是否包含一个模板
+        /// </summary>
+        /// <param name="key"></param>
+        public bool ContainsTemplete(string key)
+        {
+            return m_EntityContainerDic.ContainsKey(key);
         }
 
 
