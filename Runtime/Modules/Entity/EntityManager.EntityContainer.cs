@@ -92,7 +92,7 @@ namespace XFramework.Entity
                 GameObject gameObject = GameObject.Instantiate(m_Template, pos, quaternion, parent);
                 if (entityRoot)
                 {
-                    gameObject.transform.parent = entityRoot;
+                    gameObject.transform.SetParent(entityRoot);
                 }
                 Entity entity;
                 if(gameObject.TryGetComponent(type, out Component c))

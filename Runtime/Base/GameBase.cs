@@ -2,9 +2,6 @@ using System.Reflection;
 using UnityEngine;
 using XFramework;
 using XFramework.Console;
-using XFramework.Entity;
-using XFramework.Fsm;
-using XFramework.Resource;
 
 /// <summary>
 /// 这个类挂在初始场景中,是整个游戏的入口
@@ -14,11 +11,26 @@ public class GameBase : MonoBehaviour
     // 初始流程
     public string startTypeName;
     public ProcedureBase startProcedure;
+    [SerializeField]
+    private XFrameworkSetting _setting;
 
     public static GameBase activeGame { get; private set; }
 
+    public static XFrameworkSetting Setting 
+    {
+        get
+        {
+            return activeGame._setting;
+        }
+    }
+
     private void Awake()
     {
+        if(_setting == null)
+        {
+            _setting = Resources.Load<XFrameworkSetting>("XFramework/XFrameworkSetting");
+        }
+
         if (activeGame != null)
         {
             DestroyImmediate(this);

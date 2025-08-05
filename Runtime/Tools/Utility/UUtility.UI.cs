@@ -59,7 +59,7 @@ namespace XFramework
                 img.color = new Color(0, 0, 0, 0.7f);
                 
 
-                var tmp = new GameObject("text").AddComponent<Text>();
+                var tmp = new GameObject("text").AddComponent<TextMeshProUGUI>();
                 rectTransform = tmp.rectTransform;
                 rectTransform.SetParent(img.transform);
                 rectTransform.anchorMin = Vector2.zero; 
@@ -67,8 +67,9 @@ namespace XFramework
                 rectTransform.offsetMin = Vector2.zero; 
                 rectTransform.offsetMax = Vector2.zero;
                 tmp.text = text;
-                tmp.font = Resources.GetBuiltinResource(typeof(Font), "LegacyRuntime.ttf") as Font;
-                tmp.alignment = TextAnchor.MiddleCenter;
+                tmp.fontSize = 60;
+                tmp.font = GameBase.Setting.font;
+                tmp.alignment = TextAlignmentOptions.Center;
 
                 Timer.Register(time, () =>
                 {

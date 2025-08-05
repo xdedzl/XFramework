@@ -1,10 +1,18 @@
-﻿namespace XFramework.UI
+﻿using UnityEngine;
+
+namespace XFramework.UI
 {
     [UnityEngine.RequireComponent(typeof(UnityEngine.UI.Button))]
     [UnityEngine.AddComponentMenu("XFramework/XButton")]
     public class XButton : XUIBase
     {
         public UnityEngine.UI.Button button;
+        public string soundPath;
+
+        private void Start()
+        {
+            AddListener(OnClickPlaySound);
+        }
 
         private void Reset()
         {
@@ -14,6 +22,14 @@
         public void AddListener(UnityEngine.Events.UnityAction call)
         {
             button.onClick.AddListener(call);
+        }
+
+        private void OnClickPlaySound()
+        {
+            if(!string.IsNullOrEmpty(soundPath))
+            {
+                SoundManager.Instance.PlaySound(soundPath);
+            }
         }
     }
 }

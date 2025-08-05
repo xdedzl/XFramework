@@ -299,7 +299,7 @@ namespace XFramework.UI
                 var rectTransform = root.GetComponent<RectTransform>();
                 rectTransform.sizeDelta = new Vector2(200, 100);
 
-                tmp.font = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
+                tmp.font = GameBase.Setting.font;
                 tmp.alignment = TextAlignmentOptions.Center;
 
                 tmp.transform.position = new Vector3(0, 999999, 0);
