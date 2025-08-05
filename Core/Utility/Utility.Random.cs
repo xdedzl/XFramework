@@ -31,6 +31,11 @@ namespace XFramework
 
             public static T RandomValue<T>(IList<T> values, IList<float> weights)
             {
+                if(!Utility.List.IsValidList(weights))
+                {
+                    return RandomValue(values);
+                }
+
                 if (values == null || weights == null || values.Count != weights.Count)
                     throw new ArgumentException("参数不匹配");
 
