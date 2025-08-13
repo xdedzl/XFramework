@@ -53,6 +53,7 @@ namespace XFramework.UI
         public UIManager()
         {
             InitPathDic();
+            GameObject.DontDestroyOnLoad(CanvasTransform);
         }
 
         /// <summary>
@@ -303,7 +304,6 @@ namespace XFramework.UI
                 tmp.alignment = TextAlignmentOptions.Center;
 
                 tmp.transform.position = new Vector3(0, 999999, 0);
-                GameObject.DontDestroyOnLoad(root);
                 EntityManager.Instance.AddTemplate<TipEntity>("ui-tip-entity", root, "");
             }
         }

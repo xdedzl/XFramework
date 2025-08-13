@@ -1,6 +1,7 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 
@@ -131,6 +132,86 @@ namespace XFramework.Json
 
                 serializer.Serialize(writer, jObject);
             }
+        }
+    }
+
+    public class PolyListConverter : JsonConverter
+    {
+        private readonly string nameSpace;
+        private readonly string assembly;
+
+        public PolyListConverter() { }
+
+        public PolyListConverter(string nameSpace = null)
+        {
+            this.nameSpace = nameSpace;
+            this.assembly = "Assembly-CSharp";
+        }
+
+        public PolyListConverter(string nameSpace, string assembly)
+        {
+            this.nameSpace = nameSpace;
+            this.assembly = assembly;
+        }
+
+        public override bool CanConvert(Type objectType)
+        {
+            return true;
+        }
+
+        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        {
+            var jObject = JObject.Load(reader);
+            if (jObject == null)
+            {
+                return null;
+            }
+
+            var assembly = Assembly.Load(this.assembly);
+            string typeName = jObject["type"]?.Value<string>();
+            Type type;
+            if (string.IsNullOrEmpty(nameSpace))
+                type = assembly.GetType(typeName);
+            else
+                type = assembly.GetType($"{nameSpace}.{typeName}");
+
+            JToken dataToken = jObject["datas"];
+            if (dataToken == null || dataToken.Type == JTokenType.Null)
+                return null;
+
+            
+
+            // 反序列化为数组或集合
+            if (dataToken is JArray jArray)
+            {
+                var array = Array.CreateInstance(objectType.GetElementType(), jArray.Count);
+                for (int i = 0; i < jArray.Count; i++)
+                {
+                    var a = jArray[i];
+                    var b = a.ToObject(type, serializer);
+                    array.SetValue(b, i);
+                }
+                return array;
+            }
+            else
+            {
+                throw new JsonSerializationException("Expected JSON array for 'datas' field.");
+            }
+        }
+
+        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+        {
+            throw new JsonSerializationException("还没实现");
+
+            //if (value != null)
+            //{
+            //    JObject jObject = new JObject();
+            //    string typeName = string.IsNullOrEmpty(nameSpace) ? value.GetType().FullName : value.GetType().Name;
+            //    jObject.Add("type", typeName);
+            //    jObject.Add("data", JToken.FromObject(value));
+
+            //    serializer.Serialize(writer, jObject);
+            //}
         }
     }
 }
