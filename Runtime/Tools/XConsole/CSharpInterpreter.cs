@@ -26,13 +26,60 @@ namespace XFramework.Console
         {
             AddCmd("print", Print);
             AddCmd("using", Using);
+            
+            
+            var typeBase = typeof(GMCommandBase);
+            var sonTypes = Utility.Reflection.GetTypesInAllAssemblies((type) =>
+            {
+                if (type.IsSubclassOf(typeBase) && !type.IsAbstract)
+                {
+                    return true;
+                }
+                return false;
+            });
+
+            foreach (var type in sonTypes)
+            {
+                var methods = type.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+
+                foreach (var method in methods)
+                {
+                    var attr = method.GetCustomAttribute<GMCommandAttribute>();
+                    if (attr != null)
+                    {
+                        var cmd = attr.cmd is null ? method.Name : attr.cmd;
+                        var parms = method.GetParameters();
+                        if (parms.Length == 0)
+                        {
+                            CSharpInterpreter.Instance.AddCmd(cmd, (parm) =>
+                            {
+                                return method.Invoke(null, null);
+                            });
+
+                        }
+                        else if (parms.Length == 1 || parms[0].ParameterType == typeof(string))
+                        {
+                            CSharpInterpreter.Instance.AddCmd(cmd, (parm) =>
+                            {
+                                return method.Invoke(null, new object[] { parm });
+                            });
+                        }
+                        else
+                        {
+                            Debug.LogWarning($"[非法GM指令] {type.Name}.{method.Name}, GM函数只允许传一个string参数或不传参");
+                            continue;
+                        }
+                    }
+                }
+            }
+            
         }
 
         /// <summary>
         /// 执行一行代码
         /// </summary>
         /// <param name="cmd"></param>
-        public object Excute(string cmd)
+        public object Execute(string cmd)
         {
             var strs = cmd.Split(' ');
             if (dynamicValues.TryGetValue(cmd, out object value))
@@ -41,13 +88,20 @@ namespace XFramework.Console
             }
             else if (cmds.ContainsKey(strs[0]))
             {
-                if (strs.Length == 1)
+                try
                 {
-                    return ExcuteCmd(cmd, "");
+                    if (strs.Length == 1)
+                    {
+                        return ExcuteCmd(cmd, "");
+                    }
+                    else
+                    {
+                        return ExcuteCmd(strs[0], strs[1]);
+                    }
                 }
-                else
+                catch (Exception e)
                 {
-                    return ExcuteCmd(strs[0], strs[1]);
+                    // LogError($"{e.Message}\n{e.StackTrace}");
                 }
             }
 

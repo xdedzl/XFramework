@@ -10,11 +10,18 @@ namespace XFramework.Console
     {
         private static Action<Message> LogMessageReceived;
 
-        private static readonly Queue<Message> m_messages = new Queue<Message>();
+        private static readonly Queue<Message> m_messages = new ();
         private static readonly IConsole console = new UGUIConsole();
-
+        
+        private static readonly Dictionary<string, Func<string, object>> m_ExecuteFunctions = new ();
+        private static string m_CurrentExecuteKey = "";
+            
         private static bool m_isOpen;
         private static bool m_isInit;
+        
+        
+        private static readonly LinkedList<string> cmdCache = new ();
+        private static LinkedListNode<string> currentCmd;
 
         public static bool IsOpen
         {
@@ -47,50 +54,7 @@ namespace XFramework.Console
 
         static XConsole()
         {
-            var typeBase = typeof(GMCommandBase);
-            var sonTypes = Utility.Reflection.GetTypesInAllAssemblies((type) =>
-            {
-                if (type.IsSubclassOf(typeBase) && !type.IsAbstract)
-                {
-                    return true;
-                }
-                return false;
-            });
-
-            foreach (var type in sonTypes)
-            {
-                var methods = type.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-
-                foreach (var method in methods)
-                {
-                    var attr = method.GetCustomAttribute<GMCommandAttribute>();
-                    if (attr != null)
-                    {
-                        var cmd = attr.cmd is null ? method.Name : attr.cmd;
-                        var parms = method.GetParameters();
-                        if (parms.Length == 0)
-                        {
-                            CSharpInterpreter.Instance.AddCmd(cmd, (parm) =>
-                            {
-                                return method.Invoke(null, null);
-                            });
-
-                        }
-                        else if (parms.Length == 1 || parms[0].ParameterType == typeof(string))
-                        {
-                            CSharpInterpreter.Instance.AddCmd(cmd, (parm) =>
-                            {
-                                return method.Invoke(null, new object[] { parm });
-                            });
-                        }
-                        else
-                        {
-                            Debug.LogWarning($"[非法GM指令] {type.Name}.{method.Name}, GM函数只允许传一个string参数或不传参");
-                            continue;
-                        }
-                    }
-                }
-            }
+            
         }
 
         public static void LogMessage(Message message)
@@ -128,31 +92,89 @@ namespace XFramework.Console
             LogMessage(Message.Error(message, ""));
             return message;
         }
-
-        public static object Excute(string cmd)
+        
+        public static bool AddExecuteFunction(string executeKey, Func<string, object> func)
         {
-            LogMessage(Message.Input(cmd));
-
-            object value = null;
-            try
+            if (string.IsNullOrEmpty(executeKey))
             {
-                value = CSharpInterpreter.Instance.Excute(cmd);
+                Debug.LogError("Execute key is null or empty.");
+                return false;
             }
-            catch (Exception e)
+            if (m_ExecuteFunctions.ContainsKey(executeKey))
             {
-                LogError($"{e.Message}\n{e.StackTrace}");
+                Debug.LogError($"Execute function {executeKey} already exists.");
+                return false;
             }
-
-            if (value != null)
+            
+            m_ExecuteFunctions.Add(executeKey, func);
+            if (string.IsNullOrEmpty(m_CurrentExecuteKey))
             {
-                Log(value);
+                m_CurrentExecuteKey = executeKey;
             }
-            console.OnExcuteCmd(cmd, value);
-            return value;
+            return true;
         }
 
+        public static bool ChangeExecuteFunction(string executeKey)
+        {
+            if (m_ExecuteFunctions.ContainsKey(executeKey))
+            {
+                m_CurrentExecuteKey = executeKey;
+                return true;
+            }
+            else
+            {
+                Debug.LogError($"Execute function {executeKey} not found.");
+                return false;
+            }
+        }
+        
+        public static object Execute(string cmd)
+        {
+            LogMessage(Message.Input(cmd));
+            
+            m_ExecuteFunctions.TryGetValue(m_CurrentExecuteKey, out var executeFun);
+            object result = executeFun?.Invoke(cmd);
+
+            if (result != null)
+            {
+                Log(result);
+            }
+            console.OnExecuteCmd(cmd, result);
+            cmdCache.AddLast(cmd);
+            currentCmd = null;
+            
+            return result;
+        }
+        
+        public static void JumpToPreviousCmd()
+        {
+            if (currentCmd == null)
+            {
+                currentCmd = cmdCache.Last;
+            }
+            else if (currentCmd.Previous != null)
+            {
+                currentCmd = currentCmd.Previous;
+            }
+            else
+            {
+                return;
+            }
+            console.OnCurrentCmdChanged(currentCmd?.Value);
+        }
+
+        public static void JumpToNextCmd()
+        {
+            if (currentCmd != null && currentCmd.Next != null)
+            {
+                currentCmd = currentCmd.Next;
+            }
+            console.OnCurrentCmdChanged(currentCmd?.Value);
+        }
+        
         public static void Clear()
         {
+            cmdCache.Clear();
             console.OnClear();
         }
     }
@@ -167,9 +189,11 @@ namespace XFramework.Console
 
         void OnLogMessage(Message message);
 
-        void OnExcuteCmd(string cmd, object value);
+        void OnExecuteCmd(string cmd, object value);
 
         void OnClear();
+        
+        void OnCurrentCmdChanged(string cmd);
     }
 
     public enum MessageType : int

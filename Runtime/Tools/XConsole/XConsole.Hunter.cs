@@ -141,7 +141,7 @@ namespace XFramework.Console
             var command = Encoding.UTF8.GetString(buffer);
             if (!string.IsNullOrEmpty(command))
             {
-                Excute(command);
+                Execute(command);
             }
         }
 

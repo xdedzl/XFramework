@@ -141,11 +141,11 @@ public class GameBase : MonoBehaviour
         {
             if (XConsole.IsHunterEnable)
             {
-                XConsole.Excute("disable_hunter");
+                XConsole.Execute("disable_hunter");
             }
             else
             {
-                XConsole.Excute("enable_hunter");
+                XConsole.Execute("enable_hunter");
             }
         }
     }
