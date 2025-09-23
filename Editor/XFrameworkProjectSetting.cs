@@ -9,7 +9,7 @@ namespace XFramework.Editor
         {
             var provider = new SettingsProvider("Project/XFramework", SettingsScope.Project)
             {
-                label = "XFramwework",
+                label = "XFramework",
 
             };
             return provider;

@@ -3,9 +3,12 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Text;
 using UnityEngine;
+using System.Linq;
 
 namespace XFramework.Console
 {
+    public delegate bool CommandDelegate(string cmd, out object result);
+    
     public static partial class XConsole
     {
         private static Action<Message> LogMessageReceived;
@@ -13,7 +16,8 @@ namespace XFramework.Console
         private static readonly Queue<Message> m_messages = new ();
         private static readonly IConsole console = new UGUIConsole();
         
-        private static readonly Dictionary<string, Func<string, object>> m_ExecuteFunctions = new ();
+        private static readonly Dictionary<string, CommandDelegate> m_ExecuteFunctions = new ();
+        private static readonly List<CommandDelegate> m_AutoFunctions = new ();
         private static string m_CurrentExecuteKey = "";
             
         private static bool m_isOpen;
@@ -40,6 +44,7 @@ namespace XFramework.Console
                         if (!m_isInit)
                         {
                             console.OnInit();
+                            OnInit();
                             m_isInit = true;
                         }
                         console.OnOpen();
@@ -51,10 +56,20 @@ namespace XFramework.Console
                 }
             }
         }
-
+        
+        public static string CurrentCommandKey => m_CurrentExecuteKey;
+        
+        public static IReadOnlyList<string> CommandKeys => m_ExecuteFunctions.Keys.ToList();
+        
         static XConsole()
         {
-            
+            AddCommand("Auto", ExecuteAutoCommand);
+            AddCommand("GM", ExecuteGMCommand);
+        }
+
+        private static void OnInit()
+        {
+            XConsole.LogMessage(Message.System("start XConsole"));
         }
 
         public static void LogMessage(Message message)
@@ -93,7 +108,7 @@ namespace XFramework.Console
             return message;
         }
         
-        public static bool AddExecuteFunction(string executeKey, Func<string, object> func)
+        public static bool AddCommand(string executeKey, CommandDelegate func, bool registerAuto = false)
         {
             if (string.IsNullOrEmpty(executeKey))
             {
@@ -111,14 +126,24 @@ namespace XFramework.Console
             {
                 m_CurrentExecuteKey = executeKey;
             }
+            
+            if (registerAuto)
+            {
+                m_AutoFunctions.Add(func);
+            }
+
+            OnCommandChange();
             return true;
         }
 
-        public static bool ChangeExecuteFunction(string executeKey)
+        public static bool ChangeCommand(string executeKey)
         {
             if (m_ExecuteFunctions.ContainsKey(executeKey))
             {
                 m_CurrentExecuteKey = executeKey;
+                XConsole.LogMessage(Message.System("change execute commander to " + executeKey));
+
+                OnCommandChange();
                 return true;
             }
             else
@@ -127,13 +152,23 @@ namespace XFramework.Console
                 return false;
             }
         }
+
+        private static void OnCommandChange()
+        {
+            console.OnCommandChange();
+        }
+
+        public static bool Execute(string cmd)
+        {
+            return Execute(cmd, out var result);
+        }
         
-        public static object Execute(string cmd)
+        public static bool Execute(string cmd, out object result)
         {
             LogMessage(Message.Input(cmd));
-            
+            result = null;
             m_ExecuteFunctions.TryGetValue(m_CurrentExecuteKey, out var executeFun);
-            object result = executeFun?.Invoke(cmd);
+            executeFun?.Invoke(cmd, result);
 
             if (result != null)
             {
@@ -143,7 +178,26 @@ namespace XFramework.Console
             cmdCache.AddLast(cmd);
             currentCmd = null;
             
-            return result;
+            return true;
+        }
+
+        private static bool ExecuteGMCommand(string cmd, out object result)
+        {
+            return GMCommand.Execute(cmd, out result);
+        }
+        
+        private static bool ExecuteAutoCommand(string cmd, out object result)
+        {
+            foreach (var func in m_AutoFunctions)
+            {
+                if (func.Invoke(cmd, out result))
+                {
+                    return true;
+                }
+            }
+
+            result = null;
+            return false;
         }
         
         public static void JumpToPreviousCmd()
@@ -191,6 +245,8 @@ namespace XFramework.Console
 
         void OnExecuteCmd(string cmd, object value);
 
+        void OnCommandChange();
+        
         void OnClear();
         
         void OnCurrentCmdChanged(string cmd);
