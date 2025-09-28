@@ -21,7 +21,7 @@ public class SceneListWindow : EditorWindow
     {
         SceneListWindow wnd = GetWindow<SceneListWindow>();
         wnd.titleContent = new GUIContent("场景列表");
-        wnd.minSize = new Vector2(600, 300);
+        wnd.minSize = new Vector2(500, 200);
     }
 
     private void OnEnable()
@@ -122,11 +122,17 @@ public class SceneListWindow : EditorWindow
         operationsHeaderLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
         headerContainer.Add(operationsHeaderLabel);
 
-        root.Add(headerContainer);
+        // root.Add(headerContainer);
 
         // 场景列表
         sceneListView = new ListView();
         sceneListView.style.flexGrow = 1;
+        
+        // 添加边框样式
+        // sceneListView.style.borderWidth = 1;
+        // sceneListView.style.borderColor = new Color(0.3f, 0.3f, 0.3f);
+        sceneListView.style.marginLeft = 5;
+        sceneListView.style.marginRight = 5;
         
         // 配置列表视图
         ConfigureListView();
@@ -210,10 +216,10 @@ public class SceneListWindow : EditorWindow
                 OpenScene(sceneInfo.Path);
             };
 
-            // 设置交错背景色
+            // 设置交错背景色 - 更明显的对比
             element.style.backgroundColor = i % 2 == 0 ?
-                new Color(0.25f, 0.25f, 0.25f, 0.1f) :
-                new Color(0.25f, 0.25f, 0.25f, 0.2f);
+                new Color(0.25f, 0.25f, 0.25f, 0.15f) :
+                new Color(0.3f, 0.3f, 0.3f, 0.25f);
         };
 
         sceneListView.itemsSource = FilterScenes(string.Empty);

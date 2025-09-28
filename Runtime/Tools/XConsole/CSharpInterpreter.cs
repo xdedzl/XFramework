@@ -13,54 +13,42 @@ namespace XFramework.Console
     /// <summary>
     /// c#解释器
     /// </summary>
-    public class CSharpInterpreter : Singleton<CSharpInterpreter>
+    public class CSharpInterpreter
     {
-        private readonly CodeGenerater codeGenerater = new();
+        private readonly CodeGenerator codeGenerator = new();
         private readonly string ExpressionPattern = @"[^!=]=[^=]";
         private readonly Dictionary<string, object> dynamicValues = new();
-
-        public CSharpInterpreter()
-        {
-
-        }
 
         /// <summary>
         /// 执行一行代码
         /// </summary>
-        /// <param name="cmd"></param>
-        public object Execute(string cmd)
+        public bool Execute(string cmd, out object result)
         {
+            result = null;
             if (dynamicValues.TryGetValue(cmd, out object value))
             {
-                return value;
+                result = value;
+                return true;
             }
 
-            if (Application.platform == RuntimePlatform.Android)
-                throw new XFrameworkException("平台不支持动态生成代码");
-
-            return ExcuteCSharp(cmd);
+            if (Application.platform != RuntimePlatform.WindowsEditor)
+                return false;
+            
+            ExecuteCSharp(cmd);
+            return true;
         }
 
         #region cmd指令
-
-        private object Print(string arg)
+        public void Using(string name)
         {
-            return arg;
-        }
-
-        private object Using(string name)
-        {
-            codeGenerater.AddNameSpace(name);
-            return null;
+            codeGenerator.AddNameSpace(name);
         }
 
         #endregion
-
-        #region 解析c#
-
-        private object ExcuteCSharp(string cmd)
+        
+        private object ExecuteCSharp(string cmd)
         {
-            codeGenerater.ClearClasses();
+            codeGenerator.ClearClasses();
 
             Function function = new Function
             {
@@ -91,9 +79,9 @@ namespace XFramework.Console
             string className = "DynamicClass_" + Utility.Time.GetCurrentTimeStamp();
             Class dynamicClass = new Class(className);
             dynamicClass.AddFunction(function);
-            codeGenerater.AddClass(dynamicClass);
+            codeGenerator.AddClass(dynamicClass);
 
-            var value = ExcuteCode(codeGenerater.Code, className, "DynamicFunction");
+            var value = ExecuteCode(codeGenerator.Code, className, "DynamicFunction");
             if (match.Success)
             {
                 string variableName = cmd.Substring(0, match.Index + 1).Trim();
@@ -106,54 +94,26 @@ namespace XFramework.Console
             }
         }
 
-        public object ExcuteCode(string code, string className, string method)
+        public static object ExecuteCode(string code, string className, string method)
         {
-            //CSharpSyntaxTree
-#if QQQ
-            CSharpCodeProvider codeProvider = new CSharpCodeProvider();
-            CompilerParameters compilerParameters = new CompilerParameters();
-            Assembly[] assemblys = AppDomain.CurrentDomain.GetAssemblies();
-            foreach (var item in assemblys)
-            {
-                if (item.Location.Contains("Unity.Plastic.Newtonsoft.Json.dll"))
-                    continue;
-                compilerParameters.ReferencedAssemblies.Add(item.Location);
-            }
-            compilerParameters.GenerateExecutable = false;
-            compilerParameters.GenerateInMemory = true;
-            CompilerResults cr = codeProvider.CompileAssemblyFromSource(compilerParameters, code);
+            Assembly objAssembly = null;
+            object dyClass = objAssembly.CreateInstance(className);
 
-            if (cr.Errors.HasErrors)
+            var methodInfo = dyClass.GetType().GetMethod(method);
+                
+
+            if (methodInfo.ReturnType != typeof(void))
             {
-                var msg = string.Join(Environment.NewLine, cr.Errors.Cast<CompilerError>().First().ErrorText);
-                Debug.LogError(msg);
-                return null;
+                var @delegate = Utility.Reflection.MethodWrapperFunc<object>(dyClass, methodInfo);
+                var value = @delegate.Invoke();
+                return value;
             }
             else
             {
-                Assembly objAssembly = cr.CompiledAssembly;
-                object dyClass = objAssembly.CreateInstance(className);
-
-                var methodInfo = dyClass.GetType().GetMethod(method);
-                
-
-                if (methodInfo.ReturnType != typeof(void))
-                {
-                    var @delegate = Utility.Reflection.MethodWrapperFunc<object>(dyClass, methodInfo);
-                    var value = @delegate.Invoke();
-                    return value;
-                }
-                else
-                {
-                    var @delegate = Utility.Reflection.MethodWrapperAction(dyClass, methodInfo);
-                    @delegate.Invoke();
-                    return null;
-                }
+                var @delegate = Utility.Reflection.MethodWrapperAction(dyClass, methodInfo);
+                @delegate.Invoke();
+                return null;
             }
-#endif
-            return null;
         }
-
-#endregion
     }
 }

@@ -64,7 +64,7 @@ namespace XFramework.Console
         static XConsole()
         {
             AddCommand("Auto", ExecuteAutoCommand);
-            AddCommand("GM", ExecuteGMCommand);
+            AddCommand("GM", ExecuteGMCommand, true);
         }
 
         private static void OnInit()
@@ -168,7 +168,12 @@ namespace XFramework.Console
             LogMessage(Message.Input(cmd));
             result = null;
             m_ExecuteFunctions.TryGetValue(m_CurrentExecuteKey, out var executeFun);
-            executeFun?.Invoke(cmd, result);
+            if (executeFun == null)
+            {
+                LogError($"Execute function {m_CurrentExecuteKey} not found.");
+                return false;
+            }
+            executeFun(cmd, out result);
 
             if (result != null)
             {
@@ -177,10 +182,9 @@ namespace XFramework.Console
             console.OnExecuteCmd(cmd, result);
             cmdCache.AddLast(cmd);
             currentCmd = null;
-            
             return true;
         }
-
+        
         private static bool ExecuteGMCommand(string cmd, out object result)
         {
             return GMCommand.Execute(cmd, out result);
