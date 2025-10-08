@@ -18,7 +18,7 @@ namespace XFramework.UI
     }
 
     /// <summary>
-    /// Ò»¸öÊ¹ÓÃ×Öµä¹ÜÀíµÄUI¹ÜÀíÆ÷
+    /// Ò»ï¿½ï¿½Ê¹ï¿½ï¿½ï¿½Öµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½UIï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     /// </summary>
     public class UIManager : GameModuleBase<UIManager>
     {
@@ -36,15 +36,15 @@ namespace XFramework.UI
         }
 
         /// <summary>
-        /// ´æ´¢ËùÓÐÃæ°åPrefabµÄÂ·¾¶
+        /// ï¿½æ´¢ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Prefabï¿½ï¿½Â·ï¿½ï¿½
         /// </summary>
         private Dictionary<string, string> m_PanelPathDict = new Dictionary<string, string>();
         /// <summary>
-        /// ±£´æËùÓÐÊµÀý»¯Ãæ°åµÄÓÎÏ·ÎïÌåÉíÉÏµÄBasePanel×é¼þ
+        /// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Êµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ïµï¿½BasePanelï¿½ï¿½ï¿½
         /// </summary>
         private Dictionary<string, PanelBase> m_PanelDict = new Dictionary<string, PanelBase>();
         /// <summary>
-        /// ´¦ÓÚ´ò¿ª×´Ì¬µÄÃæ°å×Öµä£¬keyÎª²ã¼¶
+        /// ï¿½ï¿½ï¿½Ú´ï¿½×´Ì¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Öµä£¬keyÎªï¿½ã¼¶
         /// </summary>
         private Dictionary<int, List<PanelBase>> m_OnDisplayPanelDic = new Dictionary<int, List<PanelBase>>();
 
@@ -59,7 +59,7 @@ namespace XFramework.UI
         }
 
         /// <summary>
-        /// ´ò¿ªÃæ°å
+        /// ï¿½ï¿½ï¿½ï¿½ï¿½
         /// </summary>
         public void OpenPanel(string uiname, params object[] args)
         {
@@ -80,7 +80,7 @@ namespace XFramework.UI
             }
 
             m_OnDisplayPanelDic[panel.Level].Add(panel);
-            if (m_OnDisplayPanelDic.ContainsKey(panel.Level - 1)) // ¿ÉÒÔ¸ÄÎª if(panel.level > 0)
+            if (m_OnDisplayPanelDic.ContainsKey(panel.Level - 1)) // ï¿½ï¿½ï¿½Ô¸ï¿½Îª if(panel.level > 0)
             {
                 m_OnDisplayPanelDic[panel.Level - 1].End().OnPause();
             }
@@ -90,7 +90,7 @@ namespace XFramework.UI
         }
 
         /// <summary>
-        /// ¹Ø±ÕÃæ°å
+        /// ï¿½Ø±ï¿½ï¿½ï¿½ï¿½
         /// </summary>
         public void ClosePanel(string uiname)
         {
@@ -126,7 +126,7 @@ namespace XFramework.UI
         }
 
         /// <summary>
-        /// »ñÈ¡Ãæ°å
+        /// ï¿½ï¿½È¡ï¿½ï¿½ï¿½
         /// </summary>
         private PanelBase GetPanel(string uiname)
         {
@@ -138,7 +138,7 @@ namespace XFramework.UI
             }
             else
             {
-                // ¸ù¾ÝprefabÈ¥ÊµÀý»¯Ãæ°å
+                // ï¿½ï¿½ï¿½ï¿½prefabÈ¥Êµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
                 m_PanelPathDict.TryGetValue(uiname, out string path);
                 PanelBase panel = DefaultPanelLoader(path);
                 AddPanel(uiname, panel);
@@ -189,7 +189,7 @@ namespace XFramework.UI
         }
 
         /// <summary>
-        /// ¹Ø±Õ×îÉÏ²ã½çÃæ
+        /// ï¿½Ø±ï¿½ï¿½ï¿½ï¿½Ï²ï¿½ï¿½ï¿½ï¿½
         /// </summary>
         public void CloseTopPanel()
         {
@@ -215,7 +215,7 @@ namespace XFramework.UI
         }
 
         /// <summary>
-        /// ¹Ø±ÕÄ³Ò»²ã¼¶µÄËùÓÐÃæ°å
+        /// ï¿½Ø±ï¿½Ä³Ò»ï¿½ã¼¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         /// </summary>
         public void CloseLevelPanel(int level)
         {
@@ -231,7 +231,7 @@ namespace XFramework.UI
         }
 
         /// <summary>
-        /// ³õÊ¼»¯Ãæ°åÔ¤ÖÆÌåÂ·¾¶×Öµä
+        /// ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½Ô¤ï¿½ï¿½ï¿½ï¿½Â·ï¿½ï¿½ï¿½Öµï¿½
         /// </summary>
         private void InitPathDic()
         {
@@ -304,7 +304,7 @@ namespace XFramework.UI
 
         #endregion
 
-        #region ½Ó¿ÚÊµÏÖ
+        #region ï¿½Ó¿ï¿½Êµï¿½ï¿½
 
         public override int Priority => 200;
 

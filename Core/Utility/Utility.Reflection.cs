@@ -210,24 +210,24 @@ namespace XFramework
                 return (Action<T1, T2, T3>)Delegate.CreateDelegate(typeof(Action<T1, T2, T3>), target, methodInfo);
             }
 
-            public static Func<TReslut> MethodWrapperFunc<TReslut>(object target, MethodInfo methodInfo)
+            public static Func<TResult> MethodWrapperFunc<TResult>(object target, MethodInfo methodInfo)
             {
-                return (Func<TReslut>)Delegate.CreateDelegate(typeof(Func<TReslut>), target, methodInfo);
+                return (Func<TResult>)Delegate.CreateDelegate(typeof(Func<TResult>), target, methodInfo);
             }
 
-            public static Func<T1, TReslut> MethodWrapperFunc<T1, TReslut>(object target, MethodInfo methodInfo)
+            public static Func<T1, TResult> MethodWrapperFunc<T1, TResult>(object target, MethodInfo methodInfo)
             {
-                return (Func<T1, TReslut>)Delegate.CreateDelegate(typeof(Func<T1, TReslut>), target, methodInfo);
+                return (Func<T1, TResult>)Delegate.CreateDelegate(typeof(Func<T1, TResult>), target, methodInfo);
             }
 
-            public static Func<T1, T2, TReslut> MethodWrapperFunc<T1, T2, TReslut>(object target, MethodInfo methodInfo)
+            public static Func<T1, T2, TResult> MethodWrapperFunc<T1, T2, TResult>(object target, MethodInfo methodInfo)
             {
-                return (Func<T1, T2, TReslut>)Delegate.CreateDelegate(typeof(Func<T1, T2, TReslut>), target, methodInfo);
+                return (Func<T1, T2, TResult>)Delegate.CreateDelegate(typeof(Func<T1, T2, TResult>), target, methodInfo);
             }
 
-            public static Func<T1, T2, T3, Reslut> MethodWrapperFunc<T1, T2, T3, Reslut>(object target, MethodInfo methodInfo)
+            public static Func<T1, T2, T3, TResult> MethodWrapperFunc<T1, T2, T3, TResult>(object target, MethodInfo methodInfo)
             {
-                return (Func<T1, T2, T3, Reslut>)Delegate.CreateDelegate(typeof(Func<T1, T2, T3, Reslut>), target, methodInfo);
+                return (Func<T1, T2, T3, TResult>)Delegate.CreateDelegate(typeof(Func<T1, T2, T3, TResult>), target, methodInfo);
             }
 
             #endregion

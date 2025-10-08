@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace XFramework.Console
 {
-    public class CodeGenerater
+    public class CodeGenerator
     {
         private HashSet<string> nameSpaces = new HashSet<string>();
         private List<Class> classes = new List<Class>();

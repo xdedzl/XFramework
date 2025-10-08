@@ -6,14 +6,14 @@ namespace XFramework.Editor
     /// <summary>
     /// 编辑器图标资源
     /// </summary>
-    public class EditorIcon
+    public static class EditorIcon
     {
-        static Texture2D m_Setting;
-        static Texture2D m_Refresh;
-        static Texture2D m_Folder;
-        static Texture2D m_Trash;
-        static Texture2D m_Duplicate;
-        static Texture2D m_Plus;
+        private static Texture2D m_Setting;
+        private static Texture2D m_Refresh;
+        private static Texture2D m_Folder;
+        private static Texture2D m_Trash;
+        private static Texture2D m_Duplicate;
+        private static Texture2D m_Plus;
 
 
         public static Texture2D Setting
