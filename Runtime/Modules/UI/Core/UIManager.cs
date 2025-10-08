@@ -1,10 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using System.Xml.Linq;
 using TMPro;
 using UnityEngine;
-using UnityEngine.Video;
 using XFramework.Entity;
 using XFramework.Resource;
 using static XFramework.Utility;
@@ -13,7 +11,11 @@ namespace XFramework.UI
 {
     class MainPanelAttribute : Attribute { }
 
-
+    class PanelInfoAttribute : Attribute
+    {
+        public string name;
+        public string path;
+    }
 
     /// <summary>
     /// 一个使用字典管理的UI管理器
@@ -233,18 +235,10 @@ namespace XFramework.UI
         /// </summary>
         private void InitPathDic()
         {
-            string uipaths = Resources.Load<TextAsset>("Panels/UIPath").text;
-            uipaths = uipaths.Replace("\"", "");
-            uipaths = uipaths.Replace("\n", "");
-            uipaths = uipaths.Replace("\r", "");
-            string[] data = uipaths.Split(',');
-            string[] nameAndPath;
-            for (int i = 0; i < data.Length; i++)
+            foreach (var type in Utility.Reflection.GetSonTypes<PanelBase>())
             {
-                nameAndPath = data[i].Split(':');
-                if (nameAndPath == null || nameAndPath.Length != 2)
-                    continue;
-                m_PanelPathDict.Add(nameAndPath[0].Trim(), nameAndPath[1].Trim());
+                var panelInfo = type.GetCustomAttribute<PanelInfoAttribute>();
+                m_PanelPathDict.Add(panelInfo.path, panelInfo.path);
             }
         }
 

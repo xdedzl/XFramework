@@ -44,6 +44,11 @@ namespace XFramework
                 return instance;
             }
 
+            public static IEnumerable<Type> GetSonTypes<T>(string assemblyName = "Assembly-CSharp")
+            {
+                return GetSonTypes(typeof(T), assemblyName);
+            }
+
             /// <summary>
             /// 获取一个类型的所有派生类
             /// </summary>
