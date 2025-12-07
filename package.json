@@ -3,7 +3,7 @@
     "displayName": "XFramework",
     "description": "lit framework",
     "version": "1.0.0",
-    "unity": "2018.3",
+    "unity": "2022.3",
     "license": "Apache",
     "dependencies": {
         "com.unity.textmeshpro":"2.0.1",
