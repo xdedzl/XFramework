@@ -1,5 +1,25 @@
 # XFramework  --xdedzl
-我是薛定谔的蟑螂
+
+## 0. 使用前配置
+本包引用了UniTask，但由于upk的依赖项不支持使用git链接，且使用版本号作为依赖项时候，需要在项目层配置的mainfest.json配置scopedRegistries
+
+将下面的scopedRegistries添加到mainfest.json后即可
+```json
+{
+  "dependencies": {
+    ...
+  },
+  "scopedRegistries": [
+    {
+      "name": "OpenUPM",
+      "url": "https://package.openupm.com",
+      "scopes": [ "com.cysharp" ]
+    }
+  ]
+}
+
+```
+
 
 ## 1. 启动流程
 
