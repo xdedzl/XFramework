@@ -16,13 +16,7 @@ public class GameBase : MonoBehaviour
 
     public static GameBase activeGame { get; private set; }
 
-    public static XFrameworkSetting Setting 
-    {
-        get
-        {
-            return activeGame._setting;
-        }
-    }
+    public static XFrameworkSetting Setting => activeGame._setting;
 
     private void Awake()
     {

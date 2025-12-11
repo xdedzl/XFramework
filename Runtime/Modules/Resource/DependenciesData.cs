@@ -9,14 +9,14 @@ namespace XFramework.Resource
         private readonly string[] m_Empty;
 
         [SerializeField]
-        private SingleDepenciesData[] AllDependenceData;
+        private readonly SingleDependenciesData[] AllDependenceData;
 
         public DependenciesData()
         {
             m_Empty = new string[0];
         }
 
-        public DependenciesData(SingleDepenciesData[] allDependenceData)
+        public DependenciesData(SingleDependenciesData[] allDependenceData)
         {
             AllDependenceData = allDependenceData;
 
@@ -37,11 +37,11 @@ namespace XFramework.Resource
 
         public string[] GetAllDependencies(string assetBundleName)
         {
-            List<string> result = new List<string>();
+            var result = new List<string>();
 
             string[] dps = GetDirectDependencies(assetBundleName);
 
-            List<string> tempList = new List<string>();
+            var tempList = new List<string>();
             while (dps.Length != 0)
             {
                 foreach (var item in dps)
@@ -65,19 +65,19 @@ namespace XFramework.Resource
 
         public string[] GetAllAssetBundles()
         {
-            List<string> strs = new List<string>();
+            var paths = new List<string>();
 
             foreach (var item in AllDependenceData)
             {
-                strs.Add(item.Name);
+                paths.Add(item.Name);
             }
 
-            return strs.ToArray();
+            return paths.ToArray();
         }
     }
 
     [System.Serializable]
-    public class SingleDepenciesData
+    public class SingleDependenciesData
     {
         /// <summary>
         /// AB包名
@@ -88,25 +88,25 @@ namespace XFramework.Resource
         /// </summary>
         public string[] Dependencies;
 
-        public SingleDepenciesData(string name, string[] dependencies)
+        public SingleDependenciesData(string name, string[] dependencies)
         {
             Name = name;
             Dependencies = dependencies;
         }
     }
 
-    public class DependenceUtility
+    public static class DependencyUtility
     {
         /// <summary>
         /// 融合依赖关系
         /// 在数组中越靠后优先级越高
         /// </summary>
-        /// <param name="datas"></param>
-        public static DependenciesData ConbineDependence(DependenciesData[] datas)
+        /// <param name="dates"></param>
+        public static DependenciesData CombineDependence(DependenciesData[] dates)
         {
-            List<SingleDepenciesData> singleDatas = new List<SingleDepenciesData>();
+            var singleDates = new List<SingleDependenciesData>();
 
-            foreach (var data in datas.Reverse())
+            foreach (var data in dates.Reverse())
             {
                 string[] assetBundles = data.GetAllAssetBundles();
 
@@ -114,15 +114,15 @@ namespace XFramework.Resource
                 {
                     if (Contains(abName))
                         continue;
-                    singleDatas.Add(new SingleDepenciesData(abName, data.GetDirectDependencies(abName)));
+                    singleDates.Add(new SingleDependenciesData(abName, data.GetDirectDependencies(abName)));
                 }
             }
 
-            return new DependenciesData(singleDatas.ToArray());
+            return new DependenciesData(singleDates.ToArray());
 
             bool Contains(string abName)
             {
-                foreach (var item in singleDatas)
+                foreach (var item in singleDates)
                 {
                     if (abName == item.Name)
                         return true;
@@ -134,24 +134,24 @@ namespace XFramework.Resource
         /// <summary>
         /// 将unity依赖转为自己的
         /// </summary>
-        /// <param name="mainfest"></param>
+        /// <param name="manifest"></param>
         /// <returns></returns>
-        public static DependenciesData Manifest2Dependence(AssetBundleManifest mainfest)
+        public static DependenciesData Manifest2Dependence(AssetBundleManifest manifest)
         {
-            string[] abNames = mainfest.GetAllAssetBundles();
+            string[] abNames = manifest.GetAllAssetBundles();
 
-            List<SingleDepenciesData> singleDatas = new List<SingleDepenciesData>();
+            var singleDates = new List<SingleDependenciesData>();
 
             for (int j = 0; j < abNames.Length; j++)
             {
-                var dpNames = mainfest.GetDirectDependencies(abNames[j]);
+                var dpNames = manifest.GetDirectDependencies(abNames[j]);
                 if (dpNames.Length <= 0)
                 {
                     continue;
                 }
-                singleDatas.Add(new SingleDepenciesData(abNames[j], dpNames));
+                singleDates.Add(new SingleDependenciesData(abNames[j], dpNames));
             }
-            var data = new DependenciesData(singleDatas.ToArray());
+            var data = new DependenciesData(singleDates.ToArray());
             return data;
         }
     }

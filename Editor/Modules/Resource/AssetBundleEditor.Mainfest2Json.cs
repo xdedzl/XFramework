@@ -11,7 +11,7 @@ namespace XFramework.Editor
 {
     public partial class AssetBundleEditor
     {
-        private class Mainfest2Json : SubWindow
+        private class Manifest2Json : SubWindow
         {
             private List<string> m_Paths;
             private string m_OutPutPath;
@@ -60,7 +60,7 @@ namespace XFramework.Editor
                         {
                             if (GUILayout.Button(EditorIcon.Plus))
                             {
-                                string temp = EditorUtility.OpenFilePanel("选中mainfest", Application.streamingAssetsPath, "");
+                                string temp = EditorUtility.OpenFilePanel("选中manifest", Application.streamingAssetsPath, "");
                                 Debug.Log(temp);
                                 if (!(string.IsNullOrEmpty(temp) || m_Paths.Contains(temp)))
                                 {
@@ -93,25 +93,25 @@ namespace XFramework.Editor
             private void GenerateJson()
             {
                 AssetBundle.UnloadAllAssetBundles(true);
-                DependenciesData[] datas = new DependenciesData[m_Paths.Count];
+                var dates = new DependenciesData[m_Paths.Count];
                 for (int i = 0; i < m_Paths.Count; i++)
                 {
                     if (!m_Paths[i].EndsWith(".json"))
                     {
-                        AssetBundle mainfestAB = AssetBundle.LoadFromFile(m_Paths[i]);
-                        var mainfest = mainfestAB.LoadAsset<AssetBundleManifest>("AssetBundleManifest");
+                        AssetBundle manifestAB = AssetBundle.LoadFromFile(m_Paths[i]);
+                        var manifest = manifestAB.LoadAsset<AssetBundleManifest>("AssetBundleManifest");
 
-                        datas[i] = DependenceUtility.Manifest2Dependence(mainfest);
+                        dates[i] = DependencyUtility.Manifest2Dependence(manifest);
                     }
                     else
                     {
                         string tempJson = System.IO.File.ReadAllText(m_Paths[i]);
-                        datas[i] = JsonUtility.FromJson<DependenciesData>(tempJson);
+                        dates[i] = JsonUtility.FromJson<DependenciesData>(tempJson);
                     }
                 }
 
-                string json = JsonUtility.ToJson(DependenceUtility.ConbineDependence(datas), true);
-                File.WriteAllText(m_OutPutPath + "/depenencies.json", json);
+                string json = JsonUtility.ToJson(DependencyUtility.CombineDependence(dates), true);
+                File.WriteAllText(m_OutPutPath + "/dependencies.json", json);
                 AssetDatabase.Refresh();
 
                 Debug.Log("依赖文件已替换");

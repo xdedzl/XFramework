@@ -18,22 +18,12 @@ namespace XFramework
                 return path;
             }
         }
+        
+        public static string projectPath => Application.dataPath.Replace("Assets", "");
 
-        public static string localDataPath
-        {
-            get
-            {
-                return $"{dataPath}/LocalData";
-            }
-        }
+        public static string localDataPath => $"{dataPath}/LocalData";
 
-        public static string configPath 
-        {
-            get
-            {
-                return $"{dataPath}/Configs";
-            }
-        }
+        public static string configPath => $"{dataPath}/Configs";
 
         public static string streamingAssetsPath
         {
@@ -56,7 +46,7 @@ namespace XFramework
         }
 
         /// <summary>
-        /// ¼ÇÂ¼streamingAssetsÏÂµÄÎÄ¼þ
+        /// ï¿½ï¿½Â¼streamingAssetsï¿½Âµï¿½ï¿½Ä¼ï¿½
         /// </summary>
         public static void RecordAllStremingAssetsPath()
         {
@@ -88,7 +78,7 @@ namespace XFramework
         }
 
         /// <summary>
-        /// °ÑstreamingAssetsÏÂµÄÎÄ¼þcopyµ½persistentDataPathÏÂ
+        /// å°†streamingAssetsä¸­çš„æ–‡ä»¶copyåˆ°persistentDataPathä¸­
         /// </summary>
         /// <param name="force"></param>
         public static void CopyToPersistentDataPath(bool force = false)
@@ -104,12 +94,12 @@ namespace XFramework
 
             var uri = new System.Uri(Path.Combine(Application.streamingAssetsPath, "assetList"));
             UnityWebRequest request = UnityWebRequest.Get(uri);
-            request.SendWebRequest();//¶ÁÈ¡Êý¾Ý
+            request.SendWebRequest();
             if (request.error == null)
             {
                 while (true)
                 {
-                    if (request.downloadHandler.isDone)//ÊÇ·ñ¶ÁÈ¡ÍêÊý¾Ý
+                    if (request.downloadHandler.isDone)
                     {
                         string[] paths = request.downloadHandler.text.Trim().Split('\n');
                         foreach (var path in paths)

@@ -39,12 +39,12 @@ namespace XFramework.Resource
         /// </summary>
         public string Variant => m_Variant;
 
-        public AssetBundleLoadHelper(string abPath = "", string variant = "") : this(abPath, variant, "depenencies")
+        public AssetBundleLoadHelper(string abPath = "", string variant = "") : this(abPath, variant, "dependencies")
         {
 
         }
 
-        public AssetBundleLoadHelper(string abPath, string variant, string depenenciesFileName)
+        public AssetBundleLoadHelper(string abPath, string variant, string dependenciesFileName)
         {
             m_ABPath = string.IsNullOrEmpty(abPath) ? Application.streamingAssetsPath + "/AssetBundles" : abPath;
             m_Variant = string.IsNullOrEmpty(variant) ? ".ab" : "." + variant;
@@ -52,7 +52,7 @@ namespace XFramework.Resource
             m_ABDic = new Dictionary<string, AssetBundle>();
             m_LoadingAB = new Dictionary<string, AssetBundleCreateRequest>();
 
-            string dependencePath = $"{m_ABPath}/{depenenciesFileName}.json";
+            string dependencePath = $"{m_ABPath}/{dependenciesFileName}.json";
             if (System.IO.File.Exists(dependencePath))
             {
                 string json = System.IO.File.ReadAllText(dependencePath);
@@ -60,7 +60,7 @@ namespace XFramework.Resource
             }
             else
             {
-                m_DependenceInfo = new DependenciesData(new SingleDepenciesData[0]);
+                m_DependenceInfo = new DependenciesData(Array.Empty<SingleDependenciesData>());
                 Debug.LogWarning($"[AssetBundleHelper] 路径 {m_ABPath} 下无依赖关系");
             }
         }

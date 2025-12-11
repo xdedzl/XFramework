@@ -44,7 +44,7 @@ namespace XFramework.Editor
                 case PackOption.AllFiles:
                     files = dirInfo.GetFiles("*", SearchOption.AllDirectories);        // 取出所有文件
                     break;
-                case PackOption.TopDirectiony:
+                case PackOption.TopDirectory:
                     files = dirInfo.GetFiles("*", SearchOption.TopDirectoryOnly);      // 取出第一层文件
                     subDirectory = dirInfo.GetDirectories("*", SearchOption.TopDirectoryOnly);
                     foreach (var item in subDirectory)
@@ -52,12 +52,12 @@ namespace XFramework.Editor
                         MarkDirectory(item, PackOption.AllFiles, markRootName, ref builds);
                     }
                     break;
-                case PackOption.AllDirectiony:
+                case PackOption.AllDirectory:
                     files = dirInfo.GetFiles("*", SearchOption.TopDirectoryOnly);      // 取出第一层文件
                     subDirectory = dirInfo.GetDirectories("*", SearchOption.TopDirectoryOnly);
                     foreach (var item in subDirectory)
                     {
-                        MarkDirectory(item, PackOption.AllDirectiony, markRootName, ref builds);
+                        MarkDirectory(item, PackOption.AllDirectory, markRootName, ref builds);
                     }
                     break;
                 case PackOption.TopFileOnly:

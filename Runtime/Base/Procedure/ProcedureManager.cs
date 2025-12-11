@@ -10,34 +10,17 @@ namespace XFramework
         /// <summary>
         /// 流程状态机
         /// </summary>
-        private readonly ProcedureFsm m_Fsm;
-
-        public ProcedureManager()
-        {
-            m_Fsm = new ProcedureFsm();
-        }
+        private readonly ProcedureFsm m_Fsm = new();
 
         /// <summary>
         /// 当前流程
         /// </summary>
-        public ProcedureBase CurrentProcedure
-        {
-            get
-            {
-                return m_Fsm.CurrentState;
-            }
-        }
+        public ProcedureBase CurrentProcedure => m_Fsm.CurrentState;
 
         /// <summary>
         /// 当前的子流程
         /// </summary>
-        public SubProcedureBase CurrenSubProcedure
-        {
-            get
-            {
-                return m_Fsm.CurrentState?.CurrentSubProcedure;
-            }
-        }
+        public SubProcedureBase CurrenSubProcedure => m_Fsm.CurrentState?.CurrentSubProcedure;
 
         /// <summary>
         /// 切换流程

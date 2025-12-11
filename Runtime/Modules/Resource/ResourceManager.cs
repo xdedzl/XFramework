@@ -11,11 +11,13 @@ namespace XFramework.Resource
     /// </summary>
     public partial class ResourceManager : GameModuleBase<ResourceManager>
     {
+        public const string BuildConfigAssetPath = "Assets/Configs/AssetBundleBuildConfig.asset";
+        
         private readonly IResourceLoadHelper m_LoadHelper;
         /// <summary>
         /// 需要实例化的资源
         /// </summary>
-        private readonly Dictionary<string, Object> m_AssetDic;
+        private readonly Dictionary<string, Object> m_AssetDic = new Dictionary<string, Object>();
         /// <summary>
         /// 资源路径映射
         /// </summary>
@@ -30,7 +32,6 @@ namespace XFramework.Resource
         public ResourceManager(IResourceLoadHelper loadHelper, string mapInfoPath="")
         {
             m_LoadHelper = loadHelper;
-            m_AssetDic = new Dictionary<string, Object>();
 
             if (File.Exists(mapInfoPath))
             {

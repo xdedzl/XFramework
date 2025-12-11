@@ -5,7 +5,8 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.UIElements;
-using System; // 添加以使用 DateTime
+using System;
+using XFramework.Editor; // 添加以使用 DateTime
 
 public class SceneListWindow : EditorWindow
 {
@@ -254,24 +255,13 @@ public class SceneListWindow : EditorWindow
     private void ConfigureListView()
     {
         // 配置列表视图
-        sceneListView.makeItem = () => {
-            var itemContainer = new VisualElement
+        sceneListView.makeItem = () =>
+        {
+            var itemContainer = new XItemBox
             {
                 style =
                 {
                     flexDirection = FlexDirection.Row,
-                    paddingTop = 2,
-                    paddingBottom = 2,
-                    marginLeft = 0,
-                    marginRight = 0,
-                    borderLeftWidth = 1,
-                    borderRightWidth = 1,
-                    borderTopWidth = 0.5f,
-                    borderBottomWidth = 0.5f,
-                    borderLeftColor = new Color(0.3f, 0.3f, 0.3f, 0.6f),
-                    borderRightColor = new Color(0.3f, 0.3f, 0.3f, 0.6f),
-                    borderTopColor = new Color(0.25f, 0.25f, 0.25f, 0.6f),
-                    borderBottomColor = new Color(0.25f, 0.25f, 0.25f, 0.6f)
                 }
             };
 
