@@ -29,11 +29,12 @@ namespace XFramework
             timer = null;
         }
 
-        public void Play(AudioClip clip)
+        public void Play(AudioClip clip, float volume = 1f)
         {
             timer?.Stop();
             timer = null;
-
+            
+            source.volume = volume;
             source.clip = clip;
             source.Play();
             timer = Timer.Register(clip.length, () =>
@@ -120,20 +121,43 @@ namespace XFramework
             }
         }
 
-        public void PlaySound(string path)
+        public void PlaySound(string path, float volume = 1f)
         {
             var clip = GetAudioClip(path);
-            if(clip == null)
+            PlaySound(clip, volume);
+        }
+        
+        public void PlaySound(AudioClip clip, float volume = 1f)
+        {
+            if(!clip)
             {
-                Debug.LogWarning($"sound资源不存在， path={path}");
-
+                Debug.LogWarning($"sound资源不存在");
             }
             else
             {
-                var auidoEntity = EntityManager.Instance.Allocate<AudioEntity>("SoundManager_Audio");
-                auidoEntity.Play(clip);
+                var audioEntity = EntityManager.Instance.Allocate<AudioEntity>("SoundManager_Audio");
+                audioEntity.Play(clip, volume);
             }
-
+        }
+        
+        public void PlaySound3D(string path, Vector3 position, float volume = 1f)
+        {
+            var clip = GetAudioClip(path);
+            PlaySound3D(clip, position, volume);
+        }
+        
+        public void PlaySound3D(AudioClip clip, Vector3 position, float volume = 1f)
+        {
+            if(!clip)
+            {
+                Debug.LogWarning($"sound资源不存在");
+            }
+            else
+            {
+                var audioEntity = EntityManager.Instance.Allocate<AudioEntity>("SoundManager_Audio");
+                audioEntity.transform.position = position;
+                audioEntity.Play(clip, volume);
+            }
         }
 
         /// <summary>
