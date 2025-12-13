@@ -6,7 +6,7 @@ namespace XFramework.Event
     /// <summary>
     /// 数据主题管理类
     /// </summary>
-    public class DataSubjectManager : GameModuleBase<DataSubjectManager>
+    public class DataSubjectManager : PersistentGameModuleBase<DataSubjectManager>
     {
         /// <summary>
         /// 每一个Subject都是一个被观察的对象
@@ -68,11 +68,5 @@ namespace XFramework.Event
             if (m_SubjectDic.ContainsKey(data.dataType))
                 m_SubjectDic[data.dataType].Notify(data, type, obj);
         }
-
-        #region 接口实现
-
-        public override int Priority { get { return 3000; } }
-
-        #endregion
     }
 }

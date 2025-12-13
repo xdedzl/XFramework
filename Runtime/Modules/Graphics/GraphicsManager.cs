@@ -120,8 +120,6 @@ namespace XFramework.Draw
 
         #region 接口实现
 
-        public override int Priority { get { return 10; } }
-
         public override void Shutdown()
         {
             m_GraphicsDic.Clear();

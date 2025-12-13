@@ -46,7 +46,7 @@ namespace XFramework
     }
 
     [DependenceModule(typeof(EntityManager))]
-    public class SoundManager : GameModuleBase<SoundManager>
+    public class SoundManager : PersistentGameModuleBase<SoundManager>
     {
         /// <summary>
         /// 背景音乐
@@ -62,8 +62,6 @@ namespace XFramework
         private List<AudioSource> m_SFX3D;
 
         private readonly Dictionary<string, AudioClip> m_AudioClipDic = new();
-
-        public override int Priority => 9999;
 
         public SoundManager()
         {

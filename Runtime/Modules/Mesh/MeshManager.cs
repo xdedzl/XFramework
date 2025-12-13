@@ -231,8 +231,6 @@ namespace XFramework.Draw
             });
         }
 
-        public override int Priority => 200;
-
         public override void Shutdown()
         {
             m_LineMaterial = null;

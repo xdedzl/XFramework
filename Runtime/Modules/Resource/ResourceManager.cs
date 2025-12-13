@@ -9,7 +9,7 @@ namespace XFramework.Resource
     /// 资源管理器
     /// 若加载路径以 Res/ 开头，则会使用unity Resource.xxx 方式加载）
     /// </summary>
-    public partial class ResourceManager : GameModuleBase<ResourceManager>
+    public partial class ResourceManager : PersistentGameModuleBase<ResourceManager>
     {
         public const string BuildConfigAssetPath = "Assets/Configs/AssetBundleBuildConfig.asset";
         
@@ -361,8 +361,6 @@ namespace XFramework.Resource
         #endregion
 
         #region 接口实现
-
-        public override int Priority { get { return 100; } }
 
         public override void Shutdown()
         {

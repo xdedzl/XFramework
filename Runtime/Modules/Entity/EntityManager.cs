@@ -8,7 +8,7 @@ namespace XFramework.Entity
     /// <summary>
     /// 实体管理器
     /// </summary>
-    public partial class EntityManager : GameModuleBase<EntityManager>
+    public partial class EntityManager : PersistentMonoGameModuleBase<EntityManager>
     {
         /// <summary>
         /// 存储对应实体容器的字典

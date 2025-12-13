@@ -6,7 +6,7 @@ namespace XFramework.Fsm
     /// <summary>
     /// 状态机管理类
     /// </summary>
-    public class FsmManager : GameModuleBase<FsmManager>
+    public class FsmManager : MonoGameModuleBase<FsmManager>
     {
         /// <summary>
         /// 存储所有状态机的字典

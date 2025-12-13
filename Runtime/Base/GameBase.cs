@@ -1,7 +1,11 @@
 using System.Reflection;
+using Newtonsoft.Json;
 using UnityEngine;
 using XFramework;
 using XFramework.Console;
+using XFramework.Entity;
+using XFramework.Fsm;
+using XFramework.Json;
 
 /// <summary>
 /// 这个类挂在初始场景中,是整个游戏的入口
@@ -44,9 +48,18 @@ public class GameBase : MonoBehaviour
         EnterFirstProcedure();
     }
 
-    protected virtual void OnInit()
+    private void OnInit()
     {
-
+        GameEntry.AddModule<EntityManager>();
+        GameEntry.AddModule<FsmManager>();
+        GameEntry.AddModule<SoundManager>();
+        
+        JsonConvert.DefaultSettings = () => new JsonSerializerSettings
+        {
+            Converters = { new Vector2IntConverter(), new Vector2Converter() },
+            NullValueHandling = NullValueHandling.Ignore,
+            ContractResolver = new WritablePropertiesOnlyResolver()
+        };
     }
 
     private void EnterFirstProcedure()
@@ -149,7 +162,7 @@ public class GameBase : MonoBehaviour
         if (activeGame == this)
         {
             ProcedureManager.Instance.ChangeProcedure(null);
-            GameEntry.CleraAllModule();
+            GameEntry.ClearAllModule(true);
         }
     }
 
@@ -158,19 +171,7 @@ public class GameBase : MonoBehaviour
     /// </summary>
     protected virtual void InitAllModel()
     {
-        // Start2
-        //GameEntry.AddModule<EntityManager>();
-        //GameEntry.AddModule<FsmManager>();
 
-//#if UNITY_EDITOR
-//        string mapInfoPath = $"{Application.streamingAssetsPath}/pathMap.info";
-//        ResourceManager.GeneratePathMap(mapInfoPath, "Assets/Res");
-//        GameEntry.AddModule<ResourceManager>(new AssetDataBaseLoadHelper());
-//#else
-//        GameEntry.AddModule<ResourceManager>(new AssetBundleLoadHelper(), mapInfoPath);
-//#endif
-        //GameEntry.AddModule<UIHelper>();
-        // End2
     }
 
     private void OnValidate()

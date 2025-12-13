@@ -16,11 +16,8 @@ namespace XFramework.UI
         public string name;
         public string path;
     }
-
-    /// <summary>
-    /// һ��ʹ���ֵ������UI������
-    /// </summary>
-    public class UIManager : GameModuleBase<UIManager>
+    
+    public class UIManager : MonoGameModuleBase<UIManager>
     {
         private RectTransform canvasTransform;
         private RectTransform CanvasTransform
@@ -57,10 +54,7 @@ namespace XFramework.UI
             InitPathDic();
             GameObject.DontDestroyOnLoad(CanvasTransform);
         }
-
-        /// <summary>
-        /// �����
-        /// </summary>
+        
         public void OpenPanel(string uiname, params object[] args)
         {
             PanelBase panel = GetPanel(uiname);
@@ -88,10 +82,7 @@ namespace XFramework.UI
             panel.OnOpen(args);
             panel.OpenSubPanels();
         }
-
-        /// <summary>
-        /// �ر����
-        /// </summary>
+        
         public void ClosePanel(string uiname)
         {
             PanelBase panel = GetPanel(uiname);

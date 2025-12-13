@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
+using UnityEngine;
 
 namespace XFramework
 {
@@ -10,8 +11,9 @@ namespace XFramework
     public static class GameEntry
     {
         // 当前已加载的模块
-        private static readonly LinkedList<IGameModule> m_GameModules = new LinkedList<IGameModule>();
-        private static LinkedListNode<IGameModule> m_CurrentModule;
+        private static readonly Dictionary<Type, IGameModule> m_GameModules = new Dictionary<Type, IGameModule>();
+        private static readonly LinkedList<IMonoGameModule> m_MonoGameModules = new LinkedList<IMonoGameModule>();
+        private static LinkedListNode<IMonoGameModule> m_CurrentModule;
 
         // 模块依赖关系 key：模块, Value：依赖的模块
         private static readonly Dictionary<string, List<Type>> m_DependenceDic = new Dictionary<string, List<Type>>();
@@ -21,31 +23,12 @@ namespace XFramework
         /// </summary>
         public static void ModuleUpdate()
         {
-            m_CurrentModule = m_GameModules.First;
+            m_CurrentModule = m_MonoGameModules.First;
             while (m_CurrentModule != null)
             {
                 m_CurrentModule.Value.Update();
                 m_CurrentModule = m_CurrentModule.Next;
             }
-        }
-
-        /// <summary>
-        /// 获取一个模块
-        /// </summary>
-        /// <typeparam name="T">模块类型</typeparam>
-        /// <returns>模块</returns>
-        public static T GetModule<T>() where T : class, IGameModule
-        {
-            Type moduleType = typeof(T);
-            foreach (var module in m_GameModules)
-            {
-                if (module.GetType() == moduleType)
-                {
-                    return (T)module;
-                }
-            }
-
-            return null;
         }
 
         /// <summary>
@@ -69,17 +52,14 @@ namespace XFramework
         /// <returns>模块</returns>
         public static IGameModule AddModule(Type moduleType, params object[] args)
         {
-            foreach (var item in m_GameModules)
+            if(m_GameModules.TryGetValue(moduleType, out IGameModule existingModule))
             {
-                if (item.GetType() == moduleType)
-                {
-                    return item;
-                }
+                return existingModule;
             }
 
             IGameModule module = CreateModule(moduleType, args);
 
-            // 特殊处理
+            // Instance 赋值
             var tempType = moduleType.BaseType;
             var genericTypeDefinition = typeof(GameModuleBase<>);
             while(tempType != typeof(object))
@@ -93,26 +73,31 @@ namespace XFramework
                 tempType = tempType.BaseType;
             }
 
-            // 将模块添加到链表中
-            LinkedListNode<IGameModule> current = m_GameModules.First;
-            while (current != null)
+            m_GameModules.Add(moduleType, module);
+            
+            if (module is IMonoGameModule monoGameModule)
             {
-                if (module.Priority > current.Value.Priority)
+                LinkedListNode<IMonoGameModule> current = m_MonoGameModules.First;
+                while (current != null)
                 {
-                    break;
+                    if (monoGameModule.Priority > current.Value.Priority)
+                    {
+                        break;
+                    }
+
+                    current = current.Next;
                 }
 
-                current = current.Next;
+                if (current != null)
+                {
+                    m_MonoGameModules.AddBefore(current, monoGameModule);
+                }
+                else
+                {
+                    m_MonoGameModules.AddLast(monoGameModule);
+                }
             }
 
-            if (current != null)
-            {
-                m_GameModules.AddBefore(current, module);
-            }
-            else
-            {
-                m_GameModules.AddLast(module);
-            }
 
             return module;
         }
@@ -172,50 +157,56 @@ namespace XFramework
         {
             CheckShutdownSafe(moduleType);
 
-            IGameModule gameModule = null;
-            foreach (var module in m_GameModules)
+            if (m_GameModules.TryGetValue(moduleType, out IGameModule gameModule))
             {
-                if (module.GetType() == moduleType)
+                if (gameModule.IsPersistent)
                 {
-                    gameModule = module;
-                    gameModule.Shutdown();
-                    break;
+                    throw new XFrameworkException($"Persistent module {moduleType.Name} can not be shutdown");
                 }
-            }
-
-            m_GameModules.Remove(gameModule);
-
-            // 特殊处理
-            var tempType = moduleType.BaseType;
-            var genericTypeDefinition = typeof(GameModuleBase<>);
-            while (tempType != typeof(object))
-            {
-                if (tempType.IsGenericType && tempType.GetGenericTypeDefinition() == genericTypeDefinition)
+                
+                gameModule.Shutdown();
+                m_GameModules.Remove(moduleType);    
+                
+                // Instance 赋值
+                var tempType = moduleType.BaseType;
+                var genericTypeDefinition = typeof(GameModuleBase<>);
+                while (tempType != typeof(object))
                 {
-                    var field = tempType.GetField("m_instance", BindingFlags.Static | BindingFlags.NonPublic);
-                    field.SetValue(null, null);
-                    break;
-                }
-                tempType = tempType.BaseType;
-            }
-
-            // 依赖模块处理
-            if (m_DependenceDic.TryGetValue(moduleType.Name, out List<Type> dependentModules))
-            {
-                m_DependenceDic.Remove(moduleType.Name);
-
-                if (shutdownAllDependentModule)
-                {
-                    // 卸载依赖模块
-                    foreach (var dependentModule in dependentModules)
+                    if (tempType.IsGenericType && tempType.GetGenericTypeDefinition() == genericTypeDefinition)
                     {
-                        if (!HaveModuleDependent(dependentModule))
+                        var field = tempType.GetField("m_instance", BindingFlags.Static | BindingFlags.NonPublic);
+                        field.SetValue(null, null);
+                        break;
+                    }
+                    tempType = tempType.BaseType;
+                }
+                
+                // mono模块处理
+                if (gameModule is IMonoGameModule monoGameModule)
+                {
+                    m_MonoGameModules.Remove(monoGameModule);
+                }
+                
+                // 依赖模块处理
+                if (m_DependenceDic.TryGetValue(moduleType.Name, out List<Type> dependentModules))
+                {
+                    m_DependenceDic.Remove(moduleType.Name);
+
+                    if (shutdownAllDependentModule)
+                    {
+                        // 卸载依赖模块
+                        foreach (var dependentModule in dependentModules)
                         {
-                            ShutdownModule(dependentModule, shutdownAllDependentModule);
+                            if (!HaveModuleDependent(dependentModule))
+                            {
+                                ShutdownModule(dependentModule, shutdownAllDependentModule);
+                            }
                         }
                     }
                 }
             }
+
+            
         }
 
         /// <summary>
@@ -253,15 +244,51 @@ namespace XFramework
         /// <summary>
         /// 卸载当前已加载的所有模块
         /// </summary>
-        public static void CleraAllModule()
+        public static void ClearAllModule(bool force=false)
         {
-            foreach (var item in m_GameModules)
+            if (force)
             {
-                item.Shutdown();
+                foreach (var item in m_GameModules.Values)
+                {
+                    item.Shutdown();
+                }
+                
+                m_GameModules.Clear();
+                m_CurrentModule = null;
+                m_DependenceDic.Clear();
             }
-            m_GameModules.Clear();
-            m_CurrentModule = null;
-            m_DependenceDic.Clear();
+            else
+            {
+                throw new XFrameworkException("Please use ShutdownModule to shutdown module one by one to ensure the shutdown order");
+                var node = m_MonoGameModules.First;
+                while (node != null)
+                {
+                    var next = node.Next;
+                    if (!node.Value.IsPersistent)
+                    {
+                        m_MonoGameModules.Remove(node);
+                    }
+                    node = next;
+                }
+            
+                var modulesToRemove = new List<Type>();
+                foreach (var kvp in m_GameModules)
+                {
+                    if (!kvp.Value.IsPersistent)
+                    {
+                        kvp.Value.Shutdown();
+                        modulesToRemove.Add(kvp.Key);
+                    }
+                }
+                foreach (var key in modulesToRemove)
+                {
+                    m_GameModules.Remove(key);
+                }
+            
+                m_CurrentModule = null;
+                m_DependenceDic.Clear();
+            }
+            
         }
     }
 }
