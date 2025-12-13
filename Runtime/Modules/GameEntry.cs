@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
-using UnityEngine;
 
 namespace XFramework
 {
@@ -151,7 +151,7 @@ namespace XFramework
         /// <summary>
         /// 关闭一个模块
         /// </summary>
-        /// <param name="moduleType">模块类型</typeparam>
+        /// <param name="moduleType">模块类型</param>
         /// <param name="shutdownAllDependentModule">是否卸载其依赖的模块（当没有其它模块也依赖它时）</param>
         public static void ShutdownModule(Type moduleType, bool shutdownAllDependentModule = false)
         {
@@ -184,14 +184,17 @@ namespace XFramework
                 // mono模块处理
                 if (gameModule is IMonoGameModule monoGameModule)
                 {
+                    // todo 这里有个潜在问题, 假如在Update中卸载当前模块可能会有一些问题，先不处理，遇到了再说
+                    // if (m_CurrentModule.Value == gameModule)
+                    // {
+                    //     m_CurrentModule = m_CurrentModule.Next;
+                    // }
                     m_MonoGameModules.Remove(monoGameModule);
                 }
                 
                 // 依赖模块处理
-                if (m_DependenceDic.TryGetValue(moduleType.Name, out List<Type> dependentModules))
+                if (m_DependenceDic.Remove(moduleType.Name, out var dependentModules))
                 {
-                    m_DependenceDic.Remove(moduleType.Name);
-
                     if (shutdownAllDependentModule)
                     {
                         // 卸载依赖模块
@@ -205,8 +208,6 @@ namespace XFramework
                     }
                 }
             }
-
-            
         }
 
         /// <summary>
@@ -259,36 +260,11 @@ namespace XFramework
             }
             else
             {
-                throw new XFrameworkException("Please use ShutdownModule to shutdown module one by one to ensure the shutdown order");
-                var node = m_MonoGameModules.First;
-                while (node != null)
+                foreach (var item in m_GameModules.Keys.ToList())
                 {
-                    var next = node.Next;
-                    if (!node.Value.IsPersistent)
-                    {
-                        m_MonoGameModules.Remove(node);
-                    }
-                    node = next;
+                    ShutdownModule(item);
                 }
-            
-                var modulesToRemove = new List<Type>();
-                foreach (var kvp in m_GameModules)
-                {
-                    if (!kvp.Value.IsPersistent)
-                    {
-                        kvp.Value.Shutdown();
-                        modulesToRemove.Add(kvp.Key);
-                    }
-                }
-                foreach (var key in modulesToRemove)
-                {
-                    m_GameModules.Remove(key);
-                }
-            
-                m_CurrentModule = null;
-                m_DependenceDic.Clear();
             }
-            
         }
     }
 }
