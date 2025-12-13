@@ -19,14 +19,8 @@ namespace XFramework.Entity
 
         public Vector3 position
         {
-            get
-            {
-                return transform.position;
-            }
-            set
-            {
-                transform.position = value;
-            }
+            get => transform.position;
+            set => transform.position = value;
         }
 
         public bool IsValid

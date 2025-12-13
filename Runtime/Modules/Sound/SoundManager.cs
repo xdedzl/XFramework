@@ -43,6 +43,26 @@ namespace XFramework
                 Recycle();
             });
         }
+        
+        public void Play3D(AudioClip clip, Vector3 position, float volume = 1f)
+        {
+            timer?.Stop();
+            timer = null;
+            
+            transform.position = position;
+            source.clip = clip;
+            source.volume = volume;
+            source.spatialBlend = 1f; // 3D 声音
+            source.minDistance = 1f;
+            source.maxDistance = 20f;
+            source.rolloffMode = AudioRolloffMode.Linear;
+            source.Play();
+            timer = Timer.Register(clip.length, () =>
+            {
+                timer = null;
+                Recycle();
+            });
+        }
     }
 
     [DependenceModule(typeof(EntityManager))]
@@ -153,8 +173,7 @@ namespace XFramework
             else
             {
                 var audioEntity = EntityManager.Instance.Allocate<AudioEntity>("SoundManager_Audio");
-                audioEntity.transform.position = position;
-                audioEntity.Play(clip, volume);
+                audioEntity.Play3D(clip, position);
             }
         }
 
