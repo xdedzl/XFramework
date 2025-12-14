@@ -65,13 +65,7 @@ namespace XFramework.Resource
         /// <summary>
         /// 资源路径
         /// </summary>
-        public string AssetPath
-        {
-            get
-            {
-                return m_LoadHelper.AssetPath;
-            }
-        }
+        public string AssetPath => m_LoadHelper.AssetPath;
 
         /// <summary>
         /// 是否通过Resources内加载
@@ -99,7 +93,7 @@ namespace XFramework.Resource
             }
             if (IsResources(assetName))
             {
-                assetName = assetName.Substring(4, assetName.Length - 4);
+                assetName = assetName[4..];
                 assetName = assetName.Split('.')[0];
                 return Resources.Load<T>(assetName);
             }
@@ -119,7 +113,7 @@ namespace XFramework.Resource
         {
             if (IsResources(path))
             {
-                path = path.Substring(4, path.Length - 4);
+                path = path[4..];
                 return Resources.LoadAll<T>(path);
             }
 
@@ -136,7 +130,7 @@ namespace XFramework.Resource
         {
             if (IsResources(assetName))
             {
-                assetName = assetName.Substring(4, assetName.Length - 4);
+                assetName = assetName[4..];
                 var request = Resources.LoadAsync(assetName);
 
                 var task = XTask.WaitUntil(() => request.isDone);

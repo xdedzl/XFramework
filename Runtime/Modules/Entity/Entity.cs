@@ -23,13 +23,7 @@ namespace XFramework.Entity
             set => transform.position = value;
         }
 
-        public bool IsValid
-        {
-            get
-            {
-                return EntityManager.Instance.IsEntityValid(Id);
-            }
-        }
+        public bool IsValid => EntityManager.Instance.IsEntityValid(Id);
 
         /// <summary>
         /// 初始化

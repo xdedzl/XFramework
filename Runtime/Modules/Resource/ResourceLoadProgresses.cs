@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using System.Linq;
+using UnityEngine;
 
 namespace XFramework.Resource
 {
@@ -15,14 +16,7 @@ namespace XFramework.Resource
         {
             get
             {
-                foreach (var item in m_Operations)
-                {
-                    if (!item.isDone)
-                    {
-                        return false;
-                    }
-                }
-                return true;
+                return m_Operations.All(item => item.isDone);
             }
         }
 

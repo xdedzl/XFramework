@@ -10,6 +10,7 @@ using XFramework.Json;
 /// <summary>
 /// 这个类挂在初始场景中,是整个游戏的入口
 /// </summary>
+[DisallowMultipleComponent]
 public class GameBase : MonoBehaviour
 {
     // 初始流程
