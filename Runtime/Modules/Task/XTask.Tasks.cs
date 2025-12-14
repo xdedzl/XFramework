@@ -6,34 +6,34 @@ namespace XFramework.Tasks
     /// <summary>
     /// 任务基类
     /// </summary>
-    public abstract class TaskBase : XTask
+    public abstract class TaskBase : XTask {}
+    
+    public abstract partial class XTask
     {
-
-    }
-
-    /// <summary>
-    /// 单个任务
-    /// </summary>
-    public class SingleTask : TaskBase
-    {
-        private Func<bool> action;
-
-        public SingleTask(Func<bool> action)
+        /// <summary>
+        /// 单个任务
+        /// </summary>
+        private class SingleTask : TaskBase
         {
-            this.action = action;
-        }
+            private Func<bool> action;
 
-        public override void Update()
-        {
-            if (action())
+            public SingleTask(Func<bool> action)
             {
-                IsDone = true;
+                this.action = action;
             }
-        }
 
-        public static SingleTask Create(Func<bool> action)
-        {
-            return new SingleTask(action);
+            public override void Update()
+            {
+                if (action())
+                {
+                    IsDone = true;
+                }
+            }
+
+            public static SingleTask Create(Func<bool> action)
+            {
+                return new SingleTask(action);
+            }
         }
     }
 

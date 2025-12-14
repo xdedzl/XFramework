@@ -139,14 +139,10 @@ namespace XFramework.Resource
                 assetName = assetName.Substring(4, assetName.Length - 4);
                 var request = Resources.LoadAsync(assetName);
 
-                SingleTask task = new SingleTask(() =>
-                {
-                    return request.isDone;
-                });
-                task.Then(() =>
+                var task = XTask.WaitUntil(() => request.isDone);
+                task.ContinueWith(() =>
                 {
                     callBack.Invoke(request.asset as T);
-                    return true;
                 });
                 task.Start();
                 return new ResourceRequestProgress(request);

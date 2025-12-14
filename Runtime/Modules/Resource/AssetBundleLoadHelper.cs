@@ -118,11 +118,9 @@ namespace XFramework.Resource
             var abProgress = LoadAssetBundleAsync(temp[0], (ab) =>
             {
                 var request = ab.LoadAssetAsync(temp[1]);
-                SingleTask task = new SingleTask(() =>
-                {
-                    return request.isDone;
-                });
-                task.Then(() => { callback(request.asset as T); return true; });
+                
+                var task = XTask.WaitUntil(() => request.isDone);
+                task.ContinueWith(() => { callback(request.asset as T); });
                 task.Start();
 
                 AsyncOperationProgress resProgress = new AsyncOperationProgress(request);
@@ -147,11 +145,9 @@ namespace XFramework.Resource
                 return LoadAssetBundleAsync(path, (ab) =>
                 {
                     AssetBundleRequest request = ab.LoadAllAssetsAsync<T>();
-                    SingleTask task = new SingleTask(() =>
-                    {
-                        return request.isDone;
-                    });
-                    task.Then(() => { callback(request.allAssets.Convert<T>()); return true; });
+                    
+                    var task = XTask.WaitUntil(() => request.isDone);
+                    task.ContinueWith(() => { callback(request.allAssets.Convert<T>()); });
                     task.Start();
                 });
             }
@@ -167,27 +163,24 @@ namespace XFramework.Resource
                 void OnAssetBundleLoadComplate(IEnumerable<AssetBundle> assetBundles)
                 {
                     List<IProgress> progresses = new List<IProgress>();
-                    SingleTask startTask = SingleTask.Create(() => true);
+                    var startTask = XTask.WaitUntil(() => true);
                     XTask currentEndTask = startTask;
                     foreach (var ab in assetBundles)
                     {
                         var request = ab.LoadAllAssetsAsync<T>();
-                        SingleTask task = new SingleTask(() =>
-                        {
-                            return request.isDone;
-                        });
-                        var endTask = task.Then(() => { assets.AddRange(request.allAssets.Convert<T>()); return true; });
+                        var task = XTask.WaitUntil(() => request.isDone);
+                        var endTask = task.ContinueWith(() => { assets.AddRange(request.allAssets.Convert<T>());});
                         progresses.Add(new AsyncOperationProgress(request));
 
                         if(currentEndTask != null)
                         {
-                            currentEndTask.Then(task);
+                            currentEndTask.ContinueWith(task);
                         }
                         currentEndTask = endTask;
                     }
                     dynamicProgress.Add(new MultiProgress(progresses.ToArray()));
 
-                    currentEndTask.Then(() => { callback(assets); });
+                    currentEndTask.ContinueWith(() => { callback(assets); });
                     startTask.Start();
                 }
             }
@@ -299,25 +292,20 @@ namespace XFramework.Resource
                 for (int i = 0; i < tasks.Length; i++)
                 {
                     int index = i;
-                    tasks[index] = new SingleTask(() =>
-                    {
-                        return requests[index].isDone;
-                    });
-                    tasks[index].Then(new SingleTask(() =>
+                    tasks[index] = XTask.WaitUntil(() => requests[index].isDone);
+                    tasks[index].ContinueWith(() =>
                     {
                         string key = GetNoVariantName(requests[index].assetBundle.name);
                         m_ABDic.Add(key, requests[index].assetBundle);
                         m_LoadingAB.Remove(key);
-                        return true;
-                    }));
+                    });
                 }
 
                 AllTask abTask = new AllTask(tasks);
-                abTask.Then(new SingleTask(() =>
+                abTask.ContinueWith(() =>
                 {
                     callBack.Invoke(mainRequest.assetBundle);
-                    return true;
-                }));
+                });
                 abTask.Start();
 
                 return new AsyncOperationsProgress(requests.ToArray());
@@ -372,8 +360,8 @@ namespace XFramework.Resource
                 }
             }
 
-            SingleTask singleTask = new SingleTask(() => { return assetBundles.Count == abCount; });
-            singleTask.Then(() => { callback(assetBundles); return true; });
+            var singleTask = XTask.WaitUntil(() => assetBundles.Count == abCount);
+            singleTask.ContinueWith(() => { callback(assetBundles); });
             singleTask.Start();
 
             return new MultiProgress(progresses.ToArray());

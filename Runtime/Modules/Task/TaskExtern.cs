@@ -11,7 +11,7 @@ namespace XFramework.Tasks
         /// <returns>由tasks构建的任务</returns>
         public static XTask All(this XTask task, params XTask[] tasks)
         {
-            task.Next = new AllTask(tasks);
+            task.Next = XTask.WhenAll(tasks);
             return task.Next;
         }
 
@@ -20,14 +20,9 @@ namespace XFramework.Tasks
         /// </summary>
         /// <param name="funcs">任务组</param>
         /// <returns>由funcs组成的任务</returns>
-        public static XTask All(this XTask task, params Func<bool>[] funcs)
+        public static XTask All(this XTask task, params Func<bool>[] predicates)
         {
-            XTask[] tasks = new XTask[funcs.Length];
-            for (int i = 0; i < funcs.Length; i++)
-            {
-                tasks[i] = new SingleTask(funcs[i]);
-            }
-            task.Next = new AllTask(tasks);
+            task.Next = XTask.WhenAll(predicates);
             return task.Next;
         }
 
@@ -38,7 +33,7 @@ namespace XFramework.Tasks
         /// <returns>由tasks构建的任务</returns>
         public static XTask Race(this XTask task, params XTask[] tasks)
         {
-            task.Next = new RaceTask(tasks);
+            task.Next = XTask.WhenAny(tasks);
             return task.Next;
         }
 
@@ -47,54 +42,36 @@ namespace XFramework.Tasks
         /// </summary>
         /// <param name="funcs">任务组</param>
         /// <returns>由funcs构建的任务</returns>
-        public static XTask Race(this XTask task, params Func<bool>[] funcs)
+        public static XTask Race(this XTask task, params Func<bool>[] predicates)
         {
-            XTask[] tasks = new XTask[funcs.Length];
-            for (int i = 0; i < funcs.Length; i++)
-            {
-                tasks[i] = new SingleTask(funcs[i]);
-            }
-            task.Next = new RaceTask(tasks);
+            task.Next = XTask.WhenAny(predicates);
             return task.Next;
         }
-
+        
+        /// <summary>
+        /// 创建一个触发事件
+        /// </summary>
+        public static XTask ContinueWith(this XTask task, Action callback)
+        {
+            task.Next = XTask.WaitUntil(()=> { callback.Invoke(); return true; });
+            return task.Next;
+        }
+        
         /// <summary>
         /// 创建一个后续任务
         /// </summary>
-        /// <param name="nextTask"></param>
-        /// <returns>nextTask</returns>
-        public static XTask Then(this XTask task, XTask nextTask)
+        public static XTask ContinueWith(this XTask task, XTask nextTask)
         {
             task.Next = nextTask;
             return task.Next;
         }
-
+        
         /// <summary>
         /// 创建一个后续任务
         /// </summary>
-        /// <param name="func"></param>
-        /// <returns>nextTask</returns>
-        public static XTask Then(this XTask task, Func<bool> func)
+        public static XTask ContinueWith(this XTask task, Func<bool> predicate)
         {
-            task.Next = new SingleTask(func);
-            return task.Next;
-        }
-
-        /// <summary>
-        /// 创建一个触发事件
-        /// </summary>
-        /// <param name="task"></param>
-        /// <param name="callback"></param>
-        /// <returns>nextTask</returns>
-        public static XTask Then(this XTask task, Action callback)
-        {
-            task.Next = new SingleTask(()=> { callback.Invoke(); return true; });
-            return task.Next;
-        }
-
-        public static XTask ContinueWith(this XTask task, Action callback)
-        {
-            task.Next = new SingleTask(()=> { callback.Invoke(); return true; });
+            task.Next = XTask.WaitUntil(predicate);
             return task.Next;
         }
 
