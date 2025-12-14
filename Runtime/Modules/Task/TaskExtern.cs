@@ -2,14 +2,14 @@
 
 namespace XFramework.Tasks
 {
-    public static class TaskExten
+    public static class TaskExtern
     {
         /// <summary>
         /// 创建一个所有任务执行完才会继续执行下一个任务的队列任务
         /// </summary>
         /// <param name="tasks">任务组</param>
         /// <returns>由tasks构建的任务</returns>
-        public static ITask All(this ITask task, params ITask[] tasks)
+        public static XTask All(this XTask task, params XTask[] tasks)
         {
             task.Next = new AllTask(tasks);
             return task.Next;
@@ -20,9 +20,9 @@ namespace XFramework.Tasks
         /// </summary>
         /// <param name="funcs">任务组</param>
         /// <returns>由funcs组成的任务</returns>
-        public static ITask All(this ITask task, params Func<bool>[] funcs)
+        public static XTask All(this XTask task, params Func<bool>[] funcs)
         {
-            ITask[] tasks = new ITask[funcs.Length];
+            XTask[] tasks = new XTask[funcs.Length];
             for (int i = 0; i < funcs.Length; i++)
             {
                 tasks[i] = new SingleTask(funcs[i]);
@@ -36,7 +36,7 @@ namespace XFramework.Tasks
         /// </summary>
         /// <param name="tasks">任务组</param>
         /// <returns>由tasks构建的任务</returns>
-        public static ITask Race(this ITask task, params ITask[] tasks)
+        public static XTask Race(this XTask task, params XTask[] tasks)
         {
             task.Next = new RaceTask(tasks);
             return task.Next;
@@ -47,9 +47,9 @@ namespace XFramework.Tasks
         /// </summary>
         /// <param name="funcs">任务组</param>
         /// <returns>由funcs构建的任务</returns>
-        public static ITask Race(this ITask task, params Func<bool>[] funcs)
+        public static XTask Race(this XTask task, params Func<bool>[] funcs)
         {
-            ITask[] tasks = new ITask[funcs.Length];
+            XTask[] tasks = new XTask[funcs.Length];
             for (int i = 0; i < funcs.Length; i++)
             {
                 tasks[i] = new SingleTask(funcs[i]);
@@ -63,7 +63,7 @@ namespace XFramework.Tasks
         /// </summary>
         /// <param name="nextTask"></param>
         /// <returns>nextTask</returns>
-        public static ITask Then(this ITask task, ITask nextTask)
+        public static XTask Then(this XTask task, XTask nextTask)
         {
             task.Next = nextTask;
             return task.Next;
@@ -74,7 +74,7 @@ namespace XFramework.Tasks
         /// </summary>
         /// <param name="func"></param>
         /// <returns>nextTask</returns>
-        public static ITask Then(this ITask task, Func<bool> func)
+        public static XTask Then(this XTask task, Func<bool> func)
         {
             task.Next = new SingleTask(func);
             return task.Next;
@@ -86,7 +86,13 @@ namespace XFramework.Tasks
         /// <param name="task"></param>
         /// <param name="callback"></param>
         /// <returns>nextTask</returns>
-        public static ITask Then(this ITask task, Action callback)
+        public static XTask Then(this XTask task, Action callback)
+        {
+            task.Next = new SingleTask(()=> { callback.Invoke(); return true; });
+            return task.Next;
+        }
+
+        public static XTask ContinueWith(this XTask task, Action callback)
         {
             task.Next = new SingleTask(()=> { callback.Invoke(); return true; });
             return task.Next;
@@ -96,18 +102,18 @@ namespace XFramework.Tasks
         /// 任务开始
         /// </summary>
         /// <param name="task">任务</param>
-        public static void Start(this ITask task)
+        public static void Start(this XTask task)
         {
-            TaskManager.Instance.StartTask(task);
+            XTask.Start(task);
         }
 
         /// <summary>
         /// 任务终止
         /// </summary>
         /// <param name="task">任务</param>
-        public static void Stop(this ITask task)
+        public static void Stop(this XTask task)
         {
-            TaskManager.Instance.StopTask(task);
+            XTask.Stop(task);
         }
     }
 }

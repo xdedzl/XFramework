@@ -168,7 +168,7 @@ namespace XFramework.Resource
                 {
                     List<IProgress> progresses = new List<IProgress>();
                     SingleTask startTask = SingleTask.Create(() => true);
-                    ITask currentEndTask = startTask;
+                    XTask currentEndTask = startTask;
                     foreach (var ab in assetBundles)
                     {
                         var request = ab.LoadAllAssetsAsync<T>();
@@ -294,7 +294,7 @@ namespace XFramework.Resource
                     m_LoadingAB.Add(key, request);
                 }
 
-                ITask[] tasks = new ITask[requests.Count];
+                XTask[] tasks = new XTask[requests.Count];
 
                 for (int i = 0; i < tasks.Length; i++)
                 {

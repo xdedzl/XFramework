@@ -1,16 +1,18 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
-using System.IO;
 using UnityEngine;
 using UnityEngine.Networking;
 using XFramework.Entity;
+using XFramework.Tasks;
 
 namespace XFramework
 {
     public class AudioEntity : Entity.Entity
     {
         private AudioSource source;
-        private Timer timer;
+        private XTask xTask;
+        
+        public bool isPlaying => source.isPlaying;
 
         public override void OnInit()
         {
@@ -25,43 +27,47 @@ namespace XFramework
         public override void OnRecycle()
         {
             gameObject.SetActive(false);
-            timer?.Stop();
-            timer = null;
+            xTask?.Stop();
+            xTask = null;
         }
 
-        public void Play(AudioClip clip, float volume = 1f)
+        public XTask Play(AudioClip clip, float volume = 1f)
         {
-            timer?.Stop();
-            timer = null;
+            xTask?.Stop();
+            xTask = null;
             
             source.volume = volume;
             source.clip = clip;
             source.Play();
-            timer = Timer.Register(clip.length, () =>
+            xTask = XTask.Delay(clip.length);
+            var next = xTask.ContinueWith(() =>
             {
-                timer = null;
+                xTask = null;
                 Recycle();
             });
+            return next;
         }
         
-        public void Play3D(AudioClip clip, Vector3 position, float volume = 1f)
+        public XTask Play3D(AudioClip clip, Vector3 position, float minDistance, float maxDistance, float volume = 1f)
         {
-            timer?.Stop();
-            timer = null;
+            xTask?.Stop();
+            xTask = null;
             
             transform.position = position;
             source.clip = clip;
             source.volume = volume;
             source.spatialBlend = 1f; // 3D 声音
-            source.minDistance = 1f;
-            source.maxDistance = 20f;
+            source.minDistance = minDistance;
+            source.maxDistance = maxDistance;
             source.rolloffMode = AudioRolloffMode.Linear;
             source.Play();
-            timer = Timer.Register(clip.length, () =>
+            xTask = XTask.Delay(clip.length);
+            var next = xTask.ContinueWith(() =>
             {
-                timer = null;
+                xTask = null;
                 Recycle();
             });
+            return next;
         }
     }
 
@@ -158,22 +164,24 @@ namespace XFramework
             }
         }
         
-        public void PlaySound3D(string path, Vector3 position, float volume = 1f)
+        public AudioEntity PlaySound3D(string path, Vector3 position, float minDistance = 1f, float maxDistance=20f, float volume = 1f)
         {
             var clip = GetAudioClip(path);
-            PlaySound3D(clip, position, volume);
+            return PlaySound3D(clip, position, minDistance, maxDistance, volume);
         }
         
-        public void PlaySound3D(AudioClip clip, Vector3 position, float volume = 1f)
+        public AudioEntity PlaySound3D(AudioClip clip, Vector3 position, float minDistance = 1f, float maxDistance=20f, float volume = 1f)
         {
             if(!clip)
             {
                 Debug.LogWarning($"sound资源不存在");
+                return null;
             }
             else
             {
                 var audioEntity = EntityManager.Instance.Allocate<AudioEntity>("SoundManager_Audio");
-                audioEntity.Play3D(clip, position);
+                audioEntity.Play3D(clip, position, minDistance, maxDistance, volume);
+                return audioEntity;
             }
         }
 

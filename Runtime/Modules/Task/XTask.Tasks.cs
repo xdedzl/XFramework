@@ -6,20 +6,9 @@ namespace XFramework.Tasks
     /// <summary>
     /// 任务基类
     /// </summary>
-    public abstract class TaskBase : ITask
+    public abstract class TaskBase : XTask
     {
-        /// <summary>
-        /// 下一个任务
-        /// </summary>
-        public ITask Next { get; set; }
-        /// <summary>
-        /// 当前任务是否完成
-        /// </summary>
-        public virtual bool IsDone { get; protected set; }
-        /// <summary>
-        /// 任务完成前每帧执行
-        /// </summary>
-        public virtual void Update() { }
+
     }
 
     /// <summary>
@@ -56,9 +45,9 @@ namespace XFramework.Tasks
         /// <summary>
         /// 任务组
         /// </summary>
-        private ITask[] m_Tasks;
+        private XTask[] m_Tasks;
 
-        public RaceTask(ITask[] tasks)
+        public RaceTask(XTask[] tasks)
         {
             m_Tasks = tasks;
         }
@@ -96,9 +85,9 @@ namespace XFramework.Tasks
         /// <summary>
         /// 任务组
         /// </summary>
-        private ITask[] m_Tasks;
+        private XTask[] m_Tasks;
 
-        public AllTask(ITask[] tasks)
+        public AllTask(XTask[] tasks)
         {
             m_Tasks = tasks;
         }
@@ -144,18 +133,5 @@ namespace XFramework.Tasks
                 IsDone = true;
             }
         }
-
-        public static TimeTask Create(float time)
-        {
-            return new TimeTask(time);
-        }
     }
-
-    //public class Task
-    //{
-    //    public static ITask First()
-    //    {
-    //        return new SingleTask(() => { return true; });
-    //    } 
-    //}
 }
