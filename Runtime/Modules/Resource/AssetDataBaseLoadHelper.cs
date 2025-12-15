@@ -1,25 +1,21 @@
 ﻿#if UNITY_EDITOR
 
+using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
+using XFramework.Tasks;
+using UObject = UnityEngine.Object;
 
 namespace XFramework.Resource
 {
     public class AssetDataBaseLoadHelper : IResourceLoadHelper
     {
-        private readonly string m_AssetPath;
-
-        public AssetDataBaseLoadHelper()
-        {
-            m_AssetPath = Application.dataPath.Replace("/Assets", "");
-        }
-
         /// <summary>
         /// 资源路径
         /// </summary>
-        public string AssetPath => m_AssetPath;
+        public string AssetPath => Application.dataPath.Replace("/Assets", "");
 
         /// <summary>
         /// 同步加载资源
@@ -27,7 +23,7 @@ namespace XFramework.Resource
         /// <typeparam name="T">资源类型</typeparam>
         /// <param name="assetName">资源名称</param>
         /// <returns>资源</returns>
-        public T Load<T>(string assetName) where T : UnityEngine.Object
+        public T Load<T>(string assetName) where T : UObject
         {
             return AssetDatabase.LoadAssetAtPath<T>(assetName);
         }
@@ -39,7 +35,7 @@ namespace XFramework.Resource
         /// <param name="path">资源路径</param>
         /// <param name="isTopOnly">是否是仅加载本层级的资源</param>
         /// <returns>资源</returns>
-        public T[] LoadAll<T>(string path, bool isTopOnly = true) where T : UnityEngine.Object
+        public T[] LoadAll<T>(string path, bool isTopOnly = true) where T : UObject
         {
             if (isTopOnly)
             {
@@ -50,19 +46,20 @@ namespace XFramework.Resource
                 return LoadAllWithADB<T>(path, SearchOption.AllDirectories);
             }
         }
-
+        
         /// <summary>
-        /// 效果同Load<T>
+        /// 异步加载资源
         /// </summary>
-        /// <typeparam name="T"></typeparam>
         /// <param name="assetName"></param>
-        /// <param name="callback"></param>
+        /// <typeparam name="T"></typeparam>
         /// <returns></returns>
-        public IProgress LoadAsync<T>(string assetName, System.Action<T> callback) where T : UnityEngine.Object
+        public IProgressTask<T> LoadAsync<T>(string assetName) where T : UObject
         {
             T obj = AssetDatabase.LoadAssetAtPath<T>(assetName);
-            callback(obj);
-            return new DefaultProgress();
+            var progress = new DefaultProgress<T>(obj);
+            var xTask = XTask.WaitProgress(progress);
+            xTask.Start();
+            return xTask;
         }
 
         /// <summary>
@@ -72,7 +69,7 @@ namespace XFramework.Resource
         /// <param name="path">资源路径</param>
         /// <param name="isTopOnly">是否是仅加载本层级的资源</param>
         /// <returns>资源</returns>
-        public IProgress LoadAllSync<T>(string path, bool isTopOnly, System.Action<IList<T>> callback) where T : UnityEngine.Object
+        public IProgress LoadAllSync<T>(string path, bool isTopOnly, System.Action<IList<T>> callback) where T : UObject
         {
             var assets = LoadAll<T>(path, isTopOnly);
             callback.Invoke(assets);
@@ -82,9 +79,9 @@ namespace XFramework.Resource
         /// <summary>
         /// 加载一个文件夹下的所有资源
         /// </summary>
-        private T[] LoadAllWithADB<T>(string path, SearchOption searchOption) where T : Object
+        private T[] LoadAllWithADB<T>(string path, SearchOption searchOption) where T : UObject
         {
-            List<T> objs = new List<T>();
+            var objs = new List<T>();
             DirectoryInfo info = new DirectoryInfo(Application.dataPath.Replace("Assets", "") + path);
             foreach (var item in info.GetFiles("*", searchOption))
             {
@@ -92,8 +89,8 @@ namespace XFramework.Resource
                 if (item.Name.EndsWith(".meta"))
                     continue;
 
-                int startIndex = fullName.IndexOf("Assets");
-                string assetPath = fullName.Substring(startIndex);
+                int startIndex = fullName.IndexOf("Assets", StringComparison.Ordinal);
+                string assetPath = fullName[startIndex..];
                 objs.Add(AssetDatabase.LoadAssetAtPath<T>(assetPath));
             }
             return objs.ToArray();

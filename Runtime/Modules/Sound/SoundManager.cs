@@ -10,7 +10,7 @@ namespace XFramework
     public class AudioEntity : Entity.Entity
     {
         private AudioSource source;
-        private XTask xTask;
+        private ITask xTask;
         
         public bool isPlaying => source.isPlaying;
 
@@ -31,7 +31,7 @@ namespace XFramework
             xTask = null;
         }
 
-        public XTask Play(AudioClip clip, float volume = 1f)
+        public ITask Play(AudioClip clip, float volume = 1f)
         {
             xTask?.Stop();
             xTask = null;
@@ -48,7 +48,7 @@ namespace XFramework
             return next;
         }
         
-        public XTask Play3D(AudioClip clip, Vector3 position, float minDistance, float maxDistance, float volume = 1f)
+        public ITask Play3D(AudioClip clip, Vector3 position, float minDistance, float maxDistance, float volume = 1f)
         {
             xTask?.Stop();
             xTask = null;

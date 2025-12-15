@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace XFramework.Tasks
 {
@@ -10,14 +12,14 @@ namespace XFramework.Tasks
         /// </summary>
         internal class TaskManager : MonoSingleton<TaskManager>
         {
-            private List<XTask> m_Tasks = new();
-            private List<int> m_ToRemove = new();
+            private readonly List<ITask> m_Tasks = new();
+            private readonly List<int> m_ToRemove = new();
 
             /// <summary>
             /// 开启一个任务
             /// </summary>
             /// <param name="task"></param>
-            public void StartTask(XTask task)
+            public void StartTask(ITask task)
             {
                 m_Tasks.Add(task);
             }
@@ -26,7 +28,7 @@ namespace XFramework.Tasks
             /// 终止一个任务
             /// </summary>
             /// <param name="task"></param>
-            public void StopTask(XTask task)
+            public void StopTask(ITask task)
             {
                 m_Tasks.Remove(task);
             }
@@ -50,7 +52,7 @@ namespace XFramework.Tasks
                     }
                 }
 
-                foreach (var item in m_ToRemove)
+                foreach (var item in m_ToRemove.AsEnumerable().Reverse())
                 {
                     m_Tasks.RemoveAt(item);
                 }

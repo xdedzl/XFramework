@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using System.Collections.Generic;
+using XFramework.Tasks;
 
 namespace XFramework.Resource
 {
@@ -32,9 +33,8 @@ namespace XFramework.Resource
         /// </summary>
         /// <typeparam name="T">资源类型</typeparam>
         /// <param name="assetName">资源名称</param>
-        /// <param name="callback">回调函数</param>
-        /// <returns>加载进度</returns>
-        IProgress LoadAsync<T>(string assetName, System.Action<T> callback) where T : Object;
+        /// <returns>加载任务</returns>
+        IProgressTask<T> LoadAsync<T>(string assetName) where T : Object;
         /// <summary>
         /// 异步加载一组资源
         /// </summary>

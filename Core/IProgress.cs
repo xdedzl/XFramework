@@ -1,4 +1,7 @@
-﻿namespace XFramework
+﻿using UnityEngine;
+using System;
+
+namespace XFramework
 {
     /// <summary>
     /// 进度
@@ -13,6 +16,14 @@
         /// 当前进度
         /// </summary>
         float Progress { get; }
+    }
+    
+    public interface IProgress<T> : IProgress
+    {
+        /// <summary>
+        /// 结果
+        /// </summary>
+        T Result { get; }
     }
 
     /// <summary>
@@ -29,13 +40,53 @@
         /// </summary>
         public float Progress => 1;
     }
+    
+    /// <summary>
+    /// 默认直接完成的进度
+    /// </summary>
+    public class DefaultProgress<T> : IProgress<T>
+    {
+        /// <summary>
+        /// 是否完成 （恒为true）
+        /// </summary>
+        public bool IsDone => true;
+        /// <summary>
+        /// 当前进度（恒为1）
+        /// </summary>
+        public float Progress => 1;
+        
+        private readonly T _result;
+        private readonly Func<T> getter;
+
+        public T Result
+        {
+            get
+            {
+                if (getter != null)
+                {
+                    return getter();
+                }
+                return _result;
+            }
+        }
+
+        public DefaultProgress(T result)
+        {
+            _result = result;
+        }
+        
+        public DefaultProgress(Func<T> getter)
+        {
+            this.getter = getter;
+        }
+    }
 
     /// <summary>
     /// 包含多个子任务的进度
     /// </summary>
     public class MultiProgress : IProgress
     {
-        private IProgress[] progresses;
+        private readonly IProgress[] progresses;
 
         public MultiProgress(IProgress[] progresses)
         {
@@ -83,8 +134,8 @@
     public class DynamicMultiProgress : IProgress
     {
         private int index = 0;
-        private IProgress[] progresses;
-        private float[] ratios;
+        private readonly IProgress[] progresses;
+        private readonly float[] ratios;
 
         public DynamicMultiProgress(int count, params float[] ratios)
         {
@@ -98,7 +149,7 @@
             {
                 plus += item;
             }
-            if (plus != 1)
+            if (!Mathf.Approximately(plus, 1))
             {
                 throw new XFrameworkException("[DynamicMultiProgress] ratio error");
             }

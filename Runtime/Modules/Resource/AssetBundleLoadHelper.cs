@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using XFramework.Tasks;
 using UnityEngine;
+using UObject = UnityEngine.Object;
 
 namespace XFramework.Resource
 {
@@ -71,7 +72,7 @@ namespace XFramework.Resource
         /// <typeparam name="T">资源类型</typeparam>
         /// <param name="assetName">资源名称（完整名称，加路径及后缀名）</param>
         /// <returns>资源</returns>
-        public T Load<T>(string assetName) where T : UnityEngine.Object
+        public T Load<T>(string assetName) where T : UObject
         {
             var temp = Utility.Text.SplitPathName(assetName);
             return LoadAssetBundle(temp[0])?.LoadAsset<T>(temp[1]);
@@ -84,7 +85,7 @@ namespace XFramework.Resource
         /// <param name="path">资源路径</param>
         /// <param name="isTopOnly">是否是仅加载本层级的资源</param>
         /// <returns></returns>
-        public T[] LoadAll<T>(string path, bool isTopOnly = true) where T : UnityEngine.Object
+        public T[] LoadAll<T>(string path, bool isTopOnly = true) where T : UObject
         {
             if (isTopOnly)
             {
@@ -109,7 +110,7 @@ namespace XFramework.Resource
         /// <param name="assetName">资源名称（完整名称，加路径及后缀名）</param>
         /// <param name="callback">回调函数</param>
         /// <returns>加载进度</returns>
-        public IProgress LoadAsync<T>(string assetName, Action<T> callback) where T : UnityEngine.Object
+        public IProgress LoadAsync<T>(string assetName, Action<T> callback) where T : UObject
         {
             var temp = Utility.Text.SplitPathName(assetName);
 
@@ -123,12 +124,32 @@ namespace XFramework.Resource
                 task.ContinueWith(() => { callback(request.asset as T); });
                 task.Start();
 
-                AsyncOperationProgress resProgress = new AsyncOperationProgress(request);
+                AssetBundleRequestProgress resProgress = new AssetBundleRequestProgress(request);
                 progress.Add(resProgress);
             });
             progress.Add(abProgress);
 
             return progress;
+        }
+        
+        public IProgressTask<T> LoadAsync<T>(string assetName) where T : UObject
+        {
+            var temp = Utility.Text.SplitPathName(assetName);
+            
+            var loadAbTask = LoadAssetBundleAsync(temp[0]);
+            
+            var loadAssetTask = loadAbTask.ContinueWithDynamicProgress<IProgressTask<UObject>, UObject>(() =>
+            {
+                var request = loadAbTask.Result.LoadAssetAsync(temp[1]);
+                AssetBundleRequestProgress resProgress = new AssetBundleRequestProgress(request);
+                return XTask.WaitProgress(resProgress);
+            });
+            
+            var covertAssetTask = loadAssetTask.ContinueWithProgress((asset) => asset as T);
+            
+            var pTask = new ProgressListTask<T>(loadAbTask, covertAssetTask, 3, 1, 0.01f);
+            pTask.Start();
+            return pTask;
         }
 
         /// <summary>
@@ -138,7 +159,7 @@ namespace XFramework.Resource
         /// <param name="path">资源路径</param>
         /// <param name="isTopOnly">是否是仅加载本层级的资源</param>
         /// <returns>资源</returns>
-        public IProgress LoadAllSync<T>(string path, bool isTopOnly, Action<IList<T>> callback) where T : UnityEngine.Object
+        public IProgress LoadAllSync<T>(string path, bool isTopOnly, Action<IList<T>> callback) where T : UObject
         {
             if (isTopOnly)
             {
@@ -156,21 +177,21 @@ namespace XFramework.Resource
                 List<T> assets = new List<T>();
 
                 DynamicMultiProgress dynamicProgress = new DynamicMultiProgress(2);
-                var assetBundlesProgress = LoadAssetBundlesAsync(path, OnAssetBundleLoadComplate);
+                var assetBundlesProgress = LoadAssetBundlesAsync(path, OnAssetBundleLoadComplete);
 
                 return dynamicProgress;
 
-                void OnAssetBundleLoadComplate(IEnumerable<AssetBundle> assetBundles)
+                void OnAssetBundleLoadComplete(IEnumerable<AssetBundle> assetBundles)
                 {
                     List<IProgress> progresses = new List<IProgress>();
                     var startTask = XTask.WaitUntil(() => true);
-                    XTask currentEndTask = startTask;
+                    var currentEndTask = startTask;
                     foreach (var ab in assetBundles)
                     {
                         var request = ab.LoadAllAssetsAsync<T>();
                         var task = XTask.WaitUntil(() => request.isDone);
                         var endTask = task.ContinueWith(() => { assets.AddRange(request.allAssets.Convert<T>());});
-                        progresses.Add(new AsyncOperationProgress(request));
+                        progresses.Add(new AssetBundleRequestProgress(request));
 
                         if(currentEndTask != null)
                         {
@@ -261,7 +282,7 @@ namespace XFramework.Resource
         /// 异步获取AB包
         /// </summary>
         /// <param name="path"></param>
-        private IProgress LoadAssetBundleAsync(string path, Action<AssetBundle> callBack)
+        private IProgress<AssetBundle> LoadAssetBundleAsync(string path, Action<AssetBundle> callBack)
         {
             string abKey = Path2Key(path);
             if (!m_ABDic.TryGetValue(abKey, out AssetBundle ab))
@@ -270,7 +291,7 @@ namespace XFramework.Resource
                 m_LoadingAB.Add(abKey, mainRequest);
 
                 // 添加任务列表
-                List<AssetBundleCreateRequest> requests = new List<AssetBundleCreateRequest>
+                var requests = new List<AssetBundleCreateRequest>
                 {
                     mainRequest
                 };
@@ -287,7 +308,7 @@ namespace XFramework.Resource
                     m_LoadingAB.Add(key, request);
                 }
 
-                XTask[] tasks = new XTask[requests.Count];
+                var tasks = new ITask[requests.Count];
 
                 for (int i = 0; i < tasks.Length; i++)
                 {
@@ -308,15 +329,26 @@ namespace XFramework.Resource
                 });
                 abTask.Start();
 
-                return new AsyncOperationsProgress(requests.ToArray());
+                return new AssetBundleCreateRequestsProgress(requests);
             }
             else
             {
                 callBack(ab);
-                return new DefaultProgress();
+                return new DefaultProgress<AssetBundle>(ab);
             }
         }
 
+        private IProgressTask<AssetBundle> LoadAssetBundleAsync(string path)
+        {
+            var progress = LoadAssetBundleAsync(path, (ab) =>
+            {
+                
+            });
+            var task = XTask.WaitProgress(progress);
+            task.Start();
+            return task;
+        }
+        
         /// <summary>
         /// 异步获取一组ab包
         /// </summary>

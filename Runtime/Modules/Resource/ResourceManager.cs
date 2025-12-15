@@ -131,17 +131,16 @@ namespace XFramework.Resource
         {
             return m_LoadHelper.LoadAll<T>(path, isTopOnly);
         }
-
+        
         /// <summary>
         /// 异步加载资源
         /// </summary>
         /// <param name="assetName">资源名称</param>
-        /// <param name="callBack">回调函数</param>
-        /// <returns>加载进度</returns>
-        public IProgress LoadAsync<T>(string assetName, System.Action<T> callBack) where T : Object
+        /// <returns>加载任务</returns>
+        public IProgressTask<T> LoadAsync<T>(string assetName) where T : Object
         {
             assetName = Path2RealPath(assetName);
-            return m_LoadHelper.LoadAsync<T>(assetName, callBack);
+            return m_LoadHelper.LoadAsync<T>(assetName);
         }
 
         /// <summary>
@@ -330,7 +329,8 @@ namespace XFramework.Resource
             m_AssetDic.TryGetValue(assetName, out Object asset);
             if (asset == null)
             {
-                LoadAsync<T>(assetName, callBack);
+                var xTask = LoadAsync<T>(assetName);
+                xTask.ContinueWith(callBack);
             }
             else
             {

@@ -1,13 +1,14 @@
-﻿using System.Linq;
+﻿using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace XFramework.Resource
 {
-    public class AsyncOperationsProgress : IProgress
+    public abstract class AsyncOperationsProgress<T, K> : IProgress<K> where T : AsyncOperation
     {
-        private AsyncOperation[] m_Operations;
+        protected IList<T> m_Operations;
 
-        public AsyncOperationsProgress(AsyncOperation[] asyncOperations)
+        protected AsyncOperationsProgress(IList<T> asyncOperations)
         {
             m_Operations = asyncOperations;
         }
@@ -29,16 +30,25 @@ namespace XFramework.Resource
                 {
                     p += item.progress;
                 }
-                return p / m_Operations.Length;
+                return p / m_Operations.Count;
             }
         }
+
+        public abstract K Result { get; }
     }
 
-    public class AsyncOperationProgress : IProgress
+    public class AssetBundleCreateRequestsProgress : AsyncOperationsProgress<AssetBundleCreateRequest, AssetBundle>
     {
-        private AsyncOperation m_Operation;
+        public AssetBundleCreateRequestsProgress(IList<AssetBundleCreateRequest> asyncOperations) : base(asyncOperations) {}
+        
+        public override AssetBundle Result => m_Operations[0].assetBundle;
+    }
+    
+    public abstract class AsyncOperationProgress<T, K> : IProgress<K> where T : AsyncOperation
+    {
+        protected T m_Operation;
 
-        public AsyncOperationProgress(AsyncOperation asyncOperation)
+        protected AsyncOperationProgress(T asyncOperation)
         {
             m_Operation = asyncOperation;
         }
@@ -58,11 +68,31 @@ namespace XFramework.Resource
                 return m_Operation.progress;
             }
         }
-    }
 
+        public abstract K Result { get; }
+    }
+    
+    public class AssetBundleCreateRequestProgress : AsyncOperationProgress<AssetBundleCreateRequest, AssetBundle>
+    {
+        public AssetBundleCreateRequestProgress(AssetBundleCreateRequest asyncOperation) : base(asyncOperation)
+        {
+        }
+        
+        public override AssetBundle Result => m_Operation.assetBundle;
+    }
+    
+    public class AssetBundleRequestProgress : AsyncOperationProgress<AssetBundleRequest, Object>
+    {
+        public AssetBundleRequestProgress(AssetBundleRequest asyncOperation) : base(asyncOperation)
+        {
+        }
+        
+        public override Object Result => m_Operation.asset;
+    }
+    
     public class ResourceRequestProgress : IProgress
     {
-        private ResourceRequest m_ResourceRequest;
+        private readonly ResourceRequest m_ResourceRequest;
 
         public ResourceRequestProgress(ResourceRequest resourceRequest)
         {
