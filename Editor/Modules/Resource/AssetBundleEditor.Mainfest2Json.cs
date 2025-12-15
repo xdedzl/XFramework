@@ -119,6 +119,10 @@ namespace XFramework.Editor
 
             private string List2Str(List<String> list)
             {
+                if (list.Count == 0)
+                {
+                    return "";
+                }
                 StringBuilder stringBuilder = new StringBuilder();
                 foreach (var item in list)
                 {

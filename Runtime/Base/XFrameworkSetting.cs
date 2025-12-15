@@ -9,6 +9,6 @@ namespace XFramework
     public class XFrameworkSetting : ScriptableObject
     {
         public TMP_FontAsset font;
+        public bool UseABInEditor = false;
     }
-
 }

@@ -267,7 +267,7 @@ namespace XFramework.UI
 
         public void ShowTips(string content, Vector2 position, Color color)
         {
-            InitTipsTemplete();
+            InitTipsTemplate();
             var entity = EntityManager.Instance.Allocate<TipEntity>("ui-tip-entity");
             entity.transform.SetParent(canvasTransform);
             entity.position = position;
@@ -275,17 +275,17 @@ namespace XFramework.UI
             entity.color = color;
         }
 
-        private void InitTipsTemplete()
+        private void InitTipsTemplate()
         {
             if(!EntityManager.Instance.ContainsTemplete("ui-tip-entity"))
             {
-                var root = new GameObject("ui-tip-templete");
+                var root = new GameObject("ui-tip-template");
                 root.transform.SetParent(canvasTransform);
                 var tmp = root.AddComponent<TextMeshProUGUI>();
                 var rectTransform = root.GetComponent<RectTransform>();
                 rectTransform.sizeDelta = new Vector2(200, 100);
 
-                tmp.font = GameBase.Setting.font;
+                tmp.font = XApplication.Setting.font;
                 tmp.alignment = TextAlignmentOptions.Center;
 
                 tmp.transform.position = new Vector3(0, 999999, 0);

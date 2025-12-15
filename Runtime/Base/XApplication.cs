@@ -32,7 +32,16 @@ namespace XFramework
                 return Application.platform == RuntimePlatform.Android ? Path.Combine(Application.persistentDataPath, "StreamingAssets") : Application.streamingAssetsPath;
             }
         }
-
+        
+        private static readonly XFrameworkSetting _setting;
+        public static XFrameworkSetting Setting
+        {
+            get
+            {
+                return _setting;
+            }
+        }
+        
         static XApplication()
         {
             if (Application.platform == RuntimePlatform.WindowsEditor || Application.platform == RuntimePlatform.WindowsPlayer)
@@ -43,12 +52,26 @@ namespace XFramework
             {
                 dataPath = Application.persistentDataPath;
             }
-        }
 
-        /// <summary>
-        /// ��¼streamingAssets�µ��ļ�
-        /// </summary>
-        public static void RecordAllStremingAssetsPath()
+            var settingAssetPath = "Assets/Configs/Resources/XFrameworkSetting.asset";
+            var settingPath = Path.Combine(XApplication.dataPath, settingAssetPath);
+            _setting = Resources.Load<XFrameworkSetting>("XFrameworkSetting");
+            if (!_setting)
+            {
+                _setting = ScriptableObject.CreateInstance<XFrameworkSetting>();
+#if UNITY_EDITOR
+                // 自动创建资源
+                if (!Directory.Exists(Path.GetDirectoryName(settingPath)))
+                    Directory.CreateDirectory(Path.GetDirectoryName(settingPath));
+                UnityEditor.AssetDatabase.CreateAsset(_setting, settingAssetPath);
+                UnityEditor.AssetDatabase.SaveAssets();
+                UnityEditor.AssetDatabase.Refresh();
+                Debug.Log("当前项目没有XFrameworkSetting, 已新创建：" + settingAssetPath);
+#endif
+            }
+        }
+        
+        public static void RecordAllStreamingAssetsPath()
         {
             string assetListPath = Path.Combine(Application.streamingAssetsPath, "assetList");
             if (File.Exists(assetListPath))

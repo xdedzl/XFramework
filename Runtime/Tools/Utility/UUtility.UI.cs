@@ -68,7 +68,7 @@ namespace XFramework
                 rectTransform.offsetMax = Vector2.zero;
                 tmp.text = text;
                 tmp.fontSize = 60;
-                tmp.font = GameBase.Setting.font;
+                tmp.font = XApplication.Setting.font;
                 tmp.alignment = TextAlignmentOptions.Center;
 
                 Timer.Register(time, () =>

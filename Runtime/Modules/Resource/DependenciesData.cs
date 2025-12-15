@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
@@ -9,18 +10,18 @@ namespace XFramework.Resource
         private readonly string[] m_Empty;
 
         [SerializeField]
-        private readonly SingleDependenciesData[] AllDependenceData;
+        private SingleDependenciesData[] AllDependenceData;
 
         public DependenciesData()
         {
-            m_Empty = new string[0];
+            m_Empty = Array.Empty<string>();
         }
 
         public DependenciesData(SingleDependenciesData[] allDependenceData)
         {
             AllDependenceData = allDependenceData;
 
-            m_Empty = new string[0];
+            m_Empty = Array.Empty<string>();
         }
 
         public string[] GetDirectDependencies(string assetBundleName)
@@ -76,7 +77,7 @@ namespace XFramework.Resource
         }
     }
 
-    [System.Serializable]
+    [Serializable]
     public class SingleDependenciesData
     {
         /// <summary>

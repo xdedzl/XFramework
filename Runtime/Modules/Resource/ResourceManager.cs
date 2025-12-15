@@ -29,10 +29,21 @@ namespace XFramework.Resource
         /// </summary>
         /// <param name="loadHelper">资源加载辅助类</param>
         /// <param name="mapInfoPath">路径映射文件</param>
-        public ResourceManager(IResourceLoadHelper loadHelper, string mapInfoPath="")
+        public ResourceManager()
         {
-            m_LoadHelper = loadHelper;
-
+#if UNITY_EDITOR
+            if (XApplication.Setting.UseABInEditor)
+            {
+                m_LoadHelper = new AssetBundleLoadHelper();
+            }
+            else
+            {
+                m_LoadHelper = new AssetDataBaseLoadHelper();
+            }
+#else
+            m_LoadHelper = new AssetBundleLoadHelper();
+#endif
+            var mapInfoPath = "";
             if (File.Exists(mapInfoPath))
             {
                 m_PathMap = new Dictionary<string, string>();
@@ -44,12 +55,6 @@ namespace XFramework.Resource
                 HasPathMap = false;
             }
         }
-
-        /// <summary>
-        /// 构造一个资源管理器,加载资源时不使用路径映射
-        /// </summary>
-        /// <param name="loadHelper">资源加载辅助类</param>
-        public ResourceManager(IResourceLoadHelper loadHelper) : this(loadHelper, null) { }
 
         private void InitPathMapWithText(string mapInfoPath)
         {
@@ -67,18 +72,37 @@ namespace XFramework.Resource
         /// </summary>
         public string AssetPath => m_LoadHelper.AssetPath;
 
-        /// <summary>
-        /// 是否通过Resources内加载
-        /// </summary>
-        /// <param name="assetName"></param>
-        /// <returns></returns>
-        private bool IsResources(string assetName)
-        {
-            return assetName.StartsWith("Res");
-        }
-
         #region 资源加载
+        
+        public T LoadInResources<T>(string assetName) where T : Object
+        {
+            if (string.IsNullOrEmpty(assetName))
+            {
+                throw new XFrameworkException("load path is null");
+            }
+            assetName = assetName.Split('.')[0];
+            return Resources.Load<T>(assetName);
+        }
+        
+        public T[] LoadAllInResources<T>(string path, bool isTopOnly = true) where T : Object
+        {
+            path = path.Split('.')[0];
+            return Resources.LoadAll<T>(path);
+        }
+        
+        public IProgress LoadAsyncInResources<T>(string assetName, System.Action<T> callBack) where T : Object
+        {
+            var request = Resources.LoadAsync(assetName);
 
+            var task = XTask.WaitUntil(() => request.isDone);
+            task.ContinueWith(() =>
+            {
+                callBack.Invoke(request.asset as T);
+            });
+            task.Start();
+            return new ResourceRequestProgress(request);
+        }
+        
         /// <summary>
         /// 同步加载资源
         /// </summary>
@@ -90,12 +114,6 @@ namespace XFramework.Resource
             if (string.IsNullOrEmpty(assetName))
             {
                 throw new XFrameworkException("load path is null");
-            }
-            if (IsResources(assetName))
-            {
-                assetName = assetName[4..];
-                assetName = assetName.Split('.')[0];
-                return Resources.Load<T>(assetName);
             }
 
             assetName = Path2RealPath(assetName);
@@ -111,12 +129,6 @@ namespace XFramework.Resource
         /// <returns>资源组</returns>
         public T[] LoadAll<T>(string path, bool isTopOnly = true) where T : Object
         {
-            if (IsResources(path))
-            {
-                path = path[4..];
-                return Resources.LoadAll<T>(path);
-            }
-
             return m_LoadHelper.LoadAll<T>(path, isTopOnly);
         }
 
@@ -128,25 +140,8 @@ namespace XFramework.Resource
         /// <returns>加载进度</returns>
         public IProgress LoadAsync<T>(string assetName, System.Action<T> callBack) where T : Object
         {
-            if (IsResources(assetName))
-            {
-                assetName = assetName[4..];
-                var request = Resources.LoadAsync(assetName);
-
-                var task = XTask.WaitUntil(() => request.isDone);
-                task.ContinueWith(() =>
-                {
-                    callBack.Invoke(request.asset as T);
-                });
-                task.Start();
-                return new ResourceRequestProgress(request);
-            }
-
-            else
-            {
-                assetName = Path2RealPath(assetName);
-                return m_LoadHelper.LoadAsync<T>(assetName, callBack);
-            }
+            assetName = Path2RealPath(assetName);
+            return m_LoadHelper.LoadAsync<T>(assetName, callBack);
         }
 
         /// <summary>
@@ -158,11 +153,6 @@ namespace XFramework.Resource
         /// <returns>资源组</returns>
         public IProgress LoadAllAsync<T>(string path, bool isTopOnly, System.Action<IList<T>> callback) where T : Object
         {
-            if (IsResources(path))
-            {
-                throw new XFrameworkException("Resource not support LoadAllAsync");
-            }
-
             return m_LoadHelper.LoadAllSync<T>(path, isTopOnly, callback);
         }
 

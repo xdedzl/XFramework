@@ -203,7 +203,7 @@ namespace XFramework.Resource
                 m_ABDic.Add(path, ab);
 
                 //加载当前AB包的依赖包
-                //string[] dependencies = m_Mainfest.GetAllDependencies(ab.name);
+                //string[] dependencies = m_Manifest.GetAllDependencies(ab.name);
                 string[] dependencies = m_DependenceInfo.GetAllDependencies(ab.name);
 
                 foreach (var item in dependencies)
@@ -275,7 +275,7 @@ namespace XFramework.Resource
                     mainRequest
                 };
 
-                //string[] dependencies = m_Mainfest.GetAllDependencies(path + ".ab");
+                //string[] dependencies = m_Manifest.GetAllDependencies(path + ".ab");
                 string[] dependencies = m_DependenceInfo.GetAllDependencies(abKey + m_Variant);
                 foreach (var name in dependencies)
                 {
