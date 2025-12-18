@@ -2,11 +2,15 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace XFramework.Editor
+namespace XFramework
 {
     public class AssetFolderPathAttribute : PropertyAttribute { }
-
-    #if UNITY_EDITOR
+    
+    public class ReadOnlyAttribute : PropertyAttribute { }
+}
+#if UNITY_EDITOR
+namespace XFramework.Editor
+{
     [CustomPropertyDrawer(typeof(AssetFolderPathAttribute))]
     public class FolderPathDrawer : PropertyDrawer
     {
@@ -50,5 +54,24 @@ namespace XFramework.Editor
             return container;
         }
     }
-    #endif
+    
+    [CustomPropertyDrawer(typeof(ReadOnlyAttribute))]
+    public class ReadOnlyDrawer : PropertyDrawer
+    {
+        public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
+        {
+            // 禁用GUI的交互能力，使其变为不可编辑状态
+            GUI.enabled = false;
+            // 绘制属性字段，但此时它已经是灰色的不可编辑状态
+            EditorGUI.PropertyField(position, property, label, true);
+            // 恢复GUI的交互能力，以免影响后续元素的绘制
+            GUI.enabled = true;
+        }
+        // 确保只读字段的显示高度正确
+        public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
+        {
+            return EditorGUI.GetPropertyHeight(property, label, true);
+        }
+    }
 }
+#endif

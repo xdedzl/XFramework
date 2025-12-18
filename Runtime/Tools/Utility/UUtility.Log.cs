@@ -64,7 +64,7 @@ namespace XFramework
         [Conditional(DEBUG_LOG)]
         public static void LogColor(string color, object message)
         {
-            message = string.Format("<color=#{0}>{1}</color>", color, message);
+            message = $"<color=#{color}>{message}</color>";
             Log(message);
         }
 
@@ -76,7 +76,7 @@ namespace XFramework
         [Conditional(DEBUG_LOG)]
         public static void LogColor(string color, string format, params object[] args)
         {
-            var message = string.Format("<color=#{0}>{1}</color>", color, string.Format(format, args));
+            var message = $"<color=#{color}>{string.Format(format, args)}</color>";
             Log(message);
         }
 
@@ -120,14 +120,14 @@ namespace XFramework
         [Conditional(DEBUG_LOG)]
         public static void LogColorGUI(string color, object content)
         {
-            var message = string.Format("<color=#{0}>{1}</color>", color, content);
+            var message = $"<color=#{color}>{content}</color>";
             LogGUI(message);
         }
 
         [Conditional(DEBUG_LOG)]
         public static void LogGUI(string color, string format, params object[] args)
         {
-            var message = string.Format("<color=#{0}>{1}</color>", color, string.Format(format, args));
+            var message = $"<color=#{color}>{string.Format(format, args)}</color>";
             LogGUI(message);
         }
 

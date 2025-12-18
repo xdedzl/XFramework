@@ -1,16 +1,11 @@
 ﻿using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Runtime.Serialization.Formatters.Binary;
 
 namespace XFramework
 {
-    public enum CreatType
-    {
-        CreateNew,
-        KeepOld,
-    }
-
     /// <summary>
     /// 实用工具方法类
     /// </summary>
@@ -21,6 +16,12 @@ namespace XFramework
         /// </summary>
         public static class IO
         {
+            public enum CreatType
+            {
+                CreateNew,
+                KeepOld,
+            }
+            
             #region 序列化相关
 
             ///<summary> 
@@ -96,17 +97,23 @@ namespace XFramework
             #endregion
 
             #region 文件操作
-
             /// <summary>
-            /// 打开一个文件
+            /// 打开文件
+            /// Process用using包起来
             /// </summary>
-            /// <param name="fllePath">文件路径</param>
-            public static System.Diagnostics.Process OpenFile(string filePath, string startArgs = "")
+            public static Process OpenFile(string filePath, string startArgs = "")
             {
-                System.Diagnostics.Process process = new System.Diagnostics.Process();
+                Process process = new Process();
                 process.StartInfo.FileName = filePath;
                 process.StartInfo.Arguments = startArgs;
+                // process.StartInfo.UseShellExecute = false;
+                // process.StartInfo.RedirectStandardOutput = true;
+                // process.StartInfo.RedirectStandardError = true;
+                // process.StartInfo.CreateNoWindow = true;
                 process.Start();
+                // process.WaitForExit();
+                // string output = process.StandardOutput.ReadToEnd();
+                // string error = process.StandardError.ReadToEnd();
                 return process;
             }
 
@@ -167,7 +174,7 @@ namespace XFramework
             /// 清空一个文件夹
             /// </summary>
             /// <param name="fullPath">文件夹路径</param>
-            public static void CleraDirectory(string fullPath)
+            public static void ClearDirectory(string fullPath)
             {
                 DirectoryInfo directoryInfo = new DirectoryInfo(fullPath);
                 if (directoryInfo.Exists)

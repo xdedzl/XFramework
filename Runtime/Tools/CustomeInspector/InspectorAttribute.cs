@@ -190,16 +190,6 @@ namespace XFramework
     }
 
     /// <summary>
-    /// 只读检视器
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
-    [Conditional("UNITY_EDITOR")]
-    public sealed class ReadOnlyAttribute : InspectorAttribute
-    {
-
-    }
-
-    /// <summary>
     /// 事件、委托检视器
     /// </summary>
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = true)]

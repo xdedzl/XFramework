@@ -246,7 +246,7 @@ namespace XFramework.Editor
             {
                 if (EditorUtility.DisplayDialog("警告", "是否要删除输出目录下的所有文件", "确认", "取消"))
                 {
-                    Utility.IO.CleraDirectory(m_OutPutPath);
+                    Utility.IO.ClearDirectory(m_OutPutPath);
                 }
             }
 

@@ -11,7 +11,7 @@ using System;
 namespace XFramework
 {
     /// <summary>
-    /// 使用工具类
+    /// 通用工具类，所有Unity相关的工具方法
     /// </summary>
     public static partial class UUtility
     {

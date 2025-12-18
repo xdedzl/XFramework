@@ -36,11 +36,23 @@ namespace XFramework
             /// <returns></returns>
             public static T CreateInstance<T>(Type type, params object[] objs) where T : class
             {
-                T instance;
+                return CreateInstance(type, objs) as T;
+            }
+            
+            /// <summary>
+            /// 创建一个对象
+            /// </summary>
+            /// <typeparam name="T">对象类型</typeparam>
+            /// <param name="type">类型</param>
+            /// <param name="objs">参数数组</param>
+            /// <returns></returns>
+            public static object CreateInstance(Type type, params object[] objs)
+            {
+                object instance;
                 if (objs != null)
-                    instance = Activator.CreateInstance(type, objs) as T;
+                    instance = Activator.CreateInstance(type, objs);
                 else
-                    instance = Activator.CreateInstance(type) as T;
+                    instance = Activator.CreateInstance(type);
                 return instance;
             }
 
@@ -91,12 +103,12 @@ namespace XFramework
                 }
                 catch
                 {
-                    return new Type[0];
+                    return Type.EmptyTypes;
                 }
 
                 if (assembly == null)
                 {
-                    return new Type[0];
+                    return Type.EmptyTypes;
                 }
 
                 Type[] types = assembly.GetTypes();
@@ -110,7 +122,17 @@ namespace XFramework
 
                 return typeNames;
             }
-
+            
+            public static IEnumerable<Type> GetAssignableTypes(Type typeBase, params string[] assemblyNames)
+            {
+                List<Type> typeNames = new List<Type>();
+                foreach (var assemblyName in assemblyNames)
+                {
+                    typeNames.AddRange(GetAssignableTypes(typeBase, assemblyName));
+                }
+                return typeNames;
+            }
+            
             /// <summary>
             /// 从当前程序域的所有程序集中获取所有类型
             /// </summary>
@@ -118,10 +140,10 @@ namespace XFramework
             public static List<Type> GetTypesInAllAssemblies()
             {
                 List<Type> types = new List<Type>();
-                Assembly[] assemblys = AppDomain.CurrentDomain.GetAssemblies();
-                for (int i = 0; i < assemblys.Length; i++)
+                Assembly[] assembles = AppDomain.CurrentDomain.GetAssemblies();
+                for (int i = 0; i < assembles.Length; i++)
                 {
-                    types.AddRange(assemblys[i].GetTypes());
+                    types.AddRange(assembles[i].GetTypes());
                 }
                 return types;
             }
@@ -134,13 +156,13 @@ namespace XFramework
             public static List<Type> GetTypesInAllAssemblies(Func<Type, bool> filter)
             {
                 List<Type> types = new List<Type>();
-                Assembly[] assemblys = AppDomain.CurrentDomain.GetAssemblies();
-                for (int i = 0; i < assemblys.Length; i++)
+                Assembly[] assembles = AppDomain.CurrentDomain.GetAssemblies();
+                for (int i = 0; i < assembles.Length; i++)
                 {
                     Type[] ts;
                     try
                     {
-                        ts = assemblys[i].GetTypes();
+                        ts = assembles[i].GetTypes();
                     }
                     catch (Exception)
                     {
@@ -300,12 +322,12 @@ namespace XFramework
             }
             catch
             {
-                return new string[0];
+                return Array.Empty<string>();
             }
 
             if (assembly == null)
             {
-                return new string[0];
+                return Array.Empty<string>();
             }
 
             Type[] types = assembly.GetTypes();
