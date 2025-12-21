@@ -3,6 +3,8 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
+using System.Linq;
 
 
 namespace XFramework
@@ -18,7 +20,7 @@ namespace XFramework
             /// <param name="fullTypeName">是否使用类型全名存储</param>
             /// <param name="formatting">格式化</param>
             /// <returns>json文本</returns>
-            public static string SerializePolyArray(IList list, bool fullTypeName = false, Formatting formatting = Formatting.None)
+            public static string SerializePolyArray(IList list, bool fullTypeName = true, Formatting formatting = Formatting.None)
             {
                 JArray jArray = new JArray();
 
@@ -26,10 +28,10 @@ namespace XFramework
                 {
                     string typeName = fullTypeName ? item.GetType().FullName : item.GetType().Name;
                     JObject jObject = new JObject
-                {
-                    { "type", typeName },
-                    { "data", JToken.FromObject(item) }
-                };
+                    {
+                        { "type", typeName },
+                        { "data", JToken.FromObject(item) }
+                    };
                     jArray.Add(jObject);
                 }
                 return jArray.ToString(formatting);
@@ -42,7 +44,7 @@ namespace XFramework
             /// <param name="json">json文本</param>
             /// <param name="nameSpace">命名空间，(序列化时使用的是全名时传null即可)</param>
             /// <returns>多态数组</returns>
-            public static T[] DeserializePolyArray<T>(string json, string nameSpace = null)
+            public static T[] DeserializePolyArray<T>(string json, string nameSpace, params string[] assemblyNames)
             {
                 JArray jArray = JArray.Parse(json);
 
@@ -50,11 +52,13 @@ namespace XFramework
 
                 foreach (var jObject in jArray.Children<JObject>())
                 {
-                    Type type;
-                    if (string.IsNullOrEmpty(nameSpace))
-                        type = Type.GetType(jObject.GetValue("type").Value<string>());
-                    else
-                        type = Type.GetType($"{nameSpace}.{jObject.GetValue("type").Value<string>()}");
+                    string typeName = jObject.GetValue("type").Value<string>();
+                    string typeFullName = string.IsNullOrEmpty(nameSpace) ? typeName : $"{nameSpace}.{typeName}";
+                    Type type = Utility.Reflection.GetType(typeFullName, assemblyNames);
+                    if (type is null)
+                    {
+                        throw new Exception($"DeserializePolyArray: Cannot find type {typeFullName}");
+                    }
 
                     var value = jObject.GetValue("data").ToObject(type);
 

@@ -5,6 +5,9 @@ using UnityEngine;
 
 namespace XFramework
 {
+    /** todo Assembly assembly = AppDomain.CurrentDomain.GetAssemblies()
+    .FirstOrDefault(a => a.GetName().Name == assemblyName);**/
+    
     public static partial class Utility
     {
         /// <summary>
@@ -20,10 +23,14 @@ namespace XFramework
             public static T CreateInstance<T>(params object[] objs) where T : class
             {
                 T instance;
-                if (objs != null)
+                if (objs != null && objs.Length > 0)
+                {
                     instance = Activator.CreateInstance(typeof(T), objs) as T;
+                }
                 else
+                {
                     instance = Activator.CreateInstance(typeof(T)) as T;
+                }
                 return instance;
             }
 
@@ -131,6 +138,28 @@ namespace XFramework
                     typeNames.AddRange(GetAssignableTypes(typeBase, assemblyName));
                 }
                 return typeNames;
+            }
+
+            public static Type GetType(string typeFullName, params string[] assemblyNames)
+            {
+                if (assemblyNames is null || assemblyNames.Length == 0)
+                {
+                    return Type.GetType(typeFullName);
+                }
+                else
+                {
+                    foreach (var assemblyName in assemblyNames)
+                    {
+                        var assembly = Assembly.Load(assemblyName);
+                        var type = assembly.GetType(typeFullName);
+                        if (type != null)
+                        {
+                            return type;
+                        }
+                    }
+                }
+                
+                return null;
             }
             
             /// <summary>
