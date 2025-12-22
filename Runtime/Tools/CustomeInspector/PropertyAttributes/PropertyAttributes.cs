@@ -1,12 +1,15 @@
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
+using UnityEditor.UIElements;
 
 namespace XFramework
 {
     public class AssetFolderPathAttribute : PropertyAttribute { }
     
     public class ReadOnlyAttribute : PropertyAttribute { }
+    
+    public class AssetPathAttribute : PropertyAttribute { }
 }
 #if UNITY_EDITOR
 namespace XFramework.Editor
@@ -68,6 +71,40 @@ namespace XFramework.Editor
             GUI.enabled = true;
         }
         // 确保只读字段的显示高度正确
+        public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
+        {
+            return EditorGUI.GetPropertyHeight(property, label, true);
+        }
+    }
+
+    [CustomPropertyDrawer(typeof(AssetPathAttribute))]
+    public class AssetPathDrawer : PropertyDrawer
+    {
+        public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
+        {
+            EditorGUI.BeginProperty(position, label, property);
+            // 通过路径加载资源
+            Object asset = null;
+            if (!string.IsNullOrEmpty(property.stringValue))
+            {
+                asset = AssetDatabase.LoadAssetAtPath<Object>(property.stringValue);
+            }
+            // 显示ObjectField
+            Object newAsset = EditorGUI.ObjectField(
+                position,
+                label,
+                asset,
+                typeof(Object),
+                false // 禁止场景对象
+            );
+            // 如果选择了新资源，则更新路径
+            if (newAsset != asset)
+            {
+                string path = newAsset != null ? AssetDatabase.GetAssetPath(newAsset) : string.Empty;
+                property.stringValue = path;
+            }
+            EditorGUI.EndProperty(); 
+        }
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
             return EditorGUI.GetPropertyHeight(property, label, true);

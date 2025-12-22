@@ -4,25 +4,18 @@ using UnityEngine;
 
 namespace XFramework.UI
 {
-
+    /// <summary>
+    /// 直接放在场景中Panel，用此类来注册到UIManager中，注册完立即销毁
+    /// </summary>
     public class PanelRegister : MonoBehaviour
     {
-        public string panelName;
-        public bool openPanel = true;
-
         private void Start()
         {
-            if (string.IsNullOrEmpty(panelName))
-            {
-                return;
-            }
-
             if (TryGetComponent<PanelBase>(out var panel))
             {
-                UIManager.Instance.RegisterExistPanel(panelName, panel, openPanel);
+                UIManager.Instance.RegisterExistPanel(gameObject, panel.GetType());
                 DestroyImmediate(this);
             }
         }
-
     }
 }

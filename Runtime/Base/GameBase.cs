@@ -7,6 +7,7 @@ using XFramework.Entity;
 using XFramework.Fsm;
 using XFramework.Json;
 using XFramework.Resource;
+using XFramework.UI;
 
 /// <summary>
 /// 这个类挂在初始场景中,是整个游戏的入口
@@ -47,6 +48,7 @@ public class GameBase : MonoBehaviour
     {
         GameEntry.AddModule<ResourceManager>();
         GameEntry.AddModule<EntityManager>();
+        GameEntry.AddModule<UIManager>();
         GameEntry.AddModule<FsmManager>();
         GameEntry.AddModule<SoundManager>();
         

@@ -7,6 +7,7 @@ namespace XFramework.UI
     /// <summary>
     /// 面板基类
     /// </summary>
+    [DisallowMultipleComponent]
     public class PanelBase : MonoBehaviour
     {
         /// <summary>
