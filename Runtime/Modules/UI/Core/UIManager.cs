@@ -289,7 +289,7 @@ namespace XFramework.UI
 
         private void InitTipsTemplate()
         {
-            if(!EntityManager.Instance.ContainsTemplete("ui-tip-entity"))
+            if(!EntityManager.Instance.ContainsTemplate("ui-tip-entity"))
             {
                 var root = new GameObject("ui-tip-template");
                 root.transform.SetParent(canvasTransform);

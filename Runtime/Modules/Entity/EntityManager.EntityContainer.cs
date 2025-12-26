@@ -15,15 +15,15 @@ namespace XFramework.Entity
             /// <summary>
             /// 容器名
             /// </summary>
-            public readonly string name;
+            private readonly string name;
             /// <summary>
             /// 容器类型
             /// </summary>
-            public readonly Type type;
+            private readonly Type type;
             /// <summary>
             /// 实体列表
             /// </summary>
-            private readonly List<Entity> m_Entities;
+            private readonly HashSet<Entity> m_Entities = new();
             /// <summary>
             /// 模板
             /// </summary>
@@ -31,11 +31,11 @@ namespace XFramework.Entity
             /// <summary>
             /// 实体池
             /// </summary>
-            private readonly Stack<Entity> m_Pool;
+            private readonly Stack<Entity> m_Pool = new();
             /// <summary>
             /// 所有entity的父物体
             /// </summary>
-            private Transform entityRoot;
+            private readonly Transform entityRoot;
 
             /// <summary>
             /// 构造一个实体容器
@@ -53,8 +53,6 @@ namespace XFramework.Entity
                 this.type = type;
                 this.name = name;
                 m_Template = template;
-                m_Entities = new List<Entity>();
-                m_Pool = new Stack<Entity>();
                 if (!string.IsNullOrEmpty(entityRootName))
                 {
                     var obj = GameObject.Find(entityRootName);
@@ -72,13 +70,7 @@ namespace XFramework.Entity
             /// <summary>
             /// 实体数量（不包括池中的）
             /// </summary>
-            public int Count
-            {
-                get
-                {
-                    return m_Entities.Count;
-                }
-            }
+            public int Count => m_Entities.Count;
 
             /// <summary>
             /// 实体实例化及初始化
@@ -140,6 +132,24 @@ namespace XFramework.Entity
 
                 return entity;
             }
+            
+            internal Entity RegisterExistEntity(string id, GameObject entityObj)
+            {
+                if (!entityObj.TryGetComponent(type, out Component c))
+                {
+                    throw new Exception($"实体[{entityObj.name}]不包含类型为[{type.Name}]的组件，注册失败");
+                }
+                
+                var entity = c as Entity;
+                entity.Id = id;
+                entity.name = name;
+                entity.ContainerName = this.name;
+                entity.OnInit();
+                entity.Id = id;
+                entity.OnRecycle();
+                m_Entities.Add(entity);
+                return entity;
+            }
 
             /// <summary>
             /// 回收实体
@@ -178,7 +188,9 @@ namespace XFramework.Entity
             {
                 while (count < m_Pool.Count)
                 {
-                    GameObject obj = m_Pool.Pop().gameObject;
+                    var entity = m_Pool.Pop();
+                    entity.OnRelease();
+                    GameObject obj = entity.gameObject;
                     GameObject.Destroy(obj);
                 }
             }
@@ -188,9 +200,9 @@ namespace XFramework.Entity
             /// </summary>
             internal void OnUpdate()
             {
-                for (int i = 0; i < m_Entities.Count; i++)
+                foreach (var entity in m_Entities)
                 {
-                    m_Entities[i].OnUpdate();
+                    entity.OnUpdate();
                 }
             }
         }

@@ -13,22 +13,15 @@ namespace XFramework.Entity
         /// <summary>
         /// 存储对应实体容器的字典
         /// </summary>
-        private readonly Dictionary<string, EntityContainer> m_EntityContainerDic;
+        private readonly Dictionary<string, EntityContainer> m_EntityContainerDic = new();
         /// <summary>
         /// 存储所有在使用的实体字典
         /// </summary>
-        private readonly Dictionary<string, Entity> m_EntityDic;
+        private readonly Dictionary<string, Entity> m_EntityDic = new();
         /// <summary>
         /// 存储实体父子关系的字典(从实际经验看大多数entity都不需要attach/detach,所以不直接存在Entity中)
         /// </summary>
-        private readonly Dictionary<string, EntityInfo> m_EntityInfoDic;
-
-        public EntityManager()
-        {
-            m_EntityContainerDic = new Dictionary<string, EntityContainer>();
-            m_EntityDic = new Dictionary<string, Entity>();
-            m_EntityInfoDic = new Dictionary<string, EntityInfo>();
-        }
+        private readonly Dictionary<string, EntityInfo> m_EntityInfoDic = new();
 
         #region 增删改
 
@@ -59,7 +52,7 @@ namespace XFramework.Entity
         /// <summary>
         /// 设置模板
         /// </summary>
-        public void AddTemplate(string key, System.Type type, GameObject template)
+        public void AddTemplate(string key, Type type, GameObject template)
         {
             AddTemplate(key, type, template, key);
         }
@@ -70,7 +63,7 @@ namespace XFramework.Entity
         /// <param name="key">key</param>
         /// <param name="type">类型</param>
         /// <param name="template">模板</param>
-        public void AddTemplate(string key, System.Type type, GameObject template, string entityRootName)
+        public void AddTemplate(string key, Type type, GameObject template, string entityRootName)
         {
             if (m_EntityContainerDic.ContainsKey(key))
             {
@@ -91,10 +84,10 @@ namespace XFramework.Entity
             if(TryGetContainer(key, out var container))
             {
                 container.Clean(0);
-                var entitys = container.GetEntities();
-                if (entitys != null)
+                var entities = container.GetEntities();
+                if (entities != null)
                 {
-                    foreach (var item in entitys)
+                    foreach (var item in entities)
                     {
                         m_EntityDic.Remove(item.Id);
                         m_EntityInfoDic.Remove(item.Id);
@@ -109,7 +102,7 @@ namespace XFramework.Entity
         /// 是否包含一个模板
         /// </summary>
         /// <param name="key"></param>
-        public bool ContainsTemplete(string key)
+        public bool ContainsTemplate(string key)
         {
             return m_EntityContainerDic.ContainsKey(key);
         }
@@ -126,7 +119,7 @@ namespace XFramework.Entity
         /// <returns>实体</returns>
         public T Allocate<T>(Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null) where T : Entity
         {
-            return Allocate<T>(entityData:null, pos, quaternion, parent, id) as T;
+            return Allocate<T>(entityData:null, pos, quaternion, parent, id);
         }
 
         /// <summary>
@@ -144,7 +137,7 @@ namespace XFramework.Entity
             string key = typeof(T).Name;
             if(!TryGetContainer(key, out EntityContainer _))
             {
-                var obj = new GameObject(key + "templete");
+                var obj = new GameObject(key + "template");
                 AddTemplate<T>(obj);
             }
             return Allocate(key, entityData, pos, quaternion, parent, id) as T;
@@ -161,7 +154,7 @@ namespace XFramework.Entity
         /// <param name="quaternion">朝向</param>
         /// <param name="parent">实体父物体</param>
         /// <returns>实体</returns>
-        public T Allocate<T>(string key, IEntityData entityData=null, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null) where T : Entity
+        public T Allocate<T>(string key, IEntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null) where T : Entity
         {
             return Allocate(key, entityData, pos, quaternion, parent, id) as T;
         }
@@ -196,7 +189,7 @@ namespace XFramework.Entity
         /// <param name="quaternion">朝向</param>
         /// <param name="parent">实体父物体</param>
         /// <returns>实体</returns>
-        public T Allocate<T>(string key, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null) where T : Entity
+        public T Allocate<T>(string key, Vector3 pos, Quaternion quaternion = default, Transform parent = null, string id = null) where T : Entity
         {
             return Allocate(key, null, pos, quaternion, parent, id) as T;
         }
@@ -210,7 +203,7 @@ namespace XFramework.Entity
         /// <param name="quaternion">朝向</param>
         /// <param name="parent">实体父物体</param>
         /// <returns>实体</returns>
-        public Entity Allocate(string key, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null)
+        public Entity Allocate(string key, Vector3 pos, Quaternion quaternion = default, Transform parent = null, string id = null)
         {
             return Allocate(key, null, pos, quaternion, parent, id);
         }
@@ -225,11 +218,11 @@ namespace XFramework.Entity
         /// <param name="quaternion">角度</param>
         /// <param name="parent">实体父物体</param>
         /// <returns></returns>
-        public Entity Allocate(string key, IEntityData entityData=null, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null)
+        public Entity Allocate(string key, IEntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null)
         {
             if (!TryGetContainer(key, out EntityContainer _))
             {
-                var obj = new GameObject(key + "templete");
+                var obj = new GameObject(key + "template");
                 AddTemplate<CommonEntity>(obj);
             }
             var entityContainer = GetContainer(key);
@@ -245,7 +238,15 @@ namespace XFramework.Entity
             m_EntityDic.Add(entity.Id, entity);
             return entity;
         }
-
+        
+        internal void RegisterExistEntity(string templateKey, GameObject entityObj)
+        {
+            var container = GetContainer(templateKey);
+            var id = Guid.NewGuid().ToString();
+            var entity = container.RegisterExistEntity(id, entityObj);
+            m_EntityDic.Add(entity.Id, entity);
+        }
+        
         /// <summary>
         /// 回收实体
         /// </summary>
@@ -286,10 +287,10 @@ namespace XFramework.Entity
 
         public void RecycleContainer<T>() where T : Entity
         {
-            RecycleConatiner(typeof(T).Name);
+            RecycleContainer(typeof(T).Name);
         }
 
-        public void RecycleConatiner(string containerName)
+        public void RecycleContainer(string containerName)
         {
             if (TryGetContainer(containerName, out var container))
             {
@@ -320,10 +321,10 @@ namespace XFramework.Entity
         public void Attach(Entity child, Entity parent)
         {
             EntityInfo childInfo = GetEntityInfo(child);
-            EntityInfo parendInfo = GetEntityInfo(parent);
+            EntityInfo parentInfo = GetEntityInfo(parent);
 
             childInfo.Parent = parent;
-            parendInfo.AddChild(child);
+            parentInfo.AddChild(child);
 
             child.OnAttachTo(parent);
             parent.OnAttached(child);
@@ -349,7 +350,7 @@ namespace XFramework.Entity
         /// 移除父实体上的所有子实体
         /// </summary>
         /// <param name="parent">父实体</param>
-        public void DetachChilds(Entity parent)
+        public void DetachChildren(Entity parent)
         {
             EntityInfo parentInfo = GetEntityInfo(parent);
 
@@ -390,13 +391,13 @@ namespace XFramework.Entity
                 entityContainer = null;
                 return false;
             }
-            else if (m_EntityContainerDic.TryGetValue(containerName, out entityContainer))
+            
+            if (m_EntityContainerDic.TryGetValue(containerName, out entityContainer))
             {
                 return true;
             }
             else
             {
-                entityContainer = null;
                 return false;
             }
         }
@@ -454,18 +455,23 @@ namespace XFramework.Entity
         /// <returns></returns>
         private EntityInfo GetEntityInfo(Entity entity)
         {
-            if (m_EntityInfoDic.TryGetValue(entity.Id, out EntityInfo entityInfo))
+            return GetEntityInfo(entity.Id);
+        }
+
+        private EntityInfo GetEntityInfo(string entityId)
+        {
+            if (m_EntityInfoDic.TryGetValue(entityId, out EntityInfo entityInfo))
             {
                 return entityInfo;
             }
             else
             {
-                EntityInfo info = new EntityInfo(entity);
-                m_EntityInfoDic.Add(entity.Id, info);
+                EntityInfo info = new EntityInfo(GetEntity(entityId));
+                m_EntityInfoDic.Add(entityId, info);
                 return info;
             }
         }
-
+        
         /// <summary>
         /// 获取一个实体的子实体
         /// </summary>
@@ -494,9 +500,9 @@ namespace XFramework.Entity
         /// </summary>
         /// <param name="entityId">子实体编号</param>
         /// <returns>父实体</returns>
-        public Entity GetParentEntity(int entityId)
+        public Entity GetParentEntity(string entityId)
         {
-            return GetParentEntity(entityId);
+            return GetEntityInfo(entityId).Parent;
         }
 
         /// <summary>
@@ -506,7 +512,7 @@ namespace XFramework.Entity
         /// <returns>父实体</returns>
         public Entity GetParentEntity(Entity entity)
         {
-            return GetEntityInfo(entity).Parent;
+            return GetParentEntity(entity.Id);
         }
 
         #endregion
@@ -547,14 +553,14 @@ namespace XFramework.Entity
         /// 移除一个模板
         /// </summary>
         /// <param name="key">key</param>
-        public void RecyleAllTemplate(string key)
+        public void RecycleAllTemplate(string key)
         {
             var container = GetContainer(key);
             container.Clean(0);
-            var entitys = container.GetEntities();
-            if (entitys != null)
+            var entities = container.GetEntities();
+            if (entities != null)
             {
-                foreach (var item in entitys)
+                foreach (var item in entities)
                 {
                     m_EntityDic.Remove(item.Id);
                     m_EntityInfoDic.Remove(item.Id);

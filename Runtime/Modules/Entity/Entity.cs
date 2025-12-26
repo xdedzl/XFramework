@@ -62,15 +62,15 @@ namespace XFramework.Entity
         /// </summary>
         public virtual void OnUpdate() { }
         /// <summary>
-        /// 销毁
+        /// 释放前，在unity的OnDestroy之前调用
         /// </summary>
-        public virtual void OnDestroy() { }
+        public virtual void OnRelease() { }
 
         /// <summary>
         /// 附加实体，将child附加到自身上
         /// </summary>
         /// <param name="child">子实体</param>
-        public void Aattch(Entity child)
+        public void Attach(Entity child)
         {
             EntityManager.Instance.Attach(child, this);
         }
@@ -78,7 +78,7 @@ namespace XFramework.Entity
         /// <summary>
         /// 移除实体，将自身从父物体上移除
         /// </summary>
-        public void Dettch()
+        public void Detach()
         {
             EntityManager.Instance.Detach(this);
         }
@@ -86,9 +86,9 @@ namespace XFramework.Entity
         /// <summary>
         /// 移除自身上所有子实体
         /// </summary>
-        public void DetachChilds()
+        public void DetachChildren()
         {
-            EntityManager.Instance.DetachChilds(this);
+            EntityManager.Instance.DetachChildren(this);
         }
 
         /// <summary>
