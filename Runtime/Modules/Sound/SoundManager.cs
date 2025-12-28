@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
 using XFramework.Entity;
+using XFramework.Resource;
 using XFramework.Tasks;
 
 namespace XFramework
@@ -192,7 +193,12 @@ namespace XFramework
         {
             if (!m_AudioClipDic.ContainsKey(path))
             {
-                AudioClip clip = Resources.Load<AudioClip>(path);
+                AudioClip clip = ResourceManager.Instance.Load<AudioClip>(path);
+                if(clip==null)
+                {
+                    Debug.LogWarning($"SoundManager找不到音频资源:{path}");
+                    return null;
+                }
                 m_AudioClipDic[path] = clip;
             }
 
