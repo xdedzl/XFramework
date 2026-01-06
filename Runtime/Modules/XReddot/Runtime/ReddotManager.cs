@@ -6,22 +6,21 @@ using UnityEngine;
 
 namespace XReddot
 {
-    [Serializable]
-    public class ReddotDataArrayWrapper { public ReddotData[] items; }
-    
     /// <summary>
     /// 红点系统管理器
     /// </summary>
     public static partial class ReddotManager
     {
-        public static string RED_DOT_TREE_FULL_PATH => Application.dataPath + "/Resources/XReddot/reddot_tree.json";
-        public const string RED_DOT_TREE_ASSET_PATH = "Assets/Resources/XReddot/reddot_tree.json";
+        public const string RED_DOT_TREE_ASSET_PATH = "Assets/Resources/XReddot/reddot_tree.asset";
         public const string RED_DOT_TREE_RESOURCES_PATH = "XReddot/reddot_tree";
         
         public const string DEFAULT_RED_DOT_TAG = "__default__";
 
         private static Dictionary<string, ReddotNode> s_ReddotNodeDic;
         private static string s_SaveName = "";
+
+        public static event Action<string, bool> onNodeStateChange;
+        public static event Action onReddotTreeLoad;
 
         static ReddotManager()
         {
@@ -61,15 +60,9 @@ namespace XReddot
 
         public static void Reload()
         {
-            var textAsset = Resources.Load<TextAsset>(RED_DOT_TREE_RESOURCES_PATH);
-            if (textAsset == null)
-            {
-                Debug.LogError($"[Reddot System] Reddot tree json file not found, please make sure the file is placed in '{RED_DOT_TREE_ASSET_PATH}'");
-                return;
-            }
-            var jsonText = textAsset.text;
-            var dates = JsonUtility.FromJson<ReddotDataArrayWrapper>(jsonText).items;;
-            Init(dates);
+            var reddotTree = Resources.Load<ReddotTreeAsset>(RED_DOT_TREE_RESOURCES_PATH);
+            onReddotTreeLoad?.Invoke();
+            Init(reddotTree.items);
         }
 
         private static void LoadMark()
@@ -207,13 +200,19 @@ namespace XReddot
                 throw new Exception($"[Reddot System] there is no node which key is '{key}' in reddot tree，please add node to reddot tree or modify key");
             }
         }
-
+        
         /// <summary>
-        /// 获取键值对应的节点状态
+        /// 是否包含该节点
         /// </summary>
-        /// <param name="key">键值</param>
-        /// <returns>状态</returns>
-        public static bool GetKeyState(string key)
+        public static bool ContainsNode(string key)
+        {
+            return s_ReddotNodeDic.ContainsKey(key);
+        }
+        
+        /// <summary>
+        /// 获取节点状态
+        /// </summary>
+        public static bool GetNodeIsActive(string key)
         {
             CheckInit();
             if (s_ReddotNodeDic.TryGetValue(key, out ReddotNode reddotNode))
@@ -276,6 +275,33 @@ namespace XReddot
             Debug.Log(content);
         }
 
+        public static string GetNodeDebugString(string key)
+        {
+            if (s_ReddotNodeDic.TryGetValue(key, out ReddotNode reddotNode))
+            {
+                return reddotNode.ToString();
+            }
+            else
+            {
+                throw new Exception($"[Reddot System] there is no node which key is '{key}' in reddot tree，please add node to reddot tree or modify key");
+            }
+        }
+        
+        /// <summary>
+        /// 是否为叶节点
+        /// </summary>
+        public static bool GetNodeIsLeaf(string key)
+        {
+            if (s_ReddotNodeDic.TryGetValue(key, out ReddotNode reddotNode))
+            {
+                return reddotNode.IsLeafNode;
+            }
+            else
+            {
+                throw new Exception($"[Reddot System] there is no node which key is '{key}' in reddot tree，please add node to reddot tree or modify key");
+            }
+        }
+        
         /// <summary>
         /// 获取所有的叶节点键值
         /// </summary>

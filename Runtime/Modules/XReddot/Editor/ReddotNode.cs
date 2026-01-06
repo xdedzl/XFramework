@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -8,23 +9,137 @@ namespace XReddot.Editor
 {
     using Node = UnityEditor.Experimental.GraphView.Node;
 
+    internal class EditableLabel: VisualElement
+    {
+        private readonly TextElement m_label;
+        private readonly TextField m_textField;
+        
+        public EditableLabel() : this(string.Empty)
+        {
+        }
+        
+        public EditableLabel(string text)
+        {
+            m_label = new TextElement()
+            {
+                text = text,
+                style =
+                {
+                    unityTextAlign = TextAnchor.MiddleLeft,
+                    height = new Length(100, LengthUnit.Percent),
+                    width = new Length(100, LengthUnit.Percent),
+                    fontSize = 15,
+                }
+            };
+
+            m_textField = new TextField
+            {
+                value = text,
+                style =
+                {
+                    justifyContent = Justify.Center,
+                    // alignItems = Align.Center,
+                    // height = new Length(100, LengthUnit.Percent),
+                    // width = new Length(100, LengthUnit.Percent),
+                    marginBottom = 5,
+                    marginTop = 5,
+                }
+            };
+
+            var inputText = m_textField.Q("unity-text-input").ElementAt(0);
+            if (inputText != null)
+            {
+                inputText.style.fontSize = 15;  
+            }
+            
+            Add(m_label);
+        }
+        
+        public string text
+        {
+            get => m_label.text;
+            set
+            {
+                m_label.text = value;
+                m_textField.value = value;
+            }
+        }
+        
+        private void BeginEditTitle()
+        {
+            Remove(m_label);
+            Add(m_textField);
+            m_textField.Focus();
+            m_textField.SelectAll();
+        }
+
+        private void EndEditTitle()
+        {
+            Remove(m_textField);
+            Add(m_label);
+            text = m_textField.value;
+        }
+        
+        public void SetEditable(bool editable)
+        {
+            if (editable)
+            {
+                m_textField.RegisterCallback<FocusOutEvent>(OnFocusOut);
+                m_textField.RegisterCallback<KeyDownEvent>(OnKeyDown);
+                
+                // 监听 title 区域的双击事件
+                RegisterCallback<MouseDownEvent>(OnMouseDown);
+            }
+            else
+            {
+                m_textField.UnregisterCallback<FocusOutEvent>(OnFocusOut);
+                m_textField.UnregisterCallback<KeyDownEvent>(OnKeyDown);
+                UnregisterCallback<MouseDownEvent>(OnMouseDown);
+            }   
+            
+            return;
+
+            void OnFocusOut(FocusOutEvent e)
+            {
+                EndEditTitle();
+            }
+
+            void OnKeyDown(KeyDownEvent e)
+            {
+                if (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter)
+                {
+                    EndEditTitle();
+                }
+            }
+
+            void OnMouseDown(MouseDownEvent e)
+            {
+                if (e.clickCount == 2)
+                {
+                    BeginEditTitle();
+                    e.StopPropagation();
+                }
+            }
+        }
+    }
+
     /// <summary>
     /// 红点节点
     /// </summary>
     public class ReddotNode : Node
     {
-        private TextField keyText;
-        private TextField nameText;
-        private Port inputPort;
-        private Port outputPort;
+        private readonly TextField keyText;
+        private readonly EditableLabel nameText;
+        private readonly Port inputPort;
+        private readonly Port outputPort;
         public string Key { get { return keyText.value; } }
-        public string ReddotName { get { return nameText.value; } }
+        public string ReddotName { get { return nameText.text; } }
 
-        public string[] RedotChildren
+        public string[] ReddotChildren
         {
             get
             {
-                List<string> childen = new List<string>();
+                List<string> children = new List<string>();
                 foreach (var item in outputPort.connections)
                 {
                     var node = item.input.node as ReddotNode;
@@ -32,22 +147,22 @@ namespace XReddot.Editor
                     {
                         throw new System.Exception("有节点的key为空，请检查");
                     }
-                    childen.Add(node.Key);
+                    children.Add(node.Key);
                 }
 
-                if (childen.Count > 0)
-                    return childen.ToArray();
+                if (children.Count > 0)
+                    return children.ToArray();
                 else
                     return null;
             }
         }
 
-        public ReddotNode() : this("", "") { }
+        private readonly StyleColor m_StyleColor;
 
-        public ReddotNode(string key, string name = "Reddot")
+        public ReddotNode(string key="New Reddot Key", string name = "New Node Name")
         {
-            title = "Reddot";
-
+            m_StyleColor = mainContainer.style.backgroundColor;
+            
             inputPort = ReddotPort.Create<Edge>(Orientation.Horizontal, Direction.Input, Port.Capacity.Multi, typeof(string));
             inputPort.portName = "parents";
             inputContainer.Add(inputPort);
@@ -56,25 +171,39 @@ namespace XReddot.Editor
             outputPort.portName = "children";
             outputContainer.Add(outputPort);
 
-            keyText = new TextField();
-            keyText.value = key;
+            keyText = new TextField
+            {
+                value = key
+            };
             mainContainer.Add(keyText);
 
-            titleContainer.RemoveAt(0);
-            nameText = new TextField();
-            nameText.value = name;
-            nameText.style.minWidth = 100;
-            nameText.style.maxWidth = 100;
-
-            var inputElement = nameText.ElementAt(0);
-            var color = new StyleColor(Color.clear);
-            inputElement.style.backgroundColor = color;
-            inputElement.style.borderLeftColor = color;
-            inputElement.style.borderRightColor = color;
-            inputElement.style.borderTopColor = color;
-            inputElement.style.borderBottomColor = color;
-
+            titleContainer.RemoveAt(1);  // 删除折叠按钮
+            titleContainer.RemoveAt(0);  // 删除默认标题标签
+            nameText = new EditableLabel
+            {
+                text = name,
+                style =
+                {
+                    minWidth = 100,
+                    marginLeft = 10
+                }
+            };
             titleContainer.Insert(0, nameText);
+            
+            UpdateState();
+        }
+
+        public override void OnSelected()
+        {
+            base.OnSelected();
+            if (!Application.isPlaying)
+                return;
+            
+            if (ReddotManager.ContainsNode(Key) && ReddotManager.GetNodeIsLeaf(Key))
+            {
+                var content = ReddotManager.GetNodeDebugString(Key);
+                Debug.Log(content);
+            }
         }
 
         /// <summary>
@@ -86,6 +215,66 @@ namespace XReddot.Editor
         {
             return outputPort.ConnectTo(childNode.inputPort);
         }
+
+        public void UpdateState()
+        {
+            if (Application.isPlaying)
+            {
+                // 判断节点激活状态，激活时修改背景色
+                if (ReddotManager.ContainsNode(Key) && ReddotManager.GetNodeIsActive(Key))
+                {
+                    mainContainer.style.backgroundColor = new StyleColor(new Color(0.8f, 1f, 0.8f, 1f)); // 激活：淡绿色
+                }
+                else
+                {
+                    mainContainer.style.backgroundColor = m_StyleColor;
+                    
+                }
+            }
+            else
+            {
+                mainContainer.style.backgroundColor = m_StyleColor;
+            }
+        }
+
+        public void OnEnableEdit()
+        {
+            pickingMode = PickingMode.Position;
+            // 恢复交互能力（保守：允许选择/移动/删除/缩放）
+            capabilities |= (Capabilities.Selectable | Capabilities.Movable | Capabilities.Deletable | Capabilities.Resizable);
+            foreach (var port in inputContainer.Children().OfType<Port>())
+            {
+                port.pickingMode = PickingMode.Position;
+            }
+            foreach (var port in outputContainer.Children().OfType<Port>())
+            {
+                port.pickingMode = PickingMode.Position;
+            }
+            
+            // 允许编辑但保持样式
+            keyText.isReadOnly = false;
+            nameText.SetEditable(true);
+        }
+
+        public void OnDisableEdit()
+        {
+            // 只禁用拾取，不改变可视样式
+            pickingMode = PickingMode.Ignore;
+            // 去除交互能力，避免选择/移动/删除
+            capabilities &= ~(Capabilities.Movable | Capabilities.Deletable | Capabilities.Resizable);
+            foreach (var port in inputContainer.Children().OfType<Port>())
+            {
+                port.pickingMode = PickingMode.Ignore;
+            }
+            foreach (var port in outputContainer.Children().OfType<Port>())
+            {
+                port.pickingMode = PickingMode.Ignore;
+            }
+            
+            // 仅设为只读，避免样式变化
+            keyText.isReadOnly = true;
+            nameText.SetEditable(false);
+        }
     }
 
     public class ReddotPort : Port
@@ -94,11 +283,11 @@ namespace XReddot.Editor
 
         class EdgeConnectorListener : IEdgeConnectorListener
         {
-            private GraphViewChange m_GraphViewChange;
+            private readonly GraphViewChange m_GraphViewChange;
 
-            private List<Edge> m_EdgesToCreate;
+            private readonly List<Edge> m_EdgesToCreate;
 
-            private List<GraphElement> m_EdgesToDelete;
+            private readonly List<GraphElement> m_EdgesToDelete;
 
             public EdgeConnectorListener()
             {
@@ -112,7 +301,7 @@ namespace XReddot.Editor
                 var screenPos = GUIUtility.GUIToScreenPoint(UnityEngine.Event.current.mousePosition);
 
                 // 添加一个新节点并连接
-                var node = new ReddotNode();
+                var node = new ReddotNode(graphView.GetDefaultReddotKey());
                 graphView.AddNode(node, screenPos);
                 
                 if (edge.input is null)
@@ -188,3 +377,4 @@ namespace XReddot.Editor
         }
     }
 }
+

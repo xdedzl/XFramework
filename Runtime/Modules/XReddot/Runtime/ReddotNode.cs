@@ -64,6 +64,8 @@ namespace XReddot
                                 }
                             }
                         }
+                        
+                        OnStateChanged();
                     }
                 }
             }
@@ -115,7 +117,7 @@ namespace XReddot
             
             public void ClearMark()
             {
-                m_isActive = false;
+                IsActive = false;
                 m_tags?.Clear();
                 UpdateAllReddotActive();
             }
@@ -147,8 +149,8 @@ namespace XReddot
                 {
                     Debug.LogError("[红点系统] 尝试移除未注册的reddot组件");
                 }
+                reddot.SetActive(false);
                 reddots.Remove(reddot);
-                UpdateReddotActive(reddot);
             }
 
             private void UpdateAllReddotActive()
@@ -224,6 +226,11 @@ namespace XReddot
             public IList<string> GetTags()
             {
                 return m_tags?.ToList();
+            }
+            
+            private void OnStateChanged()
+            {
+                ReddotManager.onNodeStateChange?.Invoke(this.Key, this.IsActive);
             }
         }
     }

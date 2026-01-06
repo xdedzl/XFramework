@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using UnityEngine;
 
 namespace XFramework
 {
@@ -80,7 +79,7 @@ namespace XFramework
                 Assembly assembly = Assembly.Load(assemblyName);
                 if (assembly == null)
                 {
-                    throw new System.Exception("没有找到程序集");
+                    throw new Exception("没有找到程序集");
                 }
 
                 Type[] allType = assembly.GetTypes();
@@ -92,6 +91,16 @@ namespace XFramework
                     }
                 }
                 return types;
+            }
+            
+            public static IEnumerable<Type> GetSonTypes(Type typeBase, params string[] assemblyNames)
+            {
+                List<Type> typeNames = new List<Type>();
+                foreach (var assemblyName in assemblyNames)
+                {
+                    typeNames.AddRange(GetSonTypes(typeBase, assemblyName));
+                }
+                return typeNames;
             }
 
             /// <summary>
@@ -139,7 +148,73 @@ namespace XFramework
                 }
                 return typeNames;
             }
+            
+            /// <summary>
+            /// 获取所有泛型类的子类型
+            /// </summary>
+            public static IEnumerable<Type> GetGenericTypes(Type typeBase, int recursionDepth = 3, string assemblyName = "Assembly-CSharp")
+            {
+                if (!typeBase.IsGenericTypeDefinition)
+                {
+                    throw new Exception($"{typeBase.FullName} 不是一个泛型类型定义");
+                }
 
+                List<Type> typeNames = new List<Type>();
+                Assembly assembly;
+                try
+                {
+                    assembly = Assembly.Load(assemblyName);
+                }
+                catch
+                {
+                    return Type.EmptyTypes;
+                }
+
+                if (assembly == null)
+                {
+                    return Type.EmptyTypes;
+                }
+
+                Type[] types = assembly.GetTypes();
+                foreach (Type type in types)
+                {
+                    if ((type.IsClass || type.IsValueType) && !type.IsAbstract)
+                    {
+                        var currentDepth = 0;
+                        var curType = type.BaseType;
+                        while (currentDepth < recursionDepth)
+                        {
+                            if (curType == typeof(object) || curType == null)
+                            {
+                                break;
+                            }
+                            
+                            if (curType.IsGenericType && curType.GetGenericTypeDefinition() == typeBase)
+                            {
+                                typeNames.Add(type);
+                                break;
+                            }
+
+                            curType = curType.BaseType;
+                            currentDepth += 1;
+                        }
+                    }
+                }
+
+                return typeNames;
+            }
+            
+            public static IEnumerable<Type> GetGenericTypes(Type typeBase, int recursionDepth = 1, params string[] assemblyNames)
+            {
+                List<Type> typeNames = new List<Type>();
+                foreach (var assemblyName in assemblyNames)
+                {
+                    typeNames.AddRange(GetGenericTypes(typeBase, recursionDepth, assemblyName));
+                }
+                return typeNames;
+            }
+            
+            
             public static Type GetType(string typeFullName, params string[] assemblyNames)
             {
                 if (assemblyNames is null || assemblyNames.Length == 0)
@@ -185,18 +260,10 @@ namespace XFramework
             public static List<Type> GetTypesInAllAssemblies(Func<Type, bool> filter)
             {
                 List<Type> types = new List<Type>();
-                Assembly[] assembles = AppDomain.CurrentDomain.GetAssemblies();
-                for (int i = 0; i < assembles.Length; i++)
+                Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+                for (int i = 0; i < assemblies.Length; i++)
                 {
-                    Type[] ts;
-                    try
-                    {
-                        ts = assembles[i].GetTypes();
-                    }
-                    catch (Exception)
-                    {
-                        continue;
-                    }
+                    Type[] ts = assemblies[i].GetTypes();
                     foreach (var t in ts)
                     {
                         if (filter(t))
@@ -207,7 +274,7 @@ namespace XFramework
                 }
                 return types;
             }
-
+            
             /// <summary>
             /// 判断一个类是否继承自一个泛型类型
             /// </summary>
@@ -236,7 +303,7 @@ namespace XFramework
 
             #region 反射性能优化
 
-            public static PropertyWrapper<T> PropertyWrapper<T>(object target, PropertyInfo propertyInfo)
+            public static PropertyWrapper<T> GetPropertyWrapper<T>(object target, PropertyInfo propertyInfo)
             {
                 return new PropertyWrapper<T>(target, propertyInfo);
             }
@@ -290,8 +357,8 @@ namespace XFramework
         /// <typeparam name="T">属性类型</typeparam>
         public class PropertyWrapper<T>
         {
-            private Action<T> setter;
-            private Func<T> getter;
+            private readonly Action<T> setter;
+            private readonly Func<T> getter;
 
             /// <summary>
             /// 属性的值
@@ -390,29 +457,6 @@ namespace XFramework
                 }
             }
             return fields;
-        }
-
-        /// <summary>
-        /// 从当前程序域的所有程序集中获取所有类型
-        /// </summary>
-        /// <param name="filter">类型筛选器</param>
-        /// <returns>所有类型集合</returns>
-        public static List<Type> GetTypesInAllAssemblies(Func<Type, bool> filter)
-        {
-            List<Type> types = new List<Type>();
-            Assembly[] assemblys = AppDomain.CurrentDomain.GetAssemblies();
-            for (int i = 0; i < assemblys.Length; i++)
-            {
-                Type[] ts = assemblys[i].GetTypes();
-                foreach (var t in ts)
-                {
-                    if (filter(t))
-                    {
-                        types.Add(t);
-                    }
-                }
-            }
-            return types;
         }
 
         /// <summary>
