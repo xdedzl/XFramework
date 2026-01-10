@@ -98,21 +98,21 @@ namespace XFramework
         }
     }
 
-    public class Grid<T> : IEnumerable<T>
+    public class GridMap<T> : IEnumerable<T>
     {
-        protected T[,] map; // 二维数组地图（0无障碍，1有障碍）
+        protected T[,] map;
         protected Vector2Int offset;
 
         public int width { get { return map.GetLength(0); } }
         public int height { get { return map.GetLength(1); } }
 
-        public Grid(int width, int height)
+        public GridMap(int width, int height)
         {
             map = new T[width, height];
             offset = new Vector2Int(width / 2, height / 2);
         }
 
-        public Grid(int width, int height, Vector2Int offset)
+        public GridMap(int width, int height, Vector2Int offset)
         {
             map = new T[width, height];
             this.offset = offset;
@@ -142,7 +142,7 @@ namespace XFramework
             }
         }
 
-        public bool CheckPosVaild(Vector2Int pos)
+        public bool CheckPosValid(Vector2Int pos)
         {
             int x = pos.x + offset.x;
             int y = pos.y + offset.y;
@@ -175,18 +175,10 @@ namespace XFramework
         }
     }
 
-    public class GridMap<T> : Grid<T>
-    {
-        public GridMap(int width, int height) : base(width, height) { }
-
-        public GridMap(int width, int height, Vector2Int offset) : base(width, height, offset) { }
-        
-    }
-
     public class AStarPathfinder
     {
-        private int[,] map; // 二维数组地图（0无障碍，1有障碍）
-        private int width, height;
+        private readonly int[,] map; // 二维数组地图（0无障碍，1有障碍）
+        private readonly int width, height;
 
         public AStarPathfinder(int[,] map)
         {
@@ -198,9 +190,9 @@ namespace XFramework
         // 节点类存储寻路信息
         private class Node
         {
-            public Vector2Int position;
+            public readonly Vector2Int position;
             public int gCost;   // 起点到当前节点的实际代价
-            public int hCost;   // 当前节点到终点的启发式估计代价
+            private readonly int hCost;   // 当前节点到终点的启发式估计代价
             public int FCost => gCost + hCost; // 总代价
             public Node parent; // 回溯路径的父节点
 

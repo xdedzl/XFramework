@@ -14,6 +14,7 @@ namespace XFramework
 
     public partial class UUtility
     {
+        // 这里Cell大小被认为是1x1的单位网格
         public class Grid
         {
             private static readonly Dictionary<Vector2Int, GridDirection> _Vector2GridDirection = new()
