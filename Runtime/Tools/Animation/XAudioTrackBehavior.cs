@@ -25,7 +25,6 @@ namespace XFramework.Animation
         {
             base.OnStateUpdate(animator, stateInfo, layerIndex);
             float normalizedTime = stateInfo.normalizedTime % 1f;
-            Debug.Log(normalizedTime);
             if (Mathf.Approximately(normalizedTime, 0f))
             {
                 ResetAudios();

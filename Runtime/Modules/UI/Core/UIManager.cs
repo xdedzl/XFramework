@@ -20,11 +20,13 @@ namespace XFramework.UI
     {
         public string name;
         public string path;
+        public int level;
         
-        public PanelInfoAttribute(string name, string path)
+        public PanelInfoAttribute(string name, string path, int level = 0)
         {
             this.name = name;
             this.path = path;
+            this.level = level;
         }
     }
     
@@ -49,12 +51,12 @@ namespace XFramework.UI
             }
         }
         
-        private readonly Dictionary<string, string> m_PanelName2Path = new Dictionary<string, string>();
-        private readonly Dictionary<string, Type> m_PanelName2Type = new Dictionary<string, Type>();
-        private readonly Dictionary<Type, string> m_PanelType2Name = new Dictionary<Type, string>();
+        private readonly Dictionary<string, PanelInfoAttribute> m_PanelName2Info = new ();
+        private readonly Dictionary<string, Type> m_PanelName2Type = new ();
+        private readonly Dictionary<Type, string> m_PanelType2Name = new ();
         
-        private readonly Dictionary<string, PanelBase> m_PanelDict = new Dictionary<string, PanelBase>();
-        private readonly Dictionary<int, List<PanelBase>> m_OnDisplayPanelDic = new Dictionary<int, List<PanelBase>>();
+        private readonly Dictionary<string, PanelBase> m_PanelDict = new ();
+        private readonly Dictionary<int, List<PanelBase>> m_OnDisplayPanelDic = new ();
         
         private GameObject m_TipsPrefab;
 
@@ -71,9 +73,9 @@ namespace XFramework.UI
             if (null ==panel)
                 return;
 
-            if (m_OnDisplayPanelDic.ContainsKey(panel.Level))
+            if (m_OnDisplayPanelDic.TryGetValue(panel.Level, out var value))
             {
-                if (m_OnDisplayPanelDic[panel.Level].Contains(panel))
+                if (value.Contains(panel))
                 {
                     return;
                 }
@@ -82,13 +84,17 @@ namespace XFramework.UI
             {
                 m_OnDisplayPanelDic.Add(panel.Level, new List<PanelBase>());
             }
-
             m_OnDisplayPanelDic[panel.Level].Add(panel);
-            if (m_OnDisplayPanelDic.ContainsKey(panel.Level - 1))
-            {
-                m_OnDisplayPanelDic[panel.Level - 1].End().OnPause();
-            }
-
+            
+            // if (m_OnDisplayPanelDic.ContainsKey(panel.Level - 1))
+            // {
+            //     m_OnDisplayPanelDic[panel.Level - 1].End().OnPause();
+            // }
+            
+            // todo 应该放到OnBeforeOpen的时候
+            panel.gameObject.SetActive(true);
+            panel.transform.SetAsLastSibling();
+            
             panel.OnOpen(args);
             panel.OpenSubPanels();
         }
@@ -100,29 +106,35 @@ namespace XFramework.UI
             {
                 panel.OnClose();
                 panel.CloseSubPanels();
+                
+                // todo 应该放到OnClose的时候
+                panel.gameObject.SetActive(false);
+                
                 m_OnDisplayPanelDic[panel.Level].Remove(panel);
+                
+                panel.OnAfterClose();
             }
 
-            int index = panel.Level + 1;
-            while (m_OnDisplayPanelDic.ContainsKey(index))
-            {
-                var temp = m_OnDisplayPanelDic[index];
-                if (temp.Count > 0)
-                {
-                    temp.End().OnClose();
-                    temp.End().CloseSubPanels();
-
-                    temp.RemoveAt(temp.Count - 1);
-                }
-                else
-                {
-                    break;
-                }
-            }
-            if (m_OnDisplayPanelDic.ContainsKey(panel.Level - 1))
-            {
-                m_OnDisplayPanelDic[panel.Level - 1].End().OnResume();
-            }
+            // int index = panel.Level + 1;
+            // while (m_OnDisplayPanelDic.ContainsKey(index))
+            // {
+            //     var temp = m_OnDisplayPanelDic[index];
+            //     if (temp.Count > 0)
+            //     {
+            //         temp.End().OnClose();
+            //         temp.End().CloseSubPanels();
+            //
+            //         temp.RemoveAt(temp.Count - 1);
+            //     }
+            //     else
+            //     {
+            //         break;
+            //     }
+            // }
+            // if (m_OnDisplayPanelDic.ContainsKey(panel.Level - 1))
+            // {
+            //     m_OnDisplayPanelDic[panel.Level - 1].End().OnResume();
+            // }
         }
         
         private PanelBase GetPanel(string uiName)
@@ -134,8 +146,12 @@ namespace XFramework.UI
                 return _panel;
             }
 
-            m_PanelName2Path.TryGetValue(uiName, out string path);
-            GameObject panelGo = DefaultPanelLoader(path);
+            m_PanelName2Info.TryGetValue(uiName, out var panelInfo);
+            if (panelInfo == null)
+            {
+                throw new XFrameworkException($"[UI] The panel info you want is not exist, panel name: {uiName}");
+            }
+            GameObject panelGo = DefaultPanelLoader(panelInfo.path);
             var panel = AddPanel(uiName, panelGo);
             return panel;
         }
@@ -163,11 +179,11 @@ namespace XFramework.UI
             {
                 if (panel.GetType() != panelType)
                 {
-                    throw new XFrameworkException($"[UI] The panel type in {m_PanelName2Path[uiName]} is wrong");
+                    throw new XFrameworkException($"[UI] The panel type in {m_PanelName2Info[uiName].path} is wrong");
                 }
             }
 
-            panel.Init(uiName);
+            panel.Init();
             m_PanelDict.Add(uiName, panel);
 
             Transform uiGroup = CanvasTransform.Find("Level" + panel.Level);
@@ -211,8 +227,7 @@ namespace XFramework.UI
             {
                 foreach (var item in panels)
                 {
-                    item.OnClose();
-                    item.CloseSubPanels();
+                    ClosePanel(item.PanelName);
                 }
                 m_OnDisplayPanelDic.Remove(level);
             }
@@ -243,7 +258,7 @@ namespace XFramework.UI
                     throw new XFrameworkException($"[UI] The panel name is repeat, type1:{__type}, type2: {type}, path: {panelInfo.name}");
                 }
                 
-                m_PanelName2Path.Add(panelInfo.name, panelInfo.path);
+                m_PanelName2Info.Add(panelInfo.name, panelInfo);
                 m_PanelName2Type.Add(panelInfo.name, type);
                 m_PanelType2Name.Add(type, panelInfo.name);
                 path2TypeDict.Add(panelInfo.path, type);
@@ -325,10 +340,9 @@ namespace XFramework.UI
         public override void Shutdown()
         {
             m_PanelDict?.Clear();
-            m_PanelName2Path.Clear();
+            m_PanelName2Info.Clear();
             m_OnDisplayPanelDic.Clear();
             EntityManager.Instance.RemoveTemplate("ui-tip-entity");
-
         }
 
         #endregion

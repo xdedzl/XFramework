@@ -79,21 +79,21 @@ namespace XFramework
 
     public abstract class ProcedureWithEvent : ProcedureBase
     {
-        private readonly EventRegersterHelper regersterHelper;
+        private readonly EventRegisterHelper _registerHelper;
 
         public ProcedureWithEvent()
         {
-            regersterHelper = EventRegersterHelper.Create(this);
+            _registerHelper = EventRegisterHelper.Create(this);
         }
 
         public override void OnEnter(params object[] parms)
         {
-            regersterHelper.Register();
+            _registerHelper.Register();
         }
 
         public override void OnExit()
         {
-            regersterHelper.UnRegister();
+            _registerHelper.UnRegister();
         }
     }
 
@@ -136,21 +136,21 @@ namespace XFramework
 
     public abstract class SubProcedureWithEvent<T> : SubProcedureBase<T> where T : ProcedureBase
     {
-        private readonly EventRegersterHelper regersterHelper;
+        private readonly EventRegisterHelper _registerHelper;
 
         public SubProcedureWithEvent()
         {
-            regersterHelper = EventRegersterHelper.Create(this);
+            _registerHelper = EventRegisterHelper.Create(this);
         }
 
         public override void OnEnter(params object[] parms)
         {
-            regersterHelper.Register();
+            _registerHelper.Register();
         }
 
         public override void OnExit()
         {
-            regersterHelper.UnRegister();
+            _registerHelper.UnRegister();
         }
     }
 }

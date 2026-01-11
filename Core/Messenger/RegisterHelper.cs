@@ -16,13 +16,13 @@ namespace XFramework.Event
     /// <summary>
     /// 消息自动化注册机
     /// </summary>
-    public class EventRegersterHelper
+    public class EventRegisterHelper
     {
         private readonly Dictionary<string, Delegate> m_delegates = new Dictionary<string, Delegate>();
 
-        public EventRegersterHelper() { }
+        public EventRegisterHelper() { }
 
-        public EventRegersterHelper(object listener)
+        public EventRegisterHelper(object listener)
         {
             InitEvent(listener);
         }
@@ -97,9 +97,9 @@ namespace XFramework.Event
         /// </summary>
         /// <param name="listener">监听者</param>
         /// <returns></returns>
-        public static EventRegersterHelper Create(object listener)
+        public static EventRegisterHelper Create(object listener)
         {
-            return new EventRegersterHelper(listener);
+            return new EventRegisterHelper(listener);
         }
     }
 }

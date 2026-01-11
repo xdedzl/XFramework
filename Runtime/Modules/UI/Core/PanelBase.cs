@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 using XFramework.Event;
+using System.Reflection;
 
 namespace XFramework.UI
 {
@@ -13,11 +14,17 @@ namespace XFramework.UI
         /// <summary>
         /// UI层级,层级最低的显示在底层
         /// </summary>
-        public int Level { get; protected set; }
+        public int Level => GetType().GetCustomAttribute<PanelInfoAttribute>().level;
+
         /// <summary>
-        /// 面板名
+        /// 面板名(全局唯一)
         /// </summary>
-        public string Name { get; protected set; }
+        public string PanelName => GetType().GetCustomAttribute<PanelInfoAttribute>().name;
+        
+        /// <summary>
+        /// 面板路径
+        /// </summary>
+        public string PanelPath => GetType().GetCustomAttribute<PanelInfoAttribute>().path;
 
         protected RectTransform rect;
 
@@ -25,14 +32,13 @@ namespace XFramework.UI
 
         private ComponentFindHelper<XUIBase> m_ComponentFindHelper;
 
-        private readonly EventRegersterHelper regersterHelper;
+        private readonly EventRegisterHelper _registerHelper;
 
         /// <summary>
         /// 面板初始化，只会执行一次，在Awake后start前执行
         /// </summary>
-        internal void Init(string name)
+        internal void Init()
         {
-            Name = name;
             m_ComponentFindHelper = ComponentFindHelper<XUIBase>.CreateHelper(this.gameObject);
             rect = transform.GetComponent<RectTransform>();
             Vector3 rectSize = rect.localScale;
@@ -44,7 +50,7 @@ namespace XFramework.UI
         /// <summary>
         /// 初始化UI组件
         /// </summary>
-        public virtual void OnInit()
+        protected virtual void OnInit()
         {
 
         }
@@ -54,8 +60,7 @@ namespace XFramework.UI
         /// </summary>
         public virtual void OnOpen(params object[] args)
         {
-            gameObject.SetActive(true);
-            transform.SetAsLastSibling();
+            
         }
 
         internal void OpenSubPanels()
@@ -98,7 +103,12 @@ namespace XFramework.UI
         /// </summary>
         public virtual void OnClose()
         {
-            gameObject.SetActive(false);
+            
+        }
+
+        public virtual void OnAfterClose()
+        {
+            
         }
 
         internal void CloseSubPanels()
@@ -112,16 +122,22 @@ namespace XFramework.UI
             }
         }
 
+
+        public void Open(params object[] args)
+        {
+            UIManager.Instance.OpenPanel(PanelName, args);
+        }
+
+        public void Close()
+        {
+            UIManager.Instance.ClosePanel(PanelName);
+        }
+        
+        
         /// <summary>
         /// Find UI组件的索引器
         /// </summary>
-        public XUIBase this[string key]
-        {
-            get
-            {
-                return m_ComponentFindHelper[key];
-            }
-        }
+        public XUIBase this[string key] => m_ComponentFindHelper[key];
 
         /// <summary>
         /// 创建子面板
@@ -130,10 +146,7 @@ namespace XFramework.UI
         /// <returns></returns>
         protected T CreateSubPanel<T>(GameObject obj) where T : SubPanelBase
         {
-            if(m_SubPanels == null)
-            {
-                m_SubPanels = new List<SubPanelBase>();
-            }
+            m_SubPanels ??= new List<SubPanelBase>();
 
             T subPanel = obj.AddComponent<T>();
             subPanel.Config(this);
@@ -169,13 +182,7 @@ namespace XFramework.UI
         /// <summary>
         /// Find UI组件的索引器
         /// </summary>
-        public XUIBase this[string key]
-        {
-            get
-            {
-                return parent[key];
-            }
-        }
+        public XUIBase this[string key] => parent[key];
 
         internal void Init(Transform transform, PanelBase panel)
         {

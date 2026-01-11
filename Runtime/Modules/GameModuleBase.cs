@@ -32,11 +32,11 @@ namespace XFramework
 
     public abstract class GameModuleWithEvent<T> : GameModuleBase<T> where T : GameModuleWithEvent<T>
     {
-        private readonly EventRegersterHelper registerHelper;
+        private readonly EventRegisterHelper registerHelper;
 
         protected GameModuleWithEvent()
         {
-            registerHelper = EventRegersterHelper.Create(this);
+            registerHelper = EventRegisterHelper.Create(this);
             registerHelper.Register();
         }
 
@@ -62,11 +62,11 @@ namespace XFramework
     
     public abstract class MonoGameModuleWithEvent<T> : GameModuleBase<T> where T : MonoGameModuleWithEvent<T>
     {
-        private readonly EventRegersterHelper registerHelper;
+        private readonly EventRegisterHelper registerHelper;
 
         protected MonoGameModuleWithEvent()
         {
-            registerHelper = EventRegersterHelper.Create(this);
+            registerHelper = EventRegisterHelper.Create(this);
             registerHelper.Register();
         }
 

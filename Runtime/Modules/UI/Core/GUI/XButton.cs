@@ -7,6 +7,7 @@ namespace XFramework.UI
     public class XButton : XUIBase
     {
         public UnityEngine.UI.Button button;
+        [AssetPath]
         public string soundPath;
 
         private void Start()
