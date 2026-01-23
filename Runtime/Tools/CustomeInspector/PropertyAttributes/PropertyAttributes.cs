@@ -1,15 +1,28 @@
+using System;
+using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
-using UnityEditor.UIElements;
+using Object = UnityEngine.Object;
 
 namespace XFramework
 {
     public class AssetFolderPathAttribute : PropertyAttribute { }
     
     public class ReadOnlyAttribute : PropertyAttribute { }
-    
-    public class AssetPathAttribute : PropertyAttribute { }
+
+    public class AssetPathAttribute : PropertyAttribute
+    {
+        public Type targetType;
+        public AssetPathAttribute(Type assetType = null)
+        {
+            if (assetType != null && !assetType.IsSubclassOf(typeof(Object)))
+            {
+                throw new ArgumentException("AssetPathAttribute 只能用于 UnityEngine.Object 的子类");
+            }
+            targetType = assetType;
+        }
+    }
 }
 #if UNITY_EDITOR
 namespace XFramework.Editor
@@ -82,6 +95,9 @@ namespace XFramework.Editor
     {
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
+            var attr = fieldInfo.GetCustomAttribute<AssetPathAttribute>();
+            var targetType = attr.targetType ?? typeof(Object);
+            
             EditorGUI.BeginProperty(position, label, property);
             // 通过路径加载资源
             Object asset = null;
@@ -94,7 +110,7 @@ namespace XFramework.Editor
                 position,
                 label,
                 asset,
-                typeof(Object),
+                targetType,
                 false // 禁止场景对象
             );
             // 如果选择了新资源，则更新路径

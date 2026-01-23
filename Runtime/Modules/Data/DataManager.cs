@@ -38,11 +38,6 @@ namespace XFramework.Data
         public TKey PrimaryKey { get; }
     }
     
-    public abstract class DataScriptableObject<T> : ScriptableObject where T : IData
-    {
-        public T[] items;
-    }
-    
     public static class DataManager
     {
         private static readonly Dictionary<Type, Type> S_DataTypeMap = new();

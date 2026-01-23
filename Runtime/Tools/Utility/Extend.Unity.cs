@@ -195,48 +195,48 @@ namespace XFramework
         /// <summary>
         /// 获取Transform的所有子物体
         /// </summary>
-        public static Transform[] GetChilds(this Transform transform)
+        public static Transform[] GetChildren(this Transform transform)
         {
             int count = transform.childCount;
-            Transform[] childs = new Transform[count];
+            Transform[] children = new Transform[count];
             for (int i = 0; i < count; i++)
             {
-                childs[i] = transform.GetChild(i);
+                children[i] = transform.GetChild(i);
             }
-            return childs;
+            return children;
         }
 
         /// <summary>
         /// 获取Transform的所有 名为 _name 的 子物体
         /// </summary>
-        public static Transform[] GetChilds(this Transform transform, string name)
+        public static Transform[] GetChildren(this Transform transform, string name)
         {
             int count = transform.childCount;
-            List<Transform> childs = new List<Transform>();
+            List<Transform> children = new List<Transform>();
             for (int i = 0; i < count; i++)
             {
                 Transform tmpChild = transform.GetChild(i);
                 if (tmpChild.name == name)
                 {
-                    childs.Add(tmpChild);
+                    children.Add(tmpChild);
                 }
-                childs.AddRange(tmpChild.GetChilds(name));
+                children.AddRange(tmpChild.GetChildren(name));
             }
-            return childs.ToArray();
+            return children.ToArray();
         }
 
         /// <summary>
         /// 获取Transform的所有子物体的GameObject
         /// </summary>
-        public static GameObject[] GetChildsObj(this Transform transform)
+        public static GameObject[] GetChildrenObj(this Transform transform)
         {
             int count = transform.childCount;
-            GameObject[] childs = new GameObject[count];
+            GameObject[] children = new GameObject[count];
             for (int i = 0; i < count; i++)
             {
-                childs[i] = transform.GetChild(i).gameObject;
+                children[i] = transform.GetChild(i).gameObject;
             }
-            return childs;
+            return children;
         }
 
         /// <summary>
