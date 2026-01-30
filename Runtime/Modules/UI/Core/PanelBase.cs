@@ -9,10 +9,10 @@ namespace XFramework.UI
     /// 面板基类
     /// </summary>
     [DisallowMultipleComponent]
-    public class PanelBase : MonoBehaviour
+    public class PanelBase : MonoBehaviour, IComponentFindIgnore
     {
         /// <summary>
-        /// UI层级,层级最低的显示在底层
+        /// UI层级,层级最低地显示在底层
         /// </summary>
         public int Level => GetType().GetCustomAttribute<PanelInfoAttribute>().level;
 
@@ -163,20 +163,12 @@ namespace XFramework.UI
 
         public T FindNode<T>(string path) where T : UINodeBase, new()
         {
-            var child = transform.Find(path);
-            if (child == null)
-            {
-                throw new XFrameworkException($"[UI] FindNode, node not exist, path={path}");
-            }
-            var uiObj = new T();
-            uiObj.Init(child, this);
-            return uiObj;
+            return UINodeBase.FindNode<T>(transform, path);
         }
     }
 
-    public class UINodeBase
+    public class UINodeBase: MonoBehaviour, IComponentFindIgnore
     {
-        public Transform transform { get; private set; }
         protected PanelBase parent { get; private set; }
 
         /// <summary>
@@ -184,29 +176,26 @@ namespace XFramework.UI
         /// </summary>
         public XUIBase this[string key] => parent[key];
 
-        internal void Init(Transform transform, PanelBase panel)
+        public T FindNode<T>(string path) where T : UINodeBase
         {
-            this.transform = transform;
-            this.parent = panel;
-            OnInit();
+            return FindNode<T>(transform, path);
         }
 
-        public T Find<T>(string path) where T : UINodeBase, new()
+        public static T FindNode<T>(Transform transform, string path) where T : UINodeBase
         {
             var child = transform.Find(path);
-            var uiObj = new T();
-            uiObj.Init(child, parent);
-            return uiObj;
-        }
+            var node = child.GetComponent<UINodeBase>();
+            if (typeof(T) != node.GetType())
+            {
+                throw new XFrameworkException($"[UI] FindNode type mismatch, path={path}, expect={typeof(T)}, actual={node.GetType()}");
+            }
 
-        protected virtual void OnInit()
-        {
+            if (node == null)
+            {
+                node = child.gameObject.AddComponent<T>();
+            }
 
-        }
-
-        public T GetComponent<T>() where T : Component
-        {
-            return transform.GetComponent<T>();
+            return node as T;
         }
     }
 }
