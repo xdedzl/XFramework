@@ -5,14 +5,14 @@ using System;
 using System.IO;
 using System.Reflection;
 using System.Collections.Generic;
+using Object = UnityEngine.Object;
 
 [CustomEditor(typeof(GameBase), true)]
 public class GameInspector : Editor
 {
     private string[] typeNames = null;
     private int entranceProcedureIndex = 0;
-
-    public ProcedureBase startPrcedureTemplate;
+    
     private string savePath;
 
     private GameBase gameInstance
@@ -66,7 +66,26 @@ public class GameInspector : Editor
 
         int lastIndex = entranceProcedureIndex;
         entranceProcedureIndex = EditorGUILayout.Popup("Entrance Procedure", entranceProcedureIndex, typeNames);
-
+        
+        
+        
+        string className = gameInstance.startTypeName;
+        string[] guids = AssetDatabase.FindAssets(className + " t:MonoScript");
+        MonoScript script = null;
+        foreach (string guid in guids)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            MonoScript _script = AssetDatabase.LoadAssetAtPath<MonoScript>(path);
+            // 验证脚本的类型是否匹配
+            if (_script != null && _script.GetClass()?.Name == className)
+            {
+                script = _script;
+            }
+        }
+        
+        EditorGUILayout.ObjectField("Game Instance", script, typeof(MonoScript), true);
+        
+        
         GUILayout.EndVertical();
 
         if (lastIndex != entranceProcedureIndex)

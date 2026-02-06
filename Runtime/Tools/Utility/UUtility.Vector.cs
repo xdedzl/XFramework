@@ -11,21 +11,82 @@ namespace XFramework
         /// </summary>
         public class Vector
         {
-            public static Vector2 String2Vector2(string value)
+            public static Vector2 ParseVector2(string value)
             {
                 string[] temp = value.Substring(1, value.Length - 2).Split(',');
                 float x = System.Convert.ToSingle(temp[0]);
                 float y = System.Convert.ToSingle(temp[1]);
                 return new Vector2(x, y);
             }
+            
+            public static bool TryParseVector2(string value, out Vector2 vector)
+            {
+                vector = Vector2.zero;
+                if (string.IsNullOrEmpty(value))
+                {
+                    return false;
+                }
+                
+                string[] temp = value.Substring(1, value.Length - 2).Split(',');
+                if (temp.Length != 2)
+                {
+                    return false;
+                }
 
-            public static Vector3 String2Vector3(string value)
+                if (!float.TryParse(temp[0].Trim(), out float x))
+                {
+                    return false;
+                }
+
+                if (!float.TryParse(temp[1].Trim(), out float y))
+                {
+                    return false;
+                }
+
+                vector = new Vector2(x, y);
+                return true;
+            }
+            
+            public static Vector3 ParseVector3(string value)
             {
                 string[] temp = value.Substring(1, value.Length - 2).Split(',');
                 float x = System.Convert.ToSingle(temp[0].Trim());
                 float y = System.Convert.ToSingle(temp[1].Trim());
                 float z = System.Convert.ToSingle(temp[2].Trim());
                 return new Vector3(x, y, z);
+            }
+
+            public static bool TryParseVector3(string value, out Vector3 vector)
+            {
+                vector = Vector3.zero;
+                if (string.IsNullOrEmpty(value))
+                {
+                    return false;
+                }
+                
+                string[] temp = value.Substring(1, value.Length - 2).Split(',');
+                if (temp.Length != 3)
+                {
+                    return false;
+                }
+
+                if (!float.TryParse(temp[0].Trim(), out float x))
+                {
+                    return false;
+                }
+
+                if (!float.TryParse(temp[1].Trim(), out float y))
+                {
+                    return false;
+                }
+                
+                if (!float.TryParse(temp[2].Trim(), out float z))
+                {
+                    return false;
+                }
+
+                vector = new Vector3(x, y, z);
+                return true;
             }
 
             public static Vector2 Slerp(Vector2 v1, Vector2 v2, float t)

@@ -147,8 +147,8 @@ namespace XReddot.Editor
             if (graphView != null)
             {
                 // 记录当前视图状态
-                _lastContentViewTranslation = graphView.contentViewContainer.transform.position;
-                _lastContentViewScale = graphView.contentViewContainer.transform.scale;
+                _lastContentViewTranslation = graphView.contentViewContainer.resolvedStyle.translate;
+                _lastContentViewScale = graphView.contentViewContainer.resolvedStyle.scale.value;
                 
                 rootVisualElement.Remove(graphView);
                 graphView = null;
@@ -162,8 +162,8 @@ namespace XReddot.Editor
             LoadData();
             
             // 恢复视图状态
-            graphView.contentViewContainer.transform.position = _lastContentViewTranslation;
-            graphView.contentViewContainer.transform.scale = _lastContentViewScale;
+            graphView.contentViewContainer.style.translate = _lastContentViewTranslation;
+            graphView.contentViewContainer.style.scale = _lastContentViewScale;
             
             UpdateEditState();
         }

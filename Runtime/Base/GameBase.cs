@@ -16,7 +16,7 @@ using XFramework.UI;
 public class GameBase : MonoBehaviour
 {
     // 初始流程
-    public string startTypeName;
+    [HideInInspector] public string startTypeName;
     public ProcedureBase startProcedure;
 
     public static GameBase activeGame { get; private set; }

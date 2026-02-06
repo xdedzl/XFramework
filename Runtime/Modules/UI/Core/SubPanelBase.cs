@@ -34,7 +34,7 @@ namespace XFramework.UI
 
         public T FindNode<T>(string path) where T : UINodeBase, new()
         {
-            return UINodeBase.FindNode<T>(transform, path);
+            return UINode.FindNode<T>(transform, path);
         }
     }
 }

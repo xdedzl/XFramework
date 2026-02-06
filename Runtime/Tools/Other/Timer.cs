@@ -14,7 +14,7 @@ namespace XFramework
             {
                 if (Timer.s_Manager == null)
                 {
-                    TimerManager managerInScene = Object.FindObjectOfType<TimerManager>();
+                    TimerManager managerInScene = Object.FindFirstObjectByType<TimerManager>();
                     if (managerInScene != null)
                     {
                         Timer.s_Manager = managerInScene;

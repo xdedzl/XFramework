@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
 using XFramework.Event;
 using System.Reflection;
@@ -161,14 +162,21 @@ namespace XFramework.UI
             return this[path] as T;
         }
 
-        public T FindNode<T>(string path) where T : UINodeBase, new()
+        public T FindNode<T>(string path) where T : UINode, new()
         {
-            return UINodeBase.FindNode<T>(transform, path);
+            return UINode.FindNode<T>(transform, path);
+        }
+
+        public UINode FindNode(string path)
+        {
+            return FindNode<UINode>(path);
         }
     }
 
-    public class UINodeBase: MonoBehaviour, IComponentFindIgnore
+    public abstract class UINodeBase: MonoBehaviour, IComponentFindIgnore
     {
+        private ComponentFindHelper<XUIBase> m_ComponentFindHelper;
+        
         protected PanelBase parent { get; private set; }
 
         /// <summary>
@@ -176,26 +184,55 @@ namespace XFramework.UI
         /// </summary>
         public XUIBase this[string key] => parent[key];
 
+        public void Awake()
+        {
+            m_ComponentFindHelper = ComponentFindHelper<XUIBase>.CreateHelper(this.gameObject);
+        }
+    }
+
+    public class UINode : UINodeBase
+    {
+        public static T FindNode<T>(Transform transform, string path) where T : UINodeBase
+        {
+            var child = transform.Find(path);
+            return GetOrAddNode<T>(child.gameObject);
+        }
+        
         public T FindNode<T>(string path) where T : UINodeBase
         {
             return FindNode<T>(transform, path);
         }
-
-        public static T FindNode<T>(Transform transform, string path) where T : UINodeBase
+        
+        public static T GetOrAddNode<T>(GameObject go, bool forceReplace=true) where T : UINodeBase
         {
-            var child = transform.Find(path);
-            var node = child.GetComponent<UINodeBase>();
-            if (typeof(T) != node.GetType())
-            {
-                throw new XFrameworkException($"[UI] FindNode type mismatch, path={path}, expect={typeof(T)}, actual={node.GetType()}");
-            }
+            var node = go.GetComponent<UINodeBase>();
 
-            if (node == null)
+            if (node ==null)
             {
-                node = child.gameObject.AddComponent<T>();
+                node = go.AddComponent<T>();
+            }
+            else
+            {
+                if (typeof(T) != node.GetType())
+                {
+                    if (forceReplace)
+                    {
+                        DestroyImmediate(node);
+                        node = go.AddComponent<T>();
+                    }
+                    else
+                    {
+                        throw new XFrameworkException($"[UI] AddNode type mismatch, name={go.name}, expect={typeof(T)}, actual={node.GetType()}");
+                    }
+                }
             }
 
             return node as T;
+        }
+        
+        public static T GetOrAddNode<T>(Transform transform, bool forceReplace=true) where T : UINodeBase
+        {
+            return GetOrAddNode<T>(transform.gameObject, forceReplace);
         }
     }
 }

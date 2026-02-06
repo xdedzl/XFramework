@@ -1,3 +1,4 @@
+using System;
 using UnityEngine.UI;
 using UnityEngine;
 using UnityEngine.Events;
@@ -7,42 +8,38 @@ namespace XFramework.UI
 {
     [RequireComponent(typeof(LayoutGroup))]
     [UnityEngine.AddComponentMenu("XFramework/XLayoutGroup")]
-    public class XLayoutGroup : XUIBase
+    public class XLayoutGroup : XUIBase, IBindArrayObject<BindableDataSet>
     {
         public LayoutGroup layoutGroup;
 
         /// <summary>
         /// 实体模板
         /// </summary>
-        private GameObject m_EntityTemplate;
-        private Transform m_PoolParent;
-        /// <summary>
-        /// 实体池
-        /// </summary>
-        private Stack<GameObject> m_EntityPool;
+        private GameObject m_ItemTemplate;
+        private Type m_WrapType;
         
-        [HideInInspector] public EntityEvent onEntityChange;
+        
+        [HideInInspector] public ItemChangeEvent onItemChange;
         
 
         public int itemCount { get; private set; } = 0;
 
         private void Awake()
         {
-            onEntityChange = new EntityEvent();
-            m_EntityPool = new Stack<GameObject>();
+            onItemChange = new ItemChangeEvent();
 
-            if (m_EntityTemplate == null)
+            if (m_ItemTemplate == null)
             {
-                m_EntityTemplate = transform.GetChild(0).gameObject;
+                m_ItemTemplate = transform.GetChild(0).gameObject;
             }
 
-            if (m_EntityTemplate == null)
+            if (m_ItemTemplate == null)
             {
                 throw new System.Exception("XLayoutGroup需要一个实体模板，请在编辑器中指定，或在运行时将一个子物体作为模板");
             }
             
-            m_EntityTemplate.name += "(Template)";
-            m_EntityTemplate.SetActive(false);
+            m_ItemTemplate.name += "(Template)";
+            m_ItemTemplate.SetActive(false);
 
             if (transform.childCount > 1)
             {
@@ -57,40 +54,9 @@ namespace XFramework.UI
         {
             layoutGroup = transform.GetComponent<LayoutGroup>();
         }
-
+        
         /// <summary>
-        /// 添加实体
-        /// </summary>
-        private GameObject AddEntity()
-        {
-            GameObject obj = GetEntity();
-            return obj;
-        }
-
-        /// <summary>
-        /// 移除实体
-        /// </summary>
-        private void RemoveEntity(GameObject gameObject)
-        {
-            m_EntityPool.Push(gameObject);
-
-            if(m_PoolParent == null)
-                m_PoolParent = new GameObject(name + "_Pool").transform;
-
-            gameObject.transform.SetParent(m_PoolParent);
-        }
-
-        /// <summary>
-        /// 移除实体
-        /// </summary>
-        /// <param name="index"></param>
-        private void RemoveEntity(int index)
-        {
-            RemoveEntity(layoutGroup.transform.GetChild(index).gameObject);
-        }
-
-        /// <summary>
-        /// 配置实体数量
+        /// 配置数量
         /// </summary>
         public void SetItemCount(int targetCount)
         {
@@ -111,14 +77,14 @@ namespace XFramework.UI
                         activated++;
                     }
                     
-                    onEntityChange.Invoke(i - 1, go);
+                    onItemChange.Invoke(i - 1, go.GetComponent<UINode>());
                 }
                 // 不够则创建
                 for (int i = activated; i < differ; i++)
                 {
-                    var go = AddEntity();
+                    var go = CreateItem();
                     go.SetActive(true);
-                    onEntityChange.Invoke(i, go);
+                    onItemChange.Invoke(i, go.GetComponent<UINode>());
                 }
             }
             // 数量变少时，仅将多余的active对象设为false（从后往前，跳过模板）
@@ -139,28 +105,19 @@ namespace XFramework.UI
             itemCount = targetCount;
         }
 
-        /// <summary>
-        /// 获取一个实体并返回
-        /// </summary>
-        private GameObject GetEntity()
+        public void SetWarpType<T>() where T : UINode
         {
-            if (m_EntityPool.Count > 0)
-            {
-                GameObject obj = m_EntityPool.Pop();
-                obj.transform.SetParent(this.transform);
-                return obj;
-            }
-
-            return CreateEntity();
+            m_WrapType = typeof(T);
+            UINode.GetOrAddNode<T>(m_ItemTemplate);
         }
 
         /// <summary>
         /// 新创建一个实体并返回
         /// </summary>
         /// <returns></returns>
-        private GameObject CreateEntity()
+        private GameObject CreateItem()
         {
-            GameObject obj = Instantiate(m_EntityTemplate, transform);
+            GameObject obj = Instantiate(m_ItemTemplate, transform);
             return obj;
         }
 
@@ -175,6 +132,18 @@ namespace XFramework.UI
             }
         }
 
-        public class EntityEvent : UnityEvent<int, GameObject> { }
+        public class ItemChangeEvent : UnityEvent<int, UINode> { }
+        public class ItemDataSetEvent : UnityEvent<int, BindableDataSet, GameObject> { }
+
+        public void OnBindArray(IBindableDataArray bindableDataArray)
+        {
+            SetItemCount(bindableDataArray.Count);
+            throw new System.NotImplementedException();
+        }
+
+        public void OnBindItem(BindableDataSet item, int index)
+        {
+            throw new System.NotImplementedException();
+        }
     }
 }

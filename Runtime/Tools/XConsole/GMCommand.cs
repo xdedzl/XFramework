@@ -46,7 +46,7 @@ namespace XFramework.Console
                         }
                         else
                         {
-                            Debug.LogWarning($"[·Ç·¨GMÖ¸Áî] {type.Name}.{method.Name}, GMº¯ÊýÖ»ÔÊÐí´«Ò»¸östring²ÎÊý»ò²»´«²Î");
+                            Debug.LogWarning($"[ï¿½Ç·ï¿½GMÖ¸ï¿½ï¿½] {type.Name}.{method.Name}, GMï¿½ï¿½ï¿½ï¿½Ö»ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½stringï¿½ï¿½ï¿½ï¿½ï¿½ò²»´ï¿½ï¿½ï¿½");
                         }
                     }
                 }
@@ -70,7 +70,7 @@ namespace XFramework.Console
                         return ExecuteCmd(args[0], args[1], out result);
                     }
                 }
-                catch (Exception e)
+                catch (Exception _)
                 {
                     // LogError($"{e.Message}\n{e.StackTrace}");
                     return false;
@@ -82,15 +82,15 @@ namespace XFramework.Console
         
 
         /// <summary>
-        /// Ìí¼ÓÒ»¸öÖ¸Áî
+        /// ï¿½ï¿½ï¿½Ò»ï¿½ï¿½Ö¸ï¿½ï¿½
         /// </summary>
-        /// <param name="cmd">ÃüÁî¹Ø¼ü×Ö</param>
-        /// <param name="fun">Ö¸Áîµ÷ÓÃÄÚÈÝ</param>
+        /// <param name="cmd">ï¿½ï¿½ï¿½ï¿½Ø¼ï¿½ï¿½ï¿½</param>
+        /// <param name="fun">Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½</param>
         public static void AddCmd(string cmd, Func<string, object> fun)
         {
             if (s_Commands.ContainsKey(cmd))
             {
-                Debug.LogWarning($"[Ö¸ÁîÖØ¸´] cmd name: {cmd}");
+                Debug.LogWarning($"[Ö¸ï¿½ï¿½ï¿½Ø¸ï¿½] cmd name: {cmd}");
                 return;
             }
             s_Commands.Add(cmd, fun);
@@ -119,14 +119,14 @@ namespace XFramework.Console
         [GMCommand("enable_hunter")]
         public static void StartHunter()
         {
-            XConsole.Log("ÒÑ³É¹¦´ò¿ªHunter");
+            XConsole.Log("ï¿½Ñ³É¹ï¿½ï¿½ï¿½Hunter");
             XConsole.ConnetHunter();
         }
 
         [GMCommand("disable_hunter")]
         public static void StopHunter()
         {
-            XConsole.Log("ÒÑ³É¹¦¹Ø±ÕHunter");
+            XConsole.Log("ï¿½Ñ³É¹ï¿½ï¿½Ø±ï¿½Hunter");
             XConsole.DisConnetHunter();
         }
 

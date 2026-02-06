@@ -125,7 +125,7 @@ namespace XFramework.UI
         public static void CreateDividingRule()
         {
             GameObject parent = Selection.activeGameObject;
-            parent = parent ?? Object.FindObjectOfType<Canvas>().gameObject;
+            parent = parent ?? Object.FindFirstObjectByType<Canvas>().gameObject;
             RectTransform rule = new GameObject("DividingRule").AddComponent<RectTransform>();
             rule.SetParent(parent.transform);
             rule.anchoredPosition = Vector2.zero;
