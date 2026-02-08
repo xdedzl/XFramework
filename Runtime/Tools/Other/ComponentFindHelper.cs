@@ -28,10 +28,9 @@ namespace XFramework
         /// <param name="root">需要查找的根GameObject</param>
         public ComponentFindHelper(GameObject root)
         {
-            T[] uis = root.GetComponentsInChildren<T>();
-            for (int i = 0; i < uis.Length; i++)
+            var uis = root.GetComponentsInChildren<T>(true);
+            foreach (var ui in uis)
             {
-                var ui = uis[i];
                 var ignore = ui.GetComponentInParent<IComponentFindIgnore>();
                 if (ignore is MonoBehaviour mb && mb.gameObject != root)
                 {
@@ -40,11 +39,10 @@ namespace XFramework
 
                 var keyProvider = ui.GetComponent<IComponentKeyProvider>();
                 var key = string.IsNullOrEmpty(keyProvider?.Key) ? ui.name : keyProvider.Key;
-                if (m_componentsDic.ContainsKey(key))
+                if (!m_componentsDic.TryAdd(key, ui))
                 {
                     throw new System.Exception($"{root.name} already have a {typeof(T).Name} component named {key}");
                 }
-                m_componentsDic.Add(key, ui);
             }
         }
 

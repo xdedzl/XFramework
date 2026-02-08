@@ -11,17 +11,9 @@ namespace XFramework.UI
     public class XLayoutGroup : XUIBase, IBindArrayObject<BindableDataSet>
     {
         public LayoutGroup layoutGroup;
-
-        /// <summary>
-        /// 实体模板
-        /// </summary>
+        
         private GameObject m_ItemTemplate;
-        private Type m_WrapType;
-        
-        
-        [HideInInspector] public ItemChangeEvent onItemChange;
-        
-
+        private ItemChangeEvent onItemChange;
         public int itemCount { get; private set; } = 0;
 
         private void Awake()
@@ -37,6 +29,8 @@ namespace XFramework.UI
             {
                 throw new System.Exception("XLayoutGroup需要一个实体模板，请在编辑器中指定，或在运行时将一个子物体作为模板");
             }
+
+            UINode.GetOrAddNode<UINode>(m_ItemTemplate); 
             
             m_ItemTemplate.name += "(Template)";
             m_ItemTemplate.SetActive(false);
@@ -53,6 +47,11 @@ namespace XFramework.UI
         private void Reset()
         {
             layoutGroup = transform.GetComponent<LayoutGroup>();
+        }
+        
+        public void SetItemType<T>() where T : UINode
+        {
+            UINode.GetOrAddNode<T>(m_ItemTemplate);
         }
         
         /// <summary>
@@ -104,13 +103,13 @@ namespace XFramework.UI
             
             itemCount = targetCount;
         }
-
-        public void SetWarpType<T>() where T : UINode
+        
+        public void SetOnItemChange(UnityAction<int, UINode> callback)
         {
-            m_WrapType = typeof(T);
-            UINode.GetOrAddNode<T>(m_ItemTemplate);
+            onItemChange.RemoveAllListeners();
+            onItemChange.AddListener(callback);
         }
-
+        
         /// <summary>
         /// 新创建一个实体并返回
         /// </summary>
@@ -138,12 +137,12 @@ namespace XFramework.UI
         public void OnBindArray(IBindableDataArray bindableDataArray)
         {
             SetItemCount(bindableDataArray.Count);
-            throw new System.NotImplementedException();
+            // throw new System.NotImplementedException();
         }
 
         public void OnBindItem(BindableDataSet item, int index)
         {
-            throw new System.NotImplementedException();
+            // throw new System.NotImplementedException();
         }
     }
 }
