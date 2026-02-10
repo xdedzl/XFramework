@@ -271,49 +271,64 @@ namespace XFramework.Editor
             // 打包
             private void Build()
             {
+                if (m_incrementalPackaging)
+                {
+                    if (EditorUtility.DisplayDialog("提示","输出路径中无依赖文件，无法进行增量打包,是否进行非增量打包","确认","取消"))
+                    {
+                        return;
+                    }
+                    else
+                    {
+                        return;
+                    }
+                }
+                
                 RefreshAssetBundleBuild();
 
-                DependenciesData dependence;
+                string jsonPath = m_OutPutPath + "/AssetManifest.json";
+                
+                var dependencies = BuildAssetBundle();
+                
+                // 在 Build 方法中，创建 AssetManifest 之前添加
+                var asset2AbsList = new List<Asset2AB>();
+                foreach (var build in m_Builds)
+                {
+                    foreach (var assetPath in build.assetNames)
+                    {
+                        asset2AbsList.Add(new Asset2AB
+                        {
+                            assetPath = assetPath.Replace("\\", "/"),
+                            abName = (string.IsNullOrEmpty(build.assetBundleVariant) 
+                                ? build.assetBundleName 
+                                : $"{build.assetBundleName}.{build.assetBundleVariant}").Replace("\\", "/")
+                        });
+                    }
+                }
 
-                string jsonPath = m_OutPutPath + "/dependencies.json";
+                var assetManifest = new AssetManifest
+                {
+                    dependencies = dependencies,
+                    asset2Abs = asset2AbsList.ToArray(),
+                };
+                
+                
                 // 增量打包时，融合原有依赖文件
                 if (m_incrementalPackaging)
                 {
                     if (File.Exists(jsonPath))
                     {
-                        string readJson = File.ReadAllText(jsonPath);
-                        DependenciesData oldDependencies = JsonUtility.FromJson<DependenciesData>(readJson);
-                        DependenciesData newDependencies = BuildAssetBundle();
-                        dependence = DependencyUtility.CombineDependence(new DependenciesData[]
-                        {
-                            oldDependencies,
-                            newDependencies
-                        });
-                    }
-                    else
-                    {
-                        if (EditorUtility.DisplayDialog("提示","输出路径中无依赖文件，无法进行增量打包,是否进行非增量打包","确认","取消"))
-                        {
-                            dependence = BuildAssetBundle();
-                        }
-                        else
-                        {
-                            return;
-                        }
+                        
                     }
                 }
-                else
-                {
-                    dependence = BuildAssetBundle();
-                }
+                
 
-                string json = JsonUtility.ToJson(dependence, true);
+                string json = JsonUtility.ToJson(assetManifest, true);
                 File.WriteAllText(jsonPath, json);
 
                 Debug.Log("BuildAssetBundles Complete");
             }
 
-            private DependenciesData BuildAssetBundle()
+            private SingleDependenciesData[] BuildAssetBundle()
             {
                 if (!Directory.Exists(m_OutPutPath))
                 {

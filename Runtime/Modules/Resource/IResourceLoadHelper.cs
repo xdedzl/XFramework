@@ -1,9 +1,14 @@
-﻿using UnityEngine;
+﻿using System;
 using System.Collections.Generic;
 using XFramework.Tasks;
+using UObject = UnityEngine.Object;
 
 namespace XFramework.Resource
 {
+        
+    public delegate void LoadAssetDelegate(bool success, UObject asset);
+    public delegate void LoadAssetDelegate<in T>(bool success, T asset) where T : UObject;
+    
     /// <summary>
     /// 资源加载辅助类
     /// </summary>
@@ -13,45 +18,32 @@ namespace XFramework.Resource
         /// 资源路径
         /// </summary>
         string AssetPath { get; }
+        bool IsAssetExist(string assetName);
         /// <summary>
         /// 同步加载资源
         /// </summary>
         /// <typeparam name="T">资源类型</typeparam>
         /// <param name="assetName">资源名称</param>
         /// <returns>资源</returns>
-        T Load<T>(string assetName) where T : Object;
-        /// <summary>
-        /// 同步加载一组资源
-        /// </summary>
-        /// <typeparam name="T">资源类型</typeparam>
-        /// <param name="path">资源路径</param>
-        /// <param name="isTopOnly">是否是仅加载本层级的资源</param>
-        /// <returns>资源</returns>
-        T[] LoadAll<T>(string path, bool isTopOnly = true) where T : Object;
+        T Load<T>(string assetName) where T : UObject;
         /// <summary>
         /// 异步加载资源
         /// </summary>
         /// <typeparam name="T">资源类型</typeparam>
         /// <param name="assetName">资源名称</param>
         /// <returns>加载任务</returns>
-        IProgressTask<T> LoadAsync<T>(string assetName) where T : Object;
+        // IProgressTask<T> LoadAsync<T>(string assetName) where T : UObject;
+        
+        void LoadAsync<T>(string assetName, LoadAssetDelegate<T> callBack) where T : UObject;
         /// <summary>
-        /// 异步加载一组资源
+        /// 释放资源
         /// </summary>
-        /// <typeparam name="T">资源名称</typeparam>
-        /// <param name="path">资源路径</param>
-        /// <param name="isTopOnly">是否是仅加载本层级的资源</param>
-        /// <param name="callback">回调</param>
-        /// <returns>加载进度</returns>
-        IProgress LoadAllSync<T>(string path, bool isTopOnly, System.Action<IList<T>> callback) where T : Object;
+        void Release(UObject obj);
         /// <summary>
-        /// 卸载某个资源
+        /// 释放所有资源
         /// </summary>
-        /// <param name="name">资源名称</param>
-        void UnLoad(string name);
-        /// <summary>
-        /// 卸载所有资源
-        /// </summary>
-        void UnLoadAll();
+        void ReleaseAll();
+
+        void OnUpdate();
     }
 }

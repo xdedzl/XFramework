@@ -5,35 +5,38 @@ using UnityEngine;
 
 namespace XFramework.Resource
 {
+    [Serializable]
     public class DependenciesData
     {
-        private readonly string[] m_Empty;
-
-        [SerializeField]
-        private SingleDependenciesData[] AllDependenceData;
-
-        public DependenciesData()
-        {
-            m_Empty = Array.Empty<string>();
-        }
-
+        private readonly Dictionary<string, string[]> m_dependenceMap = new();
+        
         public DependenciesData(SingleDependenciesData[] allDependenceData)
         {
-            AllDependenceData = allDependenceData;
-
-            m_Empty = Array.Empty<string>();
+            foreach (var data in allDependenceData)
+            {
+                if (!m_dependenceMap.TryAdd(data.name, data.dependencies))
+                {
+                    Debug.LogError($"DependenciesData has repeated assetBundleName {data.name}");
+                }
+            }
+        }
+        
+        public bool IsAbExist(string assetBundleName)
+        {
+            return m_dependenceMap.ContainsKey(assetBundleName);
         }
 
         public string[] GetDirectDependencies(string assetBundleName)
         {
-            foreach (var item in AllDependenceData)
+            if (m_dependenceMap.TryGetValue(assetBundleName, out var dps))
             {
-                if (assetBundleName == item.Name)
-                {
-                    return item.Dependencies;
-                }
+                return dps;
             }
-            return m_Empty;
+            else
+            {
+                Debug.LogError($"DependenciesData has no assetBundleName {assetBundleName}");
+                return Array.Empty<string>();
+            }
         }
 
         public string[] GetAllDependencies(string assetBundleName)
@@ -66,14 +69,7 @@ namespace XFramework.Resource
 
         public string[] GetAllAssetBundles()
         {
-            var paths = new List<string>();
-
-            foreach (var item in AllDependenceData)
-            {
-                paths.Add(item.Name);
-            }
-
-            return paths.ToArray();
+            return m_dependenceMap.Keys.ToArray();
         }
     }
 
@@ -83,16 +79,16 @@ namespace XFramework.Resource
         /// <summary>
         /// AB包名
         /// </summary>
-        public string Name;
+        public string name;
         /// <summary>
         /// 直接依赖包
         /// </summary>
-        public string[] Dependencies;
+        public string[] dependencies;
 
         public SingleDependenciesData(string name, string[] dependencies)
         {
-            Name = name;
-            Dependencies = dependencies;
+            this.name = name;
+            this.dependencies = dependencies;
         }
     }
 
@@ -125,7 +121,7 @@ namespace XFramework.Resource
             {
                 foreach (var item in singleDates)
                 {
-                    if (abName == item.Name)
+                    if (abName == item.name)
                         return true;
                 }
                 return false;
@@ -137,7 +133,7 @@ namespace XFramework.Resource
         /// </summary>
         /// <param name="manifest"></param>
         /// <returns></returns>
-        public static DependenciesData Manifest2Dependence(AssetBundleManifest manifest)
+        public static SingleDependenciesData[] Manifest2Dependence(AssetBundleManifest manifest)
         {
             string[] abNames = manifest.GetAllAssetBundles();
 
@@ -146,14 +142,9 @@ namespace XFramework.Resource
             for (int j = 0; j < abNames.Length; j++)
             {
                 var dpNames = manifest.GetDirectDependencies(abNames[j]);
-                if (dpNames.Length <= 0)
-                {
-                    continue;
-                }
                 singleDates.Add(new SingleDependenciesData(abNames[j], dpNames));
             }
-            var data = new DependenciesData(singleDates.ToArray());
-            return data;
+            return singleDates.ToArray();
         }
     }
 }

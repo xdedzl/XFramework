@@ -1,9 +1,9 @@
 using UnityEngine;
-using UnityEditor;
-using UEditorPrefs = UnityEditor.EditorPrefs;
 
 namespace XFramework
 {
+    #if UNITY_EDITOR
+    using UEditorPrefs = UnityEditor.EditorPrefs;
     public partial class UUtility
     {
         public static class EditorPrefs
@@ -44,4 +44,5 @@ namespace XFramework
             public static Vector3 GetVector3(string key) => EditorPrefs.GetVector3(key, Vector3.zero);
         }
     }
+    #endif
 }

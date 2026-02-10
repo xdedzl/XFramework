@@ -92,29 +92,30 @@ namespace XFramework.Editor
 
             private void GenerateJson()
             {
-                AssetBundle.UnloadAllAssetBundles(true);
-                var dates = new DependenciesData[m_Paths.Count];
-                for (int i = 0; i < m_Paths.Count; i++)
-                {
-                    if (!m_Paths[i].EndsWith(".json"))
-                    {
-                        AssetBundle manifestAB = AssetBundle.LoadFromFile(m_Paths[i]);
-                        var manifest = manifestAB.LoadAsset<AssetBundleManifest>("AssetBundleManifest");
-
-                        dates[i] = DependencyUtility.Manifest2Dependence(manifest);
-                    }
-                    else
-                    {
-                        string tempJson = System.IO.File.ReadAllText(m_Paths[i]);
-                        dates[i] = JsonUtility.FromJson<DependenciesData>(tempJson);
-                    }
-                }
-
-                string json = JsonUtility.ToJson(DependencyUtility.CombineDependence(dates), true);
-                File.WriteAllText(m_OutPutPath + "/dependencies.json", json);
-                AssetDatabase.Refresh();
-
-                Debug.Log("依赖文件已替换");
+                // AssetBundle.UnloadAllAssetBundles(true);
+                // var dates = new DependenciesData[m_Paths.Count];
+                // for (int i = 0; i < m_Paths.Count; i++)
+                // {
+                //     if (!m_Paths[i].EndsWith(".json"))
+                //     {
+                //         AssetBundle manifestAB = AssetBundle.LoadFromFile(m_Paths[i]);
+                //         var manifest = manifestAB.LoadAsset<AssetBundleManifest>("AssetBundleManifest");
+                //
+                //         dates[i] = DependencyUtility.Manifest2Dependence(manifest);
+                //     }
+                //     else
+                //     {
+                //         string tempJson = System.IO.File.ReadAllText(m_Paths[i]);
+                //         dates[i] = JsonUtility.FromJson<DependenciesData>(tempJson);
+                //     }
+                // }
+                //
+                // string json = JsonUtility.ToJson(DependencyUtility.CombineDependence(dates), true);
+                // File.WriteAllText(m_OutPutPath + "/dependencies.json", json);
+                // AssetDatabase.Refresh();
+                //
+                Debug.Log("功能暂时不可用");
+                // Debug.Log("依赖文件已替换");
             }
 
             private string List2Str(List<String> list)

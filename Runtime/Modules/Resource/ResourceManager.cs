@@ -9,7 +9,7 @@ namespace XFramework.Resource
     /// 资源管理器
     /// 若加载路径以 Res/ 开头，则会使用unity Resource.xxx 方式加载）
     /// </summary>
-    public partial class ResourceManager : PersistentGameModuleBase<ResourceManager>
+    public partial class ResourceManager : PersistentMonoGameModuleBase<ResourceManager>
     {
         public const string BuildConfigAssetPath = "Assets/Configs/AssetBundleBuildConfig.asset";
         
@@ -72,6 +72,11 @@ namespace XFramework.Resource
         /// </summary>
         public string AssetPath => m_LoadHelper.AssetPath;
 
+        public bool IsAssetExist(string assetName)
+        {
+            return m_LoadHelper.IsAssetExist(assetName);
+        }
+
         #region 资源加载
         
         public T LoadInResources<T>(string assetName) where T : Object
@@ -119,40 +124,21 @@ namespace XFramework.Resource
             assetName = Path2RealPath(assetName);
             return m_LoadHelper.Load<T>(assetName);
         }
-
-        /// <summary>
-        /// 加载一个路径下的所有资源
-        /// </summary>
-        /// <typeparam name="T">资源类型</typeparam>
-        /// <param name="path">资源路径</param>
-        /// <param name="isTopOnly">是否是仅加载本层级的资源</param>
-        /// <returns>资源组</returns>
-        public T[] LoadAll<T>(string path, bool isTopOnly = true) where T : Object
-        {
-            return m_LoadHelper.LoadAll<T>(path, isTopOnly);
-        }
         
         /// <summary>
         /// 异步加载资源
         /// </summary>
         /// <param name="assetName">资源名称</param>
         /// <returns>加载任务</returns>
-        public IProgressTask<T> LoadAsync<T>(string assetName) where T : Object
+        // public IProgressTask<T> LoadAsync<T>(string assetName) where T : Object
+        // {
+        //     assetName = Path2RealPath(assetName);
+        //     return m_LoadHelper.LoadAsync<T>(assetName);
+        // }
+        
+        public void LoadAsync<T>(string assetName, LoadAssetDelegate<T> callback) where T : Object
         {
-            assetName = Path2RealPath(assetName);
-            return m_LoadHelper.LoadAsync<T>(assetName);
-        }
-
-        /// <summary>
-        /// 加载一个路径下的所有资源
-        /// </summary>
-        /// <typeparam name="T">资源类型</typeparam>
-        /// <param name="path">资源路径</param>
-        /// <param name="isTopOnly">是否是仅加载本层级的资源</param>
-        /// <returns>资源组</returns>
-        public IProgress LoadAllAsync<T>(string path, bool isTopOnly, System.Action<IList<T>> callback) where T : Object
-        {
-            return m_LoadHelper.LoadAllSync<T>(path, isTopOnly, callback);
+            m_LoadHelper.LoadAsync<T>(assetName, callback);
         }
 
         /// <summary>
@@ -170,7 +156,7 @@ namespace XFramework.Resource
                 }
                 else
                 {
-                    throw new XFrameworkException($"[Resource] There is no resoure whitch path is {path} or PathMapInfo is obsolete");
+                    throw new XFrameworkException($"[Resource] There is no resource which path is {path} or PathMapInfo is obsolete");
                 }
             }
             else
@@ -263,10 +249,17 @@ namespace XFramework.Resource
         /// <param name="callBack">实例化完成回调</param>
         public void InstantiateAsync<T>(string assetName, System.Action<T> callBack = null) where T : Object
         {
-            GetAssetAsync<T>(assetName, (asset) =>
+            LoadAsync<T>(assetName, (success, asset) =>
             {
-                T obj = Object.Instantiate(asset);
-                callBack?.Invoke(obj);
+                if (success)
+                {
+                    T obj = Object.Instantiate(asset);
+                    callBack?.Invoke(obj);
+                }
+                else
+                {
+                    Debug.LogError("[Resource] There is no resource which path is " + assetName);
+                }
             });
         }
 
@@ -279,10 +272,17 @@ namespace XFramework.Resource
         /// <param name="callBack">实例化完成回调</param>
         public void InstantiateAsync<T>(string assetName, Transform parent, System.Action<T> callBack = null) where T : Object
         {
-            GetAssetAsync<T>(assetName, (asset) =>
+            LoadAsync<T>(assetName, (success, asset) =>
             {
-                T obj = Object.Instantiate(asset, parent);
-                callBack?.Invoke(obj);
+                if (success)
+                {
+                    T obj = Object.Instantiate(asset, parent);
+                    callBack?.Invoke(obj);
+                }
+                else
+                {
+                    Debug.LogError("[Resource] There is no resource which path is " + assetName);
+                }
             });
         }
 
@@ -296,10 +296,17 @@ namespace XFramework.Resource
         /// <param name="callBack">实例化完成回调</param>
         public void InstantiateAsync<T>(string assetName, Vector3 position, Quaternion quaternion, System.Action<T> callBack = null) where T : Object
         {
-            GetAssetAsync<T>(assetName, (asset) =>
+            LoadAsync<T>(assetName, (success, asset) =>
             {
-                T obj = Object.Instantiate(asset, position, quaternion);
-                callBack?.Invoke(obj);
+                if (success)
+                {
+                    T obj = Object.Instantiate(asset, position, quaternion);
+                    callBack?.Invoke(obj);
+                }
+                else
+                {
+                    Debug.LogError("[Resource] There is no resource which path is " + assetName);
+                }
             });
         }
 
@@ -314,40 +321,37 @@ namespace XFramework.Resource
         /// <param name="callBack">实例化完成回调</param>
         public void InstantiateAsync<T>(string assetName, Vector3 position, Quaternion quaternion, Transform parent, System.Action<T> callBack = null) where T : Object
         {
-            GetAssetAsync<T>(assetName, (asset) =>
+            LoadAsync<T>(assetName, (success, asset) =>
             {
-                T obj = Object.Instantiate(asset, position, quaternion, parent);
-                callBack?.Invoke(obj);
+                if (success)
+                {
+                    T obj = Object.Instantiate(asset, position, quaternion, parent);
+                    callBack?.Invoke(obj);
+                }
+                else
+                {
+                    Debug.LogError("[Resource] There is no resource which path is " + assetName);
+                }
             });
         }
-
-        /// <summary>
-        /// 异步获取一个资源
-        /// </summary>
-        private void GetAssetAsync<T>(string assetName, System.Action<T> callBack) where T : Object
-        {
-            m_AssetDic.TryGetValue(assetName, out Object asset);
-            if (asset == null)
-            {
-                var xTask = LoadAsync<T>(assetName);
-                xTask.ContinueWith(callBack);
-            }
-            else
-            {
-                callBack(asset as T);
-            }
-        }
-
         #endregion
 
         #region 接口实现
 
         public override void Shutdown()
         {
-            m_LoadHelper.UnLoadAll();
+            m_LoadHelper.ReleaseAll();
             m_AssetDic.Clear();
         }
 
+        public override int Priority => 1000;
+
+        public override void Update()
+        {
+            m_LoadHelper.OnUpdate();
+        }
+
         #endregion
+
     }
 }

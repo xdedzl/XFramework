@@ -17,6 +17,11 @@ namespace XFramework.Resource
         /// </summary>
         public string AssetPath => Application.dataPath.Replace("/Assets", "");
 
+        public bool IsAssetExist(string assetName)
+        {
+            return File.Exists(Application.dataPath.Replace("/Assets", "") + assetName);
+        }
+
         /// <summary>
         /// 同步加载资源
         /// </summary>
@@ -62,6 +67,18 @@ namespace XFramework.Resource
             return xTask;
         }
 
+        public void LoadAsync<T>(string assetName, LoadAssetDelegate<T> callBack) where T : UObject
+        {
+            T obj = AssetDatabase.LoadAssetAtPath<T>(assetName);
+            var progress = new DefaultProgress<T>(obj);
+            var xTask = XTask.WaitProgress(progress);
+            xTask.Start();
+            xTask.ContinueWith<T>((r) =>
+            {
+                callBack.Invoke(true, r);
+            });
+        }
+
         /// <summary>
         /// 同步加载一组资源
         /// </summary>
@@ -96,9 +113,9 @@ namespace XFramework.Resource
             return objs.ToArray();
         }
 
-        public void UnLoad(string name) { }
-
-        public void UnLoadAll() { }
+        public void Release(UObject obj) { }
+        public void ReleaseAll() { }
+        public void OnUpdate() { }
     }
 }
 
