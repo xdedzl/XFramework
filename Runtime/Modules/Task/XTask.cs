@@ -11,7 +11,7 @@ namespace XFramework.Tasks
         void Update();
     }
     
-    public interface ITask<T> : ITask
+    public interface ITask<out T> : ITask
     {
         T Result { get; }
     }

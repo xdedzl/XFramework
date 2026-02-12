@@ -15,10 +15,6 @@ namespace XFramework.Resource
         
         private readonly IResourceLoadHelper m_LoadHelper;
         /// <summary>
-        /// 需要实例化的资源
-        /// </summary>
-        private readonly Dictionary<string, Object> m_AssetDic = new Dictionary<string, Object>();
-        /// <summary>
         /// 资源路径映射
         /// </summary>
         private readonly Dictionary<string, string> m_PathMap;
@@ -178,7 +174,7 @@ namespace XFramework.Resource
         public T Instantiate<T>(string assetName) where T : Object
         {
 
-            T asset = GetAsset<T>(assetName);
+            T asset = Load<T>(assetName);
             T obj = Object.Instantiate<T>(asset);
             return obj;
         }
@@ -192,7 +188,7 @@ namespace XFramework.Resource
         /// <returns>资源的拷贝</returns>
         public T Instantiate<T>(string assetName, Transform parent) where T : Object
         {
-            T asset = GetAsset<T>(assetName);
+            T asset = Load<T>(assetName);
             T obj = Object.Instantiate<T>(asset, parent);
             return obj;
         }
@@ -207,7 +203,7 @@ namespace XFramework.Resource
         /// <returns>资源的拷贝</returns>
         public T Instantiate<T>(string assetName, Vector3 position, Quaternion quaternion) where T : Object
         {
-            T asset = GetAsset<T>(assetName);
+            T asset = Load<T>(assetName);
             T obj = Object.Instantiate<T>(asset, position, quaternion);
             return obj;
         }
@@ -223,22 +219,9 @@ namespace XFramework.Resource
         /// <returns>资源的拷贝</returns>
         public T Instantiate<T>(string assetName, Vector3 position, Quaternion quaternion, Transform parent) where T : Object
         {
-            T asset = GetAsset<T>(assetName);
+            T asset = Load<T>(assetName);
             T obj = Object.Instantiate<T>(asset, position, quaternion, parent);
             return obj;
-        }
-
-        /// <summary>
-        /// 获取一个资源
-        /// </summary>
-        private T GetAsset<T>(string assetName) where T : Object
-        {
-            m_AssetDic.TryGetValue(assetName, out Object asset);
-            if (asset == null)
-            {
-                asset = Load<T>(assetName);
-            }
-            return asset as T;
         }
 
         /// <summary>
@@ -341,7 +324,6 @@ namespace XFramework.Resource
         public override void Shutdown()
         {
             m_LoadHelper.ReleaseAll();
-            m_AssetDic.Clear();
         }
 
         public override int Priority => 1000;
