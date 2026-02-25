@@ -262,7 +262,10 @@ namespace XFramework.Resource
                 {
                     var assetObject = loadTask.assetObject;
                     assetObject.asset = loadTask.assetBundleRequest.asset;
-                    m_LoadedAssets.Add(key, assetObject);
+                    if (!m_LoadedAssets.TryAdd(key, assetObject))
+                    {
+                        throw new Exception($"[AssetBundleLoadHelper] 资源 {assetObject.assetPath} 已存在");
+                    }
                     loadTask.callback.Invoke(success, assetObject.asset);
                 }
                 else

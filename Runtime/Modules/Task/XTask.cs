@@ -21,7 +21,7 @@ namespace XFramework.Tasks
         float Progress { get; }
     }
     
-    public interface IProgressTask<T> : ITask<T>
+    public interface IProgressTask<out T> : ITask<T>
     {
         float Progress { get; }
     }

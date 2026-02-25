@@ -1,8 +1,7 @@
-using System;
+using System.Collections.Generic;
 using UnityEngine.UI;
 using UnityEngine;
 using UnityEngine.Events;
-using System.Collections.Generic;
 
 namespace XFramework.UI
 {
@@ -13,12 +12,17 @@ namespace XFramework.UI
         public LayoutGroup layoutGroup;
         
         private GameObject m_ItemTemplate;
-        private ItemChangeEvent onItemChange;
-        public int itemCount { get; private set; } = 0;
+        private ItemChangeEvent m_OnItemChange;
+        private ItemBindEvent m_OnItemBind;
+        public int itemCount => m_Items.Count;
+
+        private readonly List<UINode> m_Items = new (); 
 
         private void Awake()
         {
-            onItemChange = new ItemChangeEvent();
+            m_OnItemChange = new ItemChangeEvent();
+            m_OnItemBind = new ItemBindEvent();
+            
 
             if (m_ItemTemplate == null)
             {
@@ -75,15 +79,19 @@ namespace XFramework.UI
                         go.SetActive(true);
                         activated++;
                     }
-                    
-                    onItemChange.Invoke(i - 1, go.GetComponent<UINode>());
+
+                    var item = go.GetComponent<UINode>();
+                    m_OnItemChange.Invoke(i - 1, item);
+                    m_Items.Add(item);
                 }
                 // 不够则创建
                 for (int i = activated; i < differ; i++)
                 {
                     var go = CreateItem();
                     go.SetActive(true);
-                    onItemChange.Invoke(i, go.GetComponent<UINode>());
+                    var item = go.GetComponent<UINode>();
+                    m_OnItemChange.Invoke(i, item);
+                    m_Items.Add(item);
                 }
             }
             // 数量变少时，仅将多余的active对象设为false（从后往前，跳过模板）
@@ -98,16 +106,15 @@ namespace XFramework.UI
                         go.SetActive(false);
                         toDisable--;
                     }
+                    m_Items.RemoveAt(m_Items.Count - 1);
                 }
             }
-            
-            itemCount = targetCount;
         }
         
         public void SetOnItemChange(UnityAction<int, UINode> callback)
         {
-            onItemChange.RemoveAllListeners();
-            onItemChange.AddListener(callback);
+            m_OnItemChange.RemoveAllListeners();
+            m_OnItemChange.AddListener(callback);
         }
         
         /// <summary>
@@ -132,17 +139,24 @@ namespace XFramework.UI
         }
 
         public class ItemChangeEvent : UnityEvent<int, UINode> { }
-        public class ItemDataSetEvent : UnityEvent<int, BindableDataSet, GameObject> { }
+        
+        
+        public class ItemBindEvent : UnityEvent<int, BindableDataSet, UINode> { }
 
         public void OnBindArray(IBindableDataArray bindableDataArray)
         {
             SetItemCount(bindableDataArray.Count);
-            // throw new System.NotImplementedException();
         }
 
         public void OnBindItem(BindableDataSet item, int index)
         {
-            // throw new System.NotImplementedException();
+            m_OnItemBind.Invoke(index, item, m_Items[index]);
+        }
+
+        public void SetOnItemBind(UnityAction<int, BindableDataSet, UINode> callback)
+        {
+            m_OnItemBind.RemoveAllListeners();
+            m_OnItemBind.AddListener(callback);
         }
     }
 }

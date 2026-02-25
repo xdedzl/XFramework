@@ -177,16 +177,25 @@ namespace XFramework.UI
     {
         private ComponentFindHelper<XUIBase> m_ComponentFindHelper;
         
-        protected PanelBase parent { get; private set; }
+        public ComponentFindHelper<XUIBase> ComponentFindHelper
+        {
+            get
+            {
+                m_ComponentFindHelper ??= ComponentFindHelper<XUIBase>.CreateHelper(this.gameObject);
+                return m_ComponentFindHelper;
+            }
+        }
+
+        // protected PanelBase parent { get; private set; }
 
         /// <summary>
         /// Find UI组件的索引器
         /// </summary>
-        public XUIBase this[string key] => parent[key];
-
-        public void Awake()
+        public XUIBase this[string key] => ComponentFindHelper[key];
+        
+        public T Find<T>(string path) where T : XUIBase
         {
-            m_ComponentFindHelper = ComponentFindHelper<XUIBase>.CreateHelper(this.gameObject);
+            return this[path] as T;
         }
     }
 

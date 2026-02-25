@@ -31,7 +31,26 @@ namespace XFramework
             var uis = root.GetComponentsInChildren<T>(true);
             foreach (var ui in uis)
             {
-                var ignore = ui.GetComponentInParent<IComponentFindIgnore>();
+                // 修改此处：手动向上查找，查到 root 为止
+                IComponentFindIgnore ignore = null;
+                Transform curr = ui.transform;
+                while (curr != null)
+                {
+                    if (curr == root.transform)
+                    {
+                        break;
+                    }
+                    
+                    ignore = curr.GetComponent<IComponentFindIgnore>();
+                    
+                    if (ignore != null)
+                    {
+                        break;
+                    }
+                    curr = curr.parent;
+                }
+
+                // var ignore = ui.GetComponentInParent<IComponentFindIgnore>();
                 if (ignore is MonoBehaviour mb && mb.gameObject != root)
                 {
                     continue;

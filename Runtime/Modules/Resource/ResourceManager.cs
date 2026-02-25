@@ -2,6 +2,7 @@
 using System.IO;
 using UnityEngine;
 using XFramework.Tasks;
+using UObject = UnityEngine.Object;
 
 namespace XFramework.Resource
 {
@@ -14,17 +15,16 @@ namespace XFramework.Resource
         public const string BuildConfigAssetPath = "Assets/Configs/AssetBundleBuildConfig.asset";
         
         private readonly IResourceLoadHelper m_LoadHelper;
-        /// <summary>
-        /// 资源路径映射
-        /// </summary>
-        private readonly Dictionary<string, string> m_PathMap;
+        private readonly Dictionary<string, string> m_PathMap;  // 资源路径映射
         public bool HasPathMap { get; }
-
-        /// <summary>
-        /// 构造一个资源管理器，如果存在路径映射文件则使用文件名加载资源
-        /// </summary>
-        /// <param name="loadHelper">资源加载辅助类</param>
-        /// <param name="mapInfoPath">路径映射文件</param>
+        
+        // 资源实例化对象池相关
+        private readonly Dictionary<UObject, UObject> m_InstanceToAsset = new ();
+        private readonly Dictionary<string, Stack<UObject>> m_FreeInstances = new ();
+        private readonly Dictionary<UObject, float> m_InstanceToFreeTime = new ();
+        private readonly LinkedList<UObject> m_InstanceLruList = new();
+        private readonly Dictionary<UObject, LinkedListNode<UObject>> m_InstanceLruNodes = new();
+        
         public ResourceManager()
         {
 #if UNITY_EDITOR
@@ -164,48 +164,20 @@ namespace XFramework.Resource
         #endregion
 
         #region 资源实例化
-
-        /// <summary>
-        /// 实例化资源
-        /// </summary>
-        /// <typeparam name="T">资源类型</typeparam>
-        /// <param name="assetName">资源名称</param>
-        /// <returns>资源的拷贝</returns>
+        
         public T Instantiate<T>(string assetName) where T : Object
         {
-
-            T asset = Load<T>(assetName);
-            T obj = Object.Instantiate<T>(asset);
-            return obj;
+            return Instantiate<T>(assetName, null);
         }
-
-        /// <summary>
-        /// 实例化资源
-        /// </summary>
-        /// <typeparam name="T">资源类型</typeparam>
-        /// <param name="assetName">资源名称</param>
-        /// <param name="parent">父物体</param>
-        /// <returns>资源的拷贝</returns>
+        
         public T Instantiate<T>(string assetName, Transform parent) where T : Object
         {
-            T asset = Load<T>(assetName);
-            T obj = Object.Instantiate<T>(asset, parent);
-            return obj;
+            return Instantiate<T>(assetName, default, default, parent);
         }
-
-        /// <summary>
-        /// 实例化资源
-        /// </summary>
-        /// <typeparam name="T">资源类型</typeparam>
-        /// <param name="assetName">资源名称</param>
-        /// <param name="position">位置</param>
-        /// <param name="quaternion">方向</param>
-        /// <returns>资源的拷贝</returns>
+        
         public T Instantiate<T>(string assetName, Vector3 position, Quaternion quaternion) where T : Object
         {
-            T asset = Load<T>(assetName);
-            T obj = Object.Instantiate<T>(asset, position, quaternion);
-            return obj;
+            return Instantiate<T>(assetName, position, quaternion, null);
         }
 
         /// <summary>
@@ -216,81 +188,27 @@ namespace XFramework.Resource
         /// <param name="position">位置</param>
         /// <param name="quaternion">方向</param>
         /// <param name="parent">父物体</param>
-        /// <returns>资源的拷贝</returns>
+        /// <returns>资源的实例</returns>
         public T Instantiate<T>(string assetName, Vector3 position, Quaternion quaternion, Transform parent) where T : Object
         {
             T asset = Load<T>(assetName);
             T obj = Object.Instantiate<T>(asset, position, quaternion, parent);
             return obj;
         }
-
-        /// <summary>
-        /// 异步实例化资源
-        /// </summary>
-        /// <typeparam name="T">资源类型</typeparam>
-        /// <param name="assetName">资源名称</param>
-        /// <param name="callBack">实例化完成回调</param>
+        
         public void InstantiateAsync<T>(string assetName, System.Action<T> callBack = null) where T : Object
         {
-            LoadAsync<T>(assetName, (success, asset) =>
-            {
-                if (success)
-                {
-                    T obj = Object.Instantiate(asset);
-                    callBack?.Invoke(obj);
-                }
-                else
-                {
-                    Debug.LogError("[Resource] There is no resource which path is " + assetName);
-                }
-            });
+            InstantiateAsync<T>(assetName, null, callBack);
         }
-
-        /// <summary>
-        /// 异步实例化资源
-        /// </summary>
-        /// <typeparam name="T">资源类型</typeparam>
-        /// <param name="assetName">资源名称</param>
-        /// <param name="parent">父物体</param>
-        /// <param name="callBack">实例化完成回调</param>
+        
         public void InstantiateAsync<T>(string assetName, Transform parent, System.Action<T> callBack = null) where T : Object
         {
-            LoadAsync<T>(assetName, (success, asset) =>
-            {
-                if (success)
-                {
-                    T obj = Object.Instantiate(asset, parent);
-                    callBack?.Invoke(obj);
-                }
-                else
-                {
-                    Debug.LogError("[Resource] There is no resource which path is " + assetName);
-                }
-            });
+            InstantiateAsync<T>(assetName, default, default, parent, callBack);
         }
-
-        /// <summary>
-        /// 异步实例化资源
-        /// </summary>
-        /// <typeparam name="T">资源类型</typeparam>
-        /// <param name="assetName">资源名称</param>
-        /// <param name="position">位置</param>
-        /// <param name="quaternion">方向</param>
-        /// <param name="callBack">实例化完成回调</param>
+        
         public void InstantiateAsync<T>(string assetName, Vector3 position, Quaternion quaternion, System.Action<T> callBack = null) where T : Object
         {
-            LoadAsync<T>(assetName, (success, asset) =>
-            {
-                if (success)
-                {
-                    T obj = Object.Instantiate(asset, position, quaternion);
-                    callBack?.Invoke(obj);
-                }
-                else
-                {
-                    Debug.LogError("[Resource] There is no resource which path is " + assetName);
-                }
-            });
+            InstantiateAsync<T>(assetName, position, quaternion, null, callBack);
         }
 
         /// <summary>
@@ -308,7 +226,24 @@ namespace XFramework.Resource
             {
                 if (success)
                 {
-                    T obj = Object.Instantiate(asset, position, quaternion, parent);
+                    T obj = UObject.Instantiate(asset, position, quaternion, parent);
+                    callBack?.Invoke(obj);
+                }
+                else
+                {
+                    Debug.LogError("[Resource] There is no resource which path is " + assetName);
+                }
+            });
+        }
+        
+        public void InstantiateAsyncByPool<T>(string assetName, Vector3 position, Quaternion quaternion, Transform parent, System.Action<T> callBack = null) where T : UObject
+        {
+            LoadAsync<T>(assetName, (success, asset) =>
+            {
+                if (success)
+                {
+                    T obj = UObject.Instantiate(asset, position, quaternion, parent);
+                    m_InstanceToAsset[obj] = asset;
                     callBack?.Invoke(obj);
                 }
                 else
@@ -318,7 +253,22 @@ namespace XFramework.Resource
             });
         }
         #endregion
+        
+        # region 资源释放
+        public void Release(UObject unityObject)
+        {
+            if (m_InstanceToAsset.TryGetValue(unityObject, out var asset))
+            {
+                // var node = m_InstanceLruList.AddLast(unityObject);
+            }
+            else
+            {
+                m_LoadHelper.Release(unityObject);
+            }
+        }
 
+        # endregion
+        
         #region 接口实现
 
         public override void Shutdown()
