@@ -51,25 +51,10 @@ namespace XFramework.Resource
                 return LoadAllWithADB<T>(path, SearchOption.AllDirectories);
             }
         }
-        
-        /// <summary>
-        /// 异步加载资源
-        /// </summary>
-        /// <param name="assetName"></param>
-        /// <typeparam name="T"></typeparam>
-        /// <returns></returns>
-        public IProgressTask<T> LoadAsync<T>(string assetName) where T : UObject
-        {
-            T obj = AssetDatabase.LoadAssetAtPath<T>(assetName);
-            var progress = new DefaultProgress<T>(obj);
-            var xTask = XTask.WaitProgress(progress);
-            xTask.Start();
-            return xTask;
-        }
 
-        public void LoadAsync<T>(string assetName, LoadAssetDelegate<T> callBack) where T : UObject
+        public void LoadAsync<T>(string assetPath, LoadAssetDelegate<T> callBack) where T : UObject
         {
-            T obj = AssetDatabase.LoadAssetAtPath<T>(assetName);
+            T obj = AssetDatabase.LoadAssetAtPath<T>(assetPath);
             var progress = new DefaultProgress<T>(obj);
             var xTask = XTask.WaitProgress(progress);
             xTask.Start();
@@ -77,6 +62,29 @@ namespace XFramework.Resource
             {
                 callBack.Invoke(true, r);
             });
+        }
+        
+        /// <summary>
+        /// 异步加载资源
+        /// </summary>
+        /// <param name="assetPath"></param>
+        /// <typeparam name="T"></typeparam>
+        /// <returns></returns>
+        public XAwaitableTask<T> LoadAsync<T>(string assetPath) where T : UObject
+        {
+            var task = new XAwaitableTask<T>();
+            LoadAsync<T>(assetPath, (success, asset) =>
+            {
+                if (success)
+                {
+                    task.SetResult(asset);
+                }
+                else
+                {
+                    task.SetResult(null);
+                }
+            });
+            return task;
         }
 
         /// <summary>

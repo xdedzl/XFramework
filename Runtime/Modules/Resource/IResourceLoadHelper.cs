@@ -35,6 +35,7 @@ namespace XFramework.Resource
         // IProgressTask<T> LoadAsync<T>(string assetName) where T : UObject;
         
         void LoadAsync<T>(string assetName, LoadAssetDelegate<T> callBack) where T : UObject;
+        XAwaitableTask<T> LoadAsync<T>(string assetName) where T : UObject;
         /// <summary>
         /// 释放资源
         /// </summary>

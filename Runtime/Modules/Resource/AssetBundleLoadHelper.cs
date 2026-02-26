@@ -230,6 +230,28 @@ namespace XFramework.Resource
             });
         }
         
+        /// <summary>
+        /// 异步加载资源（支持await语法）
+        /// </summary>
+        /// <typeparam name="T">资源类型</typeparam>
+        /// <param name="assetPath">资源路径</param>
+        public XAwaitableTask<T> LoadAsync<T>(string assetPath) where T : UObject
+        {
+            var task = new XAwaitableTask<T>(null);
+            LoadAsync<T>(assetPath, (success, asset) =>
+            {
+                if (success)
+                {
+                    task.SetResult(asset);
+                }
+                else
+                {
+                    task.SetResult(null);
+                }
+            });
+            return task;
+        }
+        
         public void Release(UObject obj)
         {
             // todo 资源卸载逻辑， 待实现

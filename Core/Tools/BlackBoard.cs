@@ -31,7 +31,7 @@ namespace XFramework.Tools
             }
         }
 
-        public bool TryGetData<T>(string key, out T value)
+        public bool TryGetValue<T>(string key, out T value)
         {
             if (_data.TryGetValue(key, out var objValue) && objValue is T tValue)
             {

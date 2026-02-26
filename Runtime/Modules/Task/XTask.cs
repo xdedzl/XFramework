@@ -9,6 +9,10 @@ namespace XFramework.Tasks
         ITask Next { get; set; }
         
         void Update();
+        
+        void OnComplete();
+        void AddCompleteListener(Action onComplete);
+        void RemoveCompleteListener(Action onComplete);
     }
     
     public interface ITask<out T> : ITask
@@ -28,13 +32,34 @@ namespace XFramework.Tasks
     
     public abstract partial class XTask : ITask
     {
+        private Action _onComplete;
         public virtual bool IsDone { get; protected set; }
         public ITask Next { get; set; }
         public virtual void Update() { }
         
+        public void OnComplete()
+        {
+            _onComplete?.Invoke();
+        }
+        
+        public void AddCompleteListener(Action onComplete)
+        {
+            _onComplete += onComplete;
+        }
+
+        public void RemoveCompleteListener(Action onComplete)
+        {
+            _onComplete -= onComplete;
+        }
+        
         public static ITask Delay(float time)
         {
             return new TimeTask(time);
+        }
+
+        public static ITask<T> Delay<T>(float time, T result)
+        {
+            return new TimeTask<T>(time, result);
         }
         
         public static ITask WhenAll(params ITask[] tasks)

@@ -221,6 +221,18 @@ namespace XFramework.Tasks
         }
     }
     
+    public class TimeTask<T>: TimeTask, ITask<T>
+    {
+        private readonly T m_Result;
+
+        public TimeTask(float time, T result):base(time)
+        {
+            m_Result = result;
+        }
+
+        public T Result => m_Result;
+    }
+    
     public class ActionTask : TaskBase
     {
         private readonly Action action;
@@ -232,11 +244,8 @@ namespace XFramework.Tasks
 
         public override void Update()
         {
-            if (IsDone)
-            {
-                action();
-                IsDone = true;
-            }
+            action();
+            IsDone = true;
         }
     }
     

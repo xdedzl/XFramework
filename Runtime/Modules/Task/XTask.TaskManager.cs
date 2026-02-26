@@ -54,6 +54,7 @@ namespace XFramework.Tasks
 
                 foreach (var item in m_ToRemove.AsEnumerable().Reverse())
                 {
+                    m_Tasks[item].OnComplete();
                     m_Tasks.RemoveAt(item);
                 }
             }

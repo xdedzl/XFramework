@@ -154,6 +154,12 @@ namespace XFramework.Tasks
             XTask.Start(task);
             return task;
         }
+        
+        public static ITask<T> Start<T>(this ITask<T> task)
+        {
+            XTask.Start(task);
+            return task;
+        }
 
         /// <summary>
         /// 任务终止
