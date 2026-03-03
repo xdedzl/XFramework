@@ -27,6 +27,8 @@ namespace XFramework.Tasks
             }
         }
 
+        public XAwaitableTask(): this(null) { }
+        
         public XAwaitableTask(ITask sourceTask)
         {
             m_SourceTask = sourceTask;

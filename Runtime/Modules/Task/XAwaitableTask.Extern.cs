@@ -1,4 +1,6 @@
 using System;
+using UnityEngine;
+using UObject = UnityEngine.Object;
 
 namespace XFramework.Tasks
 {
@@ -53,6 +55,46 @@ namespace XFramework.Tasks
             return new XAwaitableTask(task);
         }
         
+        public static XAwaitableTask<UObject> ToXAwaitableTask(this ResourceRequest request)
+        {
+            var task = new XAwaitableTask<UObject>();
+            request.completed += _ =>
+            {
+                task.SetResult(request.asset);
+            };
+            return task;
+        }
+        
+        public static XAwaitableTask<T> ToXAwaitableTask<T>(this ResourceRequest request) where T : UObject
+        {
+            var task = new XAwaitableTask<T>();
+            request.completed += _ =>
+            {
+                task.SetResult(request.asset as T);
+            };
+            return task;
+        }
+        
+        public static XAwaitableTask ToXAwaitableTask(this AsyncOperation asyncOperation)
+        {
+            var task = new XAwaitableTask();
+            asyncOperation.completed += _ =>
+            {
+                task.SetResult();
+            };
+            return task;
+        }
+        
+        public static XAwaitableTask<AssetBundle> ToXAwaitableTask(this AssetBundleCreateRequest request)
+        {
+            var task = new XAwaitableTask<AssetBundle>();
+            request.completed += _ =>
+            {
+                task.SetResult(request.assetBundle);
+            };
+            return task;
+        }
+         
         public static async XAwaitableTask ContinueWith(this XAwaitableTask awaitableTask, Action continuation)
         {
             await awaitableTask;

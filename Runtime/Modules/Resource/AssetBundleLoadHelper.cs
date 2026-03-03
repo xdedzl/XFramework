@@ -61,10 +61,11 @@ namespace XFramework.Resource
         
         private readonly Dictionary<string, AssetBundleObject> m_LoadedAB = new();          // 已加载的AB包
         private readonly Dictionary<string, AssetBundleLoadTask> m_LoadingAB = new ();      // 正在异步加载中的ab包
-        private readonly Dictionary<string, AssetBundleObject> m_UnLoadAB = new ();         // 待卸载的AB包
+        // private readonly Dictionary<string, AssetBundleObject> m_UnLoadAB = new ();         // 待卸载的AB包
         
         private readonly Dictionary<string, AssetObject> m_LoadedAssets = new ();           // 已加载的资源
         private readonly Dictionary<string, AssetLoadTask> m_LoadingAssets = new ();        // 正在异步加载的资源
+        private readonly Dictionary<string, AssetObject> m_InstanceId2Asset = new ();
         
         /// <summary>
         /// 资源根目录
@@ -143,7 +144,7 @@ namespace XFramework.Resource
             {
                 return null;
             }
-            var asset = assetBundle?.LoadAsset(assetPath);
+            var asset = assetBundle.LoadAsset(assetPath);
             if (asset == null)
             {
                 Debug.LogError($"[AssetBundleLoadHelper] 资源 {assetPath} 在AB包 {abPath} 中未找到");
@@ -195,7 +196,7 @@ namespace XFramework.Resource
                     //加载自身  todo 这里可以加个数量限制，如果当前正在加载的数量超过限制，先放到等待队列里
                     var assetRequest = assetBundle.LoadAssetAsync(assetPath);
                     assetLoadTask.assetBundleRequest = assetRequest;
-                    assetRequest.completed += (asyncOperation) =>
+                    assetRequest.completed += _ =>
                     {
                         UpdateLoadingAsset();
                     };
