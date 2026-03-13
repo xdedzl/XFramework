@@ -229,7 +229,7 @@ namespace XFramework.Resource
                     callback.Invoke(false, null);
                 }
             });
-        }
+        }   
         
         /// <summary>
         /// 异步加载资源（支持await语法）
@@ -256,6 +256,7 @@ namespace XFramework.Resource
         public void Release(UObject obj)
         {
             // todo 资源卸载逻辑， 待实现
+            GameObject.Destroy(obj);
         }
         
         private void UpdateLoadingAsset()

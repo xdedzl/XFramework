@@ -121,7 +121,11 @@ namespace XFramework.Resource
             return objs.ToArray();
         }
 
-        public void Release(UObject obj) { }
+        public void Release(UObject obj)
+        {
+            GameObject.Destroy(obj);    
+        }
+        
         public void ReleaseAll() { }
         public void OnUpdate() { }
     }

@@ -35,6 +35,7 @@ namespace XFramework.Resource
             m_LoadHelper = new AssetBundleLoadHelper();
 #endif
             m_InstantiateHelper = new ResourceInstantiateHelper(m_LoadHelper);
+            
             var mapInfoPath = "";
             if (File.Exists(mapInfoPath))
             {
