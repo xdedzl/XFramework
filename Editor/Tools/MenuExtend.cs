@@ -31,6 +31,73 @@ namespace XFramework.Editor
             }
         }
 
+        [MenuItem("GameObject/Group To Bottom Center Parent", priority = 0)]
+        public static void GroupToBottomCenterParent()
+        {
+            if (Selection.transforms.Length == 0)
+            {
+                Debug.LogWarning("请先选择至少一个GameObject");
+                return;
+            }
+
+            // 计算所有选中物体的包围盒（合并所有Renderer的bounds）
+            Bounds totalBounds = new Bounds();
+            bool boundsInitialized = false;
+
+            foreach (var trans in Selection.transforms)
+            {
+                Renderer[] renderers = trans.GetComponentsInChildren<Renderer>(true);
+                foreach (var renderer in renderers)
+                {
+                    if (!boundsInitialized)
+                    {
+                        totalBounds = renderer.bounds;
+                        boundsInitialized = true;
+                    }
+                    else
+                    {
+                        totalBounds.Encapsulate(renderer.bounds);
+                    }
+                }
+            }
+
+            Vector3 parentPos;
+            if (boundsInitialized)
+            {
+                // 底面中心：XZ取包围盒中心，Y取包围盒最低点
+                parentPos = new Vector3(totalBounds.center.x, totalBounds.min.y, totalBounds.center.z);
+            }
+            else
+            {
+                // 没有Renderer时，退化为所有物体position的平均值，Y取最低
+                Vector3 avg = Vector3.zero;
+                float minY = float.MaxValue;
+                foreach (var trans in Selection.transforms)
+                {
+                    avg += trans.position;
+                    if (trans.position.y < minY) minY = trans.position.y;
+                }
+                avg /= Selection.transforms.Length;
+                parentPos = new Vector3(avg.x, minY, avg.z);
+            }
+
+            // 记录Undo
+            Undo.SetCurrentGroupName("Group To Bottom Center Parent");
+            int undoGroup = Undo.GetCurrentGroup();
+
+            GameObject parentGo = new GameObject("new parent");
+            Undo.RegisterCreatedObjectUndo(parentGo, "Create Parent");
+            parentGo.transform.position = parentPos;
+
+            foreach (var trans in Selection.transforms)
+            {
+                Undo.SetTransformParent(trans, parentGo.transform, "Reparent " + trans.name);
+            }
+
+            Undo.CollapseUndoOperations(undoGroup);
+            Selection.activeGameObject = parentGo;
+        }
+
         [MenuItem("XFramework/GenerateScriptsGUIDFile")]
         public static void GenerateScriptsGUIDFile()
         {
