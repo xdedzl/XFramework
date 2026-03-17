@@ -51,13 +51,9 @@ public class GameBase : MonoBehaviour
         GameEntry.AddModule<UIManager>();
         GameEntry.AddModule<FsmManager>();
         GameEntry.AddModule<SoundManager>();
-        
-        JsonConvert.DefaultSettings = () => new JsonSerializerSettings
-        {
-            Converters = { new Vector2IntConverter(), new Vector2Converter() },
-            NullValueHandling = NullValueHandling.Ignore,
-            ContractResolver = new WritablePropertiesOnlyResolver()
-        };
+
+
+        XJson.SetUnityDefaultSetting();
     }
 
     private void EnterFirstProcedure()

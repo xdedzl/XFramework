@@ -1,7 +1,9 @@
 using System.IO;
 using System.Text;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.Networking;
+using XFramework.Json;
 
 namespace XFramework
 {
@@ -163,5 +165,13 @@ namespace XFramework
                 }
             }
         }
+
+#if UNITY_EDITOR
+        [InitializeOnLoadMethod]
+        private static void OnProjectInitialize()
+        {
+            XJson.SetUnityDefaultSetting();
+        }
+#endif
     }
 }
