@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 // ！！！ 一条任务链，要么全用 AwaitableTask, 要么全用XTask, 不要混用
 namespace XFramework.Tasks
 {
-    // 无返回值的UniTask（核心类）
+    // 无返回值的XTask（核心类）
     [AsyncMethodBuilder(typeof(XAwaitableTaskMethodBuilder))]
     public partial class XAwaitableTask
     {
@@ -89,7 +89,7 @@ namespace XFramework.Tasks
         }
     }
 
-    // 有返回值的UniTask<T>
+    // 有返回值的XTask<T>
     [AsyncMethodBuilder(typeof(XAwaitableTaskMethodBuilder<>))]
     public class XAwaitableTask<T>
     {

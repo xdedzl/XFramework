@@ -24,39 +24,6 @@ namespace XFramework.Json
         }
     }
 
-    public class ColorArrayConverter : JsonConverter
-    {
-        public override bool CanConvert(Type objectType)
-        {
-            return true;
-        }
-
-        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
-        {
-            var value = serializer.Deserialize<string[]>(reader);
-            List<Color> values = new List<Color>();
-
-            foreach (var item in value)
-            {
-                string[] colors = item.Split(',');
-                var c = new Color(float.Parse(colors[0]), float.Parse(colors[1]), float.Parse(colors[2]), float.Parse(colors[3]));
-                values.Add(c);
-            }
-            return values.ToArray();
-        }
-
-        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
-        {
-            Color[] values = (Color[])value;
-            var valueString = new List<string>();
-            foreach (var item in values)
-            {
-                valueString.Add($"{item.r},{item.g},{item.b},{item.a}");
-            }
-            serializer.Serialize(writer, valueString);
-        }
-    }
-
     public class Vector2Converter : JsonConverter<Vector2>
     {
         public override Vector2 ReadJson(JsonReader reader, Type objectType, Vector2 existingValue, bool hasExistingValue, JsonSerializer serializer)
@@ -110,81 +77,28 @@ namespace XFramework.Json
             serializer.Serialize(writer, v2Str);
         }
     }
-
-    public class ListVector3Converter : JsonConverter
+    
+    public class Vector3IntConverter : JsonConverter<Vector3Int>
     {
-        public override bool CanConvert(Type objectType)
+        public override Vector3Int ReadJson(JsonReader reader, Type objectType, Vector3Int existingValue, bool hasExistingValue, JsonSerializer serializer)
         {
-            return true;
+            string value = serializer.Deserialize<string>(reader);
+
+            string[] v3 = value.Split(',');
+
+            return new Vector3Int(int.Parse(v3[0]), int.Parse(v3[1]), int.Parse(v3[2]));
         }
 
-        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        public override void WriteJson(JsonWriter writer, Vector3Int value, JsonSerializer serializer)
         {
-            var value = serializer.Deserialize<List<string>>(reader);
-            List<Vector3> values = new List<Vector3>();
-
-            foreach (var item in value)
-            {
-                string[] v3s = item.Split(',');
-                var v3 = new Vector3(float.Parse(v3s[0]), float.Parse(v3s[1]), float.Parse(v3s[2]));
-                values.Add(v3);
-            }
-            return values;
-        }
-
-        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
-        {
-            List<Vector3> values = (List<Vector3>)value;
-            var valueString = new List<string>();
-            foreach (var item in values)
-            {
-                valueString.Add($"{item.x},{item.y},{item.z}");
-            }
-            serializer.Serialize(writer, valueString);
+            string v3Str = $"{value.x},{value.y},{value.z}";
+            serializer.Serialize(writer, v3Str);
         }
     }
 
-    public class Vector3ArrayConverter : JsonConverter
+    public class QuaternionConverter : JsonConverter<Quaternion>
     {
-        public override bool CanConvert(Type objectType)
-        {
-            return true;
-        }
-
-        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
-        {
-            var value = serializer.Deserialize<string[]>(reader);
-            List<Vector3> values = new List<Vector3>();
-
-            foreach (var item in value)
-            {
-                string[] v3s = item.Split(',');
-                var v3 = new Vector3(float.Parse(v3s[0]), float.Parse(v3s[1]), float.Parse(v3s[2]));
-                values.Add(v3);
-            }
-            return values.ToArray();
-        }
-
-        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
-        {
-            Vector3[] values = (Vector3[])value;
-            var valueString = new List<string>();
-            foreach (var item in values)
-            {
-                valueString.Add($"{item.x},{item.y},{item.z}");
-            }
-            serializer.Serialize(writer, valueString);
-        }
-    }
-
-    public class QuaternionConverter : JsonConverter
-    {
-        public override bool CanConvert(Type objectType)
-        {
-            return true;
-        }
-
-        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        public override Quaternion ReadJson(JsonReader reader, Type objectType, Quaternion existingValue, bool hasExistingValue,JsonSerializer serializer)
         {
             string value = serializer.Deserialize<string>(reader);
 
@@ -193,7 +107,7 @@ namespace XFramework.Json
             return new Quaternion(float.Parse(v4[0]), float.Parse(v4[1]), float.Parse(v4[2]), float.Parse(v4[3]));
         }
 
-        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+        public override void WriteJson(JsonWriter writer, Quaternion value, JsonSerializer serializer)
         {
             Quaternion v = (Quaternion)value;
             string q4Str = $"{v.x},{v.y},{v.z},{v.w}";
@@ -201,47 +115,4 @@ namespace XFramework.Json
             serializer.Serialize(writer, q4Str);
         }
     }
-
-    public class ListQuaternionConverter : JsonConverter
-    {
-        public override bool CanConvert(Type objectType)
-        {
-            return true;
-        }
-
-        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
-        {
-            List<string> value = serializer.Deserialize<List<string>>(reader);
-            List<Quaternion> quaternions = new List<Quaternion>();
-            foreach (var item in value)
-            {
-                string[] Quater = item.Split(',');
-                var tmp = new Quaternion(float.Parse(Quater[0]), float.Parse(Quater[1]), float.Parse(Quater[2]), float.Parse(Quater[3]));
-                quaternions.Add(tmp);
-            }
-
-            return quaternions;
-        }
-
-        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
-        {
-            Quaternion v = (Quaternion)value;
-            string v4Str = $"{v.x},{v.y},{v.z},{v.w}";
-            serializer.Serialize(writer, v4Str);
-        }
-    }
-
-    public class QueueConverter<T> : JsonConverter<Queue<T>>
-    {
-        public override Queue<T> ReadJson(JsonReader reader, Type objectType, Queue<T> existingValue, bool hasExistingValue, JsonSerializer serializer)
-        {
-            var list = serializer.Deserialize<List<T>>(reader);
-            return new Queue<T>(list ?? new List<T>());
-        }
-        public override void WriteJson(JsonWriter writer, Queue<T> value, JsonSerializer serializer)
-        {
-            serializer.Serialize(writer, value.ToList());
-        }
-    }
-
 }

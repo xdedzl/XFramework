@@ -1,6 +1,7 @@
 using System;
 using Newtonsoft.Json;
 using UnityEngine;
+using XFramework.Json;
 
 namespace XFramework.Resource
 {
@@ -54,10 +55,14 @@ namespace XFramework.Resource
     {
         public static T ToXTextAsset<T>(this TextAsset textAsset) where T : XTextAsset
         {
-            var asset = JsonConvert.DeserializeObject<T>(textAsset.text);
+            XJson.SetUnityDefaultSetting();
+             var asset = JsonConvert.DeserializeObject<T>(textAsset.text);
 #if UNITY_EDITOR
-            string path = UnityEditor.AssetDatabase.GetAssetPath(textAsset);
-            asset.SetAssetPath(path);
+            if (asset != null)
+            {
+                string path = UnityEditor.AssetDatabase.GetAssetPath(textAsset);
+                asset.SetAssetPath(path);
+            }
 #endif
             return asset;
         }
