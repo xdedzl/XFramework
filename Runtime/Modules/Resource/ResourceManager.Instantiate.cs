@@ -259,7 +259,7 @@ namespace XFramework.Resource
                 }
             }
             
-                    /// <summary>
+            /// <summary>
             /// 清理过期的对象池实例
             /// </summary>
             private void UpdateExpiredPooledInstances()

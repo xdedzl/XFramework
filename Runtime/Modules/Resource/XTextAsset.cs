@@ -7,7 +7,7 @@ namespace XFramework.Resource
 {
     public struct XTextMetaInfo
     {
-        public string typeFullName;
+        // public string typeFullName;
         public string assetPath;
     }
     
@@ -20,7 +20,7 @@ namespace XFramework.Resource
         {
             m_MetaInfo = new XTextMetaInfo
             {
-                typeFullName = GetType().AssemblyQualifiedName,
+                // typeFullName = GetType().AssemblyQualifiedName,
                 assetPath = m_MetaInfo.assetPath
             };
             return JsonConvert.SerializeObject(this, Formatting.Indented);
@@ -31,7 +31,7 @@ namespace XFramework.Resource
         {
             m_MetaInfo = new XTextMetaInfo
             {
-                typeFullName = m_MetaInfo.typeFullName,
+                // typeFullName = m_MetaInfo.typeFullName,
                 assetPath = path
             };
         }
@@ -55,8 +55,21 @@ namespace XFramework.Resource
     {
         public static T ToXTextAsset<T>(this TextAsset textAsset) where T : XTextAsset
         {
-            XJson.SetUnityDefaultSetting();
-             var asset = JsonConvert.DeserializeObject<T>(textAsset.text);
+            var asset = JsonConvert.DeserializeObject<T>(textAsset.text);
+#if UNITY_EDITOR
+            if (asset != null)
+            {
+                string path = UnityEditor.AssetDatabase.GetAssetPath(textAsset);
+                asset.SetAssetPath(path);
+            }
+#endif
+            return asset;
+        }
+
+        public static T ToXTextAsset<T>(this TextAsset textAsset, Type type) where T : XTextAsset
+        {
+            var _asset = JsonConvert.DeserializeObject(textAsset.text, type);
+            var asset = _asset as T;
 #if UNITY_EDITOR
             if (asset != null)
             {

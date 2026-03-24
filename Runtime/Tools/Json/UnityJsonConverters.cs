@@ -32,7 +32,7 @@ namespace XFramework.Json
 
             string[] v2 = value.Split(',');
 
-            return new Vector2(int.Parse(v2[0]), int.Parse(v2[1]));
+            return new Vector2(float.Parse(v2[0]), float.Parse(v2[1]));
         }
 
         public override void WriteJson(JsonWriter writer, Vector2 value, JsonSerializer serializer)
