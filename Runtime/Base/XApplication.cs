@@ -171,6 +171,7 @@ namespace XFramework
         private static void OnProjectInitialize()
         {
             XJson.SetUnityDefaultSetting();
+            GameEntry.InitializeModules(ModuleLifecycle.EditorPersistent);
         }
 #endif
     }

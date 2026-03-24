@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace XFramework.Fsm
@@ -6,6 +6,7 @@ namespace XFramework.Fsm
     /// <summary>
     /// 状态机管理类
     /// </summary>
+    [ModuleLifecycle(ModuleLifecycle.Persistent)]
     public class FsmManager : MonoGameModuleBase<FsmManager>
     {
         /// <summary>

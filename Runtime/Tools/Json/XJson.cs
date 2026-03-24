@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace XFramework.Json
 {
@@ -14,6 +15,7 @@ namespace XFramework.Json
                     new Vector3Converter(), new Vector3IntConverter(),
                     new QuaternionConverter(),
                     new ColorConverter(),
+                    new StringEnumConverter()
                 },
                 NullValueHandling = NullValueHandling.Ignore,
                 ContractResolver = new WritablePropertiesOnlyResolver()

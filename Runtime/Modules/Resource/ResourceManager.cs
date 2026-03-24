@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
@@ -10,6 +10,7 @@ namespace XFramework.Resource
     /// <summary>
     /// 资源管理器
     /// </summary>
+    [ModuleLifecycle(ModuleLifecycle.EditorPersistent)]
     public partial class ResourceManager : PersistentMonoGameModuleBase<ResourceManager>
     {
         public const string BuildConfigAssetPath = "Assets/Configs/AssetBundleBuildConfig.asset";

@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -73,6 +73,7 @@ namespace XFramework
     }
 
     [DependenceModule(typeof(EntityManager))]
+    [ModuleLifecycle(ModuleLifecycle.Persistent)]
     public class SoundManager : PersistentGameModuleBase<SoundManager>
     {
         /// <summary>

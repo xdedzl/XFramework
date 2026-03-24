@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using UnityEngine;
 
 namespace XFramework
 {
@@ -14,6 +15,27 @@ namespace XFramework
         private static readonly Dictionary<Type, IGameModule> m_GameModules = new Dictionary<Type, IGameModule>();
         private static readonly LinkedList<IMonoGameModule> m_MonoGameModules = new LinkedList<IMonoGameModule>();
         private static LinkedListNode<IMonoGameModule> m_CurrentModule;
+
+        /// <summary>
+        /// 初始化指定生命周期的模块
+        /// </summary>
+        public static void InitializeModules(params ModuleLifecycle[] lifecycles)
+        {
+            Debug.Log( $"[XFramework] Initializing modules with lifecycles: {string.Join(", ", lifecycles)}");
+            var modules = Utility.Reflection.GetAssignableTypes(typeof(IGameModule), "Assembly-CSharp", "XFrameworkRuntime");
+            foreach (var type in modules)
+            {
+                if (type.IsAbstract || !type.IsClass) continue;
+
+                var attr = type.GetCustomAttribute<ModuleLifecycleAttribute>();
+                if (attr == null || !lifecycles.Contains(attr.Lifecycle))
+                {
+                    continue;
+                }
+                
+                AddModule(type);
+            }
+        }
 
         // 模块依赖关系 key：模块, Value：依赖的模块
         private static readonly Dictionary<string, List<Type>> m_DependenceDic = new Dictionary<string, List<Type>>();

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -8,6 +8,7 @@ namespace XFramework.Entity
     /// <summary>
     /// 实体管理器
     /// </summary>
+    [ModuleLifecycle(ModuleLifecycle.Persistent)]
     public partial class EntityManager : PersistentMonoGameModuleBase<EntityManager>
     {
         /// <summary>

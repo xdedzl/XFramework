@@ -34,14 +34,18 @@ namespace XFramework.Data
         
     }
 
+    public interface IDataHasAlias : IData
+    {
+        public string Alias { get; }
+    }
+
     public interface IDataHasKey<out TKey> : IData
     {
         public TKey PrimaryKey { get; }
     }
 
-    public interface IDataHasAlias<out TKey> : IDataHasKey<TKey>
+    public interface IDataHasAlias<out TKey> : IDataHasKey<TKey>, IDataHasAlias
     {
-        public string Alias { get; }
     }
     
     public partial class XDataTable
@@ -109,6 +113,16 @@ namespace XFramework.Data
             return (IReadOnlyList<T>)soItems;
         }
 
+        public static IReadOnlyDictionary<int, TValue> LoadDictData<TValue>() where TValue : IDataHasKey<int>
+        {
+            return LoadDictData<int, TValue>();
+        }
+
+        public static IReadOnlyDictionary<string, TValue> LoadDictDataStr<TValue>() where TValue : IDataHasKey<string>
+        {
+            return LoadDictData<string, TValue>();
+        }
+
         public static IReadOnlyDictionary<TKey, TValue> LoadDictData<TKey, TValue>() where TValue : IDataHasKey<TKey>
         {
             var dataType = typeof(TValue);
@@ -120,7 +134,7 @@ namespace XFramework.Data
                 {
                     if (!dict.TryAdd(item.PrimaryKey, item))
                     {
-                        throw new Exception($"Data type {typeof(TKey).FullName} has repeated primary key {item.PrimaryKey}");
+                        throw new Exception($"Data type {dataType.FullName} has repeated primary key {item.PrimaryKey}");
                     }
                 }
                 S_DataDictMap[dataType] = dict;
@@ -129,7 +143,7 @@ namespace XFramework.Data
             return (IReadOnlyDictionary<TKey, TValue>)S_DataDictMap[dataType];
         }
 
-        public static IReadOnlyDictionary<string, TValue> LoadAliasDictData<TKey, TValue>() where TValue : IDataHasAlias<TKey>
+        public static IReadOnlyDictionary<string, TValue> LoadAliasDictData<TValue>() where TValue : IDataHasAlias
         {
             var dataType = typeof(TValue);
             if (S_DataAliasDictMap.TryGetValue(dataType, out var value))
@@ -158,6 +172,7 @@ namespace XFramework.Data
         [UnityEditor.MenuItem("XFramework/Data/Create Data Assets")]
         public static void CreateMissingDataAssets()
         {
+            XFramework.Json.XJson.SetUnityDefaultSetting();
             var types = Utility.Reflection.GetGenericTypes(typeof(XDataTable<>), 1, "Assembly-CSharp", "XFrameworkRuntime");
             var createdCount = 0;
             foreach (var tableType in types)

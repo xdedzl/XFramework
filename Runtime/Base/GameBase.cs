@@ -13,6 +13,7 @@ using XFramework.UI;
 /// 这个类挂在初始场景中,是整个游戏的入口
 /// </summary>
 [DisallowMultipleComponent]
+[ExecuteAlways]
 public class GameBase : MonoBehaviour
 {
     // 初始流程
@@ -23,7 +24,7 @@ public class GameBase : MonoBehaviour
 
     private void Awake()
     {
-        var a = XApplication.Setting;
+        var a = XApplication.Setting; 
         
         if (activeGame != null)
         {
@@ -46,12 +47,7 @@ public class GameBase : MonoBehaviour
 
     private void OnInit()
     {
-        GameEntry.AddModule<ResourceManager>();
-        GameEntry.AddModule<EntityManager>();
-        GameEntry.AddModule<UIManager>();
-        GameEntry.AddModule<FsmManager>();
-        GameEntry.AddModule<SoundManager>();
-
+        GameEntry.InitializeModules(ModuleLifecycle.Persistent, ModuleLifecycle.EditorPersistent);
 
         XJson.SetUnityDefaultSetting();
     }
