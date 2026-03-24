@@ -9,7 +9,7 @@ namespace XFramework.Entity
     /// 实体管理器
     /// </summary>
     [ModuleLifecycle(ModuleLifecycle.Persistent)]
-    public partial class EntityManager : PersistentMonoGameModuleBase<EntityManager>
+    public partial class EntityManager : MonoGameModuleBase<EntityManager>
     {
         /// <summary>
         /// 存储对应实体容器的字典

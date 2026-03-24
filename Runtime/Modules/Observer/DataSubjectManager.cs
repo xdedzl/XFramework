@@ -6,7 +6,7 @@ namespace XFramework.Event
     /// <summary>
     /// 数据主题管理类
     /// </summary>
-    public class DataSubjectManager : PersistentGameModuleBase<DataSubjectManager>
+    public class DataSubjectManager : GameModuleBase<DataSubjectManager>
     {
         /// <summary>
         /// 每一个Subject都是一个被观察的对象

@@ -32,7 +32,7 @@ namespace XFramework.UI
     
     [DependenceModule(typeof(ResourceManager))]
     [ModuleLifecycle(ModuleLifecycle.Persistent)]
-    public class UIManager : PersistentMonoGameModuleBase<UIManager>
+    public class UIManager : MonoGameModuleBase<UIManager>
     {
         private RectTransform canvasTransform;
         private RectTransform CanvasTransform

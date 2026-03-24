@@ -1,10 +1,23 @@
-﻿using XFramework.Event;
+using System.Reflection;
+using XFramework.Event;
 
 namespace XFramework
 {
     public abstract class GameModuleBase<T> : IGameModule where T : GameModuleBase<T>
     {
-        public virtual bool IsPersistent => false;
+        public virtual bool IsPersistent
+        {
+            get
+            {
+                var attr = GetType().GetCustomAttribute<ModuleLifecycleAttribute>();
+                if (attr == null)
+                {
+                    return false;
+                }
+
+                return attr.Lifecycle == ModuleLifecycle.Persistent || attr.Lifecycle == ModuleLifecycle.EditorPersistent;
+            }
+        }
 
         // 该变量名称和GameEntry有联系, 不要随意修改
         private static T m_instance;
@@ -77,25 +90,5 @@ namespace XFramework
     }
     
     
-    /// <summary>
-    /// 持久化模块基类, 一但创建就不可以被销毁
-    /// </summary>
-    /// <typeparam name="T"></typeparam>
-    public abstract class PersistentGameModuleBase<T> : GameModuleBase<T> where T : GameModuleBase<T>
-    {
-        public override bool IsPersistent => true;
-    }
     
-    public abstract class PersistentMonoGameModuleBase<T> : PersistentGameModuleBase<T>, IMonoGameModule where T : PersistentGameModuleBase<T>
-    {
-        /// <summary>
-        /// 模块优先级
-        /// </summary>
-        /// <remarks>优先级较高的模块会优先轮询</remarks>
-        public abstract int Priority { get; }
-        /// <summary>
-        /// 游戏框架模块轮询
-        /// </summary>
-        public virtual void Update() { }
-    }
 }

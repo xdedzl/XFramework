@@ -11,7 +11,7 @@ namespace XFramework.Resource
     /// 资源管理器
     /// </summary>
     [ModuleLifecycle(ModuleLifecycle.EditorPersistent)]
-    public partial class ResourceManager : PersistentMonoGameModuleBase<ResourceManager>
+    public partial class ResourceManager : MonoGameModuleBase<ResourceManager>
     {
         public const string BuildConfigAssetPath = "Assets/Configs/AssetBundleBuildConfig.asset";
         
