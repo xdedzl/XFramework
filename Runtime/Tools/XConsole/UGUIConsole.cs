@@ -354,6 +354,11 @@ namespace XFramework.Console
 
         public void OnLogMessage(Message message)
         {
+            if (m_TextContent == null)
+            {
+                return;
+            }
+            
             var text = m_TextContent.text + message.ToGUIString();
             m_TextContent.text = text;
         }

@@ -14,7 +14,7 @@ namespace XFramework
         {
             get
             {
-                string path = $"{Directory.GetCurrentDirectory()}/Library/XFramework";
+                var path = $"{Directory.GetCurrentDirectory()}/Library/XFramework";
                 if (!Directory.Exists(path))
                     Directory.CreateDirectory(path);
                 return path;
@@ -27,23 +27,11 @@ namespace XFramework
 
         public static string configPath => $"{dataPath}/Configs";
 
-        public static string streamingAssetsPath
-        {
-            get
-            {
-                return Application.platform == RuntimePlatform.Android ? Path.Combine(Application.persistentDataPath, "StreamingAssets") : Application.streamingAssetsPath;
-            }
-        }
-        
+        public static string streamingAssetsPath => Application.platform == RuntimePlatform.Android ? Path.Combine(Application.persistentDataPath, "StreamingAssets") : Application.streamingAssetsPath;
+
         private static readonly XFrameworkSetting _setting;
-        public static XFrameworkSetting Setting
-        {
-            get
-            {
-                return _setting;
-            }
-        }
-        
+        public static XFrameworkSetting Setting => _setting;
+
         static XApplication()
         {
             if (Application.platform == RuntimePlatform.WindowsEditor || Application.platform == RuntimePlatform.WindowsPlayer)

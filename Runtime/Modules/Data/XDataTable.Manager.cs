@@ -143,6 +143,20 @@ namespace XFramework.Data
             return (IReadOnlyDictionary<TKey, TValue>)S_DataDictMap[dataType];
         }
 
+        public static TValue GetData<TValue>(int id) where TValue : IDataHasKey<int>
+        {
+            return GetData<int, TValue>(id);
+        }
+
+        public static TValue GetData<TKey, TValue>(TKey key) where TValue : IDataHasKey<TKey>
+        {
+            if (LoadDictData<TKey, TValue>().TryGetValue(key, out var value))
+            {
+                return value;
+            }
+            throw new Exception($"Data type {typeof(TValue).FullName} missing key {key}");
+        }
+
         public static IReadOnlyDictionary<string, TValue> LoadAliasDictData<TValue>() where TValue : IDataHasAlias
         {
             var dataType = typeof(TValue);
@@ -166,6 +180,16 @@ namespace XFramework.Data
             }
             S_DataAliasDictMap[dataType] = dict;
             return dict;
+        }
+
+        public static TValue GetDataByAlias<TValue>(string alias) where TValue : IDataHasAlias
+        {
+            var dict = LoadAliasDictData<TValue>();
+            if (dict.TryGetValue(alias, out var value))
+            {
+                return value;
+            }
+            throw new Exception($"Data type {typeof(TValue).FullName} missing alias {alias}");
         }
 
 #if UNITY_EDITOR

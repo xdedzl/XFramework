@@ -138,6 +138,21 @@ namespace XFramework.UI
             // }
         }
         
+        /// <summary>
+        /// 检查面板是否正在显示
+        /// </summary>
+        public bool IsPanelOpened(string uiName)
+        {
+            foreach (var list in m_OnDisplayPanelDic.Values)
+            {
+                foreach (var panel in list)
+                {
+                    if (panel.PanelName == uiName) return true;
+                }
+            }
+            return false;
+        }
+
         private PanelBase GetPanel(string uiName)
         {
             if (m_PanelDict.TryGetValue(uiName, out PanelBase _panel))
