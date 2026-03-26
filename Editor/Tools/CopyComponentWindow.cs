@@ -13,6 +13,10 @@ namespace XFramework.Editor
         private Component[] sourceComponents;
         private bool[] selectedComponents;
 
+        private bool copyPosition = false;
+        private bool copyRotation = false;
+        private bool copyScale = false;
+
         private Vector2 scrollPos;
 
         [MenuItem("XFramework/Tools/Copy Components Window")]
@@ -109,33 +113,42 @@ namespace XFramework.Editor
 
             if (sourceObj != null && sourceComponents != null && sourceComponents.Length > 0)
             {
-                GUILayout.Label("选择需要复制的组件:", EditorStyles.boldLabel);
-                
                 GUILayout.BeginHorizontal();
-                if (GUILayout.Button("全选"))
+                GUILayout.Label("Transform选项 : ", GUILayout.Width(120));
+                if (GUILayout.Button("全选", GUILayout.Width(60))) copyPosition = copyRotation = copyScale = true;
+                if (GUILayout.Button("全不选", GUILayout.Width(60))) copyPosition = copyRotation = copyScale = false;
+                GUILayout.EndHorizontal();
+
+                copyPosition = EditorGUILayout.ToggleLeft(new GUIContent(" Local Position", EditorGUIUtility.IconContent("MoveTool").image), copyPosition);
+                copyRotation = EditorGUILayout.ToggleLeft(new GUIContent(" Local Rotation", EditorGUIUtility.IconContent("RotateTool").image), copyRotation);
+                copyScale    = EditorGUILayout.ToggleLeft(new GUIContent(" Local Scale", EditorGUIUtility.IconContent("ScaleTool").image), copyScale);
+                EditorGUILayout.Space();
+
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("其他组件选项 : ", GUILayout.Width(120));
+                if (GUILayout.Button("全选", GUILayout.Width(60)))
                 {
                     for (int i = 0; i < selectedComponents.Length; i++) 
-                    {
-                        if (sourceComponents[i] != null && !(sourceComponents[i] is Transform))
-                        {
-                            selectedComponents[i] = true;
-                        }
-                    }
+                        if (sourceComponents[i] != null && !(sourceComponents[i] is Transform)) selectedComponents[i] = true;
                 }
-                if (GUILayout.Button("全不选"))
+                if (GUILayout.Button("全不选", GUILayout.Width(60)))
                 {
                     for (int i = 0; i < selectedComponents.Length; i++) selectedComponents[i] = false;
                 }
                 GUILayout.EndHorizontal();
 
                 scrollPos = GUILayout.BeginScrollView(scrollPos);
+
                 for (int i = 0; i < sourceComponents.Length; i++)
                 {
                     var comp = sourceComponents[i];
                     if (comp == null) continue; // 忽略Missing的脚本
                     if (comp is Transform) continue; // Transform通常不需要复制
 
-                    selectedComponents[i] = EditorGUILayout.ToggleLeft(comp.GetType().Name, selectedComponents[i]);
+                    GUILayout.BeginHorizontal();
+                    selectedComponents[i] = EditorGUILayout.Toggle(selectedComponents[i], GUILayout.Width(20));
+                    EditorGUILayout.ObjectField(comp, typeof(Component), true);
+                    GUILayout.EndHorizontal();
                 }
                 GUILayout.EndScrollView();
 
@@ -193,7 +206,7 @@ namespace XFramework.Editor
                 }
             }
 
-            ExecuteCopyPaste(sourceObj, targetObjs.ToArray(), compsToCopy.ToArray(), isCut);
+            ExecuteCopyPaste(sourceObj, targetObjs.ToArray(), compsToCopy.ToArray(), isCut, copyPosition, copyRotation, copyScale);
             
             if (isCut)
             {
@@ -201,46 +214,63 @@ namespace XFramework.Editor
             }
         }
 
-        public static void ExecuteCopyPaste(GameObject source, GameObject[] targets, Component[] componentsToCopy, bool isCut)
+        public static void ExecuteCopyPaste(GameObject source, GameObject[] targets, Component[] componentsToCopy, bool isCut, bool copyPos = false, bool copyRot = false, bool copyScale = false)
         {
-            if (source == null || targets == null || targets.Length == 0 || componentsToCopy == null || componentsToCopy.Length == 0) return;
+            if (source == null || targets == null || targets.Length == 0) return;
 
             Undo.SetCurrentGroupName(isCut ? "批量剪切组件" : "批量复制组件");
             int group = Undo.GetCurrentGroup();
 
-            for (int i = 0; i < componentsToCopy.Length; i++)
+            // 拷贝 Transform 属性
+            if (copyPos || copyRot || copyScale)
             {
-                var sourceComp = componentsToCopy[i];
-                if (sourceComp == null || sourceComp is Transform) continue;
-
-                UnityEditorInternal.ComponentUtility.CopyComponent(sourceComp);
-
+                Transform sourceTrans = source.transform;
                 foreach (var target in targets)
                 {
                     if (target == null) continue;
-
-                    Undo.RecordObject(target, "Paste Component");
-                    Component existingComp = target.GetComponent(sourceComp.GetType());
-                    if (existingComp != null)
-                    {
-                        UnityEditorInternal.ComponentUtility.PasteComponentValues(existingComp);
-                    }
-                    else
-                    {
-                        UnityEditorInternal.ComponentUtility.PasteComponentAsNew(target);
-                    }
+                    Undo.RecordObject(target.transform, "Paste Transform");
+                    if (copyPos) target.transform.localPosition = sourceTrans.localPosition;
+                    if (copyRot) target.transform.localRotation = sourceTrans.localRotation;
+                    if (copyScale) target.transform.localScale = sourceTrans.localScale;
                 }
             }
 
-            if (isCut)
+            if (componentsToCopy != null)
             {
-                // 倒序删除更安全
-                for (int i = componentsToCopy.Length - 1; i >= 0; i--)
+                for (int i = 0; i < componentsToCopy.Length; i++)
                 {
-                    var comp = componentsToCopy[i];
-                    if (comp != null && !(comp is Transform))
+                    var sourceComp = componentsToCopy[i];
+                    if (sourceComp == null || sourceComp is Transform) continue;
+
+                    UnityEditorInternal.ComponentUtility.CopyComponent(sourceComp);
+
+                    foreach (var target in targets)
                     {
-                        Undo.DestroyObjectImmediate(comp);
+                        if (target == null) continue;
+
+                        Undo.RecordObject(target, "Paste Component");
+                        Component existingComp = target.GetComponent(sourceComp.GetType());
+                        if (existingComp != null)
+                        {
+                            UnityEditorInternal.ComponentUtility.PasteComponentValues(existingComp);
+                        }
+                        else
+                        {
+                            UnityEditorInternal.ComponentUtility.PasteComponentAsNew(target);
+                        }
+                    }
+                }
+
+                if (isCut)
+                {
+                    // 倒序删除更安全
+                    for (int i = componentsToCopy.Length - 1; i >= 0; i--)
+                    {
+                        var comp = componentsToCopy[i];
+                        if (comp != null && !(comp is Transform))
+                        {
+                            Undo.DestroyObjectImmediate(comp);
+                        }
                     }
                 }
             }
@@ -262,6 +292,11 @@ namespace XFramework.Editor
         private GameObject sourceObj;
         private Component[] allComponents;
         private bool[] selectedFlags;
+
+        private bool copyPosition = false;
+        private bool copyRotation = false;
+        private bool copyScale = false;
+
         private Vector2 scrollPos;
 
         public static void ShowForm(GameObject source)
@@ -300,28 +335,41 @@ namespace XFramework.Editor
 
             GUILayout.Space(10);
             GUILayout.Label($"来源: {sourceObj.name}", EditorStyles.boldLabel);
-            GUILayout.Label("请勾选你要操作的组件", EditorStyles.helpBox);
-            GUILayout.Space(5);
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Transform选项 : ", GUILayout.Width(110));
+            if (GUILayout.Button("全选", GUILayout.Width(50))) copyPosition = copyRotation = copyScale = true;
+            if (GUILayout.Button("全不选", GUILayout.Width(50))) copyPosition = copyRotation = copyScale = false;
+            GUILayout.EndHorizontal();
+
+            copyPosition = EditorGUILayout.ToggleLeft(new GUIContent(" Local Position", EditorGUIUtility.IconContent("MoveTool").image), copyPosition);
+            copyRotation = EditorGUILayout.ToggleLeft(new GUIContent(" Local Rotation", EditorGUIUtility.IconContent("RotateTool").image), copyRotation);
+            copyScale    = EditorGUILayout.ToggleLeft(new GUIContent(" Local Scale", EditorGUIUtility.IconContent("ScaleTool").image), copyScale);
+            EditorGUILayout.Space();
 
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("全选"))
+            GUILayout.Label("其他组件选项 : ", GUILayout.Width(110));
+            if (GUILayout.Button("全选", GUILayout.Width(50)))
             {
                 for (int i = 0; i < selectedFlags.Length; i++) 
                     if (allComponents[i] != null && !(allComponents[i] is Transform)) selectedFlags[i] = true;
             }
-            if (GUILayout.Button("全不选"))
+            if (GUILayout.Button("全不选", GUILayout.Width(50)))
             {
                 for (int i = 0; i < selectedFlags.Length; i++) selectedFlags[i] = false;
             }
             GUILayout.EndHorizontal();
 
             scrollPos = GUILayout.BeginScrollView(scrollPos);
+
             for (int i = 0; i < allComponents.Length; i++)
             {
                 var comp = allComponents[i];
                 if (comp == null || comp is Transform) continue;
 
-                selectedFlags[i] = EditorGUILayout.ToggleLeft(comp.GetType().Name, selectedFlags[i]);
+                GUILayout.BeginHorizontal();
+                selectedFlags[i] = EditorGUILayout.Toggle(selectedFlags[i], GUILayout.Width(20));
+                EditorGUILayout.ObjectField(comp, typeof(Component), true);
+                GUILayout.EndHorizontal();
             }
             GUILayout.EndScrollView();
 
@@ -350,14 +398,14 @@ namespace XFramework.Editor
                 }
             }
 
-            if (selectedComps.Count > 0)
+            if (selectedComps.Count > 0 || copyPosition || copyRotation || copyScale)
             {
-                CopyComponentMenuTool.SetClipboard(sourceObj, selectedComps.ToArray(), isCutMode);
-                Debug.Log($"[组件选择] 成功{(isCutMode ? "剪切" : "复制")}了 {selectedComps.Count} 个组件到剪贴板！");
+                CopyComponentMenuTool.SetClipboard(sourceObj, selectedComps.ToArray(), isCutMode, copyPosition, copyRotation, copyScale);
+                Debug.Log($"[组件选择] 已存入剪贴板。普通组件: {selectedComps.Count} 个，包含 Transform 属性。");
             }
             else
             {
-                Debug.LogWarning("[组件选择] 未选择任何组件，剪贴板未更新。");
+                Debug.LogWarning("[组件选择] 未选择任何组件及属性，剪贴板未更新。");
             }
             
             Close();
@@ -372,12 +420,19 @@ namespace XFramework.Editor
         private static Component[] copiedComponents;
         private static bool isCutMode;
         private static GameObject sourceObj;
+        
+        private static bool clipboardPos;
+        private static bool clipboardRot;
+        private static bool clipboardScale;
 
-        public static void SetClipboard(GameObject source, Component[] comps, bool cutMode)
+        public static void SetClipboard(GameObject source, Component[] comps, bool cutMode, bool pos, bool rot, bool scale)
         {
             sourceObj = source;
             copiedComponents = comps;
             isCutMode = cutMode;
+            clipboardPos = pos;
+            clipboardRot = rot;
+            clipboardScale = scale;
         }
 
         [MenuItem("GameObject/XFramework 快捷组件/选择提取组件 (Copy & Cut...)", false, -10)]
@@ -392,9 +447,10 @@ namespace XFramework.Editor
         public static void PasteComponents(MenuCommand menuCommand)
         {
             GameObject target = menuCommand.context as GameObject ?? Selection.activeGameObject;
-            if (target == null || copiedComponents == null || copiedComponents.Length == 0) return;
+            if (target == null) return;
+            if (copiedComponents == null && !clipboardPos && !clipboardRot && !clipboardScale) return;
 
-            CopyComponentWindow.ExecuteCopyPaste(sourceObj, new GameObject[] { target }, copiedComponents, isCutMode);
+            CopyComponentWindow.ExecuteCopyPaste(sourceObj, new GameObject[] { target }, copiedComponents, isCutMode, clipboardPos, clipboardRot, clipboardScale);
 
             if (isCutMode)
             {
@@ -408,7 +464,7 @@ namespace XFramework.Editor
         [MenuItem("GameObject/XFramework 快捷组件/粘贴选中组件 (Paste)", true)]
         public static bool ValidatePasteComponents()
         {
-            return copiedComponents != null && copiedComponents.Length > 0;
+            return sourceObj != null && ((copiedComponents != null && copiedComponents.Length > 0) || clipboardPos || clipboardRot || clipboardScale);
         }
     }
 }
