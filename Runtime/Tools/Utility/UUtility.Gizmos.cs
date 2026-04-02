@@ -1,5 +1,6 @@
 ﻿using System;
 using UnityEngine;
+using UMesh = UnityEngine.Mesh;
 
 namespace XFramework
 {
@@ -47,7 +48,7 @@ namespace XFramework
 
             }
 
-            public static Mesh SemicircleMesh(float radius, int angle, Vector3 axis)
+            public static UMesh SemicircleMesh(float radius, int angle, Vector3 axis)
             {
                 Vector3 leftdir = Quaternion.AngleAxis(-angle / 2, axis) * Vector3.forward;
                 Vector3 rightdir = Quaternion.AngleAxis(angle / 2, axis) * Vector3.forward;
@@ -74,7 +75,7 @@ namespace XFramework
                     triangles[3 * i + 2] = i + 2;
                 }
 
-                Mesh mesh = new Mesh();
+                UMesh mesh = new UMesh();
                 mesh.vertices = vertexs;
                 mesh.triangles = triangles;
                 mesh.RecalculateNormals();
