@@ -1,16 +1,16 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace XFramework
 {
     [ExecuteAlways]
-    public class MeshStar : CustomMesh<StarDescription>
+    public class MeshCapsule : CustomMesh<CapsuleDescription>
     {
         private void Awake() { GenerateMesh(); }
         private void OnValidate() { GenerateMesh(); }
         
         private void Reset()
         {
-            description = StarDescription.identity;
+            description = CapsuleDescription.identity;
         }
 
         [ContextMenu("Regenerate Mesh")]
@@ -20,14 +20,16 @@ namespace XFramework
             if (m_MeshFilter != null)
             {
                 var desc = description;
-                desc.corner_count = Mathf.Max(3, desc.corner_count);
-                desc.outer_radius = Mathf.Max(0.01f, desc.outer_radius);
-                desc.inner_radius = Mathf.Clamp(desc.inner_radius, 0.01f, desc.outer_radius - 0.01f);
+                desc.radius = Mathf.Max(0.01f, desc.radius);
+                desc.height = Mathf.Max(desc.radius * 2, desc.height);
+                desc.section_count = Mathf.Max(3, desc.section_count);
+                desc.cap_section_count = Mathf.Max(1, desc.cap_section_count);
                 
-                Mesh generatedMesh = UUtility.Model.GenerateStarMesh(desc);
-                generatedMesh.name = "Procedural Star";
+                Mesh generatedMesh = UUtility.Model.GenerateCapsuleMesh(desc);
+                generatedMesh.name = "Procedural Capsule";
                 m_MeshFilter.sharedMesh = generatedMesh;
             }
         }
     }
 }
+

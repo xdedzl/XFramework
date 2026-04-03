@@ -1,16 +1,16 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace XFramework
 {
     [ExecuteAlways]
-    public class MeshStar : CustomMesh<StarDescription>
+    public class MeshOctahedron : CustomMesh<OctahedronDescription>
     {
         private void Awake() { GenerateMesh(); }
         private void OnValidate() { GenerateMesh(); }
         
         private void Reset()
         {
-            description = StarDescription.identity;
+            description = OctahedronDescription.identity;
         }
 
         [ContextMenu("Regenerate Mesh")]
@@ -20,14 +20,13 @@ namespace XFramework
             if (m_MeshFilter != null)
             {
                 var desc = description;
-                desc.corner_count = Mathf.Max(3, desc.corner_count);
-                desc.outer_radius = Mathf.Max(0.01f, desc.outer_radius);
-                desc.inner_radius = Mathf.Clamp(desc.inner_radius, 0.01f, desc.outer_radius - 0.01f);
+                desc.radius = Mathf.Max(0.01f, desc.radius);
                 
-                Mesh generatedMesh = UUtility.Model.GenerateStarMesh(desc);
-                generatedMesh.name = "Procedural Star";
+                Mesh generatedMesh = UUtility.Model.GenerateOctahedronMesh(desc);
+                generatedMesh.name = "Procedural Octahedron";
                 m_MeshFilter.sharedMesh = generatedMesh;
             }
         }
     }
 }
+
