@@ -8,7 +8,7 @@ namespace XFramework.Entity
     /// <summary>
     /// 实体管理器
     /// </summary>
-    [ModuleLifecycle(ModuleLifecycle.Persistent)]
+    [ModuleLifecycle(ModuleLifecycle.RuntimePersistent)]
     public partial class EntityManager : MonoGameModuleBase<EntityManager>
     {
         /// <summary>

@@ -150,6 +150,7 @@ namespace XFramework
 
             // 加载模块
             IGameModule module = (IGameModule)Activator.CreateInstance(moduleType, args);
+            module.Initialize();
             if (module == null)
             {
                 throw new Exception(moduleType.Name + " is not a module");

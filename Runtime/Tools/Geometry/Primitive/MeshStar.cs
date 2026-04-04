@@ -14,7 +14,7 @@ namespace XFramework
         }
 
         [ContextMenu("Regenerate Mesh")]
-        protected override void GenerateMesh()
+        public void GenerateMesh()
         {
             if (m_MeshFilter == null) m_MeshFilter = GetComponent<MeshFilter>();
             if (m_MeshFilter != null)

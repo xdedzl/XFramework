@@ -6,6 +6,10 @@
     public interface IGameModule
     {
         /// <summary>
+        /// 初始化
+        /// </summary>
+        void Initialize();
+        /// <summary>
         /// 关闭模块
         /// </summary> 
         void Shutdown();

@@ -23,5 +23,10 @@ namespace XFramework
         {
             
         }
+        
+        private void Awake()
+        {
+            GenerateMesh();
+        }
     }
 }

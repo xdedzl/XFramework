@@ -73,7 +73,7 @@ namespace XFramework
     }
 
     [DependenceModule(typeof(EntityManager))]
-    [ModuleLifecycle(ModuleLifecycle.Persistent)]
+    [ModuleLifecycle(ModuleLifecycle.RuntimePersistent)]
     public class SoundManager : GameModuleBase<SoundManager>
     {
         /// <summary>

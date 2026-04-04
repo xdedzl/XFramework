@@ -12,11 +12,15 @@ namespace XFramework
         /// </summary>
         Normal,
         /// <summary>
-        /// 持久化模块，游戏启动时创建，游戏结束时销毁
+        /// 持久化模块，游戏启动或编译后创建，始终存在
         /// </summary>
         Persistent,
         /// <summary>
-        /// 编辑器持久化模块，编辑器启动或编译后创建，始终存在
+        /// 运行时持久化模块，游戏启动后创建，始终存在
+        /// </summary>
+        RuntimePersistent,
+        /// <summary>
+        /// 编辑器持久化模块，编译后创建，始终存在
         /// </summary>
         EditorPersistent
     }

@@ -2,7 +2,6 @@
 
 namespace XFramework
 {
-    [ExecuteAlways]
     public class MeshCube : CustomMesh<CubeDescription>
     {
         public bool useOld;
@@ -10,11 +9,6 @@ namespace XFramework
         private void Reset()
         {
             description = CubeDescription.identity;
-        }
-        
-        private void Awake()
-        {
-            GenerateMesh();
         }
 
         private void OnValidate()

@@ -10,12 +10,7 @@ namespace XFramework
             get
             {
                 var attr = GetType().GetCustomAttribute<ModuleLifecycleAttribute>();
-                if (attr == null)
-                {
-                    return false;
-                }
-
-                return attr.Lifecycle == ModuleLifecycle.Persistent || attr.Lifecycle == ModuleLifecycle.EditorPersistent;
+                return attr?.Lifecycle is ModuleLifecycle.Persistent or ModuleLifecycle.EditorPersistent or ModuleLifecycle.RuntimePersistent;
             }
         }
 
@@ -37,6 +32,9 @@ namespace XFramework
                 throw new XFrameworkException($"must load module before use it. ModuleName: {typeof(T).Name} use --> GameEntry.AddModule ");
             }
         }
+
+        public virtual void Initialize() { }
+
         /// <summary>
         /// 关闭模块
         /// </summary> 
