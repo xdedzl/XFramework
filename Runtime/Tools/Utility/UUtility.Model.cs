@@ -140,7 +140,96 @@ namespace XFramework
         public float width;
         public static StarDescription identity => new StarDescription { corner_count = 5, outer_radius = 1f, inner_radius = 0.5f, width = 0.2f };
     }
-    
+
+    // 胶囊体
+    [Serializable]
+    public struct CapsuleDescription : IMeshDescription
+    {
+        public float radius;
+        public float height;
+        public int section_count;
+        public int cap_section_count;
+        public static CapsuleDescription identity => new CapsuleDescription { radius = 0.5f, height = 2f, section_count = 20, cap_section_count = 10 };
+    }
+
+    // 圆盘
+    [Serializable]
+    public struct DiscDescription : IMeshDescription
+    {
+        public float outer_radius;
+        public float inner_radius;
+        public int section_count;
+        [Range(0, 1)]
+        public float ratio;
+        public static DiscDescription identity => new DiscDescription { outer_radius = 1f, inner_radius = 0f, section_count = 20, ratio = 1f };
+    }
+
+    // 管状体 (空心圆柱)
+    [Serializable]
+    public struct TubeDescription : IMeshDescription
+    {
+        public float outer_radius;
+        public float inner_radius;
+        public float height;
+        public int section_count;
+        [Range(0, 1)]
+        public float ratio;
+        public static TubeDescription identity => new TubeDescription { outer_radius = 1f, inner_radius = 0.5f, height = 2f, section_count = 20, ratio = 1f };
+    }
+
+    // 椭球体
+    [Serializable]
+    public struct EllipsoidDescription : IMeshDescription
+    {
+        public float radius_x;
+        public float radius_y;
+        public float radius_z;
+        public int section_count;
+        [Range(0, 1)]
+        public float ratio;
+        public static EllipsoidDescription identity => new EllipsoidDescription { radius_x = 1f, radius_y = 1.5f, radius_z = 1f, section_count = 20, ratio = 1f };
+    }
+
+    // 螺旋管 (Helix)
+    [Serializable]
+    public struct HelixDescription : IMeshDescription
+    {
+        public float coil_radius;
+        public float tube_radius;
+        public float turns;
+        public float height;
+        public int section_count;
+        public int tube_section_count;
+        public static HelixDescription identity => new HelixDescription { coil_radius = 1f, tube_radius = 0.2f, turns = 3f, height = 4f, section_count = 60, tube_section_count = 10 };
+    }
+
+    // 正四面体
+    [Serializable]
+    public struct TetrahedronDescription : IMeshDescription
+    {
+        public float radius;
+        public static TetrahedronDescription identity => new TetrahedronDescription { radius = 1f };
+    }
+
+    // 正八面体
+    [Serializable]
+    public struct OctahedronDescription : IMeshDescription
+    {
+        public float radius;
+        public static OctahedronDescription identity => new OctahedronDescription { radius = 1f };
+    }
+
+    // 箭头
+    [Serializable]
+    public struct ArrowDescription : IMeshDescription
+    {
+        public float shaft_radius;
+        public float shaft_height;
+        public float head_radius;
+        public float head_height;
+        public int section_count;
+        public static ArrowDescription identity => new ArrowDescription { shaft_radius = 0.1f, shaft_height = 1f, head_radius = 0.3f, head_height = 0.5f, section_count = 12 };
+    }
     # endregion
 
     public partial class UUtility
@@ -296,7 +385,7 @@ namespace XFramework
                             int i2 = i0 + gridSize;
                             int i3 = i2 + 1;
 
-                            AddQuad(i0, i1, i3, i2, indices);
+                            AddQuadRightHand(i0, i1, i3, i2, indices);
                         }
                     }
                 }
@@ -510,7 +599,7 @@ namespace XFramework
                     vertices.Add(pos);
                     uvs.Add(new Vector2(pos.x / UVSize, pos.z / UVSize));
                 }
-                AddQuad(bottom_offset + 2, bottom_offset, bottom_offset + 6, bottom_offset + 4, indices);
+                AddQuadRightHand(bottom_offset + 2, bottom_offset, bottom_offset + 6, bottom_offset + 4, indices);
 
                 // top
                 int top_offset = vertices.Count;
@@ -519,7 +608,7 @@ namespace XFramework
                     vertices.Add(pos);
                     uvs.Add(new Vector2(pos.x / UVSize, pos.z / UVSize));
                 }
-                AddQuad(top_offset, top_offset + 2, top_offset + 4, top_offset + 6, indices);
+                AddQuadRightHand(top_offset, top_offset + 2, top_offset + 4, top_offset + 6, indices);
 
                 int row_point_count = row_position_lists[0].Count;
                 // side
@@ -731,7 +820,7 @@ namespace XFramework
                     }
                 }
 
-                if (ratio != 1f)
+                if (!Mathf.Approximately(ratio, 1f))
                 {
                     int inner_offset = vertices.Count;
                     // inner
@@ -1228,7 +1317,7 @@ namespace XFramework
                     for (int j = 0; j < circle_point_count; j++)
                     {
                         int next_j = (j + 1) % circle_point_count;
-                        AddQuad(j + start_index, next_j + start_index, next_j + next_start_index, j + next_start_index, indices);
+                        AddQuadRightHand(j + start_index, next_j + start_index, next_j + next_start_index, j + next_start_index, indices);
                     }
                 }
 
@@ -1298,7 +1387,7 @@ namespace XFramework
                     : 0;
 
                 float single_section_length = 2 * Mathf.PI * radius * ratio / sectionCount;
-                int keyPointCount = ratio < 1f ? sectionCount + 1 : sectionCount + 1;
+                int keyPointCount = sectionCount + 1;
 
                 // 横截面
                 List<Vector3> raw_cross_positions = new List<Vector3>
@@ -1420,7 +1509,7 @@ namespace XFramework
                 mesh.RecalculateBounds();
                 return mesh;
             }
-            
+
             // 多角星
             public static UMesh GenerateStarMesh(StarDescription description)
             {
@@ -1432,7 +1521,7 @@ namespace XFramework
                 float outer_radius = description.outer_radius;
                 float inner_radius = description.inner_radius;
                 float width = description.width;
-                
+
                 float single_radians = 2 * Mathf.PI / corner_count;
                 float half_single_radians = single_radians / 2;
 
@@ -1451,7 +1540,7 @@ namespace XFramework
                     vertices.Add(center_position); uvs.Add(new Vector2(-center_position.x, -center_position.y));
                     vertices.Add(left_inner_position); uvs.Add(new Vector2(-left_inner_position.x, -left_inner_position.y));
                     vertices.Add(outer_position); uvs.Add(new Vector2(-outer_position.x, -outer_position.y));
-                    
+
                     vertices.Add(center_position); uvs.Add(new Vector2(-center_position.x, -center_position.y));
                     vertices.Add(outer_position); uvs.Add(new Vector2(-outer_position.x, -outer_position.y));
                     vertices.Add(right_inner_position); uvs.Add(new Vector2(-right_inner_position.x, -right_inner_position.y));
@@ -1498,9 +1587,711 @@ namespace XFramework
                 mesh.RecalculateBounds();
                 return mesh;
             }
+
+            // 胶囊体
+            public static UMesh GenerateCapsuleMesh(CapsuleDescription description)
+            {
+                float radius = description.radius;
+                float height = Mathf.Max(description.height, radius * 2);
+                int segments = Mathf.Max(3, description.section_count);
+                int rings = Mathf.Max(1, description.cap_section_count);
+
+                float cylinder_height = height - radius * 2;
+
+                List<Vector3> vertices = new List<Vector3>();
+                List<Vector2> uvs = new List<Vector2>();
+                List<int> indices = new List<int>();
+
+                for (int i = 0; i <= rings * 2 + 1; i++)
+                {
+                    float yOffset = 0f;
+                    float lat;
+
+                    if (i <= rings)
+                    {
+                        // top hemisphere
+                        yOffset = cylinder_height / 2f;
+                        lat = (float)i / rings * (Mathf.PI / 2f);
+                    }
+                    else
+                    {
+                        // bottom hemisphere
+                        yOffset = -cylinder_height / 2f;
+                        lat = Mathf.PI / 2f + (float)(i - rings - 1) / rings * (Mathf.PI / 2f);
+                    }
+
+                    float y = Mathf.Cos(lat) * radius + yOffset;
+                    float r = Mathf.Sin(lat) * radius;
+                    float v = 1f - (float)i / (rings * 2 + 1);
+
+                    for (int j = 0; j <= segments; j++)
+                    {
+                        float u = (float)j / segments;
+                        float lon = u * Mathf.PI * 2f;
+
+                        float x = Mathf.Sin(lon) * r;
+                        float z = Mathf.Cos(lon) * r;
+
+                        vertices.Add(new Vector3(x, y, z));
+                        uvs.Add(new Vector2(u, v));
+                    }
+                }
+
+                for (int i = 0; i < rings * 2 + 1; i++)
+                {
+                    for (int j = 0; j < segments; j++)
+                    {
+                        int current = i * (segments + 1) + j;
+                        int next = current + segments + 1;
+
+                        indices.Add(current);
+                        indices.Add(current + 1);
+                        indices.Add(next + 1);
+
+                        indices.Add(current);
+                        indices.Add(next + 1);
+                        indices.Add(next);
+                    }
+                }
+                indices.Reverse();
+
+                UMesh mesh = new UMesh();
+                mesh.SetVertices(vertices);
+                mesh.SetUVs(0, uvs);
+                mesh.SetTriangles(indices, 0);
+                mesh.RecalculateNormals();
+                mesh.RecalculateTangents();
+                mesh.RecalculateBounds();
+                return mesh;
+            }
+
+            // 圆盘
+            public static UMesh GenerateDiscMesh(DiscDescription description)
+            {
+                List<Vector3> vertices = new List<Vector3>();
+                List<Vector2> uvs = new List<Vector2>();
+                List<int> indices = new List<int>();
+
+                float outer_radius = description.outer_radius;
+                float inner_radius = description.inner_radius;
+                int section_count = Mathf.Max(3, description.section_count);
+                float ratio = Mathf.Clamp01(description.ratio);
+
+                int point_count = Mathf.Max(2, Mathf.CeilToInt(section_count * ratio)) + 1;
+                float angle_step = 2 * Mathf.PI * ratio / (point_count - 1);
+
+                // Front Face
+                int front_offset = 0;
+                for (int i = 0; i < point_count; i++)
+                {
+                    float angle = i * angle_step;
+                    float sin = Mathf.Sin(angle);
+                    float cos = Mathf.Cos(angle);
+
+                    // Inner
+                    vertices.Add(new Vector3(-sin * inner_radius, 0, cos * inner_radius));
+                    uvs.Add(new Vector2((-sin * inner_radius / outer_radius) * 0.5f + 0.5f, (cos * inner_radius / outer_radius) * 0.5f + 0.5f));
+
+                    // Outer
+                    vertices.Add(new Vector3(-sin * outer_radius, 0, cos * outer_radius));
+                    uvs.Add(new Vector2((-sin) * 0.5f + 0.5f, cos * 0.5f + 0.5f));
+                }
+
+                for (int i = 0; i < point_count - 1; i++)
+                {
+                    int root = front_offset + i * 2;
+                    AddQuadRightHand(root, root + 1, root + 3, root + 2, indices);
+                }
+
+                // Back Face
+                int back_offset = vertices.Count;
+                for (int i = 0; i < point_count; i++)
+                {
+                    float angle = i * angle_step;
+                    float sin = Mathf.Sin(angle);
+                    float cos = Mathf.Cos(angle);
+
+                    // Inner
+                    vertices.Add(new Vector3(-sin * inner_radius, 0, cos * inner_radius));
+                    uvs.Add(new Vector2((sin * inner_radius / outer_radius) * 0.5f + 0.5f, (cos * inner_radius / outer_radius) * 0.5f + 0.5f));
+
+                    // Outer
+                    vertices.Add(new Vector3(-sin * outer_radius, 0, cos * outer_radius));
+                    uvs.Add(new Vector2(sin * 0.5f + 0.5f, cos * 0.5f + 0.5f));
+                }
+
+                for (int i = 0; i < point_count - 1; i++)
+                {
+                    int root = back_offset + i * 2;
+                    AddQuadRightHand(root + 2, root + 3, root + 1, root, indices);
+                }
+
+                // Sides
+                if (inner_radius > 0)
+                {
+                    // Inner side
+                    for (int i = 0; i < point_count - 1; i++)
+                    {
+                        AddQuadRightHand(front_offset + i * 2, back_offset + i * 2, back_offset + (i + 1) * 2, front_offset + (i + 1) * 2, indices);
+                    }
+                }
+
+                // Outer side
+                for (int i = 0; i < point_count - 1; i++)
+                {
+                    AddQuadRightHand(back_offset + i * 2 + 1, front_offset + i * 2 + 1, front_offset + (i + 1) * 2 + 1, back_offset + (i + 1) * 2 + 1, indices);
+                }
+
+                // End caps
+                if (ratio < 1f)
+                {
+                    AddQuadRightHand(front_offset, front_offset + 1, back_offset + 1, back_offset, indices);
+                    int last = (point_count - 1) * 2;
+                    AddQuadRightHand(back_offset + last, back_offset + last + 1, front_offset + last + 1, front_offset + last, indices);
+                }
+
+                indices.Reverse();
+
+                UMesh mesh = new UMesh();
+                mesh.SetVertices(vertices);
+                mesh.SetUVs(0, uvs);
+                mesh.SetTriangles(indices, 0);
+                mesh.RecalculateNormals();
+                mesh.RecalculateTangents();
+                mesh.RecalculateBounds();
+                return mesh;
+            }
+
+            // 管状体 (空心圆柱)
+            public static UMesh GenerateTubeMesh(TubeDescription description)
+            {
+                List<Vector3> vertices = new List<Vector3>();
+                List<Vector2> uvs = new List<Vector2>();
+                List<int> indices = new List<int>();
+
+                float outer_radius = description.outer_radius;
+                float inner_radius = description.inner_radius;
+                float height = description.height;
+                int section_count = Mathf.Max(3, description.section_count);
+                float ratio = Mathf.Clamp01(description.ratio);
+
+                int point_count = Mathf.Max(2, Mathf.CeilToInt(section_count * ratio)) + 1;
+                float angle_step = 2 * Mathf.PI * ratio / (point_count - 1);
+                float half_height = height * 0.5f;
+
+                // 生成外侧面 (Outer Side)
+                int outer_side_offset = 0;
+                for (int i = 0; i < point_count; i++)
+                {
+                    float angle = i * angle_step;
+                    float sin = Mathf.Sin(angle);
+                    float cos = Mathf.Cos(angle);
+                    float u = (float)i / (point_count - 1);
+
+                    vertices.Add(new Vector3(-sin * outer_radius, half_height, cos * outer_radius));
+                    uvs.Add(new Vector2(u, 1f));
+                    vertices.Add(new Vector3(-sin * outer_radius, -half_height, cos * outer_radius));
+                    uvs.Add(new Vector2(u, 0f));
+                }
+
+                for (int i = 0; i < point_count - 1; i++)
+                {
+                    int root = outer_side_offset + i * 2;
+                    AddQuadLeftHand(root + 1, root, root + 2, root + 3, indices);
+                }
+
+                // 生成内侧面 (Inner Side)
+                int inner_side_offset = vertices.Count;
+                for (int i = 0; i < point_count; i++)
+                {
+                    float angle = i * angle_step;
+                    float sin = Mathf.Sin(angle);
+                    float cos = Mathf.Cos(angle);
+                    float u = (float)i / (point_count - 1);
+
+                    vertices.Add(new Vector3(-sin * inner_radius, half_height, cos * inner_radius));
+                    uvs.Add(new Vector2(u, 1f));
+                    vertices.Add(new Vector3(-sin * inner_radius, -half_height, cos * inner_radius));
+                    uvs.Add(new Vector2(u, 0f));
+                }
+
+                for (int i = 0; i < point_count - 1; i++)
+                {
+                    int root = inner_side_offset + i * 2;
+                    AddQuadLeftHand(root, root + 1, root + 3, root + 2, indices);
+                }
+
+                // 顶面 (Top Face)
+                int top_offset = vertices.Count;
+                for (int i = 0; i < point_count; i++)
+                {
+                    float angle = i * angle_step;
+                    float sin = Mathf.Sin(angle);
+                    float cos = Mathf.Cos(angle);
+
+                    vertices.Add(new Vector3(-sin * inner_radius, half_height, cos * inner_radius));
+                    uvs.Add(new Vector2((-sin * inner_radius / outer_radius) * 0.5f + 0.5f, (cos * inner_radius / outer_radius) * 0.5f + 0.5f));
+
+                    vertices.Add(new Vector3(-sin * outer_radius, half_height, cos * outer_radius));
+                    uvs.Add(new Vector2((-sin) * 0.5f + 0.5f, cos * 0.5f + 0.5f));
+                }
+
+                for (int i = 0; i < point_count - 1; i++)
+                {
+                    int root = top_offset + i * 2;
+                    AddQuadRightHand(root, root + 1, root + 3, root + 2, indices);
+                }
+
+                // 底面 (Bottom Face)
+                int bottom_offset = vertices.Count;
+                for (int i = 0; i < point_count; i++)
+                {
+                    float angle = i * angle_step;
+                    float sin = Mathf.Sin(angle);
+                    float cos = Mathf.Cos(angle);
+
+                    vertices.Add(new Vector3(-sin * inner_radius, -half_height, cos * inner_radius));
+                    uvs.Add(new Vector2((sin * inner_radius / outer_radius) * 0.5f + 0.5f, (cos * inner_radius / outer_radius) * 0.5f + 0.5f));
+
+                    vertices.Add(new Vector3(-sin * outer_radius, -half_height, cos * outer_radius));
+                    uvs.Add(new Vector2(sin * 0.5f + 0.5f, cos * 0.5f + 0.5f));
+                }
+
+                for (int i = 0; i < point_count - 1; i++)
+                {
+                    int root = bottom_offset + i * 2;
+                    AddQuadRightHand(root + 2, root + 3, root + 1, root, indices);
+                }
+
+                // 封口端面 (Cap Faces)
+                if (ratio < 1f)
+                {
+                    int cap_offset = vertices.Count;
+                    // Front cap
+                    vertices.Add(new Vector3(0, half_height, outer_radius)); uvs.Add(new Vector2(0, 1));
+                    vertices.Add(new Vector3(0, -half_height, outer_radius)); uvs.Add(new Vector2(0, 0));
+                    vertices.Add(new Vector3(0, half_height, inner_radius)); uvs.Add(new Vector2(1, 1));
+                    vertices.Add(new Vector3(0, -half_height, inner_radius)); uvs.Add(new Vector2(1, 0));
+                    AddQuadRightHand(cap_offset + 1, cap_offset, cap_offset + 2, cap_offset + 3, indices);
+
+                    // Back cap
+                    int back_idx = point_count - 1;
+                    float back_angle = back_idx * angle_step;
+                    float bsin = Mathf.Sin(back_angle);
+                    float bcos = Mathf.Cos(back_angle);
+
+                    int bcap_offset = cap_offset + 4;
+                    vertices.Add(new Vector3(-bsin * outer_radius, half_height, bcos * outer_radius)); uvs.Add(new Vector2(0, 1));
+                    vertices.Add(new Vector3(-bsin * outer_radius, -half_height, bcos * outer_radius)); uvs.Add(new Vector2(0, 0));
+                    vertices.Add(new Vector3(-bsin * inner_radius, half_height, bcos * inner_radius)); uvs.Add(new Vector2(1, 1));
+                    vertices.Add(new Vector3(-bsin * inner_radius, -half_height, bcos * inner_radius)); uvs.Add(new Vector2(1, 0));
+                    AddQuadRightHand(bcap_offset, bcap_offset + 1, bcap_offset + 3, bcap_offset + 2, indices);
+                }
+
+                UMesh mesh = new UMesh();
+                mesh.SetVertices(vertices);
+                mesh.SetUVs(0, uvs);
+                mesh.SetTriangles(indices, 0);
+                mesh.RecalculateNormals();
+                mesh.RecalculateTangents();
+                mesh.RecalculateBounds();
+                return mesh;
+            }
+
+            // 椭球体
+            public static UMesh GenerateEllipsoidMesh(EllipsoidDescription description)
+            {
+                List<Vector3> vertices = new List<Vector3>();
+                List<Vector2> uvs = new List<Vector2>();
+                List<int> indices = new List<int>();
+
+                float rx = description.radius_x;
+                float ry = description.radius_y;
+                float rz = description.radius_z;
+                float ratio = Mathf.Clamp01(description.ratio);
+                int section_count = Mathf.Max(3, description.section_count);
+
+                int latitude_count = section_count;
+                int longitude_count = (int)(section_count * ratio);
+                longitude_count = Mathf.Max(longitude_count, 1) * 2;
+
+                float lat_section_radian = Mathf.PI / latitude_count;
+                float lon_section_radian = 2 * Mathf.PI * ratio / longitude_count;
+
+                for (int lat = 0; lat <= latitude_count; lat++)
+                {
+                    float theta = lat * lat_section_radian;
+                    float sin_theta = Mathf.Sin(theta);
+                    float cos_theta = Mathf.Cos(theta);
+
+                    for (int lon = 0; lon <= longitude_count; lon++)
+                    {
+                        float phi = lon * lon_section_radian;
+                        float sin_phi = Mathf.Sin(phi);
+                        float cos_phi = Mathf.Cos(phi);
+
+                        float x = cos_phi * sin_theta;
+                        float y = cos_theta;
+                        float z = sin_phi * sin_theta;
+
+                        Vector2 uv = new Vector2(-(float)lon / longitude_count, (float)lat / latitude_count);
+
+                        vertices.Add(new Vector3(rx * x, ry * y, rz * z));
+                        uvs.Add(uv);
+                    }
+                }
+
+                for (int lat = 0; lat < latitude_count; lat++)
+                {
+                    for (int lon = 0; lon < longitude_count; lon++)
+                    {
+                        int first = (lat * (longitude_count + 1)) + lon;
+                        int second = first + longitude_count + 1;
+
+                        AddTriangle(first, second, first + 1, indices);
+                        AddTriangle(second, second + 1, first + 1, indices);
+                    }
+                }
+
+                if (ratio < 1f)
+                {
+                    int front_side_offset = vertices.Count;
+                    vertices.Add(Vector3.zero);
+                    uvs.Add(Vector2.zero);
+
+                    for (int lat = 0; lat <= latitude_count; lat++)
+                    {
+                        Vector3 old_pos = vertices[lat * (longitude_count + 1)];
+                        vertices.Add(old_pos);
+                        uvs.Add(new Vector2(-old_pos.x / rx, -old_pos.z / rz));
+                    }
+
+                    for (int lat = 0; lat < latitude_count; lat++)
+                    {
+                        AddTriangle(front_side_offset, front_side_offset + 1 + lat + 1, front_side_offset + 1 + lat, indices);
+                    }
+
+                    int back_side_offset = vertices.Count;
+                    vertices.Add(Vector3.zero);
+                    uvs.Add(Vector2.zero);
+
+                    for (int lat = 0; lat <= latitude_count; lat++)
+                    {
+                        Vector3 old_pos = vertices[lat * (longitude_count + 1) + longitude_count];
+                        vertices.Add(old_pos);
+                        uvs.Add(new Vector2(old_pos.x / rx, -old_pos.z / rz));
+                    }
+
+                    for (int lat = 0; lat < latitude_count; lat++)
+                    {
+                        AddTriangle(back_side_offset, back_side_offset + 1 + lat, back_side_offset + 1 + lat + 1, indices);
+                    }
+                }
+
+                indices.Reverse();
+
+                UMesh mesh = new UMesh();
+                mesh.SetVertices(vertices);
+                mesh.SetUVs(0, uvs);
+                mesh.SetTriangles(indices, 0);
+                mesh.RecalculateNormals();
+                // 调整椭球体的法线
+                Vector3[] normals = mesh.normals;
+                for (int i = 0; i < vertices.Count; i++)
+                {
+                    Vector3 n = new Vector3(vertices[i].x / (rx * rx), vertices[i].y / (ry * ry), vertices[i].z / (rz * rz));
+                    normals[i] = n.normalized;
+                }
+                mesh.normals = normals;
+
+                mesh.RecalculateTangents();
+                mesh.RecalculateBounds();
+                return mesh;
+            }
+
+            // 螺旋管
+            public static UMesh GenerateHelixMesh(HelixDescription description)
+            {
+                List<Vector3> vertices = new List<Vector3>();
+                List<Vector2> uvs = new List<Vector2>();
+                List<int> indices = new List<int>();
+
+                int section_count = Mathf.Max(3, description.section_count);
+                int tube_section_count = Mathf.Max(3, description.tube_section_count);
+                float coil_radius = description.coil_radius;
+                float tube_radius = description.tube_radius;
+                float turns = description.turns;
+                float height = description.height;
+
+                int point_count = section_count + 1;
+
+                List<Vector3> path_points = new List<Vector3>();
+                for (int i = 0; i < point_count; i++)
+                {
+                    float t = (float)i / section_count * turns;
+                    float radian = t * 2 * Mathf.PI;
+                    float x = -Mathf.Sin(radian) * coil_radius;
+                    float z = Mathf.Cos(radian) * coil_radius;
+                    float y = ((float)i / section_count) * height - height / 2;
+                    path_points.Add(new Vector3(x, y, z));
+                }
+
+                int circle_point_count = tube_section_count + 1;
+                float single_circle_angle = 2 * Mathf.PI / tube_section_count;
+
+                List<Vector3> circle_points = new List<Vector3>();
+                for (int i = 0; i < circle_point_count; i++)
+                {
+                    float radian = single_circle_angle * i;
+                    float x = -Mathf.Sin(radian);
+                    float y = Mathf.Cos(radian);
+                    circle_points.Add(new Vector3(x, y, 0));
+                }
+
+                float v = 0;
+                for (int i = 0; i < point_count; i++)
+                {
+                    int pre_index = Mathf.Max(i - 1, 0);
+                    int next_index = Mathf.Min(i + 1, point_count - 1);
+                    Vector3 center_position = path_points[i];
+
+                    Vector3 tangent = (path_points[next_index] - path_points[pre_index]).normalized;
+                    if (tangent == Vector3.zero) tangent = Vector3.up;
+
+                    Vector3 binormal = new Vector3(-center_position.x, 0, -center_position.z).normalized;
+                    if (binormal == Vector3.zero) binormal = Vector3.right;
+                    
+                    Vector3 normal = Vector3.Cross(tangent, binormal).normalized;
+                    binormal = Vector3.Cross(normal, tangent).normalized;
+
+                    Matrix4x4 m = Matrix4x4.identity;
+                    m.SetColumn(0, new Vector4(normal.x, normal.y, normal.z, 0));
+                    m.SetColumn(1, new Vector4(binormal.x, binormal.y, binormal.z, 0));
+                    m.SetColumn(2, new Vector4(tangent.x, tangent.y, tangent.z, 0));
+                    m.SetColumn(3, new Vector4(center_position.x, center_position.y, center_position.z, 1));
+
+                    if (i > 0) v += (path_points[i] - path_points[i - 1]).magnitude;
+
+                    for (int j = 0; j < circle_point_count; j++)
+                    {
+                        Vector3 position = m.MultiplyPoint3x4(circle_points[j] * tube_radius);
+                        vertices.Add(position);
+                        uvs.Add(new Vector2((float)j / tube_section_count, v / (Mathf.PI * 2 * tube_radius)));
+                    }
+                }
+
+                for (int i = 0; i < section_count; i++)
+                {
+                    int start_index = i * circle_point_count;
+                    int next_start_index = (i + 1) * circle_point_count;
+
+                    for (int j = 0; j < tube_section_count; j++)
+                    {
+                        AddQuadRightHand(j + start_index, j + 1 + start_index, j + 1 + next_start_index, j + next_start_index, indices);
+                    }
+                }
+
+                // Front Cap
+                int front_cap_offset = vertices.Count;
+                vertices.Add(path_points[0]); uvs.Add(Vector2.zero);
+                for (int j = 0; j < circle_point_count; j++)
+                {
+                    vertices.Add(vertices[j]);
+                    uvs.Add(new Vector2(circle_points[j].x, circle_points[j].y));
+                }
+                for (int j = 0; j < circle_point_count - 1; j++)
+                {
+                    AddTriangle(front_cap_offset, front_cap_offset + j + 1, front_cap_offset + j + 2, indices);
+                }
+
+                // Back Cap
+                int back_cap_offset = vertices.Count;
+                int last_circle_offset = section_count * circle_point_count;
+                vertices.Add(path_points[point_count - 1]); uvs.Add(Vector2.zero);
+                for (int j = 0; j < circle_point_count; j++)
+                {
+                    vertices.Add(vertices[last_circle_offset + j]);
+                    uvs.Add(new Vector2(circle_points[j].x, circle_points[j].y));
+                }
+                for (int j = 0; j < circle_point_count - 1; j++)
+                {
+                    AddTriangle(back_cap_offset, back_cap_offset + j + 2, back_cap_offset + j + 1, indices);
+                }
+
+                UMesh mesh = new UMesh();
+                mesh.SetVertices(vertices);
+                mesh.SetUVs(0, uvs);
+                mesh.SetTriangles(indices, 0);
+                mesh.RecalculateNormals();
+                mesh.RecalculateTangents();
+                mesh.RecalculateBounds();
+                return mesh;
+            }
+
+            // 正四面体
+            public static UMesh GenerateTetrahedronMesh(TetrahedronDescription description)
+            {
+                float r = description.radius;
+
+                float a = 1f / 3f;
+                float b = Mathf.Sqrt(8f / 9f);
+                float c = Mathf.Sqrt(2f / 9f);
+                float d = Mathf.Sqrt(2f / 3f);
+
+                Vector3 p0 = new Vector3(0, r, 0);
+                Vector3 p1 = new Vector3(-c * r, -a * r, d * r);
+                Vector3 p2 = new Vector3(-c * r, -a * r, -d * r);
+                Vector3 p3 = new Vector3(b * r, -a * r, 0);
+
+                Vector3[] srcVerts = new Vector3[] {
+                    p0, p1, p2, // Face 0
+                    p0, p2, p3, // Face 1
+                    p0, p3, p1, // Face 2
+                    p1, p3, p2  // Face 3
+                };
+
+                List<Vector3> vertices = new List<Vector3>(srcVerts);
+                List<int> indices = new List<int>();
+                for (int i = 0; i < 12; i++) indices.Add(i);
+
+                indices.Reverse();
+
+                UMesh mesh = new UMesh();
+                mesh.SetVertices(vertices);
+                mesh.SetTriangles(indices, 0);
+                mesh.RecalculateNormals();
+                mesh.RecalculateBounds();
+                return mesh;
+            }
+
+            // 正八面体
+            public static UMesh GenerateOctahedronMesh(OctahedronDescription description)
+            {
+                float r = description.radius;
+
+                Vector3 pt = new Vector3(0, r, 0);
+                Vector3 pb = new Vector3(0, -r, 0);
+                Vector3 p0 = new Vector3(r, 0, 0);
+                Vector3 p1 = new Vector3(0, 0, r);
+                Vector3 p2 = new Vector3(-r, 0, 0);
+                Vector3 p3 = new Vector3(0, 0, -r);
+
+                Vector3[] srcVerts = new Vector3[] {
+                    pt, p0, p1,
+                    pt, p1, p2,
+                    pt, p2, p3,
+                    pt, p3, p0,
+                    pb, p1, p0,
+                    pb, p2, p1,
+                    pb, p3, p2,
+                    pb, p0, p3
+                };
+
+                List<Vector3> vertices = new List<Vector3>(srcVerts);
+                List<int> indices = new List<int>();
+                for (int i = 0; i < 24; i++) indices.Add(i);
+
+                indices.Reverse();
+
+                UMesh mesh = new UMesh();
+                mesh.SetVertices(vertices);
+                mesh.SetTriangles(indices, 0);
+                mesh.RecalculateNormals();
+                mesh.RecalculateBounds();
+                return mesh;
+            }
+
+            // 箭头
+            public static UMesh GenerateArrowMesh(ArrowDescription description)
+            {
+                List<Vector3> vertices = new List<Vector3>();
+                List<int> indices = new List<int>();
+
+                int section_count = Mathf.Max(3, description.section_count);
+                float shaft_radius = description.shaft_radius;
+                float shaft_height = description.shaft_height;
+                float head_radius = description.head_radius;
+                float head_height = description.head_height;
+
+                int point_count = section_count + 1;
+                float angle_step = 2 * Mathf.PI / section_count;
+
+                // 底面圆盘
+                int bottom_offset = vertices.Count;
+                vertices.Add(Vector3.zero);
+                for (int i = 0; i < point_count; i++)
+                {
+                    float angle = i * angle_step;
+                    vertices.Add(new Vector3(-Mathf.Sin(angle) * shaft_radius, 0, Mathf.Cos(angle) * shaft_radius));
+                }
+                for (int i = 0; i < section_count; i++)
+                {
+                    AddTriangle(bottom_offset, bottom_offset + i + 2, bottom_offset + i + 1, indices);
+                }
+
+                // 轴柱
+                int shaft_offset = vertices.Count;
+                for (int i = 0; i < point_count; i++)
+                {
+                    float angle = i * angle_step;
+                    float sin = Mathf.Sin(angle);
+                    float cos = Mathf.Cos(angle);
+                    vertices.Add(new Vector3(-sin * shaft_radius, 0, cos * shaft_radius));
+                    vertices.Add(new Vector3(-sin * shaft_radius, shaft_height, cos * shaft_radius));
+                }
+                for (int i = 0; i < section_count; i++)
+                {
+                    int root = shaft_offset + i * 2;
+                    AddQuadRightHand(root, root + 1, root + 3, root + 2, indices);
+                }
+
+                // 箭头底环盖
+                int cap_offset = vertices.Count;
+                for (int i = 0; i < point_count; i++)
+                {
+                    float angle = i * angle_step;
+                    float sin = Mathf.Sin(angle);
+                    float cos = Mathf.Cos(angle);
+                    vertices.Add(new Vector3(-sin * shaft_radius, shaft_height, cos * shaft_radius));
+                    vertices.Add(new Vector3(-sin * head_radius, shaft_height, cos * head_radius));
+                }
+                for (int i = 0; i < section_count; i++)
+                {
+                    int root = cap_offset + i * 2;
+                    // 法线朝下
+                    AddQuadLeftHand(root + 2, root + 3, root + 1, root, indices);
+                }
+
+                // 箭头锥面
+                int head_offset = vertices.Count;
+                Vector3 top_pos = new Vector3(0, shaft_height + head_height, 0);
+                for (int i = 0; i < point_count; i++)
+                {
+                    float angle = i * angle_step;
+                    float sin = Mathf.Sin(angle);
+                    float cos = Mathf.Cos(angle);
+                    vertices.Add(new Vector3(-sin * head_radius, shaft_height, cos * head_radius));
+                    vertices.Add(top_pos);
+                }
+                for (int i = 0; i < section_count; i++)
+                {
+                    int root = head_offset + i * 2;
+                    AddTriangle(root, root + 2, root + 1, indices);
+                }
+
+                indices.Reverse();
+
+                UMesh mesh = new UMesh();
+                mesh.SetVertices(vertices);
+                mesh.SetTriangles(indices, 0);
+                mesh.RecalculateNormals();
+                mesh.RecalculateBounds();
+                return mesh;
+            }
             #endregion
-            
+
             #region create go
+            // 立方体
             public static GameObject CreateCube(CubeDescription description)
             {
                 GameObject go = new GameObject();
@@ -1512,7 +2303,8 @@ namespace XFramework
                 mr.sharedMaterial = urpAsset != null ? urpAsset.defaultMaterial : new Material(Shader.Find("Universal Render Pipeline/Lit"));
                 return go;
             }
-
+            
+            // 球体
             public static GameObject CreateSphere(SphereDescription description)
             {
                 GameObject go = new GameObject();
@@ -1525,6 +2317,7 @@ namespace XFramework
                 return go;
             }
 
+            // 空心球
             public static GameObject CreateHollowSphere(HollowSphereDescription description)
             {
                 GameObject go = new GameObject();
@@ -1537,6 +2330,7 @@ namespace XFramework
                 return go;
             }
 
+            // 棱柱
             public static GameObject CreatePrism(PrismDescription description)
             {
                 GameObject go = new GameObject();
@@ -1549,6 +2343,7 @@ namespace XFramework
                 return go;
             }
 
+            // 圆柱
             public static GameObject CreateCylinder(CylinderDescription description)
             {
                 GameObject go = new GameObject();
@@ -1561,6 +2356,7 @@ namespace XFramework
                 return go;
             }
 
+            // 棱锥
             public static GameObject CreatePyramid(PyramidDescription description)
             {
                 GameObject go = new GameObject();
@@ -1573,6 +2369,7 @@ namespace XFramework
                 return go;
             }
 
+            // 圆环
             public static GameObject CreateCircularRing(CircularRingDescription description)
             {
                 GameObject go = new GameObject();
@@ -1585,6 +2382,7 @@ namespace XFramework
                 return go;
             }
 
+            // 方环
             public static GameObject CreateSquareRing(SquareRingDescription description)
             {
                 GameObject go = new GameObject();
@@ -1597,6 +2395,7 @@ namespace XFramework
                 return go;
             }
 
+            // 星形
             public static GameObject CreateStar(StarDescription description)
             {
                 GameObject go = new GameObject();
@@ -1608,7 +2407,111 @@ namespace XFramework
                 mr.sharedMaterial = urpAsset != null ? urpAsset.defaultMaterial : new Material(Shader.Find("Universal Render Pipeline/Lit"));
                 return go;
             }
-            
+
+            // 胶囊体
+            public static GameObject CreateCapsule(CapsuleDescription description)
+            {
+                GameObject go = new GameObject();
+                MeshFilter mf = go.AddComponent<MeshFilter>();
+                MeshRenderer mr = go.AddComponent<MeshRenderer>();
+                var meshCapsule = go.AddComponent<MeshCapsule>();
+                meshCapsule.description = description;
+                var urpAsset = UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline;
+                mr.sharedMaterial = urpAsset != null ? urpAsset.defaultMaterial : new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                return go;
+            }
+
+            // 圆盘
+            public static GameObject CreateDisc(DiscDescription description)
+            {
+                GameObject go = new GameObject();
+                MeshFilter mf = go.AddComponent<MeshFilter>();
+                MeshRenderer mr = go.AddComponent<MeshRenderer>();
+                var meshDisc = go.AddComponent<MeshDisc>();
+                meshDisc.description = description;
+                var urpAsset = UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline;
+                mr.sharedMaterial = urpAsset != null ? urpAsset.defaultMaterial : new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                return go;
+            }
+
+            // 圆管
+            public static GameObject CreateTube(TubeDescription description)
+            {
+                GameObject go = new GameObject();
+                MeshFilter mf = go.AddComponent<MeshFilter>();
+                MeshRenderer mr = go.AddComponent<MeshRenderer>();
+                var meshTube = go.AddComponent<MeshTube>();
+                meshTube.description = description;
+                var urpAsset = UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline;
+                mr.sharedMaterial = urpAsset != null ? urpAsset.defaultMaterial : new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                return go;
+            }
+
+            // 椭球体
+            public static GameObject CreateEllipsoid(EllipsoidDescription description)
+            {
+                GameObject go = new GameObject();
+                MeshFilter mf = go.AddComponent<MeshFilter>();
+                MeshRenderer mr = go.AddComponent<MeshRenderer>();
+                var meshEllipsoid = go.AddComponent<MeshEllipsoid>();
+                meshEllipsoid.description = description;
+                var urpAsset = UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline;
+                mr.sharedMaterial = urpAsset != null ? urpAsset.defaultMaterial : new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                return go;
+            }
+
+            // 螺旋体
+            public static GameObject CreateHelix(HelixDescription description)
+            {
+                GameObject go = new GameObject();
+                MeshFilter mf = go.AddComponent<MeshFilter>();
+                MeshRenderer mr = go.AddComponent<MeshRenderer>();
+                var comp = go.AddComponent<MeshHelix>();
+                comp.description = description;
+                var urpAsset = UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline;
+                mr.sharedMaterial = urpAsset != null ? urpAsset.defaultMaterial : new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                return go;
+            }
+
+            // 四面体
+            public static GameObject CreateTetrahedron(TetrahedronDescription description)
+            {
+                GameObject go = new GameObject();
+                MeshFilter mf = go.AddComponent<MeshFilter>();
+                MeshRenderer mr = go.AddComponent<MeshRenderer>();
+                var comp = go.AddComponent<MeshTetrahedron>();
+                comp.description = description;
+                var urpAsset = UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline;
+                mr.sharedMaterial = urpAsset != null ? urpAsset.defaultMaterial : new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                return go;
+            }
+
+            // 八面体
+            public static GameObject CreateOctahedron(OctahedronDescription description)
+            {
+                GameObject go = new GameObject();
+                MeshFilter mf = go.AddComponent<MeshFilter>();
+                MeshRenderer mr = go.AddComponent<MeshRenderer>();
+                var comp = go.AddComponent<MeshOctahedron>();
+                comp.description = description;
+                var urpAsset = UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline;
+                mr.sharedMaterial = urpAsset != null ? urpAsset.defaultMaterial : new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                return go;
+            }
+
+            // 箭头
+            public static GameObject CreateArrow(ArrowDescription description)
+            {
+                GameObject go = new GameObject();
+                MeshFilter mf = go.AddComponent<MeshFilter>();
+                MeshRenderer mr = go.AddComponent<MeshRenderer>();
+                var comp = go.AddComponent<MeshArrow>();
+                comp.description = description;
+                var urpAsset = UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline;
+                mr.sharedMaterial = urpAsset != null ? urpAsset.defaultMaterial : new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                return go;
+            }
+
             #endregion
             
             private static List<Vector3> RecalculateRowPositions(List<Vector3> raw, int section_count)
@@ -1636,7 +2539,7 @@ namespace XFramework
                 return curver.EvaluatePositions(Mathf.Max(1, section_count));
             }
 
-            private static void AddQuad(int leftDown, int rightDown, int rightUp, int leftUp, List<int> indices)
+            private static void AddQuadRightHand(int leftDown, int rightDown, int rightUp, int leftUp, List<int> indices)
             {
                 indices.Add(rightDown);
                 indices.Add(leftDown);
@@ -1645,6 +2548,17 @@ namespace XFramework
                 indices.Add(rightDown);
                 indices.Add(leftUp);
                 indices.Add(rightUp);
+            }
+            
+            private static void AddQuadLeftHand(int leftDown, int rightDown, int rightUp, int leftUp, List<int> indices)
+            {
+                indices.Add(rightDown);
+                indices.Add(leftUp);
+                indices.Add(leftDown);
+
+                indices.Add(rightDown);
+                indices.Add(rightUp);
+                indices.Add(leftUp);
             }
 
             private static void AddTriangle(int index1, int index2, int index3, List<int> indices)
@@ -1658,7 +2572,7 @@ namespace XFramework
             {
                 for (int i = 0; i < count - 1; i++)
                 {
-                    if (is_lu_rd) AddQuad(downOffset + i, downOffset + 1 + i, upOffset + 1 + i, upOffset + i, indices);
+                    if (is_lu_rd) AddQuadRightHand(downOffset + i, downOffset + 1 + i, upOffset + 1 + i, upOffset + i, indices);
                     else AddQuad1(downOffset + i, downOffset + 1 + i, upOffset + 1 + i, upOffset + i, indices);
                 }
             }
