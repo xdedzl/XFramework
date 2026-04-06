@@ -93,7 +93,7 @@ namespace XFramework.UI
             // }
             
             // todo 应该放到OnBeforeOpen的时候
-            panel.gameObject.SetActive(true);
+            panel.SetVisible(true);
             panel.transform.SetAsLastSibling();
             
             panel.OnOpen(args);
@@ -109,7 +109,7 @@ namespace XFramework.UI
                 panel.CloseSubPanels();
                 
                 // todo 应该放到OnClose的时候
-                panel.gameObject.SetActive(false);
+                panel.SetVisible(false);
                 
                 m_OnDisplayPanelDic[panel.Level].Remove(panel);
                 

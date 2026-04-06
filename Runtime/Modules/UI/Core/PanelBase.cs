@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using XFramework.Event;
@@ -28,6 +28,19 @@ namespace XFramework.UI
         public string PanelPath => GetType().GetCustomAttribute<PanelInfoAttribute>().path;
 
         protected RectTransform rect;
+
+        /// <summary>
+        /// 控制面板显隐，子类可覆写以支持 UI Toolkit 等非 GameObject 方式
+        /// </summary>
+        public virtual void SetVisible(bool visible)
+        {
+            gameObject.SetActive(visible);
+        }
+
+        /// <summary>
+        /// 面板是否可见
+        /// </summary>
+        public virtual bool IsVisible => gameObject.activeSelf;
 
         private List<SubPanelBase> m_SubPanels;
 
