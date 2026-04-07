@@ -46,7 +46,7 @@ namespace XFramework.UI
 
         private ComponentFindHelper<XUIBase> m_ComponentFindHelper;
 
-        private readonly EventRegisterHelper _registerHelper;
+        private EventRegisterHelper _registerHelper;
 
         /// <summary>
         /// 面板初始化，只会执行一次，在Awake后start前执行
@@ -54,6 +54,7 @@ namespace XFramework.UI
         internal void Init()
         {
             m_ComponentFindHelper = ComponentFindHelper<XUIBase>.CreateHelper(this.gameObject);
+            _registerHelper = EventRegisterHelper.Create(this);
             rect = transform.GetComponent<RectTransform>();
             Vector3 rectSize = rect.localScale;
             rect.localScale = rectSize;
@@ -74,7 +75,7 @@ namespace XFramework.UI
         /// </summary>
         public virtual void OnOpen(params object[] args)
         {
-            
+            _registerHelper?.Register();
         }
 
         internal void OpenSubPanels()
@@ -117,7 +118,7 @@ namespace XFramework.UI
         /// </summary>
         public virtual void OnClose()
         {
-            
+            _registerHelper?.UnRegister();
         }
 
         public virtual void OnAfterClose()
