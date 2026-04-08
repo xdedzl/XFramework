@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using XFramework.Event;
-using XFramework.Fsm;
 
 namespace XFramework
 {
@@ -9,7 +8,7 @@ namespace XFramework
     /// 流程基类
     /// </summary>
     [System.Serializable]
-    public abstract class ProcedureBase : FsmState 
+    public abstract class ProcedureBase
     {
         private List<SubProcedureBase> m_subProcedureBases;
         private SubProcedureBase m_currentSubProcedure;
@@ -20,6 +19,8 @@ namespace XFramework
                 return m_currentSubProcedure;
             }
         }
+
+        public virtual void OnInit() { }
 
         public virtual void OnEnter(ProcedureBase preProcedure)
         {
@@ -36,12 +37,12 @@ namespace XFramework
             onReady?.Invoke();
         }
 
-        public override void OnUpdate()
+        public virtual void OnUpdate()
         {
             m_currentSubProcedure?.OnUpdate();
         }
 
-        public override void OnExit()
+        public virtual void OnExit()
         {
             m_currentSubProcedure?.OnExit();
         }
@@ -97,7 +98,7 @@ namespace XFramework
             _registerHelper = EventRegisterHelper.Create(this);
         }
 
-        public override void OnEnter(params object[] parms)
+        public override void OnEnter(ProcedureBase preProcedure)
         {
             _registerHelper.Register();
         }
