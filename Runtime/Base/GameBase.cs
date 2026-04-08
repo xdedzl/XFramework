@@ -154,7 +154,7 @@ namespace XFramework
 
         private void OnValidate()
         {
-            if (ProcedureManager.IsValid)
+            if (ProcedureManager.IsValid && startProcedure != null)
             {
                 ProcedureManager.Instance.UpdateProcedure(startProcedure);
             }

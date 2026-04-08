@@ -10,7 +10,8 @@ using Object = UnityEngine.Object;
 [CustomEditor(typeof(GameBase), true)]
 public class GameInspector : Editor
 {
-    private string[] typeNames = null;
+    private string[] typeNames = null;      // full names (for storage)
+    private string[] displayNames = null;   // short names (for popup display)
     private int entranceProcedureIndex = 0;
     
     private string savePath;
@@ -30,7 +31,7 @@ public class GameInspector : Editor
     {
         entranceProcedureIndex = EditorPrefs.GetInt("index", 0);
 
-        typeNames = GetSonNames();
+        RefreshTypeNames();
         if (typeNames.Length == 0)
             return;
 
@@ -51,46 +52,107 @@ public class GameInspector : Editor
         savePath += "/";
     }
 
+    private void OnEnable()
+    {
+        EditorApplication.update += OnEditorUpdate;
+    }
+
+    private void OnDisable()
+    {
+        EditorApplication.update -= OnEditorUpdate;
+    }
+
+    private void OnEditorUpdate()
+    {
+        if (Application.isPlaying)
+            Repaint();
+    }
+
     public override void OnInspectorGUI()
     {
-        typeNames = GetSonNames();
+        RefreshTypeNames();
         if (typeNames.Length == 0)
+        {
+            EditorGUILayout.HelpBox("未找到任何 ProcedureBase 子类", MessageType.Warning);
             return;
+        }
 
         if (entranceProcedureIndex > typeNames.Length - 1)
             entranceProcedureIndex = 0;
 
+        // ── Entrance Procedure ──────────────────────────────────
         GUI.backgroundColor = new Color32(0, 170, 255, 30);
         GUILayout.BeginVertical("Box");
         GUI.backgroundColor = Color.white;
 
+        EditorGUILayout.LabelField("Entrance Procedure", EditorStyles.boldLabel);
+
         int lastIndex = entranceProcedureIndex;
-        entranceProcedureIndex = EditorGUILayout.Popup("Entrance Procedure", entranceProcedureIndex, typeNames);
-        
-        
-        
-        string className = gameInstance.startTypeName;
-        string[] guids = AssetDatabase.FindAssets(className + " t:MonoScript");
+        entranceProcedureIndex = EditorGUILayout.Popup("Start Procedure", entranceProcedureIndex, displayNames);
+
+        // script 快速跳转
+        string fullClassName = gameInstance.startTypeName;
+        // FindAssets 按文件名匹配，需要用简单类名（去掉命名空间）
+        string simpleClassName = fullClassName.Contains('.') ? fullClassName[(fullClassName.LastIndexOf('.') + 1)..] : fullClassName;
+        string[] guids = AssetDatabase.FindAssets(simpleClassName + " t:MonoScript");
         MonoScript script = null;
         foreach (string guid in guids)
         {
             string path = AssetDatabase.GUIDToAssetPath(guid);
             MonoScript _script = AssetDatabase.LoadAssetAtPath<MonoScript>(path);
-            // 验证脚本的类型是否匹配
-            if (_script != null && _script.GetClass()?.Name == className)
+            if (_script != null && _script.GetClass() != null && _script.GetClass().FullName == fullClassName)
             {
                 script = _script;
+                break;
             }
         }
-        
-        EditorGUILayout.ObjectField("Game Instance", script, typeof(MonoScript), true);
-        
-        
+        EditorGUILayout.ObjectField("Script", script, typeof(MonoScript), false);
+
         GUILayout.EndVertical();
 
         if (lastIndex != entranceProcedureIndex)
         {
             UpdateGame();
+        }
+
+        // ── Runtime Status ──────────────────────────────────────
+        if (Application.isPlaying && ProcedureManager.IsValid)
+        {
+            EditorGUILayout.Space(4);
+            GUI.backgroundColor = new Color32(0, 255, 100, 30);
+            GUILayout.BeginVertical("Box");
+            GUI.backgroundColor = Color.white;
+
+            EditorGUILayout.LabelField("Runtime Status", EditorStyles.boldLabel);
+
+            var current = ProcedureManager.Instance.CurrentProcedure;
+            if (current != null)
+            {
+                var type = current.GetType();
+                EditorGUILayout.LabelField("Current Procedure", type.Name, EditorStyles.boldLabel);
+                EditorGUI.indentLevel++;
+                EditorGUILayout.LabelField("Full Name", type.FullName, EditorStyles.miniLabel);
+                EditorGUI.indentLevel--;
+
+                var sub = ProcedureManager.Instance.CurrenSubProcedure;
+                if (sub != null)
+                {
+                    EditorGUILayout.LabelField("Sub Procedure", sub.GetType().Name, EditorStyles.boldLabel);
+                    EditorGUI.indentLevel++;
+                    EditorGUILayout.LabelField("Full Name", sub.GetType().FullName, EditorStyles.miniLabel);
+                    EditorGUI.indentLevel--;
+                }
+                else
+                {
+                    EditorGUILayout.LabelField("Sub Procedure", "None");
+                }
+            }
+            else
+            {
+                EditorGUILayout.LabelField("Current Procedure", "None");
+            }
+
+            GUILayout.EndVertical();
         }
 
         base.OnInspectorGUI();
@@ -104,6 +166,43 @@ public class GameInspector : Editor
         }
         gameInstance.startTypeName = typeNames[entranceProcedureIndex];
         gameInstance.startProcedure = Utility.Reflection.CreateInstance<ProcedureBase>(GetType(typeNames[entranceProcedureIndex]));
+    }
+
+    private void RefreshTypeNames()
+    {
+        var fullNames = new List<string>();
+        var shortNames = new List<string>();
+        Type typeBase = typeof(ProcedureBase);
+        Assembly assembly;
+        try { assembly = Assembly.Load("Assembly-CSharp"); }
+        catch { typeNames = new string[0]; displayNames = new string[0]; return; }
+
+        if (assembly == null) { typeNames = new string[0]; displayNames = new string[0]; return; }
+
+        foreach (Type type in assembly.GetTypes())
+        {
+            if (type.IsClass && !type.IsAbstract && type.IsSubclassOf(typeBase) && type.GetCustomAttribute<HideInEditor>() == null)
+            {
+                fullNames.Add(type.FullName);
+                // namespace を / 区切りに変換して表示 (例: GeoPet/LaunchProcedure)
+                shortNames.Add(string.IsNullOrEmpty(type.Namespace)
+                    ? type.Name
+                    : type.Namespace.Replace(".", "/") + "/" + type.Name);
+            }
+        }
+        // sort by full name, keep both lists in sync
+        var paired = new List<(string full, string display)>();
+        for (int i = 0; i < fullNames.Count; i++)
+            paired.Add((fullNames[i], shortNames[i]));
+        paired.Sort((a, b) => string.Compare(a.full, b.full, StringComparison.Ordinal));
+
+        typeNames = new string[paired.Count];
+        displayNames = new string[paired.Count];
+        for (int i = 0; i < paired.Count; i++)
+        {
+            typeNames[i] = paired[i].full;
+            displayNames[i] = paired[i].display;
+        }
     }
 
     private void OnDestroy()
@@ -122,28 +221,5 @@ public class GameInspector : Editor
                 return type;
         }
         return null;
-    }
-
-    private string[] GetSonNames()
-    {
-        List<string> typeNames = new List<string>();
-        Type typeBase = typeof(ProcedureBase);
-        Assembly assembly = Assembly.Load("Assembly-CSharp");
-
-        if (assembly == null)
-        {
-            return new string[0];
-        }
-
-        Type[] types = assembly.GetTypes();
-        foreach (Type type in types)
-        {
-            if (type.IsClass && !type.IsAbstract && type.IsSubclassOf(typeBase) && type.GetCustomAttribute<HideInEditor>() == null)
-            {
-                typeNames.Add(type.FullName);
-            }
-        }
-        typeNames.Sort();
-        return typeNames.ToArray();
     }
 }

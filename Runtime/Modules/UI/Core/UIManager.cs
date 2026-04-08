@@ -284,7 +284,10 @@ namespace XFramework.UI
         internal void RegisterExistPanel(GameObject panelGo, Type panelType)
         {
             var uiName = m_PanelType2Name[panelType];
-            AddPanel(uiName, panelGo);
+            if (!m_PanelDict.ContainsKey(uiName))
+            {
+                AddPanel(uiName, panelGo);
+            }
             OpenPanel(uiName);
         }
 

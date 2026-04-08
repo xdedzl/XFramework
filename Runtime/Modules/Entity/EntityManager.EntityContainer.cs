@@ -63,6 +63,7 @@ namespace XFramework.Entity
                     else
                     {
                         entityRoot = new GameObject(entityRootName).transform;
+                        GameObject.DontDestroyOnLoad(entityRoot.gameObject);
                     }
                 }
             }
