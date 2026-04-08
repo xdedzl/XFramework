@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using XFramework.Event;
 using XFramework.Fsm;
 
@@ -23,6 +24,16 @@ namespace XFramework
         public virtual void OnEnter(ProcedureBase preProcedure)
         {
 
+        }
+
+        /// <summary>
+        /// 流程进入后的异步准备阶段。
+        /// 默认实现直接调用 onReady；子类可重写以执行场景加载等异步操作，完成后再调用 onReady。
+        /// onReady 触发后框架才会执行 Module 加载和 UI 打开。
+        /// </summary>
+        public virtual void OnPrepare(Action onReady)
+        {
+            onReady?.Invoke();
         }
 
         public override void OnUpdate()

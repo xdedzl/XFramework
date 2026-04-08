@@ -266,6 +266,39 @@ namespace XFramework
         }
 
         /// <summary>
+        /// 检查模块是否已加载
+        /// </summary>
+        public static bool IsModuleLoaded<T>() where T : IGameModule
+        {
+            return IsModuleLoaded(typeof(T));
+        }
+
+        /// <summary>
+        /// 检查模块是否已加载
+        /// </summary>
+        public static bool IsModuleLoaded(Type moduleType)
+        {
+            return m_GameModules.ContainsKey(moduleType);
+        }
+
+        /// <summary>
+        /// 获取当前已加载的所有指定生命周期的模块类型
+        /// </summary>
+        public static List<Type> GetLoadedModuleTypes(ModuleLifecycle lifecycle)
+        {
+            var result = new List<Type>();
+            foreach (var kvp in m_GameModules)
+            {
+                var attr = kvp.Key.GetCustomAttribute<ModuleLifecycleAttribute>();
+                if (attr != null && attr.Lifecycle == lifecycle)
+                {
+                    result.Add(kvp.Key);
+                }
+            }
+            return result;
+        }
+
+        /// <summary>
         /// 卸载当前已加载的所有模块
         /// </summary>
         public static void ClearAllModule(bool force=false)

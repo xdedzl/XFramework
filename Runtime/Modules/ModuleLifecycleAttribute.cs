@@ -22,7 +22,11 @@ namespace XFramework
         /// <summary>
         /// 编辑器持久化模块，编译后创建，始终存在
         /// </summary>
-        EditorPersistent
+        EditorPersistent,
+        /// <summary>
+        /// 流程控制模块，随流程切换自动加载和卸载
+        /// </summary>
+        Procedure
     }
 
     /// <summary>
