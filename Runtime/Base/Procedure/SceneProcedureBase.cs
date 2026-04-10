@@ -19,11 +19,27 @@ namespace XFramework
         /// </summary>
         public virtual LoadSceneMode LoadSceneMode => LoadSceneMode.Single;
 
+        private ProcedureBase m_preProcedure;
+
+        public override void OnEnter(ProcedureBase preProcedure)
+        {
+            base.OnEnter(preProcedure);
+            m_preProcedure = preProcedure;
+        }
+
         /// <summary>
         /// 异步加载场景，完成后调用 onReady 以触发 Module/UI 处理
         /// </summary>
         public override void OnPrepare(Action onReady)
         {
+            // 如果上一个流程也是 SceneProcedureBase，并且场景路径相同，则不需要重新加载场景
+            if (m_preProcedure is SceneProcedureBase preSceneProcedure && preSceneProcedure.ScenePath == this.ScenePath)
+            {
+                onReady?.Invoke();
+                OnSceneLoaded();
+                return;
+            }
+
             var asyncOp = SceneManager.LoadSceneAsync(ScenePath, LoadSceneMode);
             asyncOp.completed += _ =>
             {
