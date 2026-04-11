@@ -132,6 +132,8 @@ flowchart TB
 - **内置子流程 (SubProcedure)**: 
   - 支持在大流程内部进行二次状态拆分（如：战斗流程中的"部署"、"开战"、"结算"）。
   - 使用 `ChangeSubProcedure<T>(args)` 进行内部切换。
+- **全局重置 (ChangeProcedure(null))**: 
+  - 当切换到空流程时，框架会自动检测并清理当前所有 `Procedure` 生命周期绑定的模块及 UI 面板，确保系统状态彻底归零。
 
 ### 2.2 扩展流程类型
 针对不同业务场景，框架预设了以下扩展：
@@ -486,7 +488,9 @@ public class BattleModule : GameModuleBase<BattleModule> { ... }
 ```csharp
 public class TimerModule : MonoGameModuleBase<TimerModule>
 {
-    public override int Priority => 10; // 数值越大，每帧执行越靠前
+    // 如果不重写，默认值为 GameModulePriority.Default (200)
+    // 基础设施建议使用 GameModulePriority.Highest (0) 等较小数值
+    public override int Priority => (int)GameModulePriority.Default; 
 
     public override void Update()
     {
@@ -495,7 +499,13 @@ public class TimerModule : MonoGameModuleBase<TimerModule>
 }
 ```
 
-### 5.4 注册与访问
+### 5.4 模块优先级 (Priority)
+所有模块都可以重写 `Priority` 属性。
+- **语义分层**：数值越小，地位越高（参考 `GameModulePriority`）。
+- **Update 顺序**：`Priority` 数值越小，在链表中排得越靠前，每帧执行顺位也越靠前。
+- **Shutdown 顺序**：在 `ClearAllModule` 时，`Priority` **数值越大越先销毁**，**数值越小（底层设施）最后销毁**。
+
+### 5.5 注册与访问
 - **显式手动加载**：`GameEntry.AddModule<MySystemModule>();`
 - **单例访问**：`MySystemModule.Instance.BusinessLogic();`
 
@@ -513,15 +523,20 @@ public class TimerModule : MonoGameModuleBase<TimerModule>
 | **`RuntimePersistent`** | **运行期持久化**。仅在游戏运行时加载，直到游戏结束才销毁。                               |
 | **`Procedure`**         | **流程绑定**。模块的生命周期与 `ProcedureBase` 挂钩。                                    |
 
-#### 关于 Procedure 绑定的特殊说明
+#### 5.5.1 关于 Procedure 绑定的特殊说明
 若模块标记为 `ModuleLifecycle.Procedure`，它将不再需要手动加载。您只需在对应的流程类上打标签：
 
 ```csharp
 [ProcedureModule(typeof(MySystemModule))]
 public class BattleProcedure : SceneProcedureBase { ... }
 ```
-- **进流程时**：`ProcedureManager`发现 `BattleProcedure` 需要该模块，若未加载则自动 `AddModule`。
+- **进流程时**：`ProcedureManager` 发现 `BattleProcedure` 需要该模块，若未加载则自动 `AddModule`。
 - **出流程时**：如果下一个流程不需要该模块，框架会自动调用 `Shutdown` 释放资源。
+
+#### 5.5.2 模块销毁顺序 (Shutdown Order)
+在调用 `GameEntry.ClearAllModule(force)` 时，系统会严格按照 `Priority` 进行**降序排列销毁**。
+- **逻辑设计**：这一设计是为了保护"底层设施"。通常底层设施（如 `SaveManager`, `ResourceManager`）的优先级设为**较小数值**（地位更高），而上层业务逻辑设为**较大数值**。
+- **结果**：业务模块（数值大）先执行 `Shutdown`（可以进行数据落盘操作），此时底层设施（数值小）依然存活，直到整条链路最后才会被关闭。
 
 ---
 

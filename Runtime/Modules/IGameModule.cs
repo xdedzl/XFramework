@@ -14,6 +14,11 @@
         /// </summary> 
         void Shutdown();
         /// <summary>
+        /// 模块优先级
+        /// </summary>
+        /// <remarks>优先级较高的模块会优先轮询</remarks>
+        int Priority{ get; }
+        /// <summary>
         /// 模块是否为持久化模块
         /// </summary>
         bool IsPersistent{ get; }
@@ -24,11 +29,6 @@
     /// </summary>
     public interface IMonoGameModule : IGameModule
     {
-        /// <summary>
-        /// 模块优先级
-        /// </summary>
-        /// <remarks>优先级较高的模块会优先轮询</remarks>
-        int Priority{ get; }
         /// <summary>
         /// 游戏框架模块轮询
         /// </summary>

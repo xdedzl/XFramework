@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -102,7 +102,8 @@ namespace XFramework
                 LinkedListNode<IMonoGameModule> current = m_MonoGameModules.First;
                 while (current != null)
                 {
-                    if (monoGameModule.Priority > current.Value.Priority)
+                    // 数值越小，优先级越高，越靠前。
+                    if (monoGameModule.Priority < current.Value.Priority)
                     {
                         break;
                     }
@@ -305,18 +306,23 @@ namespace XFramework
         {
             if (force)
             {
-                foreach (var item in m_GameModules.Values)
+                // 获取所有模块并按优先级从高到低排列销毁 (数值大的先死，数值小的即底层设施后死)
+                var modules = m_GameModules.Values.OrderByDescending(m => m.Priority).ToList();
+                foreach (var item in modules)
                 {
                     item.Shutdown();
                 }
                 
                 m_GameModules.Clear();
                 m_CurrentModule = null;
+                m_MonoGameModules.Clear();
                 m_DependenceDic.Clear();
             }
             else
             {
-                foreach (var item in m_GameModules.Keys.ToList())
+                // 同样按优先级降序逐个安全卸载
+                var types = m_GameModules.OrderByDescending(kvp => kvp.Value.Priority).Select(kvp => kvp.Key).ToList();
+                foreach (var item in types)
                 {
                     ShutdownModule(item);
                 }

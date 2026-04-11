@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using XFramework.UI;
@@ -61,15 +61,23 @@ namespace XFramework
             m_CurrentProcedure = newProcedure;
 
             newProcedure?.OnEnter(oldProcedure);
-            newProcedure?.OnPrepare(() =>
+            if (newProcedure == null)
             {
-                // 防止准备期间已经切换到其他流程
-                if (m_CurrentProcedure != newProcedure)
-                    return;
+                HandleProcedureModules(null);
+                HandleProcedureUI(null);
+            }
+            else
+            {
+                newProcedure.OnPrepare(() =>
+                {
+                    // 防止准备期间已经切换到其他流程
+                    if (m_CurrentProcedure != newProcedure)
+                        return;
 
-                HandleProcedureModules(newProcedure);
-                HandleProcedureUI(newProcedure);
-            });
+                    HandleProcedureModules(newProcedure);
+                    HandleProcedureUI(newProcedure);
+                });
+            }
         }
 
         /// <summary>

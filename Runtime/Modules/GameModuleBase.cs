@@ -3,6 +3,34 @@ using XFramework.Event;
 
 namespace XFramework
 {
+    public enum GameModulePriority
+    {
+        /// <summary>
+        /// 最高优先级，框架核心模块建议使用该优先级
+        /// </summary>
+        Highest = 0,
+        /// <summary>
+        /// 存档系统
+        /// </summary>
+        Save = 100,
+        /// <summary>
+        /// 较高优先级，游戏核心模块建议使用该优先级
+        /// </summary>
+        Higher = 200,
+        /// <summary>
+        /// 默认优先级，普通模块建议使用该优先级
+        /// </summary>
+        Default = 500,
+        /// <summary>
+        /// 较低优先级，非核心模块建议使用该优先级
+        /// </summary>
+        Lower = 750,
+        /// <summary>
+        /// 最低优先级，框架辅助模块建议使用该优先级
+        /// </summary>
+        Lowest = 1000
+    }
+
     public abstract class GameModuleBase<T> : IGameModule where T : GameModuleBase<T>
     {
         public virtual bool IsPersistent
@@ -39,6 +67,8 @@ namespace XFramework
         /// 关闭模块
         /// </summary> 
         public virtual void Shutdown() { }
+
+        public virtual int Priority => (int)GameModulePriority.Default;
     }
 
     public abstract class GameModuleWithEvent<T> : GameModuleBase<T> where T : GameModuleWithEvent<T>
@@ -60,11 +90,6 @@ namespace XFramework
     
     public abstract class MonoGameModuleBase<T> : GameModuleBase<T>, IMonoGameModule where T : MonoGameModuleBase<T>
     {
-        /// <summary>
-        /// 模块优先级
-        /// </summary>
-        /// <remarks>优先级较高的模块会优先轮询</remarks>
-        public abstract int Priority { get; }
         /// <summary>
         /// 游戏框架模块轮询
         /// </summary>

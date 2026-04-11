@@ -61,6 +61,8 @@ namespace XFramework.Save
             }
         }
 
+        public override int Priority => (int)GameModulePriority.Save;
+
         #region Public API
 
         /// <summary>
