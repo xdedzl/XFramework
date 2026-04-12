@@ -236,39 +236,64 @@ namespace XFramework
             var camAttr = GetAttribute<ProcedureCameraAttribute>(newState);
             string targetCameraName = camAttr?.CameraName;
 
-            // 执行物理切换 (基于 UObjectFinder)
+            // 执行物理切换 (优先组件 Enable，其次 GameObject Active)
             if (!string.IsNullOrEmpty(targetCameraName) && targetCameraName != m_ActiveCameraName)
             {
                 // 关闭旧相机
                 if (!string.IsNullOrEmpty(m_ActiveCameraName))
                 {
-                    try
-                    {
-                        var oldCam = UObjectFinder.Find(m_ActiveCameraName);
-                        if (oldCam != null) oldCam.SetActive(false);
-                    }
-                    catch { /* 忽略销毁掉的对象 */ }
+                    GameObject oldGo = UObjectFinder.Find(m_ActiveCameraName);
+                    ToggleCameraObject(oldGo, false);
                 }
 
                 // 开启新相机
                 m_ActiveCameraName = targetCameraName;
-                try
+                GameObject newGo = UObjectFinder.Find(m_ActiveCameraName);
+                if (newGo != null)
                 {
-                    var newCam = UObjectFinder.Find(m_ActiveCameraName);
-                    if (newCam != null)
-                    {
-                        newCam.SetActive(true);
-                        Debug.Log($"[ProcedureManager] Switch Camera to: {m_ActiveCameraName}");
-                    }
-                    else
-                    {
-                        Debug.LogWarning($"[ProcedureManager] Camera not found by UObjectFinder: {m_ActiveCameraName}");
-                    }
+                    ToggleCameraObject(newGo, true);
+                    Debug.Log($"[ProcedureManager] Switch Camera to: {m_ActiveCameraName}");
                 }
-                catch (Exception e)
+                else if (!string.IsNullOrEmpty(m_ActiveCameraName))
                 {
-                    Debug.LogError($"[ProcedureManager] Failed to switch camera: {e.Message}");
+                    Debug.LogWarning($"[ProcedureManager] Camera not found: {m_ActiveCameraName}");
                 }
+            }
+        }
+
+        private void ToggleCameraObject(GameObject go, bool active)
+        {
+            if (go == null) return;
+
+            // 寻找镜头组件（适配 Cinemachine 或标准 Camera）
+            // 优先通过 behaviour.enabled 控制，这样在 Unity 6 中可以保留物体的生命周期
+            var behaviours = go.GetComponents<Behaviour>();
+            bool componentFound = false;
+            foreach (var b in behaviours)
+            {
+                if (b == null) continue;
+                string typeName = b.GetType().Name;
+                
+                // 识别 Cinemachine 系列组件 (Unity 6: CinemachineCamera, Legacy: CinemachineVirtualCamera)
+                if (typeName.Contains("CinemachineCamera") || 
+                    typeName.Contains("CinemachineVirtualCamera") || 
+                    typeName.Contains("CinemachineFreeLook"))
+                {
+                    b.enabled = active;
+                    componentFound = true;
+                }
+                // 也可以适配标准 Camera
+                else if (typeName == "Camera")
+                {
+                    b.enabled = active;
+                    componentFound = true;
+                }
+            }
+
+            // 如果没找到组件，或者明确需要开关物体，则回退到 SetActive
+            if (!componentFound)
+            {
+                go.SetActive(active);
             }
         }
 
