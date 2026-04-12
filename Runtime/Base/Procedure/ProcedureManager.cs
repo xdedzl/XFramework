@@ -236,28 +236,43 @@ namespace XFramework
             var camAttr = GetAttribute<ProcedureCameraAttribute>(newState);
             string targetCameraName = camAttr?.CameraName;
 
-            // 执行物理切换 (优先组件 Enable，其次 GameObject Active)
-            if (!string.IsNullOrEmpty(targetCameraName) && targetCameraName != m_ActiveCameraName)
+            // 1. 如果都有相机且名称一致，则无需任何操作
+            if (!string.IsNullOrEmpty(targetCameraName) && targetCameraName == m_ActiveCameraName)
             {
-                // 关闭旧相机
-                if (!string.IsNullOrEmpty(m_ActiveCameraName))
+                return;
+            }
+
+            // 2. 关闭旧相机 (如果名称有效)
+            if (!string.IsNullOrEmpty(m_ActiveCameraName))
+            {
+                // 旧的相机可能会找不到，因为场景可能已经被卸载，这是正常的
+                GameObject oldGo = UObjectFinder.Find(m_ActiveCameraName);
+                if (oldGo != null)
                 {
-                    GameObject oldGo = UObjectFinder.Find(m_ActiveCameraName);
                     ToggleCameraObject(oldGo, false);
                 }
+            }
 
-                // 开启新相机
-                m_ActiveCameraName = targetCameraName;
-                GameObject newGo = UObjectFinder.Find(m_ActiveCameraName);
+            // 3. 加载新相机
+            if (!string.IsNullOrEmpty(targetCameraName))
+            {
+                GameObject newGo = UObjectFinder.Find(targetCameraName);
                 if (newGo != null)
                 {
                     ToggleCameraObject(newGo, true);
+                    m_ActiveCameraName = targetCameraName;
                     Debug.Log($"[ProcedureManager] Switch Camera to: {m_ActiveCameraName}");
                 }
-                else if (!string.IsNullOrEmpty(m_ActiveCameraName))
+                else
                 {
-                    Debug.LogWarning($"[ProcedureManager] Camera not found: {m_ActiveCameraName}");
+                    // 新的流程相机如果找不到，说明配置有问题，要抛出 error
+                    throw new XFrameworkException($"[ProcedureManager] Camera '{targetCameraName}' not found. Please check your procedure configuration.");
                 }
+            }
+            else
+            {
+                // 4. 新流程没有相机配置，重置激活状态
+                m_ActiveCameraName = null;
             }
         }
 
