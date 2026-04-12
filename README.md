@@ -515,7 +515,7 @@ public class TimerModule : MonoGameModuleBase<TimerModule>
 - **单例访问**：`MySystemModule.Instance.BusinessLogic();`
 
 > [!TIP]
-> **自动事件绑定**：如果您的模块需要监听 `MessageManager` 事件，可以改用继承 `GameModuleWithEvent<T>`。它会自动扫描并绑定类中所有带有 `[EventListener]` 特性的方法，并在 `Shutdown` 时自动解绑。
+> **自动事件绑定**：如果您的模块需要监听 `MessageManager` 事件，必须改用继承 `GameModuleWithEvent<T>`（如果还需要 `Update` 轮询则继承 `MonoGameModuleWithEvent<T>`）。它会自动利用反射扫描并绑定类中所有带有 `[EventListener]` 特性的方法（**支持 private 方法监听，保持良好的封装性**），并在 `Shutdown` 时自动解绑。为追求极致效率，默认的 `GameModuleBase` 是不具有反射注册功能的。
 
 ### 5.5 模块生命周期详解 (Module Lifecycle)
 

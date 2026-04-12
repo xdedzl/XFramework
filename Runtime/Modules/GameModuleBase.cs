@@ -96,7 +96,7 @@ namespace XFramework
         public virtual void Update() { }
     }
     
-    public abstract class MonoGameModuleWithEvent<T> : GameModuleBase<T> where T : MonoGameModuleWithEvent<T>
+    public abstract class MonoGameModuleWithEvent<T> : MonoGameModuleBase<T> where T : MonoGameModuleWithEvent<T>
     {
         private readonly EventRegisterHelper registerHelper;
 
