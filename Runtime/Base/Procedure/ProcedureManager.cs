@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using UnityEngine;
 using XFramework.UI;
 
 namespace XFramework
@@ -63,8 +64,7 @@ namespace XFramework
             newProcedure?.OnEnter(oldProcedure);
             if (newProcedure == null)
             {
-                HandleProcedureModules(null);
-                HandleProcedureUI(null);
+                RefreshProcedureState();
             }
             else
             {
@@ -74,8 +74,7 @@ namespace XFramework
                     if (m_CurrentProcedure != newProcedure)
                         return;
 
-                    HandleProcedureModules(newProcedure);
-                    HandleProcedureUI(newProcedure);
+                    RefreshProcedureState();
                 });
             }
         }
@@ -190,17 +189,102 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 根据新流程的 ProcedureUIAttribute 进行UI面板差异打开/关闭
+        /// 当前激活的相机对象名称
+        /// </summary>
+        private string m_ActiveCameraName;
+
+        /// <summary>
+        /// 强制刷新当前流程（及子流程）的所有自动配置项（模块、UI、相机等）。
+        /// 通常在全流程切换或子流程切换后由框架内部自动调用。
+        /// </summary>
+        internal void RefreshProcedureState()
+        {
+            if (m_CurrentProcedure != null)
+            {
+                HandleProcedureModules(m_CurrentProcedure);
+                HandleProcedureUI(m_CurrentProcedure);
+                HandleProcedureCamera(m_CurrentProcedure);
+            }
+        }
+
+        /// <summary>
+        /// 从当前流程栈中获取指定特性（子流程优先）。
+        /// </summary>
+        private T GetAttribute<T>(ProcedureBase state) where T : Attribute
+        {
+            if (state == null) return null;
+
+            // 1. 优先从当前子流程类上查找
+            if (state.CurrentSubProcedure != null)
+            {
+                var attr = state.CurrentSubProcedure.GetType().GetCustomAttribute<T>();
+                if (attr != null) return attr;
+            }
+
+            // 2. 其次从父流程类上查找
+            return state.GetType().GetCustomAttribute<T>();
+        }
+
+        /// <summary>
+        /// 根据特性配置自动切换相机显隐。
+        /// 规则：子流程优先；如果都没有定义则保持现状。
+        /// </summary>
+        private void HandleProcedureCamera(ProcedureBase newState)
+        {
+            if (newState == null) return;
+
+            var camAttr = GetAttribute<ProcedureCameraAttribute>(newState);
+            string targetCameraName = camAttr?.CameraName;
+
+            // 执行物理切换 (基于 UObjectFinder)
+            if (!string.IsNullOrEmpty(targetCameraName) && targetCameraName != m_ActiveCameraName)
+            {
+                // 关闭旧相机
+                if (!string.IsNullOrEmpty(m_ActiveCameraName))
+                {
+                    try
+                    {
+                        var oldCam = UObjectFinder.Find(m_ActiveCameraName);
+                        if (oldCam != null) oldCam.SetActive(false);
+                    }
+                    catch { /* 忽略销毁掉的对象 */ }
+                }
+
+                // 开启新相机
+                m_ActiveCameraName = targetCameraName;
+                try
+                {
+                    var newCam = UObjectFinder.Find(m_ActiveCameraName);
+                    if (newCam != null)
+                    {
+                        newCam.SetActive(true);
+                        Debug.Log($"[ProcedureManager] Switch Camera to: {m_ActiveCameraName}");
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"[ProcedureManager] Camera not found by UObjectFinder: {m_ActiveCameraName}");
+                    }
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"[ProcedureManager] Failed to switch camera: {e.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// 根据新流程或子流程的特性进行UI面板差异打开/关闭。
+        /// 规则：优先使用子流程配置（排他性覆盖）；否则沿用父流程配置。
         /// </summary>
         private void HandleProcedureUI(ProcedureBase newState)
         {
             var requiredPanels = new HashSet<string>();
             if (newState != null)
             {
-                var attr = newState.GetType().GetCustomAttribute<ProcedureUIAttribute>();
-                if (attr != null)
+                var uiAttr = GetAttribute<ProcedureUIAttribute>(newState);
+                if (uiAttr != null)
                 {
-                    foreach (var panelName in attr.PanelNames)
+                    foreach (var panelName in uiAttr.PanelNames)
                     {
                         requiredPanels.Add(panelName);
                     }

@@ -73,6 +73,7 @@ flowchart TB
         
         %% 特性约束关联
         Proc -.->|"[ProcedureUI]<br/>控制面板显隐"| UI
+        Proc -.->|"[ProcedureCamera]<br/>控制场景相机"| UnityTools
         Proc -.->|"[ProcedureModule]<br/>提供对应依赖锁"| ModPool
     end
 
@@ -144,9 +145,12 @@ flowchart TB
   - 通过 `Parent` 属性（`SubProcedureBase<T>`）可安全访问所属的大流程实例。
 
 ### 2.3 驱动机制 (Automatic Drivers)
-流程通过 `[ProcedureModule]` 和 `[ProcedureUI]` 特性自动驱动其他系统：
-1. **模块驱动**：进入流程时自动加载所需的业务 Module（见 5.5 节）。
-2. **UI 驱动**：根据流程类型自动打开/关闭对应的 UI 面板，实现"所见即所得"的场景切换体验。
+流程通过特性自动驱动其他系统，实现配置化、声明式的逻辑切换：
+1. **模块驱动 (`[ProcedureModule]`)**：进入流程时自动加载所需的业务 Module（见 5.5 节）。
+2. **UI 驱动 (`[ProcedureUI]`)**：根据名称自动打开/关闭对应的 UI 面板，实现"所见即所得"的界面切换体验。
+3. **相机驱动 (`[ProcedureCamera]`)**：**[New]** 声明流程所需的相机名称。进入阶段时，框架将通过 `UObjectFinder` 查找并激活该相机，并自动关闭前一个相机的激活状态。
+   - **优先级规则**：系统会优先应用子流程（SubProcedure）指定的相机；若子流程未声明，则回退并应用父流程的配置。
+   - **核心依赖**：依赖场景中需要切换的相机对象挂载 `UObjectReference`。
 
 ### 2.4 完整流程编写示例 (Usage Example)
 以下是一个典型的游戏流程代码示例，展示了如何结合特性与生命周期钩子：
@@ -155,9 +159,10 @@ flowchart TB
 using XFramework;
 using Action = System.Action;
 
-// 1. 定义流程依赖：进入此流程自动加载 BattleModule，自动打开 BattlePanel
+// 1. 定义流程依赖：自动加载模块、打开 UI、激活相机
 [ProcedureModule(typeof(BattleModule))]
 [ProcedureUI("BattlePanel")]
+[ProcedureCamera("MainCamera")]
 public class BattleProcedure : SceneProcedureBase
 {
     // 指定该流程关联的 Unity 场景路径

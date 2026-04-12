@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using XFramework.Event;
 
@@ -68,6 +68,7 @@ namespace XFramework
                 {
                     m_currentSubProcedure = item;
                     m_currentSubProcedure.OnEnter(args);
+                    ProcedureManager.Instance.RefreshProcedureState();
                     return;
                 }
             }
@@ -77,6 +78,7 @@ namespace XFramework
             m_currentSubProcedure.OnInit();
             m_currentSubProcedure.OnEnter(args);
             m_subProcedureBases.Add(m_currentSubProcedure);
+            ProcedureManager.Instance.RefreshProcedureState();
         }
 
         /// <summary>
