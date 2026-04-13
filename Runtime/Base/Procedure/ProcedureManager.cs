@@ -1,8 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
-using UnityEngine;
-using XFramework.UI;
 
 namespace XFramework
 {
@@ -21,10 +18,7 @@ namespace XFramework
         /// </summary>
         private ProcedureBase m_CurrentProcedure;
 
-        /// <summary>
-        /// 当前由流程管理的UI面板名称
-        /// </summary>
-        private readonly HashSet<string> m_ProcedureManagedPanels = new();
+        // UI 面板状态已移至 ProcedureUIProcessor 中管理
 
         /// <summary>
         /// 当前流程
@@ -145,53 +139,46 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 根据新流程的 ProcedureModuleAttribute 进行模块差异加载/卸载
+        /// 流程处理器列表
         /// </summary>
-        private void HandleProcedureModules(ProcedureBase newState)
+        private readonly List<IProcedureProcessor> m_Processors = new List<IProcedureProcessor>()
         {
-            var requiredTypes = new HashSet<Type>();
-            if (newState != null)
-            {
-                var attr = newState.GetType().GetCustomAttribute<ProcedureModuleAttribute>();
-                if (attr != null)
-                {
-                    foreach (var moduleType in attr.ModuleTypes)
-                    {
-                        var lifecycleAttr = moduleType.GetCustomAttribute<ModuleLifecycleAttribute>();
-                        if (lifecycleAttr == null || lifecycleAttr.Lifecycle != ModuleLifecycle.Procedure)
-                        {
-                            throw new XFrameworkException(
-                                $"[Procedure] Module {moduleType.Name} declared in ProcedureModuleAttribute on {newState.GetType().Name} " +
-                                $"must have [ModuleLifecycle(ModuleLifecycle.Procedure)] attribute");
-                        }
-                        requiredTypes.Add(moduleType);
-                    }
-                }
-            }
+            new ProcedureModuleProcessor(),
+            new ProcedureUIProcessor(),
+            new ProcedureCameraProcessor(),
+            new ProcedureCursorProcessor(),
+            new ProcedureTimeScaleProcessor()
+        };
 
-            var loadedProcedureModules = GameEntry.GetLoadedModuleTypes(ModuleLifecycle.Procedure);
-
-            foreach (var loadedType in loadedProcedureModules)
+        /// <summary>
+        /// 注册自定义流程处理器
+        /// </summary>
+        public void AddProcessor(IProcedureProcessor processor)
+        {
+            if (processor != null && !m_Processors.Contains(processor))
             {
-                if (!requiredTypes.Contains(loadedType))
-                {
-                    GameEntry.ShutdownModule(loadedType);
-                }
-            }
-
-            foreach (var requiredType in requiredTypes)
-            {
-                if (!GameEntry.IsModuleLoaded(requiredType))
-                {
-                    GameEntry.AddModule(requiredType);
-                }
+                m_Processors.Add(processor);
             }
         }
 
         /// <summary>
-        /// 当前激活的相机对象名称
+        /// 特性缓存字典
         /// </summary>
-        private string m_ActiveCameraName;
+        private readonly Dictionary<Type, ProcedureAttributeContext> m_AttributeCache = new();
+
+        /// <summary>
+        /// 获取或创建指定类型的特性上下文。
+        /// </summary>
+        private ProcedureAttributeContext GetContext(Type type)
+        {
+            if (type == null) return null;
+            if (!m_AttributeCache.TryGetValue(type, out var context))
+            {
+                context = new ProcedureAttributeContext(type);
+                m_AttributeCache[type] = context;
+            }
+            return context;
+        }
 
         /// <summary>
         /// 强制刷新当前流程（及子流程）的所有自动配置项（模块、UI、相机等）。
@@ -201,158 +188,13 @@ namespace XFramework
         {
             if (m_CurrentProcedure != null)
             {
-                HandleProcedureModules(m_CurrentProcedure);
-                HandleProcedureUI(m_CurrentProcedure);
-                HandleProcedureCamera(m_CurrentProcedure);
-            }
-        }
+                var subContext = m_CurrentProcedure.CurrentSubProcedure != null ? GetContext(m_CurrentProcedure.CurrentSubProcedure.GetType()) : null;
+                var parentContext = GetContext(m_CurrentProcedure.GetType());
 
-        /// <summary>
-        /// 从当前流程栈中获取指定特性（子流程优先）。
-        /// </summary>
-        private T GetAttribute<T>(ProcedureBase state) where T : Attribute
-        {
-            if (state == null) return null;
-
-            // 1. 优先从当前子流程类上查找
-            if (state.CurrentSubProcedure != null)
-            {
-                var attr = state.CurrentSubProcedure.GetType().GetCustomAttribute<T>();
-                if (attr != null) return attr;
-            }
-
-            // 2. 其次从父流程类上查找
-            return state.GetType().GetCustomAttribute<T>();
-        }
-
-        /// <summary>
-        /// 根据特性配置自动切换相机显隐。
-        /// 规则：子流程优先；如果都没有定义则保持现状。
-        /// </summary>
-        private void HandleProcedureCamera(ProcedureBase newState)
-        {
-            if (newState == null) return;
-
-            var camAttr = GetAttribute<ProcedureCameraAttribute>(newState);
-            string targetCameraName = camAttr?.CameraName;
-
-            // 1. 如果都有相机且名称一致，则无需任何操作
-            if (!string.IsNullOrEmpty(targetCameraName) && targetCameraName == m_ActiveCameraName)
-            {
-                return;
-            }
-
-            // 2. 关闭旧相机 (如果名称有效)
-            if (!string.IsNullOrEmpty(m_ActiveCameraName))
-            {
-                // 旧的相机可能会找不到，因为场景可能已经被卸载，这是正常的
-                GameObject oldGo = UObjectFinder.Find(m_ActiveCameraName);
-                if (oldGo != null)
+                foreach (var processor in m_Processors)
                 {
-                    ToggleCameraObject(oldGo, false);
+                    processor.OnRefreshProcedureState(m_CurrentProcedure, subContext, parentContext);
                 }
-            }
-
-            // 3. 加载新相机
-            if (!string.IsNullOrEmpty(targetCameraName))
-            {
-                GameObject newGo = UObjectFinder.Find(targetCameraName);
-                if (newGo != null)
-                {
-                    ToggleCameraObject(newGo, true);
-                    m_ActiveCameraName = targetCameraName;
-                    Debug.Log($"[ProcedureManager] Switch Camera to: {m_ActiveCameraName}");
-                }
-                else
-                {
-                    // 新的流程相机如果找不到，说明配置有问题，要抛出 error
-                    throw new XFrameworkException($"[ProcedureManager] Camera '{targetCameraName}' not found. Please check your procedure configuration.");
-                }
-            }
-            else
-            {
-                // 4. 新流程没有相机配置，重置激活状态
-                m_ActiveCameraName = null;
-            }
-        }
-
-        private void ToggleCameraObject(GameObject go, bool active)
-        {
-            if (go == null) return;
-
-            // 寻找镜头组件（适配 Cinemachine 或标准 Camera）
-            // 优先通过 behaviour.enabled 控制，这样在 Unity 6 中可以保留物体的生命周期
-            var behaviours = go.GetComponents<Behaviour>();
-            bool componentFound = false;
-            foreach (var b in behaviours)
-            {
-                if (b == null) continue;
-                string typeName = b.GetType().Name;
-                
-                // 识别 Cinemachine 系列组件 (Unity 6: CinemachineCamera, Legacy: CinemachineVirtualCamera)
-                if (typeName.Contains("CinemachineCamera") || 
-                    typeName.Contains("CinemachineVirtualCamera") || 
-                    typeName.Contains("CinemachineFreeLook"))
-                {
-                    b.enabled = active;
-                    componentFound = true;
-                }
-                // 也可以适配标准 Camera
-                else if (typeName == "Camera")
-                {
-                    b.enabled = active;
-                    componentFound = true;
-                }
-            }
-
-            // 如果没找到组件，或者明确需要开关物体，则回退到 SetActive
-            if (!componentFound)
-            {
-                go.SetActive(active);
-            }
-        }
-
-        /// <summary>
-        /// 根据新流程或子流程的特性进行UI面板差异打开/关闭。
-        /// 规则：优先使用子流程配置（排他性覆盖）；否则沿用父流程配置。
-        /// </summary>
-        private void HandleProcedureUI(ProcedureBase newState)
-        {
-            var requiredPanels = new HashSet<string>();
-            if (newState != null)
-            {
-                var uiAttr = GetAttribute<ProcedureUIAttribute>(newState);
-                if (uiAttr != null)
-                {
-                    foreach (var panelName in uiAttr.PanelNames)
-                    {
-                        requiredPanels.Add(panelName);
-                    }
-                }
-            }
-
-            // 关闭不再需要的面板
-            foreach (var panelName in m_ProcedureManagedPanels)
-            {
-                if (!requiredPanels.Contains(panelName))
-                {
-                    UIManager.Instance.ClosePanel(panelName);
-                }
-            }
-
-            // 打开需要的面板
-            foreach (var panelName in requiredPanels)
-            {
-                if (!m_ProcedureManagedPanels.Contains(panelName))
-                {
-                    UIManager.Instance.OpenPanel(panelName);
-                }
-            }
-
-            m_ProcedureManagedPanels.Clear();
-            foreach (var panelName in requiredPanels)
-            {
-                m_ProcedureManagedPanels.Add(panelName);
             }
         }
     }

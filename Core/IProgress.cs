@@ -1,4 +1,3 @@
-﻿using UnityEngine;
 using System;
 
 namespace XFramework
@@ -149,7 +148,7 @@ namespace XFramework
             {
                 plus += item;
             }
-            if (!Mathf.Approximately(plus, 1))
+            if (Math.Abs(plus - 1f) > 1e-6f)
             {
                 throw new XFrameworkException("[DynamicMultiProgress] ratio error");
             }

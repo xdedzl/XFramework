@@ -189,7 +189,7 @@ namespace XFramework.UI
             var panelType = m_PanelName2Type[uiName];
             if (panel == null)
             {
-                panelGo.AddComponent(panelType);
+                panel = (PanelBase)panelGo.AddComponent(panelType);
             }
             else
             {
@@ -241,11 +241,21 @@ namespace XFramework.UI
         {
             if (m_OnDisplayPanelDic.TryGetValue(level, out List<PanelBase> panels))
             {
+                var panelNames = new List<string>(panels.Count);
                 foreach (var item in panels)
                 {
-                    ClosePanel(item.PanelName);
+                    panelNames.Add(item.PanelName);
                 }
-                m_OnDisplayPanelDic.Remove(level);
+
+                foreach (var panelName in panelNames)
+                {
+                    ClosePanel(panelName);
+                }
+
+                if (panels.Count == 0)
+                {
+                    m_OnDisplayPanelDic.Remove(level);
+                }
             }
         }
 
