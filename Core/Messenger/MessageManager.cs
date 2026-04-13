@@ -153,12 +153,11 @@ namespace XFramework.Event
 
         private void OnPreListenerAdd(string eventKey, Delegate listenerBeingAdded)
         {
-            if (!m_eventDictionary.ContainsKey(eventKey))
+            if (!m_eventDictionary.TryGetValue(eventKey, out Delegate d))
             {
-                m_eventDictionary.Add(eventKey, null);
+                m_eventDictionary[eventKey] = null;
+                d = null;
             }
-
-            Delegate d = m_eventDictionary[eventKey];
 
             if (d != null && d.GetType() != listenerBeingAdded.GetType())
             {
@@ -168,10 +167,8 @@ namespace XFramework.Event
 
         private void OnPreListenerRemove(string eventKey, Delegate listenerBeingRemoved)
         {
-            if (m_eventDictionary.ContainsKey(eventKey))
+            if (m_eventDictionary.TryGetValue(eventKey, out Delegate d))
             {
-                Delegate d = m_eventDictionary[eventKey];
-
                 if (d == null)
                 {
                     throw new XFrameworkException(string.Format("Attempting to remove listener with for event type \"{0}\" but current listener is null.", eventKey));
@@ -189,7 +186,7 @@ namespace XFramework.Event
 
         private void OnPostListenerRemove(string eventKey)
         {
-            if (m_eventDictionary[eventKey] == null)
+            if (m_eventDictionary.TryGetValue(eventKey, out Delegate d) && d == null)
             {
                 m_eventDictionary.Remove(eventKey);
             }

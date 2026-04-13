@@ -372,7 +372,13 @@ namespace XFramework
         /// </summary>
         public static string InitialToUpper(this string str)
         {
-            return str.Substring(0,1).ToUpper() + str.Substring(1);
+            if (string.IsNullOrEmpty(str)) return str;
+
+            return string.Create(str.Length, str, (chars, state) =>
+            {
+                state.AsSpan().CopyTo(chars);
+                chars[0] = char.ToUpper(chars[0]);
+            });
         }
 
         /// <summary>
