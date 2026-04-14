@@ -12,6 +12,11 @@ namespace XFramework.Editor
     /// </summary>
     public static class MenuExtend
     {
+        private const string kSnapToGroundMenuPath = "GameObject/XFramework/Snap To Ground %#G";
+        private const string kTransformSnapToGroundMenuPath = "CONTEXT/Transform/XFramework/Snap To Ground";
+        private const float kSnapRayStartOffset = 1000f;
+        private const float kSnapRayDistance = 20000f;
+
         [MenuItem("GameObject/CreateParent", priority = 0)]
         public static void CreateParent()
         {
@@ -98,6 +103,41 @@ namespace XFramework.Editor
             Selection.activeGameObject = parentGo;
         }
 
+        [MenuItem(kSnapToGroundMenuPath, false, 20)]
+        public static void SnapSelectedToGround()
+        {
+            SnapTransformsToGround(GetTopLevelSelectedTransforms());
+        }
+
+        [MenuItem(kSnapToGroundMenuPath, true)]
+        public static bool ValidateSnapSelectedToGround()
+        {
+            foreach (var transform in Selection.transforms)
+            {
+                if (transform != null && !EditorUtility.IsPersistent(transform))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        [MenuItem(kTransformSnapToGroundMenuPath)]
+        public static void SnapContextTransformToGround(MenuCommand command)
+        {
+            if (command.context is Transform transform)
+            {
+                SnapTransformsToGround(new[] { transform });
+            }
+        }
+
+        [MenuItem(kTransformSnapToGroundMenuPath, true)]
+        public static bool ValidateSnapContextTransformToGround(MenuCommand command)
+        {
+            return command.context is Transform transform && !EditorUtility.IsPersistent(transform);
+        }
+
         [MenuItem("XFramework/GenerateScriptsGUIDFile")]
         public static void GenerateScriptsGUIDFile()
         {
@@ -143,6 +183,196 @@ namespace XFramework.Editor
 
             tmp.font = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
             tmp.alignment = TextAlignmentOptions.Center;
+        }
+
+        private static Transform[] GetTopLevelSelectedTransforms()
+        {
+            var selectedTransforms = Selection.transforms;
+            var selectedSet = new HashSet<Transform>(selectedTransforms);
+            var result = new List<Transform>();
+
+            foreach (var transform in selectedTransforms)
+            {
+                if (transform == null || EditorUtility.IsPersistent(transform))
+                {
+                    continue;
+                }
+
+                bool hasSelectedAncestor = false;
+                Transform parent = transform.parent;
+                while (parent != null)
+                {
+                    if (selectedSet.Contains(parent))
+                    {
+                        hasSelectedAncestor = true;
+                        break;
+                    }
+
+                    parent = parent.parent;
+                }
+
+                if (!hasSelectedAncestor)
+                {
+                    result.Add(transform);
+                }
+            }
+
+            return result.ToArray();
+        }
+
+        private static void SnapTransformsToGround(IReadOnlyList<Transform> transforms)
+        {
+            if (transforms == null || transforms.Count == 0)
+            {
+                Debug.LogWarning("请先选择至少一个场景中的GameObject。");
+                return;
+            }
+
+            Undo.SetCurrentGroupName("Snap To Ground");
+            int undoGroup = Undo.GetCurrentGroup();
+            int snappedCount = 0;
+
+            foreach (var transform in transforms)
+            {
+                if (transform == null || EditorUtility.IsPersistent(transform))
+                {
+                    continue;
+                }
+
+                if (TrySnapTransformToGround(transform))
+                {
+                    snappedCount++;
+                }
+            }
+
+            Undo.CollapseUndoOperations(undoGroup);
+
+            if (snappedCount == 0)
+            {
+                Debug.LogWarning("没有找到可用于贴地的地面碰撞体。");
+            }
+            else
+            {
+                Debug.Log($"贴地完成，共处理 {snappedCount} 个 GameObject。");
+            }
+        }
+
+        private static bool TrySnapTransformToGround(Transform transform)
+        {
+            Bounds bounds = new Bounds(transform.position, Vector3.zero);
+            bool hasBounds = TryGetWorldBounds(transform, out bounds);
+
+            float currentBottomY = hasBounds ? bounds.min.y : transform.position.y;
+            Vector3 rayOrigin = transform.position;
+
+            if (!TryGetGroundHeight(transform, rayOrigin, out float groundY))
+            {
+                return false;
+            }
+
+            float deltaY = groundY - currentBottomY;
+            if (Mathf.Abs(deltaY) < 0.0001f)
+            {
+                return true;
+            }
+
+            Undo.RecordObject(transform, "Snap To Ground");
+
+            Vector3 position = transform.position;
+            position.y += deltaY;
+            transform.position = position;
+
+            PrefabUtility.RecordPrefabInstancePropertyModifications(transform);
+            return true;
+        }
+
+        private static bool TryGetWorldBounds(Transform transform, out Bounds bounds)
+        {
+            bool hasBounds = false;
+            bounds = new Bounds(transform.position, Vector3.zero);
+
+            foreach (var collider in transform.GetComponentsInChildren<Collider>(true))
+            {
+                if (!hasBounds)
+                {
+                    bounds = collider.bounds;
+                    hasBounds = true;
+                }
+                else
+                {
+                    bounds.Encapsulate(collider.bounds);
+                }
+            }
+
+            foreach (var collider2D in transform.GetComponentsInChildren<Collider2D>(true))
+            {
+                if (!hasBounds)
+                {
+                    bounds = collider2D.bounds;
+                    hasBounds = true;
+                }
+                else
+                {
+                    bounds.Encapsulate(collider2D.bounds);
+                }
+            }
+
+            foreach (var renderer in transform.GetComponentsInChildren<Renderer>(true))
+            {
+                if (!hasBounds)
+                {
+                    bounds = renderer.bounds;
+                    hasBounds = true;
+                }
+                else
+                {
+                    bounds.Encapsulate(renderer.bounds);
+                }
+            }
+
+            return hasBounds;
+        }
+
+        private static bool TryGetGroundHeight(Transform transform, Vector3 rayOrigin, out float groundY)
+        {
+            bool foundGround = false;
+            groundY = 0f;
+
+            RaycastHit[] hits3D = Physics.RaycastAll(rayOrigin, Vector3.down, kSnapRayDistance, ~0, QueryTriggerInteraction.Ignore);
+            System.Array.Sort(hits3D, (left, right) => left.distance.CompareTo(right.distance));
+
+            foreach (var hit in hits3D)
+            {
+                if (hit.collider == null || hit.collider.transform.IsChildOf(transform))
+                {
+                    continue;
+                }
+
+                groundY = hit.point.y;
+                foundGround = true;
+                break;
+            }
+
+            RaycastHit2D[] hits2D = Physics2D.RaycastAll(rayOrigin, Vector2.down, kSnapRayDistance);
+            System.Array.Sort(hits2D, (left, right) => left.distance.CompareTo(right.distance));
+
+            foreach (var hit in hits2D)
+            {
+                if (hit.collider == null || hit.collider.transform.IsChildOf(transform))
+                {
+                    continue;
+                }
+
+                if (!foundGround || hit.point.y > groundY)
+                {
+                    groundY = hit.point.y;
+                    foundGround = true;
+                }
+
+                break;
+            }
+
+            return foundGround;
         }
         
         
