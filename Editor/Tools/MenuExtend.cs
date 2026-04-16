@@ -4,6 +4,8 @@ using UnityEngine;
 using XFramework;
 using System.Collections.Generic;
 using TMPro;
+using UnityEngine.UIElements;
+using UnityEditor.UIElements;
 
 namespace XFramework.Editor
 {
@@ -13,9 +15,17 @@ namespace XFramework.Editor
     public static class MenuExtend
     {
         private const string kSnapToGroundMenuPath = "GameObject/XFramework/Snap To Ground %#G";
+        private const string kSnapToGroundOptionsMenuPath = "GameObject/XFramework/Snap To Ground...";
         private const string kTransformSnapToGroundMenuPath = "CONTEXT/Transform/XFramework/Snap To Ground";
+        private const string kTransformSnapToGroundOptionsMenuPath = "CONTEXT/Transform/XFramework/Snap To Ground...";
         private const float kSnapRayStartOffset = 1000f;
         private const float kSnapRayDistance = 20000f;
+
+        internal enum SnapToGroundMode
+        {
+            Physics,
+            Mesh
+        }
 
         [MenuItem("GameObject/CreateParent", priority = 0)]
         public static void CreateParent()
@@ -106,21 +116,25 @@ namespace XFramework.Editor
         [MenuItem(kSnapToGroundMenuPath, false, 20)]
         public static void SnapSelectedToGround()
         {
-            SnapTransformsToGround(GetTopLevelSelectedTransforms());
+            SnapTransformsToGround(GetTopLevelSelectedTransforms(), SnapToGroundMode.Physics);
         }
 
         [MenuItem(kSnapToGroundMenuPath, true)]
         public static bool ValidateSnapSelectedToGround()
         {
-            foreach (var transform in Selection.transforms)
-            {
-                if (transform != null && !EditorUtility.IsPersistent(transform))
-                {
-                    return true;
-                }
-            }
+            return HasValidSceneTransformSelection(Selection.transforms);
+        }
 
-            return false;
+        [MenuItem(kSnapToGroundOptionsMenuPath, false, 21)]
+        public static void OpenSnapSelectedToGroundOptions()
+        {
+            SnapToGroundWindow.ShowWindow(GetTopLevelSelectedTransforms());
+        }
+
+        [MenuItem(kSnapToGroundOptionsMenuPath, true)]
+        public static bool ValidateOpenSnapSelectedToGroundOptions()
+        {
+            return HasValidSceneTransformSelection(Selection.transforms);
         }
 
         [MenuItem(kTransformSnapToGroundMenuPath)]
@@ -128,7 +142,7 @@ namespace XFramework.Editor
         {
             if (command.context is Transform transform)
             {
-                SnapTransformsToGround(new[] { transform });
+                SnapTransformsToGround(new[] { transform }, SnapToGroundMode.Physics);
             }
         }
 
@@ -136,6 +150,21 @@ namespace XFramework.Editor
         public static bool ValidateSnapContextTransformToGround(MenuCommand command)
         {
             return command.context is Transform transform && !EditorUtility.IsPersistent(transform);
+        }
+
+        [MenuItem(kTransformSnapToGroundOptionsMenuPath)]
+        public static void OpenSnapContextTransformToGroundOptions(MenuCommand command)
+        {
+            if (command.context is Transform transform)
+            {
+                SnapToGroundWindow.ShowWindow(new[] { transform });
+            }
+        }
+
+        [MenuItem(kTransformSnapToGroundOptionsMenuPath, true)]
+        public static bool ValidateOpenSnapContextTransformToGroundOptions(MenuCommand command)
+        {
+            return ValidateSnapContextTransformToGround(command);
         }
 
         [MenuItem("XFramework/GenerateScriptsGUIDFile")]
@@ -185,7 +214,7 @@ namespace XFramework.Editor
             tmp.alignment = TextAlignmentOptions.Center;
         }
 
-        private static Transform[] GetTopLevelSelectedTransforms()
+        internal static Transform[] GetTopLevelSelectedTransforms()
         {
             var selectedTransforms = Selection.transforms;
             var selectedSet = new HashSet<Transform>(selectedTransforms);
@@ -220,7 +249,7 @@ namespace XFramework.Editor
             return result.ToArray();
         }
 
-        private static void SnapTransformsToGround(IReadOnlyList<Transform> transforms)
+        internal static void SnapTransformsToGround(IReadOnlyList<Transform> transforms, SnapToGroundMode mode)
         {
             if (transforms == null || transforms.Count == 0)
             {
@@ -239,7 +268,7 @@ namespace XFramework.Editor
                     continue;
                 }
 
-                if (TrySnapTransformToGround(transform))
+                if (TrySnapTransformToGround(transform, mode))
                 {
                     snappedCount++;
                 }
@@ -249,15 +278,15 @@ namespace XFramework.Editor
 
             if (snappedCount == 0)
             {
-                Debug.LogWarning("没有找到可用于贴地的地面碰撞体。");
+                Debug.LogWarning($"没有找到可用于贴地的{GetSnapModeDisplayName(mode)}命中目标。");
             }
             else
             {
-                Debug.Log($"贴地完成，共处理 {snappedCount} 个 GameObject。");
+                Debug.Log($"贴地完成，共处理 {snappedCount} 个 GameObject，模式：{GetSnapModeDisplayName(mode)}。");
             }
         }
 
-        private static bool TrySnapTransformToGround(Transform transform)
+        private static bool TrySnapTransformToGround(Transform transform, SnapToGroundMode mode)
         {
             Bounds bounds = new Bounds(transform.position, Vector3.zero);
             bool hasBounds = TryGetWorldBounds(transform, out bounds);
@@ -265,7 +294,7 @@ namespace XFramework.Editor
             float currentBottomY = hasBounds ? bounds.min.y : transform.position.y;
             Vector3 rayOrigin = transform.position;
 
-            if (!TryGetGroundHeight(transform, rayOrigin, out float groundY))
+            if (!TryGetGroundHeight(transform, rayOrigin, mode, out float groundY))
             {
                 return false;
             }
@@ -333,7 +362,18 @@ namespace XFramework.Editor
             return hasBounds;
         }
 
-        private static bool TryGetGroundHeight(Transform transform, Vector3 rayOrigin, out float groundY)
+        private static bool TryGetGroundHeight(Transform transform, Vector3 rayOrigin, SnapToGroundMode mode, out float groundY)
+        {
+            switch (mode)
+            {
+                case SnapToGroundMode.Mesh:
+                    return TryGetGroundHeightByMesh(transform, rayOrigin, out groundY);
+                default:
+                    return TryGetGroundHeightByPhysics(transform, rayOrigin, out groundY);
+            }
+        }
+
+        private static bool TryGetGroundHeightByPhysics(Transform transform, Vector3 rayOrigin, out float groundY)
         {
             bool foundGround = false;
             groundY = 0f;
@@ -373,6 +413,210 @@ namespace XFramework.Editor
             }
 
             return foundGround;
+        }
+
+        private static bool TryGetGroundHeightByMesh(Transform transform, Vector3 rayOrigin, out float groundY)
+        {
+            bool foundGround = false;
+            float closestDistance = float.MaxValue;
+            groundY = 0f;
+
+            Ray ray = new Ray(rayOrigin, Vector3.down);
+
+            foreach (var meshFilter in Object.FindObjectsByType<MeshFilter>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (meshFilter == null || meshFilter.sharedMesh == null || meshFilter.transform.IsChildOf(transform))
+                {
+                    continue;
+                }
+
+                if (!meshFilter.TryGetComponent<MeshRenderer>(out var meshRenderer) || !meshRenderer.enabled)
+                {
+                    continue;
+                }
+
+                if (!CanVerticalRayHitBounds(meshRenderer.bounds, rayOrigin))
+                {
+                    continue;
+                }
+
+                if (TryIntersectRayMesh(ray, meshFilter.sharedMesh, meshFilter.transform.localToWorldMatrix, out RaycastHit hit)
+                    && hit.distance < closestDistance)
+                {
+                    closestDistance = hit.distance;
+                    groundY = hit.point.y;
+                    foundGround = true;
+                }
+            }
+
+            var bakedMesh = new Mesh();
+            try
+            {
+                foreach (var skinnedMeshRenderer in Object.FindObjectsByType<SkinnedMeshRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                {
+                    if (skinnedMeshRenderer == null || skinnedMeshRenderer.sharedMesh == null || skinnedMeshRenderer.transform.IsChildOf(transform) || !skinnedMeshRenderer.enabled)
+                    {
+                        continue;
+                    }
+
+                    if (!CanVerticalRayHitBounds(skinnedMeshRenderer.bounds, rayOrigin))
+                    {
+                        continue;
+                    }
+
+                    skinnedMeshRenderer.BakeMesh(bakedMesh);
+                    if (bakedMesh.vertexCount == 0)
+                    {
+                        continue;
+                    }
+
+                    if (TryIntersectRayMesh(ray, bakedMesh, skinnedMeshRenderer.transform.localToWorldMatrix, out RaycastHit hit)
+                        && hit.distance < closestDistance)
+                    {
+                        closestDistance = hit.distance;
+                        groundY = hit.point.y;
+                        foundGround = true;
+                    }
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(bakedMesh);
+            }
+
+            return foundGround;
+        }
+
+        private static bool CanVerticalRayHitBounds(Bounds bounds, Vector3 rayOrigin)
+        {
+            return rayOrigin.x >= bounds.min.x
+                   && rayOrigin.x <= bounds.max.x
+                   && rayOrigin.z >= bounds.min.z
+                   && rayOrigin.z <= bounds.max.z
+                   && rayOrigin.y >= bounds.min.y;
+        }
+
+        private static bool TryIntersectRayMesh(Ray ray, Mesh mesh, Matrix4x4 matrix, out RaycastHit hit)
+        {
+            hit = default;
+            if (mesh == null)
+            {
+                return false;
+            }
+
+            var vertices = mesh.vertices;
+            var triangles = mesh.triangles;
+            if (vertices == null || triangles == null || triangles.Length < 3)
+            {
+                return false;
+            }
+
+            Matrix4x4 worldToLocal = matrix.inverse;
+            Vector3 localOrigin = worldToLocal.MultiplyPoint(ray.origin);
+            Vector3 localDirection = worldToLocal.MultiplyVector(ray.direction).normalized;
+
+            bool hasHit = false;
+            float closestDistance = float.MaxValue;
+            Vector3 closestPoint = Vector3.zero;
+            Vector3 closestNormal = Vector3.up;
+
+            for (int i = 0; i < triangles.Length; i += 3)
+            {
+                Vector3 vertex0 = vertices[triangles[i]];
+                Vector3 vertex1 = vertices[triangles[i + 1]];
+                Vector3 vertex2 = vertices[triangles[i + 2]];
+
+                if (!TryIntersectRayTriangle(localOrigin, localDirection, vertex0, vertex1, vertex2, out Vector3 localHitPoint))
+                {
+                    continue;
+                }
+
+                Vector3 worldHitPoint = matrix.MultiplyPoint(localHitPoint);
+                float distance = Vector3.Distance(ray.origin, worldHitPoint);
+                if (distance >= closestDistance)
+                {
+                    continue;
+                }
+
+                closestDistance = distance;
+                closestPoint = worldHitPoint;
+                closestNormal = Vector3.Cross(vertex1 - vertex0, vertex2 - vertex0).normalized;
+                hasHit = true;
+            }
+
+            if (!hasHit)
+            {
+                return false;
+            }
+
+            hit.point = closestPoint;
+            hit.distance = closestDistance;
+            hit.normal = matrix.MultiplyVector(closestNormal).normalized;
+            return true;
+        }
+
+        private static bool TryIntersectRayTriangle(
+            Vector3 rayOrigin,
+            Vector3 rayDirection,
+            Vector3 vertex0,
+            Vector3 vertex1,
+            Vector3 vertex2,
+            out Vector3 hitPoint)
+        {
+            hitPoint = Vector3.zero;
+
+            const float epsilon = 0.000001f;
+            Vector3 edge1 = vertex1 - vertex0;
+            Vector3 edge2 = vertex2 - vertex0;
+            Vector3 pVector = Vector3.Cross(rayDirection, edge2);
+            float determinant = Vector3.Dot(edge1, pVector);
+
+            if (determinant > -epsilon && determinant < epsilon)
+            {
+                return false;
+            }
+
+            float inverseDeterminant = 1f / determinant;
+            Vector3 tVector = rayOrigin - vertex0;
+            float u = Vector3.Dot(tVector, pVector) * inverseDeterminant;
+            if (u < 0f || u > 1f)
+            {
+                return false;
+            }
+
+            Vector3 qVector = Vector3.Cross(tVector, edge1);
+            float v = Vector3.Dot(rayDirection, qVector) * inverseDeterminant;
+            if (v < 0f || u + v > 1f)
+            {
+                return false;
+            }
+
+            float t = Vector3.Dot(edge2, qVector) * inverseDeterminant;
+            if (t < epsilon)
+            {
+                return false;
+            }
+
+            hitPoint = rayOrigin + rayDirection * t;
+            return true;
+        }
+
+        private static bool HasValidSceneTransformSelection(IEnumerable<Transform> transforms)
+        {
+            foreach (var transform in transforms)
+            {
+                if (transform != null && !EditorUtility.IsPersistent(transform))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static string GetSnapModeDisplayName(SnapToGroundMode mode)
+        {
+            return mode == SnapToGroundMode.Mesh ? "Mesh" : "Physics";
         }
         
         
@@ -423,6 +667,95 @@ namespace XFramework.Editor
                     Debug.Log(targetGameObject.name + "上已存在所有组件，没有新组件被粘贴。");
                 }
             }
+        }
+    }
+
+
+    public class SnapToGroundWindow : EditorWindow
+    {
+        private IReadOnlyList<Transform> m_TargetTransforms;
+        private MenuExtend.SnapToGroundMode m_Mode = MenuExtend.SnapToGroundMode.Physics;
+
+        public static void ShowWindow(IReadOnlyList<Transform> targetTransforms)
+        {
+            var window = GetWindow<SnapToGroundWindow>(true, "Snap To Ground", true);
+            window.minSize = new Vector2(280f, 140f);
+            window.maxSize = new Vector2(420f, 220f);
+            window.Init(targetTransforms);
+            window.ShowUtility();
+        }
+
+        private void Init(IReadOnlyList<Transform> targetTransforms)
+        {
+            m_TargetTransforms = targetTransforms;
+            BuildUI();
+        }
+
+        public void CreateGUI()
+        {
+            BuildUI();
+        }
+
+        private void BuildUI()
+        {
+            var root = rootVisualElement;
+            root.Clear();
+            root.style.paddingLeft = 10;
+            root.style.paddingRight = 10;
+            root.style.paddingTop = 10;
+            root.style.paddingBottom = 10;
+
+            var titleLabel = new Label("贴地模式设置");
+            titleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            titleLabel.style.marginBottom = 8;
+            root.Add(titleLabel);
+
+            int targetCount = m_TargetTransforms?.Count ?? 0;
+            var targetLabel = new Label($"目标数量: {targetCount}");
+            targetLabel.style.marginBottom = 8;
+            root.Add(targetLabel);
+
+            var modeField = new EnumField("检测模式", m_Mode);
+            modeField.RegisterValueChangedCallback(evt =>
+            {
+                if (evt.newValue is MenuExtend.SnapToGroundMode mode)
+                {
+                    m_Mode = mode;
+                }
+            });
+            root.Add(modeField);
+
+            var hintLabel = new Label("Physics 使用碰撞体；Mesh 直接检测场景中的 Mesh。");
+            hintLabel.style.whiteSpace = WhiteSpace.Normal;
+            hintLabel.style.marginTop = 8;
+            hintLabel.style.marginBottom = 12;
+            hintLabel.style.color = new Color(0.75f, 0.75f, 0.75f);
+            root.Add(hintLabel);
+
+            var buttonRow = new VisualElement();
+            buttonRow.style.flexDirection = FlexDirection.Row;
+
+            var applyButton = new Button(() =>
+            {
+                MenuExtend.SnapTransformsToGround(m_TargetTransforms, m_Mode);
+                Close();
+            })
+            {
+                text = "执行贴地"
+            };
+            applyButton.style.flexGrow = 1;
+            applyButton.style.marginRight = 8;
+            applyButton.SetEnabled(targetCount > 0);
+            buttonRow.Add(applyButton);
+
+            var cancelButton = new Button(Close)
+            {
+                text = "取消"
+            };
+            cancelButton.style.width = 72;
+            buttonRow.Add(cancelButton);
+
+            root.Add(buttonRow);
         }
     }
 
