@@ -1,4 +1,5 @@
 #if UNITY_EDITOR
+using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
@@ -70,14 +71,16 @@ namespace XReddot.Editor
                 m_treeAsset = AssetDatabase.LoadAssetAtPath<ReddotTreeAsset>(ReddotManager.RED_DOT_TREE_ASSET_PATH);
                 if (m_treeAsset == null)
                 {
+                    EnsureAssetDirectoryExists(ReddotManager.RED_DOT_TREE_ASSET_PATH);
                     m_treeAsset = ScriptableObject.CreateInstance<ReddotTreeAsset>();
+                    m_treeAsset.items = Array.Empty<ReddotData>();
                     AssetDatabase.CreateAsset(m_treeAsset, ReddotManager.RED_DOT_TREE_ASSET_PATH);
                     AssetDatabase.SaveAssets();
                     AssetDatabase.Refresh();
                 }
             }
             
-            var reddotDates = m_treeAsset.items;
+            var reddotDates = m_treeAsset.items ?? Array.Empty<ReddotData>();
             var nodeDic = new Dictionary<string, ReddotNode>();
 
             foreach (var item in reddotDates)
@@ -102,6 +105,33 @@ namespace XReddot.Editor
                         graphView.AddElement(edge);
                     }
                 }
+            }
+        }
+
+        private static void EnsureAssetDirectoryExists(string assetPath)
+        {
+            var directoryPath = Path.GetDirectoryName(assetPath)?.Replace("\\", "/");
+            if (string.IsNullOrEmpty(directoryPath) || AssetDatabase.IsValidFolder(directoryPath))
+            {
+                return;
+            }
+
+            var folders = directoryPath.Split('/');
+            if (folders.Length == 0 || folders[0] != "Assets")
+            {
+                throw new IOException($"Invalid asset path: {assetPath}");
+            }
+
+            var currentPath = folders[0];
+            for (int i = 1; i < folders.Length; i++)
+            {
+                var nextPath = $"{currentPath}/{folders[i]}";
+                if (!AssetDatabase.IsValidFolder(nextPath))
+                {
+                    AssetDatabase.CreateFolder(currentPath, folders[i]);
+                }
+
+                currentPath = nextPath;
             }
         }
 

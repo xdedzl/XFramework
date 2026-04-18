@@ -62,7 +62,14 @@ namespace XReddot
         {
             var reddotTree = Resources.Load<ReddotTreeAsset>(RED_DOT_TREE_RESOURCES_PATH);
             onReddotTreeLoad?.Invoke();
-            Init(reddotTree.items);
+            if (reddotTree == null)
+            {
+                Debug.LogWarning($"[Reddot System] Missing reddot tree asset at Resources path '{RED_DOT_TREE_RESOURCES_PATH}'.");
+                Init(Array.Empty<ReddotData>());
+                return;
+            }
+
+            Init(reddotTree.items ?? Array.Empty<ReddotData>());
         }
 
         private static void LoadMark()
