@@ -419,18 +419,39 @@ MessageManager.Instance.BroadCast("OnUpdate", arg1, arg2);
 
 #### 1. 如何挂载组件 (UObjectReference)
 若要使某个对象及其组件能被查找，必须在该 GameObject 上挂载 **`UObjectReference`** 组件：
-- **默认模式**：不勾选 `Use Key`。查询路径 (Path) 即为该 **GameObject 的名称**。
-- **自定义路径**：勾选 `Use Key` 并填写 Key。查询路径将变为 **`${Key}/${GameObject.name}`**。
+- **注册模式 (`RegistrationMode`)**：
+  - `Single`：默认单值模式。对象注册到单值字典，可通过 `Find` / `Find<T>` 查询。
+  - `List`：列表模式。对象注册到列表字典，可通过 `FindList` / `FindList<T>` 查询；该模式下会强制使用自定义 Key。
+- **默认路径**：在 `Single` 模式下，不勾选 `Use Key` 时，查询路径 (Path) 即为该 **GameObject 的名称**。
+- **自定义路径**：在 `Single` 模式勾选 `Use Key`，或切换到 `List` 模式后填写 Key。查询路径即为 **`Key` 本身**。
+- **自动补值**：当对象进入需要使用 Key 的状态（勾选 `Use Key` 或切换为 `List` 模式）且当前 Key 为空时，框架会自动将其填充为 `gameObject.name`。
 - **生命周期**：组件在 `Awake` 时自动向 `UObjectFinder` 注册，在 `OnDestroy` 时自动注销，确保引用安全且无残留。
 
 #### 2. 高速查询示例 (Query)
 ```csharp
-// 1. 获取 GameObject 引用
-GameObject go = UObjectFinder.Find("MainView/Submit_Btn");
+// 1. Single 模式：获取 GameObject 引用
+GameObject cameraGo = UObjectFinder.Find("MainCamera");
 
-// 2. 直接获取并提取指定组件 (推荐)
-var btn = UObjectFinder.Find<Button>("MainView/Submit_Btn");
+// 2. Single 模式：直接获取并提取指定组件 (推荐)
+var menu = UObjectFinder.Find<TavernMenu>("Menu");
+
+// 3. List 模式：获取同一个 key 下的全部 GameObject
+IReadOnlyList<GameObject> orderPoints = UObjectFinder.FindList("OrderPoints");
+
+// 4. List 模式：直接提取同一个 key 下的全部目标组件
+IReadOnlyList<Transform> spawnPoints = UObjectFinder.FindList<Transform>("NpcSpawns");
 ```
+
+#### 3. 查询规则与行为说明
+- `Find` / `Find<T>` 只查询 `Single` 模式对象；`List` 模式对象不会被这两个接口命中。
+- `FindList` / `FindList<T>` 只查询 `List` 模式对象；返回结果按 **场景加载顺序 + Hierarchy 顺序** 稳定排序。
+- `FindList<T>` 会自动跳过未挂载目标组件的条目。
+- `Single` 模式下同 key 重复注册时，后注册的对象会覆盖前一个并输出警告。
+- `List` 模式下允许多个对象共享同一个 key，它们会全部归入同一个列表结果。
+
+#### 4. 编辑器辅助工具
+- 可通过菜单 **`XFramework/Tools/UObject Finder`** 打开可视化窗口，浏览当前已加载场景中的全部 `UObjectReference`。
+- 窗口支持搜索、定位、Key/注册模式筛选，以及 `List` 组的展开与收起，适合排查 key 配置与列表归组情况。
 
 > [!TIP]
 > **设计初衷**：旨在解决 `GameObject.Find` 性能低下的问题。通过 `UObjectReference` 建立的强引用字典查询，效率接近 $O(1)$，特别适合跨模块访问关键节点（如 MainCamera、UIRoot）或动态生成的实体。

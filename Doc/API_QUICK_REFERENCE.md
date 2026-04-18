@@ -8,11 +8,20 @@
 
 ### 1.1 `UObjectFinder`
 极致性能的场景对象提取工具。
-- `Find<T>(string name)`: 沿场景根节点查找。
-- `Find(string name)`: 返回 GameObject。
-- `FindRecursive<T>(Transform parent, string name)`: 在父节点下递归查找。
+- `Find(string key)`: 查询 `Single` 模式下的 `GameObject`。
+- `Find<T>(string key)`: 查询 `Single` 模式下的指定组件。
+- `FindList(string key)`: 查询 `List` 模式下的全部 `GameObject`。
+- `FindList<T>(string key)`: 查询 `List` 模式下的全部指定组件。
+- `Clear()`: 清空全部注册缓存。
+- `List` 模式结果按 **场景加载顺序 + Hierarchy 顺序** 稳定返回。
+- `Single` 模式重复 key 会覆盖并告警；`List` 模式允许同 key 多对象共存。
+- `UObjectReference`:
+  - `Single` 模式：可选 `UseKey`，`Path` 为 `gameObject.name` 或自定义 `key`
+  - `List` 模式：强制使用 `key` 作为 `Path`
+  - 当进入需要使用 key 的状态且 key 为空时，会自动填充为 `gameObject.name`
 
 ### 1.2 `Extend.Unity` (Transform 增强)
+- 递归查找能力属于 `Transform` 扩展，不属于 `UObjectFinder`。
 - `transform.FindRecursive(string name)`: 递归查询子物体。
 - `transform.GetChildren()`: 获取直接子物体。
 - `transform.SetX/Y/Z(float val, VectorType type)`: 链式修改坐标/旋转/缩放。
