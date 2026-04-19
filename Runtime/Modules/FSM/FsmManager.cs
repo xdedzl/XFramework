@@ -1,178 +1,219 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using UnityEngine;
 
 namespace XFramework.Fsm
 {
     /// <summary>
-    /// 状态机管理类
+    /// 新一代状态机管理器：全局 FSM 驱动 + 调试注册中心。
     /// </summary>
     [ModuleLifecycle(ModuleLifecycle.Persistent)]
     public class FsmManager : MonoGameModuleBase<FsmManager>
     {
-        /// <summary>
-        /// 存储所有状态机的字典
-        /// </summary>
-        private readonly Dictionary<string, IFsm> m_FsmDic = new Dictionary<string, IFsm>();
-
-        /// <summary>
-        /// 状态机的数量
-        /// </summary>
-        public int Count
+        private sealed class FsmRecord
         {
-            get
+            public string Key;
+            public FsmScope Scope;
+            public UnityEngine.Object Owner;
+            public IFsmInspectable Inspectable;
+            public Action DisposeHandler;
+            public Action UpdateHandler;
+            public Action ManualDisposeHandler;
+        }
+
+        private readonly Dictionary<string, FsmRecord> m_Records = new Dictionary<string, FsmRecord>();
+        private readonly List<string> m_UpdateKeys = new List<string>();
+        private readonly List<FsmDebugEntry> m_DebugEntries = new List<FsmDebugEntry>();
+
+        public int Count => m_Records.Count;
+
+        public override int Priority => (int)GameModulePriority.Highest;
+
+        public override void Initialize()
+        {
+            base.Initialize();
+            FsmClock.Configure(() => Time.frameCount, () => Time.realtimeSinceStartup);
+        }
+
+        public Fsm<TContext> CreateGlobalFsm<TContext>(string key, TContext context, bool autoStart = false)
+        {
+            ValidateKey(key);
+
+            if (m_Records.ContainsKey(key))
             {
-                return m_FsmDic.Count;
-            }
-        }
-
-        /// <summary>
-        /// 是否包含某种状态机
-        /// </summary>
-        public bool HasFsm<T>() where T : IFsm
-        {
-            return HasFsm(typeof(T));
-        }
-
-        /// <summary>
-        /// 是否包含某种状态机
-        /// </summary>
-        public bool HasFsm(Type type)
-        {
-            return m_FsmDic.ContainsKey(type.Name);
-        }
-
-        /// <summary>
-        /// 获取一个状态机
-        /// </summary>
-        /// <typeparam name="TFsm"></typeparam>
-        public TFsm GetFsm<TFsm>() where TFsm : class, IFsm
-        {
-            if (!HasFsm<TFsm>())
-            {
-                CreateFsm<TFsm>();
-            }
-            return (TFsm)m_FsmDic[typeof(TFsm).Name];
-        }
-
-        /// <summary>
-        /// 获取对应状态机当前所处的状态
-        /// </summary>
-        /// <typeparam name="TFsm">状态机类型</typeparam>
-        public FsmState GetCurrentState<TFsm>() where TFsm : IFsm
-        {
-            if (HasFsm<TFsm>())
-            {
-                return m_FsmDic[typeof(TFsm).Name].GetCurrentState();
-            }
-            else
-            {
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// 获取对应状态机当前所处的状态
-        /// </summary>
-        /// <typeparam name="TFsm">状态机类型</typeparam>
-        /// <typeparam name="TState">目标状态</typeparam>
-        /// <returns></returns>
-        public TState GetCurrentState<TFsm, TState>() where TFsm : IFsm where TState : FsmState
-        {
-            return GetCurrentState<TFsm>() as TState;
-        }
-
-        /// <summary>
-        /// 切换对应状态机到对应状态
-        /// </summary>
-        /// <typeparam name="TFsm">状态机类型</typeparam>
-        /// <typeparam name="KState">目标状态</typeparam>
-        /// <param name="parms">参数</param>
-        public void ChangeState<TFsm, KState>(params object[] parms) where TFsm : class, IFsm where KState : FsmState
-        {
-            if (!HasFsm<TFsm>())
-            {
-                CreateFsm<TFsm>();
-            }
-            m_FsmDic[typeof(TFsm).Name].ChangeState<KState>(parms);
-        }
-
-        /// <summary>
-        /// 切换对应状态机到对应状态
-        /// </summary>
-        /// <param name="typeFsm">状态机类型</param>
-        /// <param name="typeState">目标状态</param>
-        /// <param name="parms">参数</param>
-        public void ChangeState(Type typeFsm, Type typeState, params object[] parms)
-        {
-            if (!typeFsm.IsSubclassOf(typeof(IFsm)) || !typeState.IsSubclassOf(typeof(FsmState)))
-            {
-                throw new System.Exception("[FSM] type error");
+                throw new XFrameworkException($"[FSM] duplicate registration key: {key}");
             }
 
-            if (!HasFsm(typeFsm))
-            {
-                CreateFsm(typeFsm);
-            }
-            m_FsmDic[typeFsm.Name].ChangeState(typeState, parms);
-        }
-
-        /// <summary>
-        /// 根据类型创建一个状态机
-        /// </summary>
-        public T CreateFsm<T>() where T : class, IFsm
-        {
-            return CreateFsm(typeof(T)) as T;
-        }
-
-        /// <summary>
-        /// 创建一个状态机
-        /// </summary>
-        /// <param name="type">状态机类型</param>
-        /// <returns>状态机</returns>
-        public IFsm CreateFsm(Type type)
-        {
-            if (type.IsSubclassOf(type.GetType()))
-            {
-                throw new Exception($"{type.Name}不继承IFsm");
-            }
-            IFsm fsm = Activator.CreateInstance(type) as IFsm;
-            m_FsmDic.Add(type.Name, fsm);
+            var fsm = new Fsm<TContext>(context, key, autoStart);
+            Register(key, fsm, FsmScope.Global, null, fsm.Update, fsm.Dispose);
             return fsm;
         }
 
-        /// <summary>
-        /// 删除一个状态机
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        public void DestroyFsm<T>() where T : class, IFsm
+        public IFsmInspectable GetGlobalFsm(string key)
         {
-            DestroyFsm(typeof(T));
-        }
-
-        /// <summary>
-        /// 删除一个状态机
-        /// </summary>
-        /// <param name="type">状态机类型</param>
-        public void DestroyFsm(Type type)
-        {
-            if (HasFsm(type))
+            if (!TryGetGlobalFsm(key, out IFsmInspectable fsm))
             {
-                m_FsmDic.Remove(type.Name);
+                throw new XFrameworkException($"[FSM] global fsm not found: {key}");
             }
+
+            return fsm;
         }
 
-        #region 接口实现
+        public bool TryGetGlobalFsm(string key, out IFsmInspectable fsm)
+        {
+            if (m_Records.TryGetValue(key, out FsmRecord record) && record.Scope == FsmScope.Global)
+            {
+                fsm = record.Inspectable;
+                return true;
+            }
 
-        public override int Priority { get { return 0; } }
+            fsm = null;
+            return false;
+        }
+
+        public void RegisterInstance(string key, IFsmInspectable fsm, UnityEngine.Object owner = null)
+        {
+            ValidateKey(key);
+
+            if (fsm == null)
+            {
+                throw new XFrameworkException("[FSM] registered instance can not be null");
+            }
+
+            if (m_Records.ContainsKey(key))
+            {
+                throw new XFrameworkException($"[FSM] duplicate registration key: {key}");
+            }
+
+            if (fsm.IsDisposed)
+            {
+                throw new XFrameworkException($"[FSM] can not register disposed fsm: {key}");
+            }
+
+            Register(key, fsm, FsmScope.Instance, owner, CreateUpdateHandler(fsm), CreateDisposeHandler(fsm));
+        }
+
+        public void Unregister(string key)
+        {
+            if (!m_Records.TryGetValue(key, out FsmRecord record))
+            {
+                return;
+            }
+
+            if (record.Inspectable is IFsmDisposableNotifier disposableNotifier && record.DisposeHandler != null)
+            {
+                disposableNotifier.Disposed -= record.DisposeHandler;
+            }
+
+            m_Records.Remove(key);
+        }
+
+        public IReadOnlyList<FsmDebugEntry> GetDebugEntries()
+        {
+            m_DebugEntries.Clear();
+            foreach (KeyValuePair<string, FsmRecord> pair in m_Records.OrderBy(pair => pair.Key))
+            {
+                m_DebugEntries.Add(new FsmDebugEntry(pair.Key, pair.Value.Scope, pair.Value.Owner, pair.Value.Inspectable));
+            }
+
+            return m_DebugEntries;
+        }
 
         public override void Update()
         {
-            foreach (var fsm in m_FsmDic.Values)
+            m_UpdateKeys.Clear();
+            foreach (KeyValuePair<string, FsmRecord> pair in m_Records)
             {
-                fsm.OnUpdate();
+                if (pair.Value.UpdateHandler != null)
+                {
+                    m_UpdateKeys.Add(pair.Key);
+                }
+            }
+
+            for (int i = 0; i < m_UpdateKeys.Count; i++)
+            {
+                if (m_Records.TryGetValue(m_UpdateKeys[i], out FsmRecord record))
+                {
+                    record.UpdateHandler?.Invoke();
+                }
             }
         }
 
-        #endregion
+        public override void Shutdown()
+        {
+            string[] keys = m_Records.Keys.ToArray();
+            for (int i = 0; i < keys.Length; i++)
+            {
+                if (!m_Records.TryGetValue(keys[i], out FsmRecord record))
+                {
+                    continue;
+                }
+
+                if (record.Scope == FsmScope.Global)
+                {
+                    record.ManualDisposeHandler?.Invoke();
+                }
+                else
+                {
+                    Unregister(keys[i]);
+                }
+            }
+
+            m_Records.Clear();
+            m_UpdateKeys.Clear();
+            m_DebugEntries.Clear();
+            base.Shutdown();
+        }
+
+        private void Register(string key, IFsmInspectable fsm, FsmScope scope, UnityEngine.Object owner, Action updateHandler, Action disposeHandler)
+        {
+            var record = new FsmRecord
+            {
+                Key = key,
+                Scope = scope,
+                Owner = owner,
+                Inspectable = fsm,
+                UpdateHandler = updateHandler,
+                ManualDisposeHandler = disposeHandler
+            };
+
+            if (fsm is IFsmDisposableNotifier notifier)
+            {
+                record.DisposeHandler = () => Unregister(key);
+                notifier.Disposed += record.DisposeHandler;
+            }
+
+            m_Records.Add(key, record);
+        }
+
+        private static void ValidateKey(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                throw new XFrameworkException("[FSM] registration key can not be empty");
+            }
+        }
+
+        private static Action CreateUpdateHandler(IFsmInspectable fsm)
+        {
+            var method = fsm.GetType().GetMethod("Update", Type.EmptyTypes);
+            if (method == null)
+            {
+                return null;
+            }
+
+            return () => method.Invoke(fsm, null);
+        }
+
+        private static Action CreateDisposeHandler(IFsmInspectable fsm)
+        {
+            if (fsm is IDisposable disposable)
+            {
+                return disposable.Dispose;
+            }
+
+            return null;
+        }
     }
 }

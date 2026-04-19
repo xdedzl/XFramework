@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 
-namespace XFramework.Fsm
+namespace XFramework.FsmOld
 {
     /// <summary>
     /// 状态机
     /// </summary>
     /// <typeparam name="TState">子类状态机对应的状态基类</typeparam>
-    public class Fsm<TState> : IFsm where TState : FsmState
+    public class FsmOld<TState> : IFsmOld where TState : FsmStateOld
     {
         private TState m_CurrentState;
 
@@ -21,7 +21,7 @@ namespace XFramework.Fsm
         /// </summary>
         public TState CurrentState { get { return m_CurrentState; } }
 
-        public Fsm()
+        public FsmOld()
         {
             m_StateDic = new Dictionary<string, TState>();
         }
@@ -92,7 +92,7 @@ namespace XFramework.Fsm
         /// 获取当前状态
         /// </summary>
         /// <returns></returns>
-        public FsmState GetCurrentState()
+        public FsmStateOld GetCurrentState()
         {
             return m_CurrentState;
         }
@@ -110,7 +110,7 @@ namespace XFramework.Fsm
         /// </summary>
         /// <typeparam name="T">状态类型</typeparam>
         /// <param name="parms">启动参数</param>
-        public void ChangeState<T>(params object[] parms) where T : FsmState
+        public void ChangeState<T>(params object[] parms) where T : FsmStateOld
         {
             ChangeState(typeof(T), parms);
         }

@@ -105,7 +105,7 @@ flowchart TB
 | **任务系统**       | [Runtime/Modules/Task/](./Runtime/Modules/Task/)         | [异步任务 (`XTask`)](#35-异步与并发处理-xtask)                                    |
 | **持久化**         | [Runtime/Modules/Save/](./Runtime/Modules/Save/)         | [存档系统 (`SaveManager`)](#41-存档持久化-savemanager)                            |
 | **数据配置**       | [Runtime/Modules/Data/](./Runtime/Modules/Data/)         | [配表系统 (`XDataTable`)](#42-数据表驱动配置-xdatatable)                          |
-| **状态机**         | [Runtime/Modules/FSM/](./Runtime/Modules/FSM/)           | [有限状态机 (`FSM`)](#44-任务序列与有限状态机-task--fsm)                          |
+| **状态机**         | [Runtime/Modules/FSM/](./Runtime/Modules/FSM/)           | [有限状态机 (`FSM`)](#36-有限状态机-fsm)                                          |
 | **工具库 (Core)**  | [Core/Utility/](./Core/Utility/)                         | [通用工具 (`Utility`)](#51-通用底层-utility)                                      |
 | **工具库 (Unity)** | [Runtime/Tools/](./Runtime/Tools/)                       | [引擎工具 (`UUtility`)](#52-引擎特定高级工具-uutility)                            |
 | **控制台**         | [Runtime/Tools/XConsole/](./Runtime/Tools/XConsole/)     | [XConsole 运行时控制台](#55-xconsole-运行时控制台)                                |
@@ -375,6 +375,102 @@ MessageManager.Instance.BroadCast("OnUpdate", arg1, arg2);
 > **开发指南**：如果你的类继承自 XFramework 的系统基类，请优先查找对应的 `WithEvent` 版本（如 `SubProcedureWithEvent`），它们能够确保事件在正确的生命周期内被清理，有效规避内存泄露风险。
 
 ### 3.5 异步与并发处理 (XTask)
+
+### 3.6 有限状态机 (FSM)
+
+XFramework 现已提供一套全新的现代 FSM 底座，核心类型位于 `Runtime/Modules/FSM/`，统一命名空间为 `XFramework.Fsm`。
+
+#### 1. 设计目标
+- **纯 C# 核心**：`Fsm<TContext>` 与 `FsmState<TContext>` 不直接依赖 Unity API，适合角色 AI、流程驱动和工具态逻辑复用。
+- **强类型上下文**：长期状态数据统一放在 `TContext` 中，状态切换只携带一次性 `payload`。
+- **三种运行模式**：
+  - **Global FSM**：由 `FsmManager` 创建并自动 `Update()`，适合全局工具态、输入模式、运行时流程控制。
+  - **Registered Instance FSM**：由业务对象自行创建，调用 `RegisterInstance` 后交给 `FsmManager` 驱动并进入调试中心。
+  - **Local-only FSM**：由业务对象自行创建且不注册，完全由调用方手动 `Update()`。
+
+#### 2. 核心 API
+```csharp
+using XFramework.Fsm;
+
+public sealed class ActorContext
+{
+    public string Name;
+}
+
+public sealed class IdleState : FsmState<ActorContext>
+{
+    public override void OnEnter(FsmTransition transition)
+    {
+        // 进入状态
+    }
+}
+
+// Local-only FSM：不注册到 FsmManager，由业务自己驱动
+var localFsm = new Fsm<ActorContext>(new ActorContext
+{
+    Name = "Guest"
+}, "GuestFsm");
+
+localFsm.AddState<IdleState>();
+localFsm.Start<IdleState>();
+localFsm.Update();
+```
+
+`Fsm<TContext>` 固定提供以下能力：
+- `AddState<TState>()` / `AddState(FsmState<TContext>)`
+- `Start<TState>(object payload = null)`
+- `ChangeState<TState>(object payload = null)`
+- `Stop(object payload = null)`
+- `Update()`
+- `Dispose()`
+- 调试事件：`StateChanging`、`StateChanged`、`StateStopped`
+- 重入规则：若在 `StateChanging`、`OnExit`、`OnEnter`、`StateChanged` 中再次请求切换，FSM 不会立即嵌套执行，而是在当前切换完成后串行处理最后一次待处理请求。
+
+#### 3. Runtime 管理器
+`FsmManager` 同时承担**全局 FSM 驱动**与**调试注册中心**两项职责：
+
+```csharp
+using XFramework.Fsm;
+
+var globalFsm = FsmManager.Instance.CreateGlobalFsm("MapEdit", new ActorContext());
+globalFsm.AddState<IdleState>();
+globalFsm.Start<IdleState>();
+```
+
+```csharp
+using XFramework.Fsm;
+
+// Registered Instance FSM：注册后由 FsmManager 驱动，同时出现在调试器中
+var actorFsm = new Fsm<ActorContext>(new ActorContext
+{
+    Name = "Npc_A"
+}, "Npc_A_Fsm");
+
+actorFsm.AddState<IdleState>();
+actorFsm.Start<IdleState>();
+FsmManager.Instance.RegisterInstance("Npc_A_Fsm", actorFsm, owner);
+```
+
+- `CreateGlobalFsm<TContext>(string key, TContext context, bool autoStart = false)`
+  - 当 `autoStart = true` 时，首个注册进来的状态会自动作为初始状态启动。
+- `GetGlobalFsm(string key)` / `TryGetGlobalFsm(string key, out IFsmInspectable fsm)`
+- `RegisterInstance(string key, IFsmInspectable fsm, UnityEngine.Object owner = null)`
+- `Unregister(string key)`
+
+#### 3.1 驱动规则
+- `CreateGlobalFsm` 创建的 FSM 会自动被 `FsmManager.Update()` 驱动。
+- `RegisterInstance` 不只是调试注册；注册成功后，该 FSM 也会被 `FsmManager.Update()` 自动驱动。
+- 不调用 `RegisterInstance` 的本地 FSM，不会自动更新，必须由业务主动调用 `Update()`。
+- `Unregister` 仅取消托管与调试注册，不会自动 `Dispose()` 该 FSM；实例生命周期仍由业务方负责。
+
+#### 4. 调试与观察
+- 菜单 **`XFramework/Tools/FSM Debugger`**：查看当前所有 Global / Instance FSM 的 key、scope、context、当前状态、上一次切换与 payload 摘要。
+- 控制台命令 **`fsm_list`**：通过 `XConsole` 输出当前所有活动 FSM 的文本快照。
+
+#### 5. 迁移说明
+- 旧实现已整体迁移到 `XFramework.FsmOld` 命名空间，仅作为过渡保留。
+- `FsmOld` / `FsmManagerOld` / `FsmStateOld` 不再扩展新能力。
+- 若需要子状态，请在状态内部再组合一个新的 `Fsm<TSubContext>`，不要继续依赖旧的 `TowLevel` 风格设计。
 
 ---
 

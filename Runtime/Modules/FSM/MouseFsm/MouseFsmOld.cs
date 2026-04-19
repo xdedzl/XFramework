@@ -1,21 +1,21 @@
 ﻿using UnityEngine;
 using UnityEngine.EventSystems;
 
-namespace XFramework.Fsm
+namespace XFramework.FsmOld
 {
     /// <summary>
     /// 鼠标事件
     /// </summary>
-    public sealed class MouseFsm : Fsm<MouseState>
+    public sealed class MouseFsmOld : FsmOld<MouseStateOld>
     {
         /// <summary>
         /// 当前鼠标状态
         /// </summary>
-        public MouseState CurrentMouseState
+        public MouseStateOld CurrentMouseStateOld
         {
             get
             {
-                return (MouseState)CurrentState;
+                return (MouseStateOld)CurrentState;
             }
         }
         /// <summary>
@@ -37,43 +37,43 @@ namespace XFramework.Fsm
             {
                 if (Input.GetMouseButtonDown(0))
                 {
-                    CurrentMouseState.OnLeftButtonDown();
+                    CurrentMouseStateOld.OnLeftButtonDown();
                 }
                 else if (Input.GetMouseButton(0))
                 {
-                    CurrentMouseState.OnLeftButtonHold();
+                    CurrentMouseStateOld.OnLeftButtonHold();
                 }
                 else if (Input.GetMouseButtonUp(0))
                 {
-                    CurrentMouseState.OnLeftButtonUp();
+                    CurrentMouseStateOld.OnLeftButtonUp();
                 }
                 else if (Input.GetMouseButtonDown(1))
                 {
-                    CurrentMouseState.OnRightButtonDown();
+                    CurrentMouseStateOld.OnRightButtonDown();
                 }
                 else if (Input.GetMouseButton(1))
                 {
-                    CurrentMouseState.OnRightButtonHold();
+                    CurrentMouseStateOld.OnRightButtonHold();
                 }
                 else if (Input.GetMouseButtonUp(1))
                 {
-                    CurrentMouseState.OnRightButtonUp();
+                    CurrentMouseStateOld.OnRightButtonUp();
                 }
                 else if (Input.GetMouseButtonDown(2))
                 {
-                    CurrentMouseState.OnCenterButtonDown();
+                    CurrentMouseStateOld.OnCenterButtonDown();
                 }
                 else if (Input.GetMouseButton(2))
                 {
-                    CurrentMouseState.OnCenterButtonHold();
+                    CurrentMouseStateOld.OnCenterButtonHold();
                 }
                 else if (Input.GetMouseButtonUp(2))
                 {
-                    CurrentMouseState.OnCenterButtonUp();
+                    CurrentMouseStateOld.OnCenterButtonUp();
                 }
             }
 
-            CurrentMouseState.OnUpdate();
+            CurrentMouseStateOld.OnUpdate();
 
             if (Input.mousePosition != lastPosition)
             {

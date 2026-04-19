@@ -97,9 +97,19 @@
 - `asyncOp.ToXAwaitableTask()`: 封装 Unity 异步操作。
 
 ### 5.2 `FsmManager` & `FSM`
-- `CreateFsm<T>(string name, T owner, params FsmState<T>[] states)`.
-- `fsm.Start<TState>()`.
-- `fsm.ChangeState<TState>()`.
+- `new Fsm<TContext>(context, debugName)`: 创建一个纯 C# 单活跃状态机。
+- `fsm.AddState<TState>()` / `fsm.AddState(state)`: 注册状态实例。
+- `fsm.Start<TState>(payload)` / `fsm.ChangeState<TState>(payload)`: 启动或切换状态。
+- `fsm.Stop(payload)` / `fsm.Update()` / `fsm.Dispose()`.
+- `fsm.StateChanging / StateChanged / StateStopped`: 观察运行时状态切换。
+- `Fsm<TContext>` 支持切换重入保护：若在切换回调内再次请求切换，会在当前切换完成后串行处理最后一次待处理请求。
+- `FsmManager.Instance.CreateGlobalFsm<TContext>(key, context, autoStart)`: 创建并托管一个自动轮询的全局 FSM。
+- `FsmManager.Instance.RegisterInstance(key, fsm, owner)`: 将实例 FSM 注册到调试中心，并由 `FsmManager` 自动驱动更新。
+- `FsmManager.Instance.Unregister(key)`: 取消托管与调试注册，但不会自动销毁 FSM 实例。
+- `FsmManager.Instance.GetDebugEntries()`: 获取调试窗口与控制台可用的只读快照。
+- `fsm_list`: 通过 `XConsole` 输出当前所有已注册 FSM。
+
+> 旧版 `FsmOld` API 已迁移至 `XFramework.FsmOld`，仅用于未迁移业务的过渡期保留。
 
 ---
 

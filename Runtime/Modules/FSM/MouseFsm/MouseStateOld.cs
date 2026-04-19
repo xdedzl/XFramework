@@ -1,6 +1,6 @@
-﻿namespace XFramework.Fsm
+﻿namespace XFramework.FsmOld
 {
-    public class MouseState : FsmState
+    public class MouseStateOld : FsmStateOld
     {
         /// <summary>
         /// 左键按下

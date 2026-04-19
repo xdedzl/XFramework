@@ -1,9 +1,9 @@
-﻿namespace XFramework.Fsm
+﻿namespace XFramework.FsmOld
 {
     /// <summary>
     /// 状态基类
     /// </summary>
-    public abstract class FsmState
+    public abstract class FsmStateOld
     {
         /// <summary>
         /// 初始化
@@ -27,7 +27,7 @@
         public virtual void OnExit() { }
     }
 
-    public abstract class FsmStateTowLevel : FsmState
+    public abstract class FsmStateOldTowLevel : FsmStateOld
     {
         protected int currentSubState { get; private set; } = -1;
         protected void ChangeSubState(int state)

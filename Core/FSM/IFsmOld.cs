@@ -1,11 +1,11 @@
 ﻿using System;
 
-namespace XFramework.Fsm
+namespace XFramework.FsmOld
 {
     /// <summary>
     /// 状态机接口
     /// </summary>
-    public interface IFsm
+    public interface IFsmOld
     {
         /// <summary>
         /// 每帧调用
@@ -16,7 +16,7 @@ namespace XFramework.Fsm
         /// </summary>
         /// <typeparam name="T">状态类型</typeparam>
         /// <param name="parms">启动参数</param>
-        void ChangeState<T>(params object[] parms) where T : FsmState;
+        void ChangeState<T>(params object[] parms) where T : FsmStateOld;
         /// <summary>
         /// 状态切换
         /// </summary>
@@ -26,7 +26,7 @@ namespace XFramework.Fsm
         /// <summary>
         /// 获取当前状态
         /// </summary>
-        FsmState GetCurrentState();
+        FsmStateOld GetCurrentState();
         /// <summary>
         /// 状态机销毁
         /// </summary>
