@@ -13,18 +13,14 @@ namespace XFramework.Fsm
     {
         private sealed class FsmRecord
         {
-            public string Key;
             public FsmScope Scope;
             public UnityEngine.Object Owner;
-            public IFsmInspectable Inspectable;
-            public Action DisposeHandler;
-            public Action UpdateHandler;
-            public Action ManualDisposeHandler;
+            public IManagedFsm Fsm;
         }
 
-        private readonly Dictionary<string, FsmRecord> m_Records = new Dictionary<string, FsmRecord>();
-        private readonly List<string> m_UpdateKeys = new List<string>();
-        private readonly List<FsmDebugEntry> m_DebugEntries = new List<FsmDebugEntry>();
+        private readonly Dictionary<string, FsmRecord> m_Records = new ();
+        private readonly List<string> m_UpdateKeys = new ();
+        private readonly List<FsmDebugEntry> m_DebugEntries = new ();
 
         public int Count => m_Records.Count;
 
@@ -38,6 +34,16 @@ namespace XFramework.Fsm
 
         public Fsm<TContext> CreateGlobalFsm<TContext>(string key, TContext context, bool autoStart = false)
         {
+            return CreateManagedFsm(key, context, FsmScope.Global, null, autoStart);
+        }
+
+        public Fsm<TContext> CreateInstanceFsm<TContext>(string key, TContext context, UnityEngine.Object owner = null, bool autoStart = false)
+        {
+            return CreateManagedFsm(key, context, FsmScope.Instance, owner, autoStart);
+        }
+        
+        private Fsm<TContext> CreateManagedFsm<TContext>(string key, TContext context, FsmScope scope, UnityEngine.Object owner, bool autoStart)
+        {
             ValidateKey(key);
 
             if (m_Records.ContainsKey(key))
@@ -45,11 +51,36 @@ namespace XFramework.Fsm
                 throw new XFrameworkException($"[FSM] duplicate registration key: {key}");
             }
 
-            var fsm = new Fsm<TContext>(context, key, autoStart);
-            Register(key, fsm, FsmScope.Global, null, fsm.Update, fsm.Dispose);
-            return fsm;
+            var managedFsm = new Fsm<TContext>(context, key, autoStart);
+            managedFsm.BindManager(this, key);
+            Register(key, managedFsm, scope, owner);
+            return (Fsm<TContext>)managedFsm;
         }
 
+        
+        private void Register(string key, IManagedFsm fsm, FsmScope scope, UnityEngine.Object owner)
+        {
+            var record = new FsmRecord
+            {
+                Scope = scope,
+                Owner = owner,
+                Fsm = fsm
+            };
+
+            m_Records.Add(key, record);
+        }
+        
+        public void Unregister(string key)
+        {
+            if (!m_Records.ContainsKey(key))
+            {
+                return;
+            }
+
+            m_Records.Remove(key);
+        }
+        
+                
         public IFsmInspectable GetGlobalFsm(string key)
         {
             if (!TryGetGlobalFsm(key, out IFsmInspectable fsm))
@@ -64,7 +95,7 @@ namespace XFramework.Fsm
         {
             if (m_Records.TryGetValue(key, out FsmRecord record) && record.Scope == FsmScope.Global)
             {
-                fsm = record.Inspectable;
+                fsm = record.Fsm;
                 return true;
             }
 
@@ -72,49 +103,13 @@ namespace XFramework.Fsm
             return false;
         }
 
-        public void RegisterInstance(string key, IFsmInspectable fsm, UnityEngine.Object owner = null)
-        {
-            ValidateKey(key);
-
-            if (fsm == null)
-            {
-                throw new XFrameworkException("[FSM] registered instance can not be null");
-            }
-
-            if (m_Records.ContainsKey(key))
-            {
-                throw new XFrameworkException($"[FSM] duplicate registration key: {key}");
-            }
-
-            if (fsm.IsDisposed)
-            {
-                throw new XFrameworkException($"[FSM] can not register disposed fsm: {key}");
-            }
-
-            Register(key, fsm, FsmScope.Instance, owner, CreateUpdateHandler(fsm), CreateDisposeHandler(fsm));
-        }
-
-        public void Unregister(string key)
-        {
-            if (!m_Records.TryGetValue(key, out FsmRecord record))
-            {
-                return;
-            }
-
-            if (record.Inspectable is IFsmDisposableNotifier disposableNotifier && record.DisposeHandler != null)
-            {
-                disposableNotifier.Disposed -= record.DisposeHandler;
-            }
-
-            m_Records.Remove(key);
-        }
-
+        
         public IReadOnlyList<FsmDebugEntry> GetDebugEntries()
         {
             m_DebugEntries.Clear();
             foreach (KeyValuePair<string, FsmRecord> pair in m_Records.OrderBy(pair => pair.Key))
             {
-                m_DebugEntries.Add(new FsmDebugEntry(pair.Key, pair.Value.Scope, pair.Value.Owner, pair.Value.Inspectable));
+                m_DebugEntries.Add(new FsmDebugEntry(pair.Key, pair.Value.Scope, pair.Value.Owner, pair.Value.Fsm));
             }
 
             return m_DebugEntries;
@@ -125,17 +120,14 @@ namespace XFramework.Fsm
             m_UpdateKeys.Clear();
             foreach (KeyValuePair<string, FsmRecord> pair in m_Records)
             {
-                if (pair.Value.UpdateHandler != null)
-                {
-                    m_UpdateKeys.Add(pair.Key);
-                }
+                m_UpdateKeys.Add(pair.Key);
             }
 
             for (int i = 0; i < m_UpdateKeys.Count; i++)
             {
                 if (m_Records.TryGetValue(m_UpdateKeys[i], out FsmRecord record))
                 {
-                    record.UpdateHandler?.Invoke();
+                    record.Fsm.Update();
                 }
             }
         }
@@ -152,7 +144,7 @@ namespace XFramework.Fsm
 
                 if (record.Scope == FsmScope.Global)
                 {
-                    record.ManualDisposeHandler?.Invoke();
+                    record.Fsm.Dispose();
                 }
                 else
                 {
@@ -165,27 +157,7 @@ namespace XFramework.Fsm
             m_DebugEntries.Clear();
             base.Shutdown();
         }
-
-        private void Register(string key, IFsmInspectable fsm, FsmScope scope, UnityEngine.Object owner, Action updateHandler, Action disposeHandler)
-        {
-            var record = new FsmRecord
-            {
-                Key = key,
-                Scope = scope,
-                Owner = owner,
-                Inspectable = fsm,
-                UpdateHandler = updateHandler,
-                ManualDisposeHandler = disposeHandler
-            };
-
-            if (fsm is IFsmDisposableNotifier notifier)
-            {
-                record.DisposeHandler = () => Unregister(key);
-                notifier.Disposed += record.DisposeHandler;
-            }
-
-            m_Records.Add(key, record);
-        }
+        
 
         private static void ValidateKey(string key)
         {
@@ -193,27 +165,6 @@ namespace XFramework.Fsm
             {
                 throw new XFrameworkException("[FSM] registration key can not be empty");
             }
-        }
-
-        private static Action CreateUpdateHandler(IFsmInspectable fsm)
-        {
-            var method = fsm.GetType().GetMethod("Update", Type.EmptyTypes);
-            if (method == null)
-            {
-                return null;
-            }
-
-            return () => method.Invoke(fsm, null);
-        }
-
-        private static Action CreateDisposeHandler(IFsmInspectable fsm)
-        {
-            if (fsm is IDisposable disposable)
-            {
-                return disposable.Dispose;
-            }
-
-            return null;
         }
     }
 }

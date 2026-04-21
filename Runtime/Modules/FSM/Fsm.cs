@@ -7,7 +7,7 @@ namespace XFramework.Fsm
     /// <summary>
     /// 现代单活跃状态机。
     /// </summary>
-    public class Fsm<TContext> : IFsmInspectable, IFsmDisposableNotifier, IDisposable
+    public class Fsm<TContext> : IManagedFsm
     {
         private enum TransitionRequestType
         {
@@ -42,6 +42,8 @@ namespace XFramework.Fsm
         private readonly string m_DebugName;
         private readonly bool m_AutoStartOnFirstState;
 
+        private FsmManager m_Manager;
+        private string m_RegistrationKey;
         private FsmState<TContext> m_CurrentState;
         private FsmState<TContext> m_PreviousState;
         private FsmTransition m_LastTransition;
@@ -50,7 +52,7 @@ namespace XFramework.Fsm
         private bool m_IsTransitioning;
         private PendingTransitionRequest m_PendingTransitionRequest;
 
-        public Fsm(TContext context, string debugName = null, bool autoStartOnFirstState = false)
+        internal Fsm(TContext context, string debugName = null, bool autoStartOnFirstState = false)
         {
             m_Context = context;
             m_DebugName = string.IsNullOrWhiteSpace(debugName) ? typeof(TContext).Name : debugName;
@@ -60,7 +62,6 @@ namespace XFramework.Fsm
         public event Action<FsmTransition> StateChanging;
         public event Action<FsmTransition> StateChanged;
         public event Action<FsmTransition> StateStopped;
-        public event Action Disposed;
 
         public string DebugName => m_DebugName;
         public Type ContextType => typeof(TContext);
@@ -164,13 +165,27 @@ namespace XFramework.Fsm
             m_PendingTransitionRequest = default;
             m_IsDisposed = true;
 
+            FsmManager manager = m_Manager;
+            string registrationKey = m_RegistrationKey;
+            m_Manager = null;
+            m_RegistrationKey = null;
+
+            manager?.Unregister(registrationKey);
+
             StateChanging = null;
             StateChanged = null;
             StateStopped = null;
+        }
 
-            Action disposed = Disposed;
-            Disposed = null;
-            disposed?.Invoke();
+        private void BindManagerInternal(FsmManager manager, string registrationKey)
+        {
+            m_Manager = manager;
+            m_RegistrationKey = registrationKey;
+        }
+
+        internal void BindManager(FsmManager manager, string registrationKey)
+        {
+            BindManagerInternal(manager, registrationKey);
         }
 
         private TState GetState<TState>() where TState : FsmState<TContext>

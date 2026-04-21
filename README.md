@@ -383,10 +383,9 @@ XFramework 现已提供一套全新的现代 FSM 底座，核心类型位于 `Ru
 #### 1. 设计目标
 - **纯 C# 核心**：`Fsm<TContext>` 与 `FsmState<TContext>` 不直接依赖 Unity API，适合角色 AI、流程驱动和工具态逻辑复用。
 - **强类型上下文**：长期状态数据统一放在 `TContext` 中，状态切换只携带一次性 `payload`。
-- **三种运行模式**：
+- **统一托管模式**：
   - **Global FSM**：由 `FsmManager` 创建并自动 `Update()`，适合全局工具态、输入模式、运行时流程控制。
-  - **Registered Instance FSM**：由业务对象自行创建，调用 `RegisterInstance` 后交给 `FsmManager` 驱动并进入调试中心。
-  - **Local-only FSM**：由业务对象自行创建且不注册，完全由调用方手动 `Update()`。
+  - **Instance FSM**：由 `FsmManager` 创建并托管，适合挂靠到具体业务对象并进入调试中心。
 
 #### 2. 核心 API
 ```csharp
@@ -405,15 +404,14 @@ public sealed class IdleState : FsmState<ActorContext>
     }
 }
 
-// Local-only FSM：不注册到 FsmManager，由业务自己驱动
-var localFsm = new Fsm<ActorContext>(new ActorContext
+// Instance FSM：由 FsmManager 创建并托管
+var actorFsm = FsmManager.Instance.CreateInstanceFsm("Npc_A_Fsm", new ActorContext
 {
-    Name = "Guest"
-}, "GuestFsm");
+    Name = "Npc_A"
+}, owner);
 
-localFsm.AddState<IdleState>();
-localFsm.Start<IdleState>();
-localFsm.Update();
+actorFsm.AddState<IdleState>();
+actorFsm.Start<IdleState>();
 ```
 
 `Fsm<TContext>` 固定提供以下能力：
@@ -440,27 +438,27 @@ globalFsm.Start<IdleState>();
 ```csharp
 using XFramework.Fsm;
 
-// Registered Instance FSM：注册后由 FsmManager 驱动，同时出现在调试器中
-var actorFsm = new Fsm<ActorContext>(new ActorContext
+// Instance FSM：由 FsmManager 驱动，同时出现在调试器中
+var actorFsm = FsmManager.Instance.CreateInstanceFsm("Npc_A_Fsm", new ActorContext
 {
     Name = "Npc_A"
-}, "Npc_A_Fsm");
+}, owner);
 
 actorFsm.AddState<IdleState>();
 actorFsm.Start<IdleState>();
-FsmManager.Instance.RegisterInstance("Npc_A_Fsm", actorFsm, owner);
 ```
 
 - `CreateGlobalFsm<TContext>(string key, TContext context, bool autoStart = false)`
   - 当 `autoStart = true` 时，首个注册进来的状态会自动作为初始状态启动。
+- `CreateInstanceFsm<TContext>(string key, TContext context, UnityEngine.Object owner = null, bool autoStart = false)`
+  - 创建挂靠到业务对象的实例 FSM，并自动加入 `FsmDebugger` 与运行时驱动列表。
 - `GetGlobalFsm(string key)` / `TryGetGlobalFsm(string key, out IFsmInspectable fsm)`
-- `RegisterInstance(string key, IFsmInspectable fsm, UnityEngine.Object owner = null)`
 - `Unregister(string key)`
 
 #### 3.1 驱动规则
 - `CreateGlobalFsm` 创建的 FSM 会自动被 `FsmManager.Update()` 驱动。
-- `RegisterInstance` 不只是调试注册；注册成功后，该 FSM 也会被 `FsmManager.Update()` 自动驱动。
-- 不调用 `RegisterInstance` 的本地 FSM，不会自动更新，必须由业务主动调用 `Update()`。
+- `CreateInstanceFsm` 创建的 FSM 会自动被 `FsmManager.Update()` 驱动，并进入调试中心。
+- 业务侧不再直接 `new Fsm<TContext>(...)`；运行时 FSM 统一由 `FsmManager` 创建。
 - `Unregister` 仅取消托管与调试注册，不会自动 `Dispose()` 该 FSM；实例生命周期仍由业务方负责。
 
 #### 4. 调试与观察
