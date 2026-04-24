@@ -15,6 +15,7 @@ namespace XFramework.Animation
 
         public Animator Animator { get; private set; }
         public XAnimationAsset Asset => m_CompiledAsset?.Asset;
+        public XAnimationCompiledAsset CompiledAsset => m_CompiledAsset;
 
         public void Initialize(string assetPath, Animator animator)
         {
@@ -30,7 +31,24 @@ namespace XFramework.Animation
 
             DisposePlayer();
 
-            m_CompiledAsset = m_AssetLoader.Load(assetPath);
+            Initialize(m_AssetLoader.Load(assetPath), animator);
+        }
+
+        public void Initialize(XAnimationCompiledAsset compiledAsset, Animator animator)
+        {
+            if (compiledAsset == null)
+            {
+                throw new XFrameworkException("XAnimationDriver compiledAsset cannot be null.");
+            }
+
+            if (animator == null)
+            {
+                throw new XFrameworkException("XAnimationDriver animator cannot be null.");
+            }
+
+            DisposePlayer();
+
+            m_CompiledAsset = compiledAsset;
             if (m_CompiledAsset.Asset.graph != null && m_CompiledAsset.Asset.graph.enabled)
             {
                 throw new XFrameworkException("XAnimationStateGraph runtime is not supported in phase 1. Disable graph.enabled before initialization.");

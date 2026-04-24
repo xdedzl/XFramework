@@ -8,6 +8,17 @@ namespace XFramework.Animation
     public sealed class XAnimationAssetLoader
     {
         private readonly XAnimationAssetValidator m_Validator = new();
+        private readonly IXAnimationAssetResolver m_Resolver;
+
+        public XAnimationAssetLoader()
+            : this(new XAnimationRuntimeAssetResolver())
+        {
+        }
+
+        public XAnimationAssetLoader(IXAnimationAssetResolver resolver)
+        {
+            m_Resolver = resolver ?? throw new ArgumentNullException(nameof(resolver));
+        }
 
         public XAnimationCompiledAsset Load(string assetPath)
         {
@@ -16,7 +27,7 @@ namespace XFramework.Animation
                 throw new XFrameworkException("XAnimation assetPath cannot be empty.");
             }
 
-            TextAsset textAsset = ResourceManager.Instance.Load<TextAsset>(assetPath);
+            TextAsset textAsset = m_Resolver.LoadTextAsset(assetPath);
             if (textAsset == null)
             {
                 throw new XFrameworkException($"XAnimation asset missing at '{assetPath}'.");
@@ -44,7 +55,7 @@ namespace XFramework.Animation
                 AvatarMask mask = null;
                 if (!string.IsNullOrWhiteSpace(channelConfig.maskPath))
                 {
-                    mask = ResourceManager.Instance.Load<AvatarMask>(channelConfig.maskPath);
+                    mask = m_Resolver.LoadAvatarMask(channelConfig.maskPath);
                     if (mask == null)
                     {
                         throw new XFrameworkException($"XAnimation channel '{channelConfig.name}' failed to load AvatarMask at '{channelConfig.maskPath}'.");
@@ -60,7 +71,7 @@ namespace XFramework.Animation
             for (int i = 0; i < asset.clips.Length; i++)
             {
                 XAnimationClipConfig clipConfig = asset.clips[i];
-                AnimationClip clip = ResourceManager.Instance.Load<AnimationClip>(clipConfig.clipPath);
+                AnimationClip clip = m_Resolver.LoadAnimationClip(clipConfig.clipPath);
                 if (clip == null)
                 {
                     throw new XFrameworkException($"XAnimation clip '{clipConfig.key}' failed to load AnimationClip at '{clipConfig.clipPath}'.");
