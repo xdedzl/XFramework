@@ -1,0 +1,41 @@
+.inspector-element{
+    margin-top: 2px;
+    margin-bottom: 2px;
+	width: auto;
+	height: auto;
+}
+.integer-element{
+    flex-direction: row;
+}
+.decimal-element{
+    flex-direction: row;
+}
+.string-element{
+    flex-direction: row;
+}
+.enum-element{
+    flex-direction: row;
+}
+
+.asset-path-element{
+    flex-direction: row;
+}
+.texture-path-element{
+    flex-direction: column;
+}
+.tagsEnum-element{
+    flex-direction: row;
+}
+
+.label{
+    width: 40%;
+    color: white;
+}
+
+.input{
+    width: 60%;
+    min-width: 100;
+	font-size: 10px;
+	background-color: teal;
+    border-radius: 5px;
+}
