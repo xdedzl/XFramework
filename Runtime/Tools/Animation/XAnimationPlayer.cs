@@ -125,8 +125,11 @@ namespace XFramework.Animation
             {
                 XAnimationChannel channel = m_Channels[i];
                 channel.PrepareFrame(deltaTime);
-                m_LayerMixer.SetInputWeight(i, channel.ChannelWeight);
+                m_LayerMixer.SetInputWeight(i, channel.HasActivePlayback ? channel.ChannelWeight : 0f);
             }
+
+            m_RootMotionResolver.ResolveSource(m_Channels);
+            m_RootMotionResolver.ApplyToAnimator(Animator);
 
             m_Graph.Evaluate(deltaTime);
 

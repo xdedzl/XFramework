@@ -193,7 +193,9 @@ namespace XFramework.Animation
         public XAnimationCompiledChannel CompiledChannel { get; }
         public AnimationMixerPlayable Mixer { get; }
         public float ChannelWeight => m_ChannelWeight;
+        public float TimeScale => m_TimeScale;
         public XAnimationPlaybackInstance CurrentPlayback => m_Current;
+        public bool HasActivePlayback => m_Current != null || m_Previous != null;
 
         internal bool TryPlay(XAnimationCompiledClip clip, XAnimationPlaybackOptions options, XAnimationCueDispatcher cueDispatcher)
         {
@@ -212,7 +214,8 @@ namespace XFramework.Animation
                 DestroyPlayback(ref m_Previous, cueDispatcher);
             }
 
-            if (m_Current != null)
+            bool hasPlaybackToFadeOut = m_Current != null;
+            if (hasPlaybackToFadeOut)
             {
                 m_Current.SuppressCues = true;
                 cueDispatcher?.RemovePlayback(m_Current.PlaybackId);
@@ -226,6 +229,20 @@ namespace XFramework.Animation
             AnimationClipPlayable playable = AnimationClipPlayable.Create(m_Graph, clip.Clip);
             playable.SetApplyFootIK(false);
             playable.SetTime(Mathf.Clamp01(options.NormalizedTime) * Mathf.Max(clip.Clip.length, 0.0001f));
+            if (!hasPlaybackToFadeOut)
+            {
+                options = new XAnimationPlaybackOptions(
+                    0f,
+                    options.FadeOut,
+                    options.Weight,
+                    options.NormalizedTime,
+                    options.Speed,
+                    options.IsLooping,
+                    options.Priority,
+                    options.Interruptible,
+                    options.DrivesRootMotion);
+            }
+
             XAnimationPlaybackInstance playback = new(playbackId, Name, clip, playable, options);
             cueDispatcher?.ResetForPlayback(playbackId);
             m_Current = playback;
@@ -320,7 +337,9 @@ namespace XFramework.Animation
                 normalizedTime = m_Current.NormalizedTime,
                 totalNormalizedTime = m_Current.TotalNormalizedTime,
                 weight = m_Current.CurrentWeight,
+                channelWeight = m_ChannelWeight,
                 speed = m_Current.Speed * m_TimeScale,
+                timeScale = m_TimeScale,
                 isLooping = m_Current.IsLooping,
                 isFading = m_Current.IsFading,
                 priority = m_Current.Priority,
@@ -366,6 +385,20 @@ namespace XFramework.Animation
             if (Mixer.GetInput(inputIndex).IsValid())
             {
                 m_Graph.Disconnect(Mixer, inputIndex);
+            }
+
+            // Disconnect the playable's output if it is already connected elsewhere.
+            if (playable.GetOutput(0).IsValid())
+            {
+                for (int i = 0; i < Mixer.GetInputCount(); i++)
+                {
+                    if (Mixer.GetInput(i).Equals(playable))
+                    {
+                        m_Graph.Disconnect(Mixer, i);
+                        Mixer.SetInputWeight(i, 0f);
+                        break;
+                    }
+                }
             }
 
             m_Graph.Connect(playable, 0, Mixer, inputIndex);

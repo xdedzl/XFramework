@@ -109,6 +109,22 @@ namespace XFramework.Animation
         public XAnimationStateGraphConfig graph = new XAnimationStateGraphConfig();
     }
 
+    [Serializable]
+    public class XAnimationOverrideClipConfig
+    {
+        public string key;
+        [AssetPath(typeof(AnimationClip))]
+        public string clipPath;
+    }
+
+    [Serializable]
+    public class XAnimationOverrideAsset : XTextAsset
+    {
+        [AssetPath(typeof(TextAsset))]
+        public string baseAssetPath;
+        public XAnimationOverrideClipConfig[] clips = Array.Empty<XAnimationOverrideClipConfig>();
+    }
+
     public sealed class XAnimationCompiledChannel
     {
         public XAnimationCompiledChannel(XAnimationChannelConfig config, AvatarMask mask, int layerIndex)
@@ -267,7 +283,9 @@ namespace XFramework.Animation
         public float normalizedTime;
         public float totalNormalizedTime;
         public float weight;
+        public float channelWeight;
         public float speed;
+        public float timeScale;
         public bool isLooping;
         public bool isFading;
         public int priority;

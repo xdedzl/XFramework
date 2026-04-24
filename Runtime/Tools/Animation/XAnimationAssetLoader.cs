@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using UnityEngine;
 using XFramework.Resource;
 
@@ -33,14 +35,32 @@ namespace XFramework.Animation
                 throw new XFrameworkException($"XAnimation asset missing at '{assetPath}'.");
             }
 
-            XAnimationAsset asset = textAsset.ToXTextAsset<XAnimationAsset>();
-            if (asset == null)
-            {
-                throw new XFrameworkException($"Failed to deserialize XAnimation asset at '{assetPath}'.");
-            }
-
+            XAnimationAsset asset = LoadAsset(textAsset, assetPath);
             m_Validator.Validate(asset);
             return Compile(asset);
+        }
+
+        public static bool IsXAnimationAssetText(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return false;
+            }
+
+            try
+            {
+                JObject json = JObject.Parse(text);
+                if (json["baseAssetPath"] != null)
+                {
+                    return true;
+                }
+
+                return json["channels"] is JArray && json["clips"] is JArray;
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
         }
 
         public XAnimationCompiledAsset Compile(XAnimationAsset asset)
@@ -118,6 +138,146 @@ namespace XFramework.Animation
                 channelIndexByName,
                 clipIndexByKey,
                 parameterIndexByName);
+        }
+
+        private XAnimationAsset LoadAsset(TextAsset textAsset, string assetPath)
+        {
+            if (IsOverrideAssetText(textAsset.text))
+            {
+                return LoadOverrideAsset(textAsset, assetPath);
+            }
+
+            XAnimationAsset asset = textAsset.ToXTextAsset<XAnimationAsset>();
+            if (asset == null)
+            {
+                throw new XFrameworkException($"Failed to deserialize XAnimation asset at '{assetPath}'.");
+            }
+
+            return asset;
+        }
+
+        private XAnimationAsset LoadOverrideAsset(TextAsset textAsset, string assetPath)
+        {
+            XAnimationOverrideAsset overrideAsset = textAsset.ToXTextAsset<XAnimationOverrideAsset>();
+            if (overrideAsset == null)
+            {
+                throw new XFrameworkException($"Failed to deserialize XAnimation override asset at '{assetPath}'.");
+            }
+
+            ValidateOverrideAsset(overrideAsset, assetPath);
+
+            TextAsset baseTextAsset = m_Resolver.LoadTextAsset(overrideAsset.baseAssetPath);
+            if (baseTextAsset == null)
+            {
+                throw new XFrameworkException($"XAnimation override '{assetPath}' base asset missing at '{overrideAsset.baseAssetPath}'.");
+            }
+
+            if (IsOverrideAssetText(baseTextAsset.text))
+            {
+                throw new XFrameworkException($"XAnimation override '{assetPath}' baseAssetPath must reference a base XAnimationAsset, not another override asset.");
+            }
+
+            XAnimationAsset baseAsset = baseTextAsset.ToXTextAsset<XAnimationAsset>();
+            if (baseAsset == null)
+            {
+                throw new XFrameworkException($"Failed to deserialize XAnimation override base asset at '{overrideAsset.baseAssetPath}'.");
+            }
+
+            m_Validator.Validate(baseAsset);
+            XAnimationAsset mergedAsset = CloneAsset(baseAsset);
+            if (mergedAsset == null)
+            {
+                throw new XFrameworkException($"Failed to clone XAnimation override base asset at '{overrideAsset.baseAssetPath}'.");
+            }
+
+            ApplyOverrideClips(mergedAsset, overrideAsset, assetPath);
+            return mergedAsset;
+        }
+
+        private static bool IsOverrideAssetText(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return false;
+            }
+
+            try
+            {
+                JObject json = JObject.Parse(text);
+                return json["baseAssetPath"] != null;
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+        }
+
+        private static XAnimationAsset CloneAsset(XAnimationAsset asset)
+        {
+            string json = JsonConvert.SerializeObject(asset);
+            return JsonConvert.DeserializeObject<XAnimationAsset>(json);
+        }
+
+        private static void ValidateOverrideAsset(XAnimationOverrideAsset overrideAsset, string assetPath)
+        {
+            if (string.IsNullOrWhiteSpace(overrideAsset.baseAssetPath))
+            {
+                throw new XFrameworkException($"XAnimation override '{assetPath}' baseAssetPath cannot be empty.");
+            }
+
+            HashSet<string> overrideKeys = new(StringComparer.Ordinal);
+            XAnimationOverrideClipConfig[] clips = overrideAsset.clips ?? Array.Empty<XAnimationOverrideClipConfig>();
+            for (int i = 0; i < clips.Length; i++)
+            {
+                XAnimationOverrideClipConfig clip = clips[i];
+                if (clip == null)
+                {
+                    throw new XFrameworkException($"XAnimation override '{assetPath}' clip config at index {i} is null.");
+                }
+
+                if (string.IsNullOrWhiteSpace(clip.key))
+                {
+                    throw new XFrameworkException($"XAnimation override '{assetPath}' clip key at index {i} cannot be empty.");
+                }
+
+                if (!overrideKeys.Add(clip.key))
+                {
+                    throw new XFrameworkException($"XAnimation override '{assetPath}' clip key '{clip.key}' is duplicated.");
+                }
+
+                if (string.IsNullOrWhiteSpace(clip.clipPath))
+                {
+                    throw new XFrameworkException($"XAnimation override '{assetPath}' clip '{clip.key}' clipPath cannot be empty.");
+                }
+            }
+        }
+
+        private static void ApplyOverrideClips(
+            XAnimationAsset baseAsset,
+            XAnimationOverrideAsset overrideAsset,
+            string assetPath)
+        {
+            Dictionary<string, XAnimationClipConfig> baseClipMap = new(StringComparer.Ordinal);
+            for (int i = 0; i < baseAsset.clips.Length; i++)
+            {
+                XAnimationClipConfig clip = baseAsset.clips[i];
+                if (clip != null && !string.IsNullOrWhiteSpace(clip.key))
+                {
+                    baseClipMap[clip.key] = clip;
+                }
+            }
+
+            XAnimationOverrideClipConfig[] overrideClips = overrideAsset.clips ?? Array.Empty<XAnimationOverrideClipConfig>();
+            for (int i = 0; i < overrideClips.Length; i++)
+            {
+                XAnimationOverrideClipConfig overrideClip = overrideClips[i];
+                if (!baseClipMap.TryGetValue(overrideClip.key, out XAnimationClipConfig baseClip))
+                {
+                    throw new XFrameworkException($"XAnimation override '{assetPath}' clip '{overrideClip.key}' does not exist in base asset '{overrideAsset.baseAssetPath}'.");
+                }
+
+                baseClip.clipPath = overrideClip.clipPath;
+            }
         }
     }
 }
