@@ -189,6 +189,56 @@ namespace XFramework.Editor
             m_Driver.SetChannelTimeScale(channelName, timeScale);
         }
 
+        public void RenameChannel(string oldName, string newName)
+        {
+            EnsureLoaded();
+            newName = newName?.Trim();
+            if (string.Equals(oldName, newName, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(newName))
+            {
+                throw new XFrameworkException("XAnimation channel name cannot be empty.");
+            }
+
+            if (m_CompiledAsset.TryGetChannelIndex(newName, out _))
+            {
+                throw new XFrameworkException($"XAnimation channel '{newName}' is duplicated.");
+            }
+
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            XAnimationChannelConfig channel = m_CompiledAsset.GetChannel(oldName).Config;
+            channel.name = newName;
+
+            if (asset.clips != null)
+            {
+                for (int i = 0; i < asset.clips.Length; i++)
+                {
+                    XAnimationClipConfig clip = asset.clips[i];
+                    if (clip != null && string.Equals(clip.defaultChannel, oldName, StringComparison.Ordinal))
+                    {
+                        clip.defaultChannel = newName;
+                    }
+                }
+            }
+
+            if (asset.graph?.states != null)
+            {
+                for (int i = 0; i < asset.graph.states.Length; i++)
+                {
+                    XAnimationStateConfig state = asset.graph.states[i];
+                    if (state != null && string.Equals(state.channelName, oldName, StringComparison.Ordinal))
+                    {
+                        state.channelName = newName;
+                    }
+                }
+            }
+
+            RebuildDriverAndSave();
+        }
+
         public void SetChannelLayerType(string channelName, XAnimationChannelLayerType layerType)
         {
             EnsureLoaded();
@@ -499,6 +549,61 @@ namespace XFramework.Editor
             m_CompiledAsset.GetChannel(channelName);
             m_CompiledAsset.GetClip(clipKey).Config.defaultChannel = channelName;
             SaveCompiledAsset();
+        }
+
+        public void RenameClip(string oldKey, string newKey)
+        {
+            EnsureLoaded();
+            newKey = newKey?.Trim();
+            if (string.Equals(oldKey, newKey, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(newKey))
+            {
+                throw new XFrameworkException("XAnimation clip key cannot be empty.");
+            }
+
+            if (m_CompiledAsset.TryGetClipIndex(newKey, out _))
+            {
+                throw new XFrameworkException($"XAnimation clip '{newKey}' is duplicated.");
+            }
+
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            XAnimationClipConfig clipConfig = m_CompiledAsset.GetClip(oldKey).Config;
+            clipConfig.key = newKey;
+
+            if (asset.cues != null)
+            {
+                for (int i = 0; i < asset.cues.Length; i++)
+                {
+                    XAnimationCueConfig cue = asset.cues[i];
+                    if (cue != null && string.Equals(cue.clipKey, oldKey, StringComparison.Ordinal))
+                    {
+                        cue.clipKey = newKey;
+                    }
+                }
+            }
+
+            if (asset.graph?.states != null)
+            {
+                for (int i = 0; i < asset.graph.states.Length; i++)
+                {
+                    XAnimationStateConfig state = asset.graph.states[i];
+                    if (state != null && string.Equals(state.clipKey, oldKey, StringComparison.Ordinal))
+                    {
+                        state.clipKey = newKey;
+                    }
+                }
+            }
+
+            if (m_OriginalClipPathByKey.Remove(oldKey, out string originalClipPath))
+            {
+                m_OriginalClipPathByKey[newKey] = originalClipPath;
+            }
+
+            RebuildDriverAndSave();
         }
 
         public void MoveClip(string clipKey, string channelName, string insertBeforeClipKey = null)

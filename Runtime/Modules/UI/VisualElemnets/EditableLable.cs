@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -7,6 +8,10 @@ namespace XFramework.UI
     {
         private readonly TextElement m_label;
         private readonly TextField m_textField;
+        public event Action<string, string> ValueCommitted;
+        public event Action EditStarted;
+        public event Action EditEnded;
+        public bool IsEditing => Contains(m_textField);
         
         public EditableLabel() : this(string.Empty)
         {
@@ -61,17 +66,35 @@ namespace XFramework.UI
         
         private void BeginEditTitle()
         {
+            if (IsEditing)
+            {
+                return;
+            }
+
             Remove(m_label);
             Add(m_textField);
             m_textField.Focus();
             m_textField.SelectAll();
+            EditStarted?.Invoke();
         }
 
         private void EndEditTitle()
         {
+            if (!IsEditing)
+            {
+                return;
+            }
+
+            string oldText = text;
             Remove(m_textField);
             Add(m_label);
             text = m_textField.value;
+            if (!string.Equals(oldText, text, StringComparison.Ordinal))
+            {
+                ValueCommitted?.Invoke(oldText, text);
+            }
+
+            EditEnded?.Invoke();
         }
         
         public void SetEditable(bool editable)
@@ -111,7 +134,7 @@ namespace XFramework.UI
                 if (e.clickCount == 2)
                 {
                     BeginEditTitle();
-                    e.StopPropagation();
+                    e.StopImmediatePropagation();
                 }
             }
         }

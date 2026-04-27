@@ -8,6 +8,7 @@ using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 using XFramework.Animation;
+using XFramework.UI;
 
 namespace XFramework.Editor
 {
@@ -50,6 +51,10 @@ namespace XFramework.Editor
         [SerializeField] private TextAsset m_SelectedAsset;
         [SerializeField] private GameObject m_SelectedPrefab;
         [SerializeField] private bool m_ShouldAutoReloadPreview;
+        [SerializeField] private bool m_AssetsSectionExpanded = true;
+        [SerializeField] private bool m_PlaybackSectionExpanded = true;
+        [SerializeField] private bool m_ClipsSectionExpanded = true;
+        [SerializeField] private bool m_ChannelsSectionExpanded = true;
 
         private TextAsset m_PendingAsset;
         private GameObject m_PendingPrefab;
@@ -75,6 +80,7 @@ namespace XFramework.Editor
         private XAnimationEditorPreviewSession m_Session;
         private double m_LastEditorTime;
         private IVisualElementScheduledItem m_DelayedSaveItem;
+        private bool m_IsEditingName;
         private bool m_IsPaused;
         private bool m_IsPreviewDragging;
         private Vector2 m_LastPreviewMousePosition;
@@ -86,6 +92,12 @@ namespace XFramework.Editor
             public Color BaseColor;
             public bool Hovered;
             public bool Playing;
+        }
+
+        private sealed class FoldoutCard
+        {
+            public VisualElement Root;
+            public VisualElement Content;
         }
 
         [MenuItem(MenuPath)]
@@ -162,10 +174,10 @@ namespace XFramework.Editor
             VisualElement root = rootVisualElement;
             root.Clear();
             root.style.flexGrow = 1;
-            root.style.paddingLeft = 3;
-            root.style.paddingRight = 3;
-            root.style.paddingTop = 3;
-            root.style.paddingBottom = 3;
+            root.style.paddingLeft = 2;
+            root.style.paddingRight = 2;
+            root.style.paddingTop = 2;
+            root.style.paddingBottom = 2;
             root.style.flexDirection = FlexDirection.Column;
 
             TwoPaneSplitView splitView = new(0, DebugPaneInitialWidth, TwoPaneSplitViewOrientation.Horizontal);
@@ -179,19 +191,28 @@ namespace XFramework.Editor
         private static Button CreateStyledButton(string label, Action onClick, Color bgColor, float marginLeft = 0f)
         {
             Button btn = new(onClick) { text = label };
+            btn.tooltip = label switch
+            {
+                "重载" => "重新读取 Prefab 和 XAnimation 资源并刷新预览。",
+                "重置位置" => "将预览对象位置和旋转恢复到初始状态。",
+                "重置视角" => "将预览相机恢复到默认视角。",
+                "停止全部" => "停止所有正在播放的 channel。",
+                "暂停" => "暂停或继续当前预览播放。",
+                _ => label
+            };
             btn.style.backgroundColor = bgColor;
             btn.style.color = Color.white;
             btn.style.borderTopWidth = 0;
             btn.style.borderBottomWidth = 0;
             btn.style.borderLeftWidth = 0;
             btn.style.borderRightWidth = 0;
-            btn.style.borderTopLeftRadius = 4;
-            btn.style.borderTopRightRadius = 4;
-            btn.style.borderBottomLeftRadius = 4;
-            btn.style.borderBottomRightRadius = 4;
+            btn.style.borderTopLeftRadius = 3;
+            btn.style.borderTopRightRadius = 3;
+            btn.style.borderBottomLeftRadius = 3;
+            btn.style.borderBottomRightRadius = 3;
             btn.style.fontSize = BodyFontSize;
-            btn.style.paddingLeft = 8;
-            btn.style.paddingRight = 8;
+            btn.style.paddingLeft = 7;
+            btn.style.paddingRight = 7;
             btn.style.paddingTop = 2;
             btn.style.paddingBottom = 2;
             if (marginLeft > 0f) btn.style.marginLeft = marginLeft;
@@ -206,14 +227,14 @@ namespace XFramework.Editor
             statusRow.style.marginTop = 4;
 
             VisualElement statusBar = new VisualElement();
-            statusBar.style.width = 3;
-            statusBar.style.height = 14;
+            statusBar.style.width = 2;
+            statusBar.style.height = 12;
             statusBar.style.backgroundColor = AccentColor;
             statusBar.style.borderTopLeftRadius = 2;
             statusBar.style.borderTopRightRadius = 2;
             statusBar.style.borderBottomLeftRadius = 2;
             statusBar.style.borderBottomRightRadius = 2;
-            statusBar.style.marginRight = 6;
+            statusBar.style.marginRight = 4;
             statusRow.Add(statusBar);
 
             m_StatusLabel = new Label();
@@ -253,7 +274,7 @@ namespace XFramework.Editor
 
             VisualElement controls = new VisualElement();
             controls.style.flexDirection = FlexDirection.Row;
-            controls.style.marginTop = 4;
+            controls.style.marginTop = 3;
             controls.style.alignItems = Align.Center;
             pane.Add(controls);
 
@@ -261,12 +282,13 @@ namespace XFramework.Editor
             controls.Add(CreateStyledButton("重置视角", ResetPreviewCamera, AccentColor, 6));
 
             Label hint = new("右键拖拽旋转，WASD 移动，QE 升降，滚轮缩放。");
-            hint.style.marginLeft = 6;
+            hint.style.marginLeft = 4;
             hint.style.color = TextMuted;
             hint.style.fontSize = BodyFontSize;
             controls.Add(hint);
 
             m_GridToggle = new Toggle("网格") { value = true };
+            m_GridToggle.tooltip = "显示或隐藏预览地面网格，只影响当前预览。";
             m_GridToggle.style.marginLeft = 12;
             m_GridToggle.RegisterValueChangedCallback(evt =>
             {
@@ -286,10 +308,10 @@ namespace XFramework.Editor
             pane.style.flexGrow = 1;
             pane.style.minHeight = 0;
             pane.style.flexDirection = FlexDirection.Column;
-            pane.style.paddingLeft = 4;
-            pane.style.paddingRight = 4;
-            pane.style.paddingTop = 4;
-            pane.style.paddingBottom = 4;
+            pane.style.paddingLeft = 3;
+            pane.style.paddingRight = 3;
+            pane.style.paddingTop = 3;
+            pane.style.paddingBottom = 3;
             pane.style.backgroundColor = PaneBg;
             pane.style.borderTopLeftRadius = 6;
             pane.style.borderTopRightRadius = 6;
@@ -305,42 +327,45 @@ namespace XFramework.Editor
             pane.style.borderRightColor = PaneBorder;
 
             // ── Card: Assets ──
-            VisualElement assetsCard = CreateCard("资源");
+            FoldoutCard assetsCard = CreateFoldoutCard("资源", m_AssetsSectionExpanded, value => m_AssetsSectionExpanded = value);
 
             m_PrefabField = new ObjectField("Prefab")
             {
                 objectType = typeof(GameObject),
                 allowSceneObjects = false
             };
+            m_PrefabField.tooltip = "用于预览动画的角色 Prefab，必须包含 Animator。";
             m_PrefabField.RegisterValueChangedCallback(evt =>
             {
                 m_SelectedPrefab = evt.newValue as GameObject;
             });
             m_PrefabField.style.marginBottom = 4;
-            assetsCard.Add(m_PrefabField);
+            assetsCard.Content.Add(m_PrefabField);
 
             m_AssetField = new ObjectField("XAnimation / Override Asset")
             {
                 objectType = typeof(TextAsset),
                 allowSceneObjects = false
             };
+            m_AssetField.tooltip = "要加载和编辑的 XAnimation .xasset 或 Override Asset。";
             m_AssetField.RegisterValueChangedCallback(evt =>
             {
                 m_SelectedAsset = evt.newValue as TextAsset;
             });
             m_AssetField.style.marginBottom = 4;
-            assetsCard.Add(m_AssetField);
+            assetsCard.Content.Add(m_AssetField);
 
-            assetsCard.Add(CreateStyledButton("重载", LoadPreview, AccentColor));
+            assetsCard.Content.Add(CreateStyledButton("重载", LoadPreview, AccentColor));
 
             // ── Card: Playback Settings ──
-            VisualElement playbackCard = CreateCard("播放设置");
+            FoldoutCard playbackCard = CreateFoldoutCard("播放设置", m_PlaybackSectionExpanded, value => m_PlaybackSectionExpanded = value);
 
             VisualElement speedRow = new VisualElement();
             speedRow.style.flexDirection = FlexDirection.Row;
             speedRow.style.alignItems = Align.Center;
 
             m_PlaySpeedField = new FloatField("播放速度") { value = 1f };
+            m_PlaySpeedField.tooltip = "点击播放 clip 时使用的预览速度，只影响当前预览，不写入配置。";
             m_PlaySpeedField.style.flexGrow = 1;
             speedRow.Add(m_PlaySpeedField);
 
@@ -348,7 +373,7 @@ namespace XFramework.Editor
             SetPauseButtonState(false, false);
             speedRow.Add(m_PauseButton);
 
-            playbackCard.Add(speedRow);
+            playbackCard.Content.Add(speedRow);
 
             VisualElement optionsRow = new VisualElement();
             optionsRow.style.flexDirection = FlexDirection.Row;
@@ -356,6 +381,7 @@ namespace XFramework.Editor
             optionsRow.style.marginTop = 4;
 
             m_RootMotionToggle = new Toggle("Root Motion") { value = false };
+            m_RootMotionToggle.tooltip = "切换预览时是否应用 Root Motion，只影响当前预览，不写入配置。";
             m_RootMotionToggle.style.flexShrink = 0;
             m_RootMotionToggle.RegisterValueChangedCallback(evt =>
             {
@@ -365,30 +391,30 @@ namespace XFramework.Editor
             });
             optionsRow.Add(m_RootMotionToggle);
 
-            playbackCard.Add(optionsRow);
+            playbackCard.Content.Add(optionsRow);
 
             ScrollView inspectorScrollView = new ScrollView();
             inspectorScrollView.verticalScrollerVisibility = ScrollerVisibility.Auto;
             inspectorScrollView.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
             inspectorScrollView.style.flexGrow = 1;
             inspectorScrollView.style.minHeight = 0;
-            inspectorScrollView.Add(assetsCard);
-            inspectorScrollView.Add(playbackCard);
+            inspectorScrollView.Add(assetsCard.Root);
+            inspectorScrollView.Add(playbackCard.Root);
 
             // ── Card: Clips ──
             m_StopAllButton = CreateStyledButton("停止全部", StopAllClips, DangerColor);
             SetStopAllButtonEnabled(false);
-            VisualElement clipsCard = CreateCard("Clips", m_StopAllButton);
+            FoldoutCard clipsCard = CreateFoldoutCard("Clips", m_ClipsSectionExpanded, value => m_ClipsSectionExpanded = value, m_StopAllButton);
 
             m_ClipListView = new VisualElement();
-            clipsCard.Add(m_ClipListView);
-            inspectorScrollView.Add(clipsCard);
+            clipsCard.Content.Add(m_ClipListView);
+            inspectorScrollView.Add(clipsCard.Root);
 
             // ── Card: Channels ──
-            VisualElement channelsCard = CreateCard("Channels");
+            FoldoutCard channelsCard = CreateFoldoutCard("Channels", m_ChannelsSectionExpanded, value => m_ChannelsSectionExpanded = value);
             m_ChannelControlsContainer = new VisualElement();
-            channelsCard.Add(m_ChannelControlsContainer);
-            inspectorScrollView.Add(channelsCard);
+            channelsCard.Content.Add(m_ChannelControlsContainer);
+            inspectorScrollView.Add(channelsCard.Root);
 
             // ── Card: Cue Log ──
             VisualElement cueCard = CreateCard("Cue Log");
@@ -414,16 +440,16 @@ namespace XFramework.Editor
         private static VisualElement CreateCard(string titleText, VisualElement titleAction = null)
         {
             VisualElement card = new VisualElement();
-            card.style.marginBottom = 4;
-            card.style.paddingLeft = 6;
-            card.style.paddingRight = 6;
-            card.style.paddingTop = 5;
-            card.style.paddingBottom = 5;
+            card.style.marginBottom = 2;
+            card.style.paddingLeft = 3;
+            card.style.paddingRight = 3;
+            card.style.paddingTop = 3;
+            card.style.paddingBottom = 3;
             card.style.backgroundColor = new Color(0.15f, 0.15f, 0.16f, 1f);
-            card.style.borderTopLeftRadius = 6;
-            card.style.borderTopRightRadius = 6;
-            card.style.borderBottomLeftRadius = 6;
-            card.style.borderBottomRightRadius = 6;
+            card.style.borderTopLeftRadius = 3;
+            card.style.borderTopRightRadius = 3;
+            card.style.borderBottomLeftRadius = 3;
+            card.style.borderBottomRightRadius = 3;
             card.style.borderTopWidth = 1;
             card.style.borderBottomWidth = 1;
             card.style.borderLeftWidth = 1;
@@ -437,20 +463,20 @@ namespace XFramework.Editor
             VisualElement titleRow = new VisualElement();
             titleRow.style.flexDirection = FlexDirection.Row;
             titleRow.style.alignItems = Align.Center;
-            titleRow.style.marginBottom = 4;
-            titleRow.style.paddingBottom = 4;
+            titleRow.style.marginBottom = 2;
+            titleRow.style.paddingBottom = 2;
             titleRow.style.borderBottomWidth = 1;
             titleRow.style.borderBottomColor = SectionDivider;
 
             VisualElement accent = new VisualElement();
-            accent.style.width = 3;
-            accent.style.height = 12;
+            accent.style.width = 2;
+            accent.style.height = 11;
             accent.style.backgroundColor = AccentColor;
             accent.style.borderTopLeftRadius = 2;
             accent.style.borderTopRightRadius = 2;
             accent.style.borderBottomLeftRadius = 2;
             accent.style.borderBottomRightRadius = 2;
-            accent.style.marginRight = 6;
+            accent.style.marginRight = 4;
             titleRow.Add(accent);
 
             Label label = new(titleText);
@@ -468,6 +494,61 @@ namespace XFramework.Editor
 
             card.Add(titleRow);
             return card;
+        }
+
+        private static FoldoutCard CreateFoldoutCard(
+            string titleText,
+            bool expanded,
+            Action<bool> setExpanded,
+            VisualElement titleAction = null)
+        {
+            VisualElement card = CreateCard(titleText, titleAction);
+            VisualElement titleRow = card[0];
+            Label label = titleRow.Q<Label>();
+            VisualElement content = new VisualElement();
+            content.style.display = expanded ? DisplayStyle.Flex : DisplayStyle.None;
+            card.Add(content);
+
+            void ApplyExpanded(bool value)
+            {
+                expanded = value;
+                setExpanded?.Invoke(value);
+                content.style.display = value ? DisplayStyle.Flex : DisplayStyle.None;
+                if (label != null)
+                {
+                    label.text = value ? $"▾ {titleText}" : $"▸ {titleText}";
+                }
+
+                titleRow.style.marginBottom = value ? 2 : 0;
+                titleRow.style.paddingBottom = value ? 2 : 0;
+                titleRow.style.borderBottomWidth = value ? 1 : 0;
+            }
+
+            ApplyExpanded(expanded);
+            titleRow.tooltip = $"点击展开/收起 {titleText} 分区。";
+            titleRow.RegisterCallback<MouseDownEvent>(evt =>
+            {
+                if (evt.button != 0)
+                {
+                    return;
+                }
+
+                if (titleAction != null &&
+                    evt.target is VisualElement target &&
+                    (ReferenceEquals(target, titleAction) || titleAction.Contains(target)))
+                {
+                    return;
+                }
+
+                ApplyExpanded(!expanded);
+                evt.StopPropagation();
+            });
+
+            return new FoldoutCard
+            {
+                Root = card,
+                Content = content
+            };
         }
 
         private static void ConfigureConsoleSection(VisualElement section)
@@ -954,11 +1035,11 @@ namespace XFramework.Editor
                 }
 
                 VisualElement group = new VisualElement();
-                group.style.marginBottom = 8;
-                group.style.paddingLeft = 6;
-                group.style.paddingRight = 6;
-                group.style.paddingTop = 6;
-                group.style.paddingBottom = 4;
+                group.style.marginBottom = 3;
+                group.style.paddingLeft = 3;
+                group.style.paddingRight = 3;
+                group.style.paddingTop = 3;
+                group.style.paddingBottom = 2;
                 group.style.backgroundColor = ListGroupBg;
                 group.style.borderTopWidth = 1;
                 group.style.borderBottomWidth = 1;
@@ -968,19 +1049,19 @@ namespace XFramework.Editor
                 group.style.borderBottomColor = SectionDivider;
                 group.style.borderLeftColor = SectionDivider;
                 group.style.borderRightColor = SectionDivider;
-                group.style.borderTopLeftRadius = 4;
-                group.style.borderTopRightRadius = 4;
-                group.style.borderBottomLeftRadius = 4;
-                group.style.borderBottomRightRadius = 4;
+                group.style.borderTopLeftRadius = 3;
+                group.style.borderTopRightRadius = 3;
+                group.style.borderBottomLeftRadius = 3;
+                group.style.borderBottomRightRadius = 3;
 
                 VisualElement groupHeader = new VisualElement();
                 groupHeader.style.flexDirection = FlexDirection.Row;
                 groupHeader.style.alignItems = Align.Center;
-                groupHeader.style.marginBottom = 4;
-                groupHeader.style.paddingLeft = 4;
-                groupHeader.style.paddingRight = 4;
-                groupHeader.style.paddingTop = 3;
-                groupHeader.style.paddingBottom = 3;
+                groupHeader.style.marginBottom = 2;
+                groupHeader.style.paddingLeft = 3;
+                groupHeader.style.paddingRight = 3;
+                groupHeader.style.paddingTop = 2;
+                groupHeader.style.paddingBottom = 2;
                 groupHeader.style.backgroundColor = ListHeaderBg;
                 groupHeader.style.borderTopLeftRadius = 3;
                 groupHeader.style.borderTopRightRadius = 3;
@@ -991,7 +1072,7 @@ namespace XFramework.Editor
                 groupTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
                 groupTitle.style.color = TextNormal;
                 groupTitle.style.flexGrow = 1;
-                groupTitle.tooltip = "点击展开/收起 Channel Clips";
+                groupTitle.tooltip = "点击展开/收起这个 channel 的 clip 列表；也可以将 clip 拖到这里以移动到该 channel 末尾。";
                 groupHeader.Add(groupTitle);
 
                 Label groupInfo = new($"{channel.Config.layerType} | {channelClips.Count} clips");
@@ -1033,19 +1114,19 @@ namespace XFramework.Editor
         {
             VisualElement container = new VisualElement();
             container.style.flexDirection = FlexDirection.Column;
-            container.style.marginBottom = 2;
+            container.style.marginBottom = 1;
 
             VisualElement row = new VisualElement();
             row.style.flexDirection = FlexDirection.Row;
             row.style.alignItems = Align.Center;
-            row.style.paddingLeft = 6;
-            row.style.paddingRight = 6;
-            row.style.paddingTop = 4;
-            row.style.paddingBottom = 4;
-            row.style.borderTopLeftRadius = 3;
-            row.style.borderTopRightRadius = 3;
-            row.style.borderBottomLeftRadius = 3;
-            row.style.borderBottomRightRadius = 3;
+            row.style.paddingLeft = 4;
+            row.style.paddingRight = 4;
+            row.style.paddingTop = 3;
+            row.style.paddingBottom = 3;
+            row.style.borderTopLeftRadius = 2;
+            row.style.borderTopRightRadius = 2;
+            row.style.borderBottomLeftRadius = 2;
+            row.style.borderBottomRightRadius = 2;
             Color baseColor = rowIndex % 2 == 0 ? ListRowEvenBg : ListRowOddBg;
             row.style.backgroundColor = baseColor;
             m_ClipRowMap[clip.Key] = row;
@@ -1065,24 +1146,24 @@ namespace XFramework.Editor
                 ApplyClipRowVisualState(clip.Key);
             });
 
-            Label label = new(clip.Key);
-            label.style.width = 78;
-            label.style.flexShrink = 0;
-            label.style.whiteSpace = WhiteSpace.Normal;
-            label.style.fontSize = 11;
-            label.style.color = TextNormal;
-            label.style.unityFontStyleAndWeight = FontStyle.Bold;
-            label.tooltip = "点击展开 Clip 配置";
+            string clipKey = clip.Key;
+
+            EditableLabel label = new(clipKey);
+            ConfigureEditableNameLabel(label, 78f);
+            label.tooltip = "单击展开/收起 clip 配置；双击编辑名称；按住拖动可移动到其他 channel，或拖到 clip 行上方调整顺序。";
+            label.SetEditable(true);
+            label.EditStarted += BeginNameEdit;
+            label.EditEnded += EndNameEdit;
+            label.ValueCommitted += (_, newValue) => RenameClip(clipKey, newValue, label);
             row.Add(label);
 
             VisualElement fileInfo = new VisualElement();
             fileInfo.style.flexGrow = 1;
-            fileInfo.style.marginLeft = 6;
-            fileInfo.style.marginRight = 6;
+            fileInfo.style.marginLeft = 4;
+            fileInfo.style.marginRight = 4;
             fileInfo.style.flexDirection = FlexDirection.Row;
             row.Add(fileInfo);
 
-            string clipKey = clip.Key;
             string activeClipPath = clip.Config.clipPath;
             string originalClipPath = m_Session?.GetOriginalClipPath(clipKey);
             m_ClipChannelMap[clipKey] = clip.Config.defaultChannel;
@@ -1127,6 +1208,7 @@ namespace XFramework.Editor
             {
                 text = "▶"
             };
+            toggleButton.tooltip = "播放或停止这个 clip。";
             ApplyClipButtonStyle(toggleButton, false);
             toggleButton.style.marginLeft = 4;
             row.Add(toggleButton);
@@ -1137,11 +1219,48 @@ namespace XFramework.Editor
             return container;
         }
 
-        private void RegisterClipNameInteractions(VisualElement label, VisualElement editor, XAnimationCompiledClip clip)
+        private static void ConfigureEditableNameLabel(EditableLabel label, float width)
+        {
+            label.style.width = width;
+            label.style.flexShrink = 0;
+            label.style.whiteSpace = WhiteSpace.Normal;
+            label.style.fontSize = BodyFontSize;
+            label.style.color = TextNormal;
+            label.style.unityFontStyleAndWeight = FontStyle.Bold;
+            TextElement textElement = label.Q<TextElement>();
+            if (textElement != null)
+            {
+                textElement.style.fontSize = BodyFontSize;
+                textElement.style.color = TextNormal;
+                textElement.style.unityFontStyleAndWeight = FontStyle.Bold;
+            }
+
+            TextField textField = label.Q<TextField>();
+            if (textField != null)
+            {
+                textField.style.marginTop = 0;
+                textField.style.marginBottom = 0;
+                textField.style.fontSize = BodyFontSize;
+                VisualElement input = textField.Q("unity-text-input");
+                if (input != null)
+                {
+                    input.style.fontSize = BodyFontSize;
+                }
+            }
+        }
+
+        private void RegisterClipNameInteractions(EditableLabel label, VisualElement editor, XAnimationCompiledClip clip)
         {
             bool isPressed = false;
             Vector2 startPosition = Vector2.zero;
             bool movedBeyondClickThreshold = false;
+            IVisualElementScheduledItem pendingClickItem = null;
+
+            void CancelPendingClick()
+            {
+                pendingClickItem?.Pause();
+                pendingClickItem = null;
+            }
 
             label.RegisterCallback<MouseDownEvent>(evt =>
             {
@@ -1150,6 +1269,17 @@ namespace XFramework.Editor
                     return;
                 }
 
+                if (evt.clickCount > 1 || label.IsEditing)
+                {
+                    CancelPendingClick();
+                    ClearClipDragData();
+                    isPressed = false;
+                    movedBeyondClickThreshold = false;
+                    evt.StopImmediatePropagation();
+                    return;
+                }
+
+                CancelPendingClick();
                 isPressed = true;
                 movedBeyondClickThreshold = false;
                 startPosition = evt.mousePosition;
@@ -1174,14 +1304,80 @@ namespace XFramework.Editor
 
                 if (!movedBeyondClickThreshold)
                 {
-                    bool expanded = editor.style.display == DisplayStyle.None;
-                    editor.style.display = expanded ? DisplayStyle.Flex : DisplayStyle.None;
+                    pendingClickItem = label.schedule.Execute(() =>
+                    {
+                        if (!label.IsEditing)
+                        {
+                            bool expanded = editor.style.display == DisplayStyle.None;
+                            editor.style.display = expanded ? DisplayStyle.Flex : DisplayStyle.None;
+                        }
+
+                        pendingClickItem = null;
+                    }).StartingIn(220);
+                    ClearClipDragData();
                 }
 
                 isPressed = false;
                 movedBeyondClickThreshold = false;
                 evt.StopPropagation();
             });
+        }
+
+        private void BeginNameEdit()
+        {
+            m_IsEditingName = true;
+            ClearClipDragData();
+        }
+
+        private void EndNameEdit()
+        {
+            m_IsEditingName = false;
+            ClearClipDragData();
+        }
+
+        private static void ClearClipDragData()
+        {
+            DragAndDrop.SetGenericData(ClipDragDataKey, null);
+        }
+
+        private void RenameClip(string oldKey, string newKey, EditableLabel label)
+        {
+            newKey = newKey?.Trim();
+            try
+            {
+                m_Session.RenameClip(oldKey, newKey);
+                SetStatus($"Clip {oldKey} 已重命名为 {newKey}。");
+                RebuildClipList();
+                RebuildChannelControls();
+                RefreshClipPlayingStates();
+                RefreshChannelStates();
+            }
+            catch (Exception ex)
+            {
+                label.text = oldKey;
+                SetStatus(ex.Message);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void RenameChannel(string oldName, string newName, EditableLabel label)
+        {
+            newName = newName?.Trim();
+            try
+            {
+                m_Session.RenameChannel(oldName, newName);
+                SetStatus($"Channel {oldName} 已重命名为 {newName}。");
+                RebuildClipList();
+                RebuildChannelControls();
+                RefreshClipPlayingStates();
+                RefreshChannelStates();
+            }
+            catch (Exception ex)
+            {
+                label.text = oldName;
+                SetStatus(ex.Message);
+                Debug.LogException(ex);
+            }
         }
 
         private void RegisterClipChannelDropTarget(VisualElement group, VisualElement groupHeader, string channelName)
@@ -1252,7 +1448,8 @@ namespace XFramework.Editor
 
         private bool CanDropClip(string clipKey, string channelName, string insertBeforeClipKey = null)
         {
-            if (m_Session == null || !m_Session.IsLoaded ||
+            if (m_IsEditingName ||
+                m_Session == null || !m_Session.IsLoaded ||
                 string.IsNullOrWhiteSpace(clipKey) ||
                 string.IsNullOrWhiteSpace(channelName))
             {
@@ -1305,14 +1502,14 @@ namespace XFramework.Editor
         {
             XAnimationClipConfig config = clip.Config;
             VisualElement editor = new VisualElement();
-            editor.style.marginLeft = 6;
-            editor.style.marginRight = 6;
-            editor.style.marginTop = 2;
-            editor.style.marginBottom = 4;
-            editor.style.paddingLeft = 8;
-            editor.style.paddingRight = 8;
-            editor.style.paddingTop = 6;
-            editor.style.paddingBottom = 6;
+            editor.style.marginLeft = 4;
+            editor.style.marginRight = 4;
+            editor.style.marginTop = 1;
+            editor.style.marginBottom = 3;
+            editor.style.paddingLeft = 6;
+            editor.style.paddingRight = 6;
+            editor.style.paddingTop = 4;
+            editor.style.paddingBottom = 4;
             editor.style.backgroundColor = new Color(0.12f, 0.12f, 0.13f, 1f);
             editor.style.borderTopWidth = 1;
             editor.style.borderBottomWidth = 1;
@@ -1328,6 +1525,7 @@ namespace XFramework.Editor
             editor.style.borderBottomRightRadius = 3;
 
             Toggle loopField = new("loop") { value = config.loop };
+            loopField.tooltip = "是否循环播放该 clip。会保存到 XAnimation 文件。";
             loopField.RegisterValueChangedCallback(evt =>
             {
                 if (m_Session == null || !m_Session.IsLoaded) return;
@@ -1343,6 +1541,7 @@ namespace XFramework.Editor
             fadeRow.style.alignItems = Align.Center;
 
             FloatField fadeInField = new("defaultFadeIn") { value = config.defaultFadeIn };
+            fadeInField.tooltip = "该 clip 默认淡入时间。会延迟保存到 XAnimation 文件。";
             fadeInField.style.flexGrow = 1;
             fadeInField.RegisterValueChangedCallback(evt =>
             {
@@ -1361,6 +1560,7 @@ namespace XFramework.Editor
             fadeRow.Add(fadeInField);
 
             FloatField fadeOutField = new("defaultFadeOut") { value = config.defaultFadeOut };
+            fadeOutField.tooltip = "该 clip 默认淡出时间。会延迟保存到 XAnimation 文件。";
             fadeOutField.style.flexGrow = 1;
             fadeOutField.style.marginLeft = 8;
             fadeOutField.RegisterValueChangedCallback(evt =>
@@ -1385,6 +1585,7 @@ namespace XFramework.Editor
                 "rootMotionMode",
                 rootMotionModeNames,
                 Mathf.Max(0, rootMotionModeNames.IndexOf(config.rootMotionMode.ToString())));
+            rootMotionModeField.tooltip = "该 clip 的 Root Motion 策略：继承 channel、强制开启或强制关闭。会保存到 XAnimation 文件。";
             rootMotionModeField.RegisterValueChangedCallback(evt =>
             {
                 if (m_Session == null || !m_Session.IsLoaded) return;
@@ -1589,11 +1790,11 @@ namespace XFramework.Editor
 
                 VisualElement controlRow = new VisualElement();
                 controlRow.style.flexDirection = FlexDirection.Column;
-                controlRow.style.marginBottom = 8;
-                controlRow.style.paddingLeft = 6;
-                controlRow.style.paddingRight = 6;
-                controlRow.style.paddingTop = 6;
-                controlRow.style.paddingBottom = 6;
+                controlRow.style.marginBottom = 3;
+                controlRow.style.paddingLeft = 3;
+                controlRow.style.paddingRight = 3;
+                controlRow.style.paddingTop = 3;
+                controlRow.style.paddingBottom = 3;
                 controlRow.style.borderTopWidth = 1;
                 controlRow.style.borderBottomWidth = 1;
                 controlRow.style.borderLeftWidth = 1;
@@ -1602,17 +1803,33 @@ namespace XFramework.Editor
                 controlRow.style.borderBottomColor = SectionDivider;
                 controlRow.style.borderLeftColor = SectionDivider;
                 controlRow.style.borderRightColor = SectionDivider;
-                controlRow.style.borderTopLeftRadius = 4;
-                controlRow.style.borderTopRightRadius = 4;
-                controlRow.style.borderBottomLeftRadius = 4;
-                controlRow.style.borderBottomRightRadius = 4;
+                controlRow.style.borderTopLeftRadius = 3;
+                controlRow.style.borderTopRightRadius = 3;
+                controlRow.style.borderBottomLeftRadius = 3;
+                controlRow.style.borderBottomRightRadius = 3;
                 controlRow.style.backgroundColor = i % 2 == 0 ? ListRowEvenBg : ListRowOddBg;
 
-                Label channelLabel = new($"▾ {channel.Name}");
-                channelLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-                channelLabel.style.color = TextNormal;
-                channelLabel.tooltip = "点击展开/收起 Channel";
-                controlRow.Add(channelLabel);
+                VisualElement channelHeader = new VisualElement();
+                channelHeader.style.flexDirection = FlexDirection.Row;
+                channelHeader.style.alignItems = Align.Center;
+                channelHeader.tooltip = "单击 channel 名称展开/收起配置和预览调试信息；双击名称编辑。";
+
+                Label channelFoldoutLabel = new("▾");
+                channelFoldoutLabel.style.width = 14;
+                channelFoldoutLabel.style.flexShrink = 0;
+                channelFoldoutLabel.style.color = TextMuted;
+                channelFoldoutLabel.style.fontSize = BodyFontSize;
+                channelHeader.Add(channelFoldoutLabel);
+
+                EditableLabel channelLabel = new(channel.Name);
+                ConfigureEditableNameLabel(channelLabel, 160f);
+                channelLabel.tooltip = "单击展开/收起这个 channel 的配置和预览调试信息；双击编辑名称。";
+                channelLabel.SetEditable(true);
+                channelLabel.EditStarted += BeginNameEdit;
+                channelLabel.EditEnded += EndNameEdit;
+                channelLabel.ValueCommitted += (_, newValue) => RenameChannel(channel.Name, newValue, channelLabel);
+                channelHeader.Add(channelLabel);
+                controlRow.Add(channelHeader);
 
                 VisualElement channelContent = new VisualElement();
                 VisualElement configBox = CreateSubBox();
@@ -1629,6 +1846,7 @@ namespace XFramework.Editor
                 {
                     value = 1f
                 };
+                timeScaleField.tooltip = "当前 channel 的预览时间缩放，只影响当前预览，不写入配置。";
                 ConfigureCompactNumberField(timeScaleField);
                 timeScaleField.RegisterValueChangedCallback(evt =>
                 {
@@ -1649,20 +1867,21 @@ namespace XFramework.Editor
                 stateLabel.style.whiteSpace = WhiteSpace.Normal;
                 stateLabel.style.fontSize = 11;
                 stateLabel.style.color = TextMuted;
-                stateLabel.style.marginBottom = 6;
+                stateLabel.style.marginBottom = 4;
                 stateLabel.style.height = ChannelStateLabelHeight;
                 stateLabel.style.minHeight = ChannelStateLabelHeight;
                 stateLabel.style.maxHeight = ChannelStateLabelHeight;
                 stateLabel.style.overflow = Overflow.Hidden;
-                stateLabel.style.paddingLeft = 4;
-                stateLabel.style.paddingRight = 4;
-                stateLabel.style.paddingTop = 3;
-                stateLabel.style.paddingBottom = 3;
+                stateLabel.style.paddingLeft = 3;
+                stateLabel.style.paddingRight = 3;
+                stateLabel.style.paddingTop = 2;
+                stateLabel.style.paddingBottom = 2;
                 stateLabel.style.backgroundColor = ListHeaderBg;
                 debugBox.Add(stateLabel);
                 m_ChannelStateLabels[channel.Name] = stateLabel;
                 channelContent.Add(debugBox);
 
+                IVisualElementScheduledItem pendingChannelClickItem = null;
                 channelLabel.RegisterCallback<MouseDownEvent>(evt =>
                 {
                     if (evt.button != 0)
@@ -1670,9 +1889,27 @@ namespace XFramework.Editor
                         return;
                     }
 
-                    bool expanded = channelContent.style.display != DisplayStyle.None;
-                    channelContent.style.display = expanded ? DisplayStyle.None : DisplayStyle.Flex;
-                    channelLabel.text = expanded ? $"▸ {channel.Name}" : $"▾ {channel.Name}";
+                    if (evt.clickCount > 1 || channelLabel.IsEditing)
+                    {
+                        pendingChannelClickItem?.Pause();
+                        pendingChannelClickItem = null;
+                        ClearClipDragData();
+                        evt.StopImmediatePropagation();
+                        return;
+                    }
+
+                    pendingChannelClickItem?.Pause();
+                    pendingChannelClickItem = channelLabel.schedule.Execute(() =>
+                    {
+                        if (!channelLabel.IsEditing)
+                        {
+                            bool expanded = channelContent.style.display != DisplayStyle.None;
+                            channelContent.style.display = expanded ? DisplayStyle.None : DisplayStyle.Flex;
+                            channelFoldoutLabel.text = expanded ? "▸" : "▾";
+                        }
+
+                        pendingChannelClickItem = null;
+                    }).StartingIn(220);
                     evt.StopPropagation();
                 });
 
@@ -1685,11 +1922,11 @@ namespace XFramework.Editor
         private static VisualElement CreateSubBox()
         {
             VisualElement box = new VisualElement();
-            box.style.marginTop = 4;
-            box.style.paddingLeft = 6;
-            box.style.paddingRight = 6;
-            box.style.paddingTop = 5;
-            box.style.paddingBottom = 5;
+            box.style.marginTop = 3;
+            box.style.paddingLeft = 4;
+            box.style.paddingRight = 4;
+            box.style.paddingTop = 4;
+            box.style.paddingBottom = 4;
             box.style.backgroundColor = new Color(0.14f, 0.14f, 0.15f, 1f);
             box.style.borderTopWidth = 1;
             box.style.borderBottomWidth = 1;
@@ -1733,8 +1970,8 @@ namespace XFramework.Editor
         {
             XAnimationChannelConfig config = channel.Config;
             VisualElement editor = new VisualElement();
-            editor.style.marginTop = 4;
-            editor.style.marginBottom = 6;
+            editor.style.marginTop = 2;
+            editor.style.marginBottom = 3;
 
             VisualElement toggleRow = new VisualElement();
             toggleRow.style.flexDirection = FlexDirection.Column;
@@ -1742,6 +1979,7 @@ namespace XFramework.Editor
             toggleRow.style.marginTop = 2;
 
             Toggle interruptField = new("allowInterrupt") { value = config.allowInterrupt };
+            interruptField.tooltip = "当前 channel 上的播放是否允许被新的播放请求打断。会保存到 XAnimation 文件。";
             interruptField.RegisterValueChangedCallback(evt =>
             {
                 if (m_Session == null || !m_Session.IsLoaded) return;
@@ -1752,6 +1990,7 @@ namespace XFramework.Editor
             toggleRow.Add(interruptField);
 
             Toggle rootMotionField = new("rootMotion") { value = config.canDriveRootMotion };
+            rootMotionField.tooltip = "该 channel 是否允许驱动 Root Motion。Additive channel 不能开启。会保存到 XAnimation 文件。";
             rootMotionField.SetEnabled(config.layerType != XAnimationChannelLayerType.Additive);
             rootMotionField.RegisterValueChangedCallback(evt =>
             {
@@ -1774,6 +2013,7 @@ namespace XFramework.Editor
                 "layerType",
                 layerTypeNames,
                 Mathf.Max(0, layerTypeNames.IndexOf(config.layerType.ToString())));
+            layerTypeField.tooltip = "channel 混合层类型。Additive 会自动关闭 rootMotion。会保存到 XAnimation 文件。";
             layerTypeField.RegisterValueChangedCallback(evt =>
             {
                 if (m_Session == null || !m_Session.IsLoaded) return;
@@ -1800,6 +2040,7 @@ namespace XFramework.Editor
                     ? null
                     : AssetDatabase.LoadAssetAtPath<AvatarMask>(config.maskPath)
             };
+            maskField.tooltip = "该 channel 使用的 AvatarMask。为空表示不使用 mask。会保存到 XAnimation 文件。";
             maskField.RegisterValueChangedCallback(evt =>
             {
                 if (m_Session == null || !m_Session.IsLoaded) return;
@@ -1811,6 +2052,7 @@ namespace XFramework.Editor
             editor.Add(maskField);
 
             FloatField defaultWeightField = new("defaultWeight") { value = config.defaultWeight };
+            defaultWeightField.tooltip = "该 channel 默认混合权重。会延迟保存到 XAnimation 文件，并立即影响当前预览。";
             defaultWeightField.RegisterValueChangedCallback(evt =>
             {
                 if (m_Session == null || !m_Session.IsLoaded) return;
@@ -1834,6 +2076,7 @@ namespace XFramework.Editor
             fadeRow.style.marginTop = 2;
 
             FloatField fadeInField = new("defaultFadeIn") { value = config.defaultFadeIn };
+            fadeInField.tooltip = "该 channel 默认淡入时间。会延迟保存到 XAnimation 文件。";
             fadeInField.RegisterValueChangedCallback(evt =>
             {
                 if (m_Session == null || !m_Session.IsLoaded) return;
@@ -1851,6 +2094,7 @@ namespace XFramework.Editor
             fadeRow.Add(fadeInField);
 
             FloatField fadeOutField = new("defaultFadeOut") { value = config.defaultFadeOut };
+            fadeOutField.tooltip = "该 channel 默认淡出时间。会延迟保存到 XAnimation 文件。";
             fadeOutField.RegisterValueChangedCallback(evt =>
             {
                 if (m_Session == null || !m_Session.IsLoaded) return;
