@@ -4,10 +4,19 @@ using UnityEngine.UIElements;
 
 namespace XFramework.UI
 {
+    public enum EditableLabelEditTrigger
+    {
+        DoubleClick,
+        ContextMenu
+    }
+
     public class EditableLabel: VisualElement
     {
         private readonly TextElement m_label;
         private readonly TextField m_textField;
+        private ContextualMenuManipulator m_ContextualMenuManipulator;
+        private bool m_Editable;
+        private EditableLabelEditTrigger m_EditTrigger = EditableLabelEditTrigger.DoubleClick;
         public event Action<string, string> ValueCommitted;
         public event Action EditStarted;
         public event Action EditEnded;
@@ -64,9 +73,9 @@ namespace XFramework.UI
             }
         }
         
-        private void BeginEditTitle()
+        public void BeginEdit()
         {
-            if (IsEditing)
+            if (!m_Editable || IsEditing)
             {
                 return;
             }
@@ -78,7 +87,7 @@ namespace XFramework.UI
             EditStarted?.Invoke();
         }
 
-        private void EndEditTitle()
+        public void EndEdit()
         {
             if (!IsEditing)
             {
@@ -99,44 +108,78 @@ namespace XFramework.UI
         
         public void SetEditable(bool editable)
         {
+            SetEditable(editable, m_EditTrigger);
+        }
+
+        public void SetEditable(bool editable, EditableLabelEditTrigger editTrigger)
+        {
+            if (m_Editable)
+            {
+                UnregisterEditCallbacks();
+            }
+
+            m_Editable = editable;
+            m_EditTrigger = editTrigger;
+
             if (editable)
             {
-                m_textField.RegisterCallback<FocusOutEvent>(OnFocusOut);
-                m_textField.RegisterCallback<KeyDownEvent>(OnKeyDown);
-                
-                // 监听 title 区域的双击事件
-                RegisterCallback<MouseDownEvent>(OnMouseDown);
-            }
-            else
-            {
-                m_textField.UnregisterCallback<FocusOutEvent>(OnFocusOut);
-                m_textField.UnregisterCallback<KeyDownEvent>(OnKeyDown);
-                UnregisterCallback<MouseDownEvent>(OnMouseDown);
+                RegisterEditCallbacks();
             }   
-            
-            return;
+        }
 
-            void OnFocusOut(FocusOutEvent e)
-            {
-                EndEditTitle();
-            }
+        private void RegisterEditCallbacks()
+        {
+            m_textField.RegisterCallback<FocusOutEvent>(OnFocusOut);
+            m_textField.RegisterCallback<KeyDownEvent>(OnKeyDown);
 
-            void OnKeyDown(KeyDownEvent e)
+            switch (m_EditTrigger)
             {
-                if (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter)
-                {
-                    EndEditTitle();
-                }
+                case EditableLabelEditTrigger.DoubleClick:
+                    RegisterCallback<MouseDownEvent>(OnMouseDown);
+                    break;
+                case EditableLabelEditTrigger.ContextMenu:
+                    m_ContextualMenuManipulator ??= new ContextualMenuManipulator(OnContextualMenuPopulate);
+                    m_ContextualMenuManipulator.target = this;
+                    break;
             }
+        }
 
-            void OnMouseDown(MouseDownEvent e)
+        private void UnregisterEditCallbacks()
+        {
+            m_textField.UnregisterCallback<FocusOutEvent>(OnFocusOut);
+            m_textField.UnregisterCallback<KeyDownEvent>(OnKeyDown);
+            UnregisterCallback<MouseDownEvent>(OnMouseDown);
+            if (m_ContextualMenuManipulator != null)
             {
-                if (e.clickCount == 2)
-                {
-                    BeginEditTitle();
-                    e.StopImmediatePropagation();
-                }
+                m_ContextualMenuManipulator.target = null;
             }
+        }
+
+        private void OnFocusOut(FocusOutEvent e)
+        {
+            EndEdit();
+        }
+
+        private void OnKeyDown(KeyDownEvent e)
+        {
+            if (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter)
+            {
+                EndEdit();
+            }
+        }
+
+        private void OnMouseDown(MouseDownEvent e)
+        {
+            if (e.clickCount == 2)
+            {
+                BeginEdit();
+                e.StopImmediatePropagation();
+            }
+        }
+
+        private void OnContextualMenuPopulate(ContextualMenuPopulateEvent e)
+        {
+            e.menu.AppendAction("Rename", _ => BeginEdit(), IsEditing ? DropdownMenuAction.Status.Disabled : DropdownMenuAction.Status.Normal);
         }
     }
 }

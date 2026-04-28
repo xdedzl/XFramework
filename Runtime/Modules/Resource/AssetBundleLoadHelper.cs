@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using XFramework.Tasks;
 using UnityEngine;
 using UObject = UnityEngine.Object;
@@ -155,6 +156,43 @@ namespace XFramework.Resource
             assetObject.asset = asset;
             assetObject.assetPath = assetPath;
             m_LoadedAssets.Add(assetPath, assetObject);
+            return asset as T;
+        }
+
+        public T LoadSubAsset<T>(string assetPath, string subAssetName) where T : UObject
+        {
+            if (!IsAssetExist(assetPath))
+            {
+                Debug.LogError($"[AssetBundleLoadHelper] 资源 {assetPath} 不存在");
+                return null;
+            }
+
+            string cacheKey = $"{assetPath}|{subAssetName}";
+            if (m_LoadedAssets.TryGetValue(cacheKey, out AssetObject cachedAssetObject))
+            {
+                return cachedAssetObject.asset as T;
+            }
+
+            string abPath = Asset2Ab(assetPath);
+            AssetBundle assetBundle = LoadAssetBundle(abPath);
+            if (assetBundle == null)
+            {
+                return null;
+            }
+
+            UObject asset = assetBundle.LoadAssetWithSubAssets(assetPath, typeof(T))
+                .OfType<T>()
+                .FirstOrDefault(item => string.Equals(item.name, subAssetName, StringComparison.Ordinal));
+            if (asset == null)
+            {
+                Debug.LogError($"[AssetBundleLoadHelper] 子资源 {subAssetName} 在资源 {assetPath} 中未找到");
+                return null;
+            }
+
+            AssetObject assetObject = new();
+            assetObject.asset = asset;
+            assetObject.assetPath = cacheKey;
+            m_LoadedAssets[cacheKey] = assetObject;
             return asset as T;
         }
 

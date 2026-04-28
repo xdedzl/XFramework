@@ -12,6 +12,12 @@ namespace XFramework.Editor
     internal sealed class XAnimationEditorPreviewSession : IDisposable
     {
         private const int MaxCueLogCount = 64;
+        private const float CloseGridSpacing = 1f;
+        private const float FarGridSpacing = 10f;
+        private const float SwitchToFarGridCellPixels = 8f;
+        private const float SwitchToCloseGridCellPixels = 12f;
+        private const float MinGridHalfSize = 250f;
+        private const float PreviewFarClipPlane = 500f;
 
         private readonly XAnimationAssetLoader m_AssetLoader = new(new XAnimationEditorAssetResolver());
         private readonly List<string> m_CueLogs = new();
@@ -28,6 +34,9 @@ namespace XFramework.Editor
         private XAnimationCompiledAsset m_CompiledAsset;
         private Vector2Int m_RenderTextureSize;
         private readonly Dictionary<string, string> m_OriginalClipPathByKey = new(StringComparer.Ordinal);
+        private string m_AssetPath;
+        private bool m_IsOverrideAsset;
+        private XAnimationOverrideAsset m_OverrideAsset;
 
         private Vector3 m_InitialPosition;
         private Quaternion m_InitialRotation;
@@ -45,11 +54,13 @@ namespace XFramework.Editor
         private bool m_GridVisible = true;
         private GameObject m_GridPlane;
         private Material m_GridMaterial;
+        private float m_GridSpacing = CloseGridSpacing;
 
         public IReadOnlyList<string> CueLogs => m_CueLogs;
         public XAnimationCompiledAsset CompiledAsset => m_CompiledAsset;
         public Texture PreviewTexture => m_RenderTexture;
         public bool IsLoaded => m_Driver != null && m_Animator != null;
+        public bool IsOverrideAsset => m_IsOverrideAsset;
 
         public void Load(GameObject prefabAsset, string assetPath)
         {
@@ -65,6 +76,7 @@ namespace XFramework.Editor
 
             DisposePreview();
 
+            m_AssetPath = assetPath;
             CacheOriginalClipPaths(assetPath);
             m_CompiledAsset = m_AssetLoader.Load(assetPath);
 
@@ -512,6 +524,7 @@ namespace XFramework.Editor
             Quaternion rotation = Quaternion.Euler(m_CameraPitch, m_CameraYaw, 0f);
             float distance = Mathf.Max(m_CameraDistance * 0.08f, 0.05f);
             m_CameraPosition -= rotation * Vector3.forward * delta * distance;
+            m_CameraDistance = Mathf.Max(Vector3.Distance(m_CameraPosition, m_CameraPivot), 0.05f);
         }
 
         /// <summary>
@@ -549,6 +562,154 @@ namespace XFramework.Editor
             m_CompiledAsset.GetChannel(channelName);
             m_CompiledAsset.GetClip(clipKey).Config.defaultChannel = channelName;
             SaveCompiledAsset();
+        }
+
+        public string AddChannel()
+        {
+            EnsureBaseAssetEditable();
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            string channelName = CreateUniqueChannelName("NewChannel");
+            List<XAnimationChannelConfig> channels = new(asset.channels ?? Array.Empty<XAnimationChannelConfig>());
+            channels.Add(new XAnimationChannelConfig
+            {
+                name = channelName,
+                layerType = XAnimationChannelLayerType.Override,
+                defaultWeight = 1f,
+                allowInterrupt = true,
+                defaultFadeIn = 0.15f,
+                defaultFadeOut = 0.15f,
+            });
+            asset.channels = channels.ToArray();
+            RebuildDriverAndSave();
+            return channelName;
+        }
+
+        public void DeleteChannel(string channelName)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            XAnimationChannelConfig[] channels = asset.channels ?? Array.Empty<XAnimationChannelConfig>();
+            if (channels.Length <= 1)
+            {
+                throw new XFrameworkException("XAnimation asset must contain at least one channel.");
+            }
+
+            XAnimationChannelConfig channel = m_CompiledAsset.GetChannel(channelName).Config;
+            bool hasOtherBaseChannel = false;
+            for (int i = 0; i < channels.Length; i++)
+            {
+                XAnimationChannelConfig item = channels[i];
+                if (!ReferenceEquals(item, channel) && item != null && item.layerType == XAnimationChannelLayerType.Base)
+                {
+                    hasOtherBaseChannel = true;
+                    break;
+                }
+            }
+
+            if (channel.layerType == XAnimationChannelLayerType.Base && !hasOtherBaseChannel)
+            {
+                throw new XFrameworkException("XAnimation asset must contain at least one Base channel.");
+            }
+
+            XAnimationClipConfig[] clips = asset.clips ?? Array.Empty<XAnimationClipConfig>();
+            List<XAnimationClipConfig> remainingClips = new(clips.Length);
+            HashSet<string> removedClipKeys = new(StringComparer.Ordinal);
+            for (int i = 0; i < clips.Length; i++)
+            {
+                XAnimationClipConfig clip = clips[i];
+                if (clip != null && string.Equals(clip.defaultChannel, channelName, StringComparison.Ordinal))
+                {
+                    removedClipKeys.Add(clip.key);
+                    continue;
+                }
+
+                remainingClips.Add(clip);
+            }
+
+            if (remainingClips.Count == 0)
+            {
+                throw new XFrameworkException("XAnimation asset must contain at least one clip.");
+            }
+
+            List<XAnimationChannelConfig> orderedChannels = new(channels.Length - 1);
+            for (int i = 0; i < channels.Length; i++)
+            {
+                if (!ReferenceEquals(channels[i], channel))
+                {
+                    orderedChannels.Add(channels[i]);
+                }
+            }
+
+            asset.channels = orderedChannels.ToArray();
+            asset.clips = remainingClips.ToArray();
+            RemoveCueReferences(asset, removedClipKeys);
+            foreach (string clipKey in removedClipKeys)
+            {
+                m_OriginalClipPathByKey.Remove(clipKey);
+            }
+
+            RebuildDriverAndSave();
+        }
+
+        public string AddClip(string channelName)
+        {
+            EnsureBaseAssetEditable();
+            m_CompiledAsset.GetChannel(channelName);
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            XAnimationClipConfig[] clips = asset.clips ?? Array.Empty<XAnimationClipConfig>();
+            string clipPath = FindTemplateClipPath(channelName, clips);
+            if (string.IsNullOrWhiteSpace(clipPath))
+            {
+                throw new XFrameworkException("Cannot add clip because no template AnimationClip exists.");
+            }
+
+            string clipKey = CreateUniqueClipKey("NewClip");
+            List<XAnimationClipConfig> orderedClips = new(clips)
+            {
+                new XAnimationClipConfig
+                {
+                    key = clipKey,
+                    clipPath = clipPath,
+                    loop = true,
+                    defaultChannel = channelName,
+                    defaultFadeIn = 0.15f,
+                    defaultFadeOut = 0.15f,
+                    rootMotionMode = XAnimationClipRootMotionMode.Inherit,
+                }
+            };
+            asset.clips = orderedClips.ToArray();
+            m_OriginalClipPathByKey[clipKey] = clipPath;
+            RebuildDriverAndSave();
+            return clipKey;
+        }
+
+        public void DeleteClip(string clipKey)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            XAnimationClipConfig[] clips = asset.clips ?? Array.Empty<XAnimationClipConfig>();
+            if (clips.Length <= 1)
+            {
+                throw new XFrameworkException("XAnimation asset must contain at least one clip.");
+            }
+
+            m_CompiledAsset.GetClip(clipKey);
+            List<XAnimationClipConfig> orderedClips = new(clips.Length - 1);
+            for (int i = 0; i < clips.Length; i++)
+            {
+                XAnimationClipConfig clip = clips[i];
+                if (clip != null && string.Equals(clip.key, clipKey, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                orderedClips.Add(clip);
+            }
+
+            asset.clips = orderedClips.ToArray();
+            RemoveCueReferences(asset, new HashSet<string>(StringComparer.Ordinal) { clipKey });
+            m_OriginalClipPathByKey.Remove(clipKey);
+            RebuildDriverAndSave();
         }
 
         public void RenameClip(string oldKey, string newKey)
@@ -671,6 +832,288 @@ namespace XFramework.Editor
             SaveCompiledAsset();
         }
 
+        public void SetClipPath(string clipKey, string clipPath)
+        {
+            EnsureLoaded();
+            if (string.IsNullOrWhiteSpace(clipPath))
+            {
+                throw new XFrameworkException("XAnimation clipPath cannot be empty.");
+            }
+
+            m_CompiledAsset.GetClip(clipKey);
+            if (m_IsOverrideAsset)
+            {
+                SetOverrideClipPath(clipKey, clipPath);
+                return;
+            }
+
+            XAnimationClipConfig config = m_CompiledAsset.GetClip(clipKey).Config;
+            if (string.Equals(config.clipPath, clipPath, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            config.clipPath = clipPath;
+            m_OriginalClipPathByKey[clipKey] = clipPath;
+            RebuildDriverAndSave();
+        }
+
+        public int AddCue(string clipKey)
+        {
+            EnsureBaseAssetEditable();
+            if (string.IsNullOrWhiteSpace(clipKey))
+            {
+                if (m_CompiledAsset.Clips.Count == 0)
+                {
+                    throw new XFrameworkException("Cannot add cue because no clip exists.");
+                }
+
+                clipKey = m_CompiledAsset.Clips[0].Key;
+            }
+
+            m_CompiledAsset.GetClip(clipKey);
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            XAnimationCueConfig[] cues = asset.cues ?? Array.Empty<XAnimationCueConfig>();
+            List<XAnimationCueConfig> orderedCues = new(cues)
+            {
+                new XAnimationCueConfig
+                {
+                    clipKey = clipKey,
+                    time = 0f,
+                    eventKey = CreateUniqueCueEventKey("NewCue"),
+                    payload = string.Empty,
+                }
+            };
+
+            asset.cues = orderedCues.ToArray();
+            RebuildDriverAndSave();
+            return asset.cues.Length - 1;
+        }
+
+        public void DeleteCue(int cueIndex)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            XAnimationCueConfig[] cues = asset.cues ?? Array.Empty<XAnimationCueConfig>();
+            if (cueIndex < 0 || cueIndex >= cues.Length)
+            {
+                throw new XFrameworkException($"XAnimation cue index '{cueIndex}' does not exist.");
+            }
+
+            List<XAnimationCueConfig> orderedCues = new(cues.Length - 1);
+            for (int i = 0; i < cues.Length; i++)
+            {
+                if (i != cueIndex)
+                {
+                    orderedCues.Add(cues[i]);
+                }
+            }
+
+            asset.cues = orderedCues.ToArray();
+            RebuildDriverAndSave();
+        }
+
+        public void SetCueClipKey(int cueIndex, string clipKey)
+        {
+            EnsureBaseAssetEditable();
+            clipKey = clipKey?.Trim();
+            if (string.IsNullOrWhiteSpace(clipKey))
+            {
+                throw new XFrameworkException("XAnimation cue clipKey cannot be empty.");
+            }
+
+            m_CompiledAsset.GetClip(clipKey);
+            XAnimationCueConfig cue = GetCueConfig(cueIndex);
+            if (string.Equals(cue.clipKey, clipKey, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            cue.clipKey = clipKey;
+            RebuildDriverAndSave();
+        }
+
+        public void SetCueTime(int cueIndex, float time, bool save = true)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationCueConfig cue = GetCueConfig(cueIndex);
+            cue.time = Mathf.Clamp01(time);
+            if (save)
+            {
+                SaveCompiledAsset();
+            }
+        }
+
+        public void SetCueEventKey(int cueIndex, string eventKey)
+        {
+            EnsureBaseAssetEditable();
+            eventKey = eventKey?.Trim();
+            if (string.IsNullOrWhiteSpace(eventKey))
+            {
+                throw new XFrameworkException("XAnimation cue eventKey cannot be empty.");
+            }
+
+            XAnimationCueConfig cue = GetCueConfig(cueIndex);
+            cue.eventKey = eventKey;
+            SaveCompiledAsset();
+        }
+
+        public void SetCuePayload(int cueIndex, string payload)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationCueConfig cue = GetCueConfig(cueIndex);
+            cue.payload = payload ?? string.Empty;
+            SaveCompiledAsset();
+        }
+
+        private void SetOverrideClipPath(string clipKey, string clipPath)
+        {
+            if (m_OverrideAsset == null)
+            {
+                throw new XFrameworkException("XAnimation override asset is not loaded.");
+            }
+
+            string originalClipPath = GetOriginalClipPath(clipKey);
+            List<XAnimationOverrideClipConfig> overrideClips = new(m_OverrideAsset.clips ?? Array.Empty<XAnimationOverrideClipConfig>());
+            int index = overrideClips.FindIndex(item => item != null && string.Equals(item.key, clipKey, StringComparison.Ordinal));
+            if (string.Equals(originalClipPath, clipPath, StringComparison.Ordinal))
+            {
+                if (index >= 0)
+                {
+                    overrideClips.RemoveAt(index);
+                }
+            }
+            else if (index >= 0)
+            {
+                overrideClips[index].clipPath = clipPath;
+            }
+            else
+            {
+                overrideClips.Add(new XAnimationOverrideClipConfig
+                {
+                    key = clipKey,
+                    clipPath = clipPath,
+                });
+            }
+
+            m_OverrideAsset.clips = overrideClips.ToArray();
+            m_OverrideAsset.SaveAsset();
+            m_CompiledAsset = m_AssetLoader.Load(m_AssetPath);
+            RebuildDriver();
+        }
+
+        private void EnsureBaseAssetEditable()
+        {
+            EnsureLoaded();
+            if (m_IsOverrideAsset)
+            {
+                throw new XFrameworkException("XAnimation override asset cannot edit channels or clip structure.");
+            }
+        }
+
+        private string CreateUniqueChannelName(string prefix)
+        {
+            return CreateUniqueName(prefix, name => m_CompiledAsset.TryGetChannelIndex(name, out _));
+        }
+
+        private string CreateUniqueClipKey(string prefix)
+        {
+            return CreateUniqueName(prefix, key => m_CompiledAsset.TryGetClipIndex(key, out _));
+        }
+
+        private string CreateUniqueCueEventKey(string prefix)
+        {
+            return CreateUniqueName(prefix, key =>
+            {
+                XAnimationCueConfig[] cues = m_CompiledAsset.Asset.cues ?? Array.Empty<XAnimationCueConfig>();
+                for (int i = 0; i < cues.Length; i++)
+                {
+                    XAnimationCueConfig cue = cues[i];
+                    if (cue != null && string.Equals(cue.eventKey, key, StringComparison.Ordinal))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            });
+        }
+
+        private XAnimationCueConfig GetCueConfig(int cueIndex)
+        {
+            XAnimationCueConfig[] cues = m_CompiledAsset.Asset.cues ?? Array.Empty<XAnimationCueConfig>();
+            if (cueIndex < 0 || cueIndex >= cues.Length || cues[cueIndex] == null)
+            {
+                throw new XFrameworkException($"XAnimation cue index '{cueIndex}' does not exist.");
+            }
+
+            return cues[cueIndex];
+        }
+
+        private static string CreateUniqueName(string prefix, Predicate<string> exists)
+        {
+            if (!exists(prefix))
+            {
+                return prefix;
+            }
+
+            for (int i = 1; i < 10000; i++)
+            {
+                string name = $"{prefix}{i}";
+                if (!exists(name))
+                {
+                    return name;
+                }
+            }
+
+            throw new XFrameworkException($"Unable to create unique name with prefix '{prefix}'.");
+        }
+
+        private static string FindTemplateClipPath(string channelName, XAnimationClipConfig[] clips)
+        {
+            for (int i = 0; i < clips.Length; i++)
+            {
+                XAnimationClipConfig clip = clips[i];
+                if (clip != null &&
+                    string.Equals(clip.defaultChannel, channelName, StringComparison.Ordinal) &&
+                    !string.IsNullOrWhiteSpace(clip.clipPath))
+                {
+                    return clip.clipPath;
+                }
+            }
+
+            for (int i = 0; i < clips.Length; i++)
+            {
+                XAnimationClipConfig clip = clips[i];
+                if (clip != null && !string.IsNullOrWhiteSpace(clip.clipPath))
+                {
+                    return clip.clipPath;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static void RemoveCueReferences(XAnimationAsset asset, HashSet<string> removedClipKeys)
+        {
+            if (asset.cues == null || removedClipKeys == null || removedClipKeys.Count == 0)
+            {
+                return;
+            }
+
+            List<XAnimationCueConfig> cues = new(asset.cues.Length);
+            for (int i = 0; i < asset.cues.Length; i++)
+            {
+                XAnimationCueConfig cue = asset.cues[i];
+                if (cue == null || !removedClipKeys.Contains(cue.clipKey))
+                {
+                    cues.Add(cue);
+                }
+            }
+
+            asset.cues = cues.ToArray();
+        }
+
         private void SaveCompiledAsset()
         {
             if (m_CompiledAsset?.Asset == null)
@@ -690,6 +1133,12 @@ namespace XFramework.Editor
         private void RebuildDriverAndSave()
         {
             m_CompiledAsset = m_AssetLoader.Compile(m_CompiledAsset.Asset);
+            RebuildDriver();
+            SaveCompiledAsset();
+        }
+
+        private void RebuildDriver()
+        {
             if (m_Driver != null && m_Animator != null)
             {
                 m_Driver.CueTriggered -= OnCueTriggered;
@@ -699,8 +1148,6 @@ namespace XFramework.Editor
                 m_Driver.CueTriggered += OnCueTriggered;
                 m_Driver.SetRootMotionEnabled(m_RootMotionEnabled);
             }
-
-            SaveCompiledAsset();
         }
 
         public string GetOriginalClipPath(string clipKey)
@@ -753,6 +1200,9 @@ namespace XFramework.Editor
 
             m_Animator = null;
             m_CompiledAsset = null;
+            m_AssetPath = null;
+            m_IsOverrideAsset = false;
+            m_OverrideAsset = null;
             m_CueLogs.Clear();
             m_OriginalClipPathByKey.Clear();
             m_RootMotionFallbackEvaluatorByClip.Clear();
@@ -764,6 +1214,8 @@ namespace XFramework.Editor
         private void CacheOriginalClipPaths(string assetPath)
         {
             m_OriginalClipPathByKey.Clear();
+            m_IsOverrideAsset = false;
+            m_OverrideAsset = null;
 
             TextAsset textAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(assetPath);
             if (textAsset == null)
@@ -774,6 +1226,8 @@ namespace XFramework.Editor
             XAnimationOverrideAsset overrideAsset = textAsset.ToXTextAsset<XAnimationOverrideAsset>();
             if (overrideAsset != null && !string.IsNullOrWhiteSpace(overrideAsset.baseAssetPath))
             {
+                m_IsOverrideAsset = true;
+                m_OverrideAsset = overrideAsset;
                 TextAsset baseTextAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(overrideAsset.baseAssetPath);
                 if (baseTextAsset == null)
                 {
@@ -819,7 +1273,7 @@ namespace XFramework.Editor
             Camera camera = m_PreviewUtility.camera;
             camera.fieldOfView = 30f;
             camera.nearClipPlane = 0.01f;
-            camera.farClipPlane = 100f;
+            camera.farClipPlane = PreviewFarClipPlane;
             camera.allowMSAA = true;
             camera.allowHDR = true;
 
@@ -957,6 +1411,7 @@ namespace XFramework.Editor
             Quaternion rotation = Quaternion.Euler(m_CameraPitch, m_CameraYaw, 0f);
             camera.transform.position = m_CameraPosition;
             camera.transform.rotation = rotation;
+            UpdateGridMaterialForCamera();
         }
 
         private void ApplyHideFlags(GameObject root)
@@ -1029,11 +1484,11 @@ namespace XFramework.Editor
             DestroyGrid();
 
             float modelExtent = Mathf.Max(m_InitialBounds.extents.magnitude, 0.5f);
-            float gridHalf = Mathf.Max(10f, Mathf.Ceil(modelExtent * 6f));
-            float cellSize = Mathf.Max(0.25f, Mathf.Pow(10f, Mathf.Floor(Mathf.Log10(modelExtent * 0.5f))));
-            int cellCount = Mathf.RoundToInt(gridHalf / cellSize);
-            gridHalf = cellCount * cellSize;
+            float gridHalf = Mathf.Max(MinGridHalfSize, Mathf.Ceil(modelExtent * 12f));
+            int cellCount = Mathf.RoundToInt(gridHalf / FarGridSpacing);
+            gridHalf = Mathf.Max(FarGridSpacing, cellCount * FarGridSpacing);
             float gridSize = gridHalf * 2f;
+            m_GridSpacing = CloseGridSpacing;
 
             // Create material from URP grid shader
             Shader shader = Shader.Find("Hidden/XFramework/AnimationPreviewGrid");
@@ -1044,14 +1499,14 @@ namespace XFramework.Editor
             }
 
             m_GridMaterial = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
-            m_GridMaterial.SetColor("_BGColor", new Color(0.039216f, 0.101961f, 0.180392f, 1f));
-            m_GridMaterial.SetColor("_GridColor", new Color(0.301961f, 0.670588f, 0.968627f, 1f));
-            m_GridMaterial.SetColor("_MajorGridColor", new Color(0.301961f, 0.670588f, 0.968627f, 1f));
-            m_GridMaterial.SetColor("_CenterLineColor", new Color(0.518077f, 0.684173f, 0.974843f, 1f));
-            m_GridMaterial.SetFloat("_GridWidth", 0.01f);
-            m_GridMaterial.SetFloat("_MajorGridWidth", 0.01f);
-            m_GridMaterial.SetFloat("_CenterLineWidth", 0.1f);
-            m_GridMaterial.SetFloat("_GridSpacing", cellSize);
+            m_GridMaterial.SetColor("_BGColor", new Color(0.075f, 0.082f, 0.09f, 0.58f));
+            m_GridMaterial.SetColor("_GridColor", new Color(0.58f, 0.64f, 0.68f, 0.22f));
+            m_GridMaterial.SetColor("_MajorGridColor", new Color(0.74f, 0.80f, 0.86f, 0.42f));
+            m_GridMaterial.SetColor("_CenterLineColor", new Color(0.42f, 0.66f, 0.95f, 0.60f));
+            m_GridMaterial.SetFloat("_GridWidth", 0.015f);
+            m_GridMaterial.SetFloat("_MajorGridWidth", 0.035f);
+            m_GridMaterial.SetFloat("_CenterLineWidth", 0.05f);
+            m_GridMaterial.SetFloat("_GridSpacing", m_GridSpacing);
             m_GridMaterial.SetFloat("_MajorGridInterval", 5f);
             m_GridMaterial.SetFloat("_GridSize", gridSize);
 
@@ -1079,6 +1534,65 @@ namespace XFramework.Editor
 
             m_GridPlane.SetActive(m_GridVisible);
             m_PreviewUtility.AddSingleGO(m_GridPlane);
+        }
+
+        private void UpdateGridMaterialForCamera()
+        {
+            if (m_GridMaterial == null)
+            {
+                return;
+            }
+
+            float closeGridCellPixels = GetCloseGridCellPixelSize();
+            float targetSpacing = m_GridSpacing;
+            if (m_GridSpacing < FarGridSpacing && closeGridCellPixels <= SwitchToFarGridCellPixels)
+            {
+                targetSpacing = FarGridSpacing;
+            }
+            else if (m_GridSpacing > CloseGridSpacing && closeGridCellPixels >= SwitchToCloseGridCellPixels)
+            {
+                targetSpacing = CloseGridSpacing;
+            }
+
+            if (Mathf.Approximately(targetSpacing, m_GridSpacing))
+            {
+                return;
+            }
+
+            m_GridSpacing = targetSpacing;
+            float widthScale = Mathf.Sqrt(m_GridSpacing);
+            m_GridMaterial.SetFloat("_GridSpacing", m_GridSpacing);
+            m_GridMaterial.SetFloat("_GridWidth", 0.015f * widthScale);
+            m_GridMaterial.SetFloat("_MajorGridWidth", 0.035f * widthScale);
+            m_GridMaterial.SetFloat("_CenterLineWidth", 0.05f * widthScale);
+        }
+
+        private float GetCloseGridCellPixelSize()
+        {
+            float distance = GetGridViewDistance();
+            int pixelHeight = Mathf.Max(m_RenderTextureSize.y, 1);
+            float fieldOfView = m_PreviewUtility?.camera != null ? m_PreviewUtility.camera.fieldOfView : 30f;
+            float viewHeightMeters = 2f * distance * Mathf.Tan(fieldOfView * 0.5f * Mathf.Deg2Rad);
+            return CloseGridSpacing * pixelHeight / Mathf.Max(viewHeightMeters, 0.0001f);
+        }
+
+        private float GetGridViewDistance()
+        {
+            Quaternion rotation = Quaternion.Euler(m_CameraPitch, m_CameraYaw, 0f);
+            Vector3 forward = rotation * Vector3.forward;
+            float gridY = m_GridPlane != null ? m_GridPlane.transform.position.y : 0f;
+            if (Mathf.Abs(forward.y) > 0.0001f)
+            {
+                float hitDistance = (gridY - m_CameraPosition.y) / forward.y;
+                if (hitDistance > 0f)
+                {
+                    return Mathf.Max(hitDistance, 0.05f);
+                }
+            }
+
+            float heightFromGrid = Mathf.Abs(m_CameraPosition.y - gridY);
+            float pitchRadians = Mathf.Max(Mathf.Abs(m_CameraPitch) * Mathf.Deg2Rad, 5f * Mathf.Deg2Rad);
+            return Mathf.Max(heightFromGrid / Mathf.Sin(pitchRadians), 0.05f);
         }
 
         private void DestroyGrid()

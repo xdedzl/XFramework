@@ -25,7 +25,7 @@ namespace XFramework.Editor
         private const float InspectorMinHeight = 240f;
         private const float CueLogInitialHeight = 90f;
         private const float CueLogSectionMinHeight = 72f;
-        private const float ClipPlayButtonWidth = 30f;
+        private const float ClipIconButtonSize = 22f;
         private const float ChannelStateLabelHeight = 64f;
         private const string ClipDragDataKey = nameof(XAnimationPreviewWindow) + ".ClipKey";
 
@@ -69,11 +69,15 @@ namespace XFramework.Editor
         private Toggle m_GridToggle;
         private Button m_PauseButton;
         private Button m_StopAllButton;
+        private Button m_AddChannelButton;
         private VisualElement m_ClipListView;
+        private readonly HashSet<string> m_ExpandedClipKeys = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, EditableLabel> m_ClipLabelMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, VisualElement> m_ClipRowMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, ClipRowVisualState> m_ClipVisualStateMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, Button> m_ClipButtonMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, string> m_ClipChannelMap = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, EditableLabel> m_ChannelLabelMap = new(StringComparer.Ordinal);
         private VisualElement m_ChannelControlsContainer;
         private ScrollView m_CueLogContainer;
 
@@ -85,6 +89,8 @@ namespace XFramework.Editor
         private bool m_IsPreviewDragging;
         private Vector2 m_LastPreviewMousePosition;
         private int m_LastCueLogCount = -1;
+        private string m_PendingClipRenameKey;
+        private string m_PendingChannelRenameKey;
         private readonly HashSet<KeyCode> m_PressedKeys = new();
 
         private sealed class ClipRowVisualState
@@ -411,7 +417,10 @@ namespace XFramework.Editor
             inspectorScrollView.Add(clipsCard.Root);
 
             // ── Card: Channels ──
-            FoldoutCard channelsCard = CreateFoldoutCard("Channels", m_ChannelsSectionExpanded, value => m_ChannelsSectionExpanded = value);
+            m_AddChannelButton = CreateStyledButton("+ Channel", AddChannel, AccentColor);
+            m_AddChannelButton.tooltip = "新增一个 channel。";
+            SetAddChannelButtonEnabled(false);
+            FoldoutCard channelsCard = CreateFoldoutCard("Channels", m_ChannelsSectionExpanded, value => m_ChannelsSectionExpanded = value, m_AddChannelButton);
             m_ChannelControlsContainer = new VisualElement();
             channelsCard.Content.Add(m_ChannelControlsContainer);
             inspectorScrollView.Add(channelsCard.Root);
@@ -1002,6 +1011,7 @@ namespace XFramework.Editor
         private void RebuildClipList()
         {
             m_ClipListView.Clear();
+            m_ClipLabelMap.Clear();
             m_ClipRowMap.Clear();
             m_ClipVisualStateMap.Clear();
             m_ClipButtonMap.Clear();
@@ -1080,6 +1090,18 @@ namespace XFramework.Editor
                 groupInfo.style.fontSize = 10;
                 groupInfo.style.flexShrink = 0;
                 groupHeader.Add(groupInfo);
+
+                Button addClipButton = new(() => AddClip(channel.Name))
+                {
+                    text = "+"
+                };
+                addClipButton.tooltip = m_Session.IsOverrideAsset
+                    ? "Override 资源不能新增 clip。"
+                    : "在这个 channel 下新增一个 clip。";
+                addClipButton.SetEnabled(!m_Session.IsOverrideAsset);
+                ApplyClipIconButtonStyle(addClipButton, AccentColor);
+                addClipButton.style.marginLeft = 6;
+                groupHeader.Add(addClipButton);
                 group.Add(groupHeader);
                 RegisterClipChannelDropTarget(group, groupHeader, channel.Name);
 
@@ -1108,6 +1130,130 @@ namespace XFramework.Editor
                 group.Add(clipsContainer);
                 m_ClipListView.Add(group);
             }
+
+            TryBeginPendingRename();
+        }
+
+        private VisualElement CreateCueRow(int cueIndex, XAnimationCueConfig cue, bool editable)
+        {
+            VisualElement row = CreateSubBox();
+            row.style.flexDirection = FlexDirection.Column;
+            row.style.marginBottom = 3;
+            row.tooltip = editable
+                ? "Cue 会在对应 clip 播放经过 normalized time 时触发。"
+                : "Override 资源只能预览 cue，不能编辑 base cue 配置。";
+
+            VisualElement topRow = new VisualElement();
+            topRow.style.flexDirection = FlexDirection.Row;
+            topRow.style.alignItems = Align.Center;
+            topRow.style.marginBottom = 2;
+            row.Add(topRow);
+
+            Label indexLabel = new($"#{cueIndex}");
+            indexLabel.style.width = 28;
+            indexLabel.style.flexShrink = 0;
+            indexLabel.style.color = TextMuted;
+            indexLabel.style.fontSize = BodyFontSize;
+            indexLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            topRow.Add(indexLabel);
+
+            FloatField timeField = new("time")
+            {
+                value = cue.time
+            };
+            timeField.tooltip = "Cue 触发时间，范围是 clip normalized time [0, 1]。";
+            timeField.SetEnabled(editable);
+            timeField.style.flexGrow = 1;
+            timeField.RegisterValueChangedCallback(evt => ChangeCueTime(cueIndex, evt.newValue, timeField));
+            topRow.Add(timeField);
+
+            Button deleteButton = new(() => DeleteCue(cueIndex))
+            {
+                text = "⌫"
+            };
+            deleteButton.tooltip = editable ? "删除这个 cue。" : "Override 资源不能删除 cue。";
+            deleteButton.SetEnabled(editable);
+            ApplyTrashButtonIcon(deleteButton);
+            ApplyClipIconButtonStyle(deleteButton);
+            deleteButton.style.marginLeft = 4;
+            topRow.Add(deleteButton);
+
+            TextField eventKeyField = new("eventKey")
+            {
+                value = cue.eventKey ?? string.Empty,
+                isDelayed = true
+            };
+            eventKeyField.tooltip = "Cue 触发时派发的事件 key，不能为空。";
+            eventKeyField.SetEnabled(editable);
+            eventKeyField.RegisterValueChangedCallback(evt => ChangeCueEventKey(cueIndex, evt.newValue, eventKeyField, evt.previousValue));
+            row.Add(eventKeyField);
+
+            TextField payloadField = new("payload")
+            {
+                value = cue.payload ?? string.Empty,
+                isDelayed = true
+            };
+            payloadField.tooltip = "Cue 触发时携带的字符串 payload。";
+            payloadField.SetEnabled(editable);
+            payloadField.RegisterValueChangedCallback(evt => ChangeCuePayload(cueIndex, evt.newValue));
+            row.Add(payloadField);
+
+            return row;
+        }
+
+        private VisualElement CreateClipCueEditor(string clipKey)
+        {
+            VisualElement box = CreateSubBox();
+            box.style.marginTop = 5;
+
+            VisualElement header = new VisualElement();
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.alignItems = Align.Center;
+            header.style.marginBottom = 3;
+
+            Label title = new("Cues");
+            title.style.flexGrow = 1;
+            title.style.color = TextNormal;
+            title.style.fontSize = BodyFontSize;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            header.Add(title);
+
+            bool editable = m_Session != null && !m_Session.IsOverrideAsset;
+            Button addButton = new(() => AddCue(clipKey))
+            {
+                text = "+"
+            };
+            addButton.tooltip = editable ? "在这个 clip 下新增一个 cue。" : "Override 资源不能新增 cue。";
+            addButton.SetEnabled(editable);
+            ApplyClipIconButtonStyle(addButton, AccentColor);
+            header.Add(addButton);
+            box.Add(header);
+
+            XAnimationCueConfig[] cues = m_Session?.CompiledAsset.Asset.cues ?? Array.Empty<XAnimationCueConfig>();
+            bool hasCue = false;
+            for (int i = 0; i < cues.Length; i++)
+            {
+                XAnimationCueConfig cue = cues[i];
+                if (cue == null || !string.Equals(cue.clipKey, clipKey, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                hasCue = true;
+                box.Add(CreateCueRow(i, cue, editable));
+            }
+
+            if (!hasCue)
+            {
+                Label emptyLabel = new("No cues");
+                emptyLabel.style.color = TextMuted;
+                emptyLabel.style.fontSize = BodyFontSize;
+                emptyLabel.style.marginLeft = 4;
+                emptyLabel.style.marginTop = 1;
+                box.Add(emptyLabel);
+            }
+
+            return box;
         }
 
         private VisualElement CreateClipRow(XAnimationCompiledClip clip, int rowIndex)
@@ -1150,33 +1296,39 @@ namespace XFramework.Editor
 
             EditableLabel label = new(clipKey);
             ConfigureEditableNameLabel(label, 78f);
-            label.tooltip = "单击展开/收起 clip 配置；双击编辑名称；按住拖动可移动到其他 channel，或拖到 clip 行上方调整顺序。";
-            label.SetEditable(true);
+            label.tooltip = "单击展开/收起 clip 配置；右键 Rename 编辑名称；按住拖动可移动到其他 channel，或拖到 clip 行上方调整顺序。";
+            label.SetEditable(true, EditableLabelEditTrigger.ContextMenu);
             label.EditStarted += BeginNameEdit;
             label.EditEnded += EndNameEdit;
             label.ValueCommitted += (_, newValue) => RenameClip(clipKey, newValue, label);
+            m_ClipLabelMap[clipKey] = label;
             row.Add(label);
 
             VisualElement fileInfo = new VisualElement();
             fileInfo.style.flexGrow = 1;
+            fileInfo.style.flexShrink = 1;
+            fileInfo.style.minWidth = 140;
             fileInfo.style.marginLeft = 4;
             fileInfo.style.marginRight = 4;
             fileInfo.style.flexDirection = FlexDirection.Row;
             row.Add(fileInfo);
 
             string activeClipPath = clip.Config.clipPath;
-            string originalClipPath = m_Session?.GetOriginalClipPath(clipKey);
             m_ClipChannelMap[clipKey] = clip.Config.defaultChannel;
 
-            fileInfo.Add(CreateClipObjectField(activeClipPath));
-            if (!string.IsNullOrWhiteSpace(originalClipPath) &&
-                !string.Equals(originalClipPath, activeClipPath, StringComparison.Ordinal))
-            {
-                fileInfo.Add(CreateClipObjectField(originalClipPath, 6));
-            }
+            ObjectField activeClipField = CreateClipObjectField(activeClipPath, editable: true);
+            activeClipField.tooltip = m_Session != null && m_Session.IsOverrideAsset
+                ? "当前 Override 资源中的覆盖动画。可直接修改，不会写回 base 资源。"
+                : "该 clip 对应的 AnimationClip 资源。可直接修改并保存到当前 XAnimation 文件。";
+            activeClipField.style.flexGrow = 1;
+            activeClipField.style.flexShrink = 1;
+            activeClipField.style.minWidth = 120;
+            activeClipField.style.maxWidth = 260;
+            activeClipField.RegisterValueChangedCallback(evt => ChangeClipPath(clip, activeClipField, evt.previousValue as AnimationClip, evt.newValue as AnimationClip));
+            fileInfo.Add(activeClipField);
 
             VisualElement editor = CreateClipEditor(clip);
-            editor.style.display = DisplayStyle.None;
+            editor.style.display = m_ExpandedClipKeys.Contains(clipKey) ? DisplayStyle.Flex : DisplayStyle.None;
             RegisterClipNameInteractions(label, editor, clip);
 
             Button toggleButton = new(() =>
@@ -1210,8 +1362,23 @@ namespace XFramework.Editor
             };
             toggleButton.tooltip = "播放或停止这个 clip。";
             ApplyClipButtonStyle(toggleButton, false);
+            toggleButton.style.flexShrink = 0;
             toggleButton.style.marginLeft = 4;
             row.Add(toggleButton);
+
+            Button deleteButton = new(() => DeleteClip(clipKey))
+            {
+                text = "⌫"
+            };
+            deleteButton.tooltip = m_Session != null && m_Session.IsOverrideAsset
+                ? "Override 资源不能删除 clip 结构。"
+                : "删除这个 clip。";
+            deleteButton.SetEnabled(m_Session != null && !m_Session.IsOverrideAsset);
+            ApplyTrashButtonIcon(deleteButton);
+            ApplyClipIconButtonStyle(deleteButton);
+            deleteButton.style.flexShrink = 0;
+            deleteButton.style.marginLeft = 3;
+            row.Add(deleteButton);
 
             m_ClipButtonMap[clipKey] = toggleButton;
             container.Add(row);
@@ -1254,13 +1421,7 @@ namespace XFramework.Editor
             bool isPressed = false;
             Vector2 startPosition = Vector2.zero;
             bool movedBeyondClickThreshold = false;
-            IVisualElementScheduledItem pendingClickItem = null;
-
-            void CancelPendingClick()
-            {
-                pendingClickItem?.Pause();
-                pendingClickItem = null;
-            }
+            bool dragStarted = false;
 
             label.RegisterCallback<MouseDownEvent>(evt =>
             {
@@ -1269,30 +1430,37 @@ namespace XFramework.Editor
                     return;
                 }
 
-                if (evt.clickCount > 1 || label.IsEditing)
+                if (label.IsEditing)
                 {
-                    CancelPendingClick();
                     ClearClipDragData();
                     isPressed = false;
                     movedBeyondClickThreshold = false;
-                    evt.StopImmediatePropagation();
+                    dragStarted = false;
                     return;
                 }
 
-                CancelPendingClick();
                 isPressed = true;
                 movedBeyondClickThreshold = false;
+                dragStarted = false;
                 startPosition = evt.mousePosition;
-                DragAndDrop.PrepareStartDrag();
-                DragAndDrop.SetGenericData(ClipDragDataKey, clip.Key);
-                DragAndDrop.StartDrag($"Move {clip.Key}");
+                ClearClipDragData();
                 evt.StopPropagation();
             });
             label.RegisterCallback<MouseMoveEvent>(evt =>
             {
-                if (isPressed && (evt.mousePosition - startPosition).sqrMagnitude >= 16f)
+                if (!isPressed || m_IsEditingName || label.IsEditing)
+                {
+                    return;
+                }
+
+                if (!movedBeyondClickThreshold && (evt.mousePosition - startPosition).sqrMagnitude >= 16f)
                 {
                     movedBeyondClickThreshold = true;
+                    DragAndDrop.PrepareStartDrag();
+                    DragAndDrop.SetGenericData(ClipDragDataKey, clip.Key);
+                    DragAndDrop.StartDrag($"Move {clip.Key}");
+                    dragStarted = true;
+                    evt.StopPropagation();
                 }
             });
             label.RegisterCallback<MouseUpEvent>(evt =>
@@ -1304,21 +1472,29 @@ namespace XFramework.Editor
 
                 if (!movedBeyondClickThreshold)
                 {
-                    pendingClickItem = label.schedule.Execute(() =>
+                    if (!label.IsEditing)
                     {
-                        if (!label.IsEditing)
+                        bool expanded = editor.style.display == DisplayStyle.None;
+                        editor.style.display = expanded ? DisplayStyle.Flex : DisplayStyle.None;
+                        if (expanded)
                         {
-                            bool expanded = editor.style.display == DisplayStyle.None;
-                            editor.style.display = expanded ? DisplayStyle.Flex : DisplayStyle.None;
+                            m_ExpandedClipKeys.Add(clip.Key);
                         }
+                        else
+                        {
+                            m_ExpandedClipKeys.Remove(clip.Key);
+                        }
+                    }
+                }
 
-                        pendingClickItem = null;
-                    }).StartingIn(220);
+                if (!dragStarted)
+                {
                     ClearClipDragData();
                 }
 
                 isPressed = false;
                 movedBeyondClickThreshold = false;
+                dragStarted = false;
                 evt.StopPropagation();
             });
         }
@@ -1340,6 +1516,244 @@ namespace XFramework.Editor
             DragAndDrop.SetGenericData(ClipDragDataKey, null);
         }
 
+        private void AddChannel()
+        {
+            try
+            {
+                string channelName = m_Session.AddChannel();
+                m_PendingChannelRenameKey = channelName;
+                RebuildClipList();
+                RebuildChannelControls();
+                RefreshClipPlayingStates();
+                RefreshChannelStates();
+                SetStatus($"已新增 Channel {channelName}。");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void DeleteChannel(string channelName)
+        {
+            int clipCount = CountClipsInChannel(channelName);
+            string message = clipCount > 0
+                ? $"确定删除 Channel '{channelName}'？\n\n将同时删除该 Channel 下的 {clipCount} 个 Clip。"
+                : $"确定删除 Channel '{channelName}'？";
+            if (!EditorUtility.DisplayDialog("删除 Channel", message, "删除", "取消"))
+            {
+                return;
+            }
+
+            try
+            {
+                m_Session.DeleteChannel(channelName);
+                RebuildClipList();
+                RebuildChannelControls();
+                RefreshClipPlayingStates();
+                RefreshChannelStates();
+                SetStatus($"已删除 Channel {channelName}。");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private int CountClipsInChannel(string channelName)
+        {
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            IReadOnlyList<XAnimationCompiledClip> clips = m_Session.CompiledAsset.Clips;
+            for (int i = 0; i < clips.Count; i++)
+            {
+                XAnimationCompiledClip clip = clips[i];
+                if (clip != null && string.Equals(clip.Config.defaultChannel, channelName, StringComparison.Ordinal))
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private void AddClip(string channelName)
+        {
+            try
+            {
+                string clipKey = m_Session.AddClip(channelName);
+                m_PendingClipRenameKey = clipKey;
+                RebuildClipList();
+                RebuildChannelControls();
+                RefreshClipPlayingStates();
+                RefreshChannelStates();
+                SetStatus($"已在 {channelName} 新增 Clip {clipKey}。");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void DeleteClip(string clipKey)
+        {
+            if (!EditorUtility.DisplayDialog("删除 Clip", $"确定删除 Clip '{clipKey}'？", "删除", "取消"))
+            {
+                return;
+            }
+
+            try
+            {
+                m_Session.DeleteClip(clipKey);
+                m_ExpandedClipKeys.Remove(clipKey);
+                RebuildClipList();
+                RebuildChannelControls();
+                RefreshClipPlayingStates();
+                RefreshChannelStates();
+                SetStatus($"已删除 Clip {clipKey}。");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void AddCue(string clipKey)
+        {
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                return;
+            }
+
+            try
+            {
+                int cueIndex = m_Session.AddCue(clipKey);
+                RebuildClipList();
+                SetStatus($"已在 {clipKey} 新增 Cue #{cueIndex}。");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void DeleteCue(int cueIndex)
+        {
+            if (!EditorUtility.DisplayDialog("删除 Cue", $"确定删除 Cue #{cueIndex}？", "删除", "取消"))
+            {
+                return;
+            }
+
+            try
+            {
+                m_Session.DeleteCue(cueIndex);
+                RebuildClipList();
+                SetStatus($"已删除 Cue #{cueIndex}。");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void ChangeCueClipKey(int cueIndex, string clipKey, DropdownField field, string previousValue)
+        {
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                field.SetValueWithoutNotify(previousValue);
+                return;
+            }
+
+            try
+            {
+                m_Session.SetCueClipKey(cueIndex, clipKey);
+                RebuildClipList();
+                SetStatus($"Cue #{cueIndex} clipKey = {clipKey}。");
+            }
+            catch (Exception ex)
+            {
+                field.SetValueWithoutNotify(previousValue);
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void ChangeCueTime(int cueIndex, float time, FloatField field)
+        {
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                return;
+            }
+
+            float clampedTime = Mathf.Clamp01(time);
+            if (!Mathf.Approximately(clampedTime, time))
+            {
+                field.SetValueWithoutNotify(clampedTime);
+            }
+
+            try
+            {
+                m_Session.SetCueTime(cueIndex, clampedTime, save: false);
+                ScheduleAssetSave();
+                SetStatus($"Cue #{cueIndex} time = {clampedTime:0.###}。");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void ChangeCueEventKey(int cueIndex, string eventKey, TextField field, string previousValue)
+        {
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                field.SetValueWithoutNotify(previousValue);
+                return;
+            }
+
+            try
+            {
+                m_Session.SetCueEventKey(cueIndex, eventKey);
+                SetStatus($"Cue #{cueIndex} eventKey = {eventKey?.Trim()}。");
+            }
+            catch (Exception ex)
+            {
+                field.SetValueWithoutNotify(previousValue);
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void ChangeCuePayload(int cueIndex, string payload)
+        {
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                return;
+            }
+
+            try
+            {
+                m_Session.SetCuePayload(cueIndex, payload);
+                SetStatus($"Cue #{cueIndex} payload 已更新。");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
         private void RenameClip(string oldKey, string newKey, EditableLabel label)
         {
             newKey = newKey?.Trim();
@@ -1347,6 +1761,10 @@ namespace XFramework.Editor
             {
                 m_Session.RenameClip(oldKey, newKey);
                 SetStatus($"Clip {oldKey} 已重命名为 {newKey}。");
+                if (m_ExpandedClipKeys.Remove(oldKey) && !string.IsNullOrWhiteSpace(newKey))
+                {
+                    m_ExpandedClipKeys.Add(newKey.Trim());
+                }
                 RebuildClipList();
                 RebuildChannelControls();
                 RefreshClipPlayingStates();
@@ -1475,27 +1893,96 @@ namespace XFramework.Editor
             SetStatus($"{clipKey} 已移动到 {channelName}。");
         }
 
-        private static void ApplyClipIconButtonStyle(Button btn, Color bgColor, float width)
+        private void TryBeginPendingRename()
         {
-            btn.style.backgroundColor = bgColor;
-            btn.style.color = Color.white;
-            btn.style.borderTopWidth = 0;
-            btn.style.borderBottomWidth = 0;
-            btn.style.borderLeftWidth = 0;
-            btn.style.borderRightWidth = 0;
+            if (rootVisualElement == null)
+            {
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(m_PendingClipRenameKey) &&
+                m_ClipLabelMap.TryGetValue(m_PendingClipRenameKey, out EditableLabel clipLabel))
+            {
+                string clipKey = m_PendingClipRenameKey;
+                m_PendingClipRenameKey = null;
+                rootVisualElement.schedule.Execute(() =>
+                {
+                    if (clipLabel != null)
+                    {
+                        m_ExpandedClipKeys.Remove(clipKey);
+                        clipLabel.BeginEdit();
+                    }
+                }).StartingIn(0);
+            }
+
+            if (!string.IsNullOrWhiteSpace(m_PendingChannelRenameKey) &&
+                m_ChannelLabelMap.TryGetValue(m_PendingChannelRenameKey, out EditableLabel channelLabel))
+            {
+                m_PendingChannelRenameKey = null;
+                rootVisualElement.schedule.Execute(() =>
+                {
+                    channelLabel?.BeginEdit();
+                }).StartingIn(0);
+            }
+        }
+
+        private static void ApplyClipIconButtonStyle(Button btn, Color? bgColor = null, float size = ClipIconButtonSize)
+        {
+            btn.style.backgroundColor = bgColor ?? ListHeaderBg;
+            btn.style.color = bgColor.HasValue ? Color.white : TextNormal;
+            btn.style.borderTopWidth = 1;
+            btn.style.borderBottomWidth = 1;
+            btn.style.borderLeftWidth = 1;
+            btn.style.borderRightWidth = 1;
+            btn.style.borderTopColor = PaneBorder;
+            btn.style.borderBottomColor = PaneBorder;
+            btn.style.borderLeftColor = PaneBorder;
+            btn.style.borderRightColor = PaneBorder;
             btn.style.borderTopLeftRadius = 3;
             btn.style.borderTopRightRadius = 3;
             btn.style.borderBottomLeftRadius = 3;
             btn.style.borderBottomRightRadius = 3;
             btn.style.paddingLeft = 0;
             btn.style.paddingRight = 0;
-            btn.style.paddingTop = 2;
-            btn.style.paddingBottom = 2;
+            btn.style.paddingTop = 0;
+            btn.style.paddingBottom = 0;
             btn.style.fontSize = 12;
-            btn.style.width = width;
-            btn.style.minWidth = width;
-            btn.style.maxWidth = width;
+            btn.style.width = size;
+            btn.style.minWidth = size;
+            btn.style.maxWidth = size;
+            btn.style.height = size;
+            btn.style.minHeight = size;
+            btn.style.maxHeight = size;
             btn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            btn.style.alignItems = Align.Center;
+            btn.style.justifyContent = Justify.Center;
+        }
+
+        private static void ApplyTrashButtonIcon(Button btn)
+        {
+            GUIContent iconContent = EditorGUIUtility.IconContent("TreeEditor.Trash");
+            Texture icon = iconContent.image != null
+                ? iconContent.image
+                : EditorGUIUtility.IconContent("d_TreeEditor.Trash").image;
+
+            if (icon == null)
+            {
+                btn.text = "🗑";
+                return;
+            }
+
+            btn.text = string.Empty;
+            btn.Clear();
+            Image image = new()
+            {
+                image = icon
+            };
+            image.tintColor = TextNormal;
+            image.style.width = 13;
+            image.style.height = 13;
+            image.style.alignSelf = Align.Center;
+            image.style.flexShrink = 0;
+            btn.Add(image);
         }
 
         private VisualElement CreateClipEditor(XAnimationCompiledClip clip)
@@ -1523,6 +2010,14 @@ namespace XFramework.Editor
             editor.style.borderTopRightRadius = 3;
             editor.style.borderBottomLeftRadius = 3;
             editor.style.borderBottomRightRadius = 3;
+
+            if (m_Session != null && m_Session.IsOverrideAsset)
+            {
+                string originalClipPath = m_Session.GetOriginalClipPath(clip.Key);
+                ObjectField originalClipField = CreateClipObjectField(originalClipPath, label: "originalClip");
+                originalClipField.tooltip = "Base XAnimation 中的原始动画资源。Override 预览中不允许从这里修改。";
+                editor.Add(originalClipField);
+            }
 
             Toggle loopField = new("loop") { value = config.loop };
             loopField.tooltip = "是否循环播放该 clip。会保存到 XAnimation 文件。";
@@ -1601,6 +2096,7 @@ namespace XFramework.Editor
                 SetStatus($"{clip.Key} rootMotionMode = {mode}。");
             });
             editor.Add(rootMotionModeField);
+            editor.Add(CreateClipCueEditor(clip.Key));
 
             return editor;
         }
@@ -1646,35 +2142,85 @@ namespace XFramework.Editor
             return null;
         }
 
-        private static ObjectField CreateClipObjectField(string assetPath, float marginLeft = 0f)
+        private static ObjectField CreateClipObjectField(string assetPath, float marginLeft = 0f, string label = null, bool editable = false)
         {
             AnimationClip clip = string.IsNullOrWhiteSpace(assetPath)
                 ? null
-                : AssetDatabase.LoadAssetAtPath<AnimationClip>(assetPath);
-            ObjectField field = new()
-            {
-                objectType = typeof(AnimationClip),
-                allowSceneObjects = false,
-                value = clip
-            };
+                : XAnimationEditorAssetResolver.ResolveAnimationClip(assetPath);
+            ObjectField field = string.IsNullOrWhiteSpace(label) ? new ObjectField() : new ObjectField(label);
+            field.objectType = typeof(AnimationClip);
+            field.allowSceneObjects = false;
+            field.value = clip;
             field.tooltip = assetPath;
             field.style.flexGrow = 1;
-            field.style.flexBasis = 0;
-            field.style.minWidth = 0;
+            field.style.minHeight = 20;
             field.style.fontSize = 10;
+            field.style.alignSelf = Align.Stretch;
+            field.pickingMode = editable ? PickingMode.Position : PickingMode.Ignore;
+            field.SetEnabled(editable);
+            if (string.IsNullOrWhiteSpace(label))
+            {
+                field.style.flexBasis = 0;
+                field.style.minWidth = 0;
+            }
             if (marginLeft > 0f)
             {
                 field.style.marginLeft = marginLeft;
             }
 
-            field.RegisterValueChangedCallback(evt => field.SetValueWithoutNotify(evt.previousValue));
+            if (!editable)
+            {
+                field.RegisterValueChangedCallback(evt => field.SetValueWithoutNotify(evt.previousValue));
+            }
+
             return field;
+        }
+
+        private void ChangeClipPath(XAnimationCompiledClip clip, ObjectField field, AnimationClip previousClip, AnimationClip newClip)
+        {
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                field.SetValueWithoutNotify(previousClip);
+                return;
+            }
+
+            if (newClip == null)
+            {
+                field.SetValueWithoutNotify(previousClip);
+                SetStatus("clip 动画资源不能为空。", true);
+                return;
+            }
+
+            string clipPath = XAnimationEditorAssetResolver.BuildClipPath(newClip);
+            if (string.IsNullOrWhiteSpace(clipPath))
+            {
+                field.SetValueWithoutNotify(previousClip);
+                SetStatus("无法获取所选 AnimationClip 的资源路径。", true);
+                return;
+            }
+
+            try
+            {
+                m_Session.SetClipPath(clip.Key, clipPath);
+                RestartClipIfPlaying(clip.Key, clip.Config.defaultChannel);
+                SetStatus($"{clip.Key} clip = {newClip.name}。");
+                RebuildClipList();
+                RebuildChannelControls();
+                RefreshClipPlayingStates();
+                RefreshChannelStates();
+            }
+            catch (Exception ex)
+            {
+                field.SetValueWithoutNotify(previousClip);
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
         }
 
         private void ApplyClipButtonStyle(Button btn, bool isPlaying)
         {
             btn.text = isPlaying ? "■" : "▶";
-            ApplyClipIconButtonStyle(btn, isPlaying ? DangerColor : AccentColor, ClipPlayButtonWidth);
+            ApplyClipIconButtonStyle(btn, isPlaying ? DangerColor : null);
         }
 
         private void SetStopAllButtonEnabled(bool enabled)
@@ -1686,6 +2232,20 @@ namespace XFramework.Editor
 
             m_StopAllButton.SetEnabled(enabled);
             m_StopAllButton.style.opacity = enabled ? 1f : 0.45f;
+        }
+
+        private void SetAddChannelButtonEnabled(bool enabled)
+        {
+            if (m_AddChannelButton == null)
+            {
+                return;
+            }
+
+            m_AddChannelButton.SetEnabled(enabled);
+            m_AddChannelButton.style.opacity = enabled ? 1f : 0.45f;
+            m_AddChannelButton.tooltip = m_Session != null && m_Session.IsOverrideAsset
+                ? "Override 资源不能新增 channel。"
+                : "新增一个 channel。";
         }
 
         private void SetPauseButtonState(bool enabled, bool paused)
@@ -1776,7 +2336,9 @@ namespace XFramework.Editor
         private void RebuildChannelControls()
         {
             m_ChannelControlsContainer.Clear();
+            m_ChannelLabelMap.Clear();
             m_ChannelStateLabels.Clear();
+            SetAddChannelButtonEnabled(m_Session != null && m_Session.IsLoaded && !m_Session.IsOverrideAsset);
 
             if (m_Session == null || !m_Session.IsLoaded)
             {
@@ -1812,7 +2374,7 @@ namespace XFramework.Editor
                 VisualElement channelHeader = new VisualElement();
                 channelHeader.style.flexDirection = FlexDirection.Row;
                 channelHeader.style.alignItems = Align.Center;
-                channelHeader.tooltip = "单击 channel 名称展开/收起配置和预览调试信息；双击名称编辑。";
+                channelHeader.tooltip = "单击 channel 名称展开/收起配置和预览调试信息；右键 Rename 编辑名称。";
 
                 Label channelFoldoutLabel = new("▾");
                 channelFoldoutLabel.style.width = 14;
@@ -1823,12 +2385,30 @@ namespace XFramework.Editor
 
                 EditableLabel channelLabel = new(channel.Name);
                 ConfigureEditableNameLabel(channelLabel, 160f);
-                channelLabel.tooltip = "单击展开/收起这个 channel 的配置和预览调试信息；双击编辑名称。";
-                channelLabel.SetEditable(true);
+                channelLabel.tooltip = "单击展开/收起这个 channel 的配置和预览调试信息；右键 Rename 编辑名称。";
+                channelLabel.SetEditable(true, EditableLabelEditTrigger.ContextMenu);
                 channelLabel.EditStarted += BeginNameEdit;
                 channelLabel.EditEnded += EndNameEdit;
                 channelLabel.ValueCommitted += (_, newValue) => RenameChannel(channel.Name, newValue, channelLabel);
+                m_ChannelLabelMap[channel.Name] = channelLabel;
                 channelHeader.Add(channelLabel);
+
+                VisualElement channelHeaderSpacer = new();
+                channelHeaderSpacer.style.flexGrow = 1;
+                channelHeader.Add(channelHeaderSpacer);
+
+                Button deleteChannelButton = new(() => DeleteChannel(channel.Name))
+                {
+                    text = "⌫"
+                };
+                deleteChannelButton.tooltip = m_Session.IsOverrideAsset
+                    ? "Override 资源不能删除 channel。"
+                    : "删除这个 channel，并在确认后连带删除其下 clip。";
+                deleteChannelButton.SetEnabled(!m_Session.IsOverrideAsset);
+                ApplyTrashButtonIcon(deleteChannelButton);
+                ApplyClipIconButtonStyle(deleteChannelButton);
+                deleteChannelButton.style.marginLeft = 4;
+                channelHeader.Add(deleteChannelButton);
                 controlRow.Add(channelHeader);
 
                 VisualElement channelContent = new VisualElement();
@@ -1881,7 +2461,6 @@ namespace XFramework.Editor
                 m_ChannelStateLabels[channel.Name] = stateLabel;
                 channelContent.Add(debugBox);
 
-                IVisualElementScheduledItem pendingChannelClickItem = null;
                 channelLabel.RegisterCallback<MouseDownEvent>(evt =>
                 {
                     if (evt.button != 0)
@@ -1889,27 +2468,15 @@ namespace XFramework.Editor
                         return;
                     }
 
-                    if (evt.clickCount > 1 || channelLabel.IsEditing)
+                    if (channelLabel.IsEditing)
                     {
-                        pendingChannelClickItem?.Pause();
-                        pendingChannelClickItem = null;
                         ClearClipDragData();
-                        evt.StopImmediatePropagation();
                         return;
                     }
 
-                    pendingChannelClickItem?.Pause();
-                    pendingChannelClickItem = channelLabel.schedule.Execute(() =>
-                    {
-                        if (!channelLabel.IsEditing)
-                        {
-                            bool expanded = channelContent.style.display != DisplayStyle.None;
-                            channelContent.style.display = expanded ? DisplayStyle.None : DisplayStyle.Flex;
-                            channelFoldoutLabel.text = expanded ? "▸" : "▾";
-                        }
-
-                        pendingChannelClickItem = null;
-                    }).StartingIn(220);
+                    bool expanded = channelContent.style.display != DisplayStyle.None;
+                    channelContent.style.display = expanded ? DisplayStyle.None : DisplayStyle.Flex;
+                    channelFoldoutLabel.text = expanded ? "▸" : "▾";
                     evt.StopPropagation();
                 });
 
@@ -1917,6 +2484,8 @@ namespace XFramework.Editor
 
                 m_ChannelControlsContainer.Add(controlRow);
             }
+
+            TryBeginPendingRename();
         }
 
         private static VisualElement CreateSubBox()
@@ -2208,18 +2777,24 @@ namespace XFramework.Editor
         private void ClearDebugViews()
         {
             m_ClipListView?.Clear();
+            m_ExpandedClipKeys.Clear();
+            m_ClipLabelMap.Clear();
             m_ClipRowMap.Clear();
             m_ClipVisualStateMap.Clear();
             m_ClipButtonMap.Clear();
             m_ClipChannelMap.Clear();
             m_ChannelControlsContainer?.Clear();
+            m_ChannelLabelMap.Clear();
             m_CueLogContainer?.Clear();
             m_ChannelStateLabels.Clear();
+            m_PendingClipRenameKey = null;
+            m_PendingChannelRenameKey = null;
             m_PreviewImage.image = null;
             m_LastCueLogCount = -1;
             m_IsPaused = false;
             SetPauseButtonState(false, false);
             SetStopAllButtonEnabled(false);
+            SetAddChannelButtonEnabled(false);
         }
 
         private void DisposeSession()

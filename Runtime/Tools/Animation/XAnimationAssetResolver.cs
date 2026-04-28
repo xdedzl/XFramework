@@ -19,7 +19,13 @@ namespace XFramework.Animation
 
         public AnimationClip LoadAnimationClip(string assetPath)
         {
-            return ResourceManager.Instance.Load<AnimationClip>(assetPath);
+            XAnimationClipPathUtility.Split(assetPath, out string mainAssetPath, out string clipName);
+            if (string.IsNullOrWhiteSpace(clipName))
+            {
+                return ResourceManager.Instance.Load<AnimationClip>(mainAssetPath);
+            }
+
+            return ResourceManager.Instance.LoadSubAsset<AnimationClip>(mainAssetPath, clipName);
         }
 
         public AvatarMask LoadAvatarMask(string assetPath)

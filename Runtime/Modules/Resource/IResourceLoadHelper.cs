@@ -26,6 +26,7 @@ namespace XFramework.Resource
         /// <param name="assetName">资源名称</param>
         /// <returns>资源</returns>
         T Load<T>(string assetName) where T : UObject;
+        T LoadSubAsset<T>(string assetName, string subAssetName) where T : UObject;
         /// <summary>
         /// 异步加载资源
         /// </summary>

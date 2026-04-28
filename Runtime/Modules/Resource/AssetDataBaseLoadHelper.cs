@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using XFramework.Tasks;
@@ -31,6 +32,18 @@ namespace XFramework.Resource
         public T Load<T>(string assetName) where T : UObject
         {
             return AssetDatabase.LoadAssetAtPath<T>(assetName);
+        }
+
+        public T LoadSubAsset<T>(string assetName, string subAssetName) where T : UObject
+        {
+            if (string.IsNullOrWhiteSpace(assetName) || string.IsNullOrWhiteSpace(subAssetName))
+            {
+                return null;
+            }
+
+            return AssetDatabase.LoadAllAssetsAtPath(assetName)
+                .OfType<T>()
+                .FirstOrDefault(asset => string.Equals(asset.name, subAssetName, StringComparison.Ordinal));
         }
 
         /// <summary>

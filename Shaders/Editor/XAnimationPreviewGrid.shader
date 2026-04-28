@@ -2,13 +2,13 @@ Shader "Hidden/XFramework/AnimationPreviewGrid"
 {
     Properties
     {
-        _BGColor ("Background Color", Color) = (0.039216, 0.101961, 0.180392, 1)
-        _GridColor ("Grid Color", Color) = (0.301961, 0.670588, 0.968627, 1)
-        _MajorGridColor ("Major Grid Color", Color) = (0.301961, 0.670588, 0.968627, 1)
-        _CenterLineColor ("Center Line Color", Color) = (0.518077, 0.684173, 0.974843, 1)
-        _GridWidth ("Grid Width (Meters)", Float) = 0.01
-        _MajorGridWidth ("Major Grid Width (Meters)", Float) = 0.01
-        _CenterLineWidth ("Center Line Width (Meters)", Float) = 0.1
+        _BGColor ("Background Color", Color) = (0.075, 0.082, 0.09, 0.58)
+        _GridColor ("Grid Color", Color) = (0.58, 0.64, 0.68, 0.22)
+        _MajorGridColor ("Major Grid Color", Color) = (0.74, 0.80, 0.86, 0.42)
+        _CenterLineColor ("Center Line Color", Color) = (0.42, 0.66, 0.95, 0.60)
+        _GridWidth ("Grid Width (Meters)", Float) = 0.015
+        _MajorGridWidth ("Major Grid Width (Meters)", Float) = 0.035
+        _CenterLineWidth ("Center Line Width (Meters)", Float) = 0.05
         _GridSpacing ("Grid Spacing (Meters)", Float) = 1
         _MajorGridInterval ("Major Grid Interval", Float) = 5
         _GridSize ("Grid Size (Meters)", Float) = 10

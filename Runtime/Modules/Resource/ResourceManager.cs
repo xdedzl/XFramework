@@ -115,6 +115,22 @@ namespace XFramework.Resource
             assetName = Path2RealPath(assetName);
             return m_LoadHelper.Load<T>(assetName);
         }
+
+        public T LoadSubAsset<T>(string assetName, string subAssetName) where T : UObject
+        {
+            if (string.IsNullOrEmpty(assetName))
+            {
+                throw new XFrameworkException("load path is null");
+            }
+
+            if (string.IsNullOrEmpty(subAssetName))
+            {
+                throw new XFrameworkException("sub asset name is null");
+            }
+
+            assetName = Path2RealPath(assetName);
+            return m_LoadHelper.LoadSubAsset<T>(assetName, subAssetName);
+        }
         
         /// <summary>
         /// 异步加载资源
