@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
-using UnityEditor.Callbacks;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -126,33 +125,7 @@ namespace XFramework.Editor
             return window;
         }
 
-        [OnOpenAsset(10)]
-        public static bool OpenAsset(int instanceID, int line)
-        {
-            UnityEngine.Object target = EditorUtility.InstanceIDToObject(instanceID);
-            if (target is not TextAsset textAsset)
-            {
-                return false;
-            }
-
-            string assetPath = AssetDatabase.GetAssetPath(textAsset);
-            if (!string.Equals(Path.GetExtension(assetPath), ".xasset", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            if (!XAnimationAssetLoader.IsXAnimationAssetText(textAsset.text))
-            {
-                return false;
-            }
-
-            XAnimationPreviewWindow existingWindow = HasOpenInstances<XAnimationPreviewWindow>()
-                ? GetWindow<XAnimationPreviewWindow>()
-                : null;
-            GameObject prefab = existingWindow?.m_PrefabField?.value as GameObject;
-            ShowWindow(textAsset, prefab, autoLoad: true);
-            return true;
-        }
+        internal GameObject CurrentSelectedPrefab => m_PrefabField?.value as GameObject;
 
         private void OnEnable()
         {

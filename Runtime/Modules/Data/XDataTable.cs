@@ -8,7 +8,7 @@ using XFramework.Resource;
 
 namespace XFramework.Data
 {
-    public abstract partial class XDataTable : XTextAsset
+    abstract partial class XDataTable : XTextAsset
     {
         private static readonly Dictionary<Type, Type> S_DataToTableType = new();
         
@@ -144,6 +144,7 @@ namespace XFramework.Data
     }
     
     [Serializable]
+    [XTextAssetAlias("xframework.data-table")]
     public abstract class XDataTable<TData> : XDataTable where TData : IData
     {
         public TData[] items;
@@ -155,6 +156,7 @@ namespace XFramework.Data
     }
     
     [Serializable]
+    [XTextAssetAlias("xframework.data-table-haskey")]
     public abstract class XDataTableHasKey<TKey, TData> : XDataTable<TData> where TData : IDataHasKey<TKey>
     {
         public static TData GetData(TKey key)
@@ -164,6 +166,7 @@ namespace XFramework.Data
     }
     
     [Serializable]
+    [XTextAssetAlias("xframework.data-table-hasalias")]
     public abstract class XDataTableHasAlias<TKey, TData> : XDataTableHasKey<TKey, TData> where TData : IDataHasAlias<TKey>
     {
         public static TData GetDataByAlias(string alias)

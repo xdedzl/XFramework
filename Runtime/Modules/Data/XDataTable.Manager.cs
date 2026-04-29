@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using System.Reflection;
 using XFramework.Json;
+using XFramework.Resource;
 
 namespace XFramework.Data
 {
@@ -76,8 +77,9 @@ namespace XFramework.Data
                     UnityEditor.AssetDatabase.Refresh();
                 }
 
-                var instance = Activator.CreateInstance(tableType);
-                var json = Newtonsoft.Json.JsonConvert.SerializeObject(instance, Newtonsoft.Json.Formatting.Indented);
+                var instance = (XTextAsset)Activator.CreateInstance(tableType);
+                instance.SetAssetPath(path);
+                var json = instance.Serialize();
                 System.IO.File.WriteAllText(path, json);
                 UnityEditor.AssetDatabase.Refresh();
                         

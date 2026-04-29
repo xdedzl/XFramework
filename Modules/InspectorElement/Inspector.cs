@@ -170,30 +170,32 @@ namespace XFramework.UI
             return element;
         }
 
-        private Type[] GetSonTypes(Type typeBase, string assemblyName = "Assembly-CSharp")
+        private Type[] GetSonTypes(Type typeBase)
         {
             List<Type> typeNames = new List<Type>();
-            Assembly assembly;
-            try
+            Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+            foreach (Assembly assembly in assemblies)
             {
-                assembly = Assembly.Load(assemblyName);
-            }
-            catch
-            {
-                return Type.EmptyTypes;
-            }
-
-            if (assembly == null)
-            {
-                return Type.EmptyTypes;
-            }
-
-            Type[] types = assembly.GetTypes();
-            foreach (Type type in types)
-            {
-                if (type.IsClass && !type.IsAbstract && type.IsSubclassOf(typeBase))
+                Type[] types;
+                try
                 {
-                    typeNames.Add(type);
+                    types = assembly.GetTypes();
+                }
+                catch (ReflectionTypeLoadException e)
+                {
+                    types = e.Types.Where(t => t != null).ToArray();
+                }
+                catch
+                {
+                    continue;
+                }
+
+                foreach (Type type in types)
+                {
+                    if (type.IsClass && !type.IsAbstract && type.IsSubclassOf(typeBase))
+                    {
+                        typeNames.Add(type);
+                    }
                 }
             }
             return typeNames.ToArray();

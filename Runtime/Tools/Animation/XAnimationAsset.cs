@@ -99,6 +99,7 @@ namespace XFramework.Animation
     }
 
     [Serializable]
+    [XTextAssetAlias("xframework.animation.asset")]
     public class XAnimationAsset : XTextAsset
     {
         public string alias;
@@ -118,6 +119,7 @@ namespace XFramework.Animation
     }
 
     [Serializable]
+    [XTextAssetAlias("xframework.animation.override")]
     public class XAnimationOverrideAsset : XTextAsset
     {
         [AssetPath(typeof(TextAsset))]

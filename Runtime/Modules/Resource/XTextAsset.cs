@@ -1,13 +1,26 @@
 using System;
+using System.Reflection;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using UnityEngine;
 using XFramework.Json;
 
 namespace XFramework.Resource
 {
+    [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
+    public class XTextAssetAliasAttribute : Attribute
+    {
+        public XTextAssetAliasAttribute(string alias)
+        {
+            Alias = alias;
+        }
+
+        public string Alias { get; }
+    }
+
     public struct XTextMetaInfo
     {
-        // public string typeFullName;
+        public string typeAlias;
         public string assetPath;
     }
     
@@ -18,9 +31,10 @@ namespace XFramework.Resource
         
         public string Serialize()
         {
+            XTextAssetAliasAttribute aliasAttribute = GetType().GetCustomAttribute<XTextAssetAliasAttribute>(true);
             m_MetaInfo = new XTextMetaInfo
             {
-                // typeFullName = GetType().AssemblyQualifiedName,
+                typeAlias = aliasAttribute?.Alias ?? m_MetaInfo.typeAlias,
                 assetPath = m_MetaInfo.assetPath
             };
             return JsonConvert.SerializeObject(this, Formatting.Indented);
@@ -31,7 +45,7 @@ namespace XFramework.Resource
         {
             m_MetaInfo = new XTextMetaInfo
             {
-                // typeFullName = m_MetaInfo.typeFullName,
+                typeAlias = m_MetaInfo.typeAlias,
                 assetPath = path
             };
         }
@@ -53,6 +67,33 @@ namespace XFramework.Resource
 
     public static class XTextUtility
     {
+        public static bool TryReadMetaInfo(string text, out XTextMetaInfo metaInfo)
+        {
+            metaInfo = default;
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return false;
+            }
+
+            try
+            {
+                JObject root = JObject.Parse(text);
+                JToken token = root["m_MetaInfo"];
+                if (token == null || token.Type != JTokenType.Object)
+                {
+                    return false;
+                }
+
+                XTextMetaInfo parsedInfo = token.ToObject<XTextMetaInfo>();
+                metaInfo = parsedInfo;
+                return !string.IsNullOrWhiteSpace(parsedInfo.typeAlias);
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+        }
+
         public static T ToXTextAsset<T>(this TextAsset textAsset) where T : XTextAsset
         {
             var asset = JsonConvert.DeserializeObject<T>(textAsset.text);
