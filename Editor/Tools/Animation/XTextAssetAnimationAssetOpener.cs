@@ -22,11 +22,7 @@ namespace XFramework.Editor
                 return false;
             }
 
-            XAnimationPreviewWindow existingWindow = XAnimationPreviewWindow.HasOpenInstances<XAnimationPreviewWindow>()
-                ? XAnimationPreviewWindow.GetWindow<XAnimationPreviewWindow>()
-                : null;
-            GameObject prefab = existingWindow?.CurrentSelectedPrefab;
-            XAnimationPreviewWindow.ShowWindow(textAsset, prefab, autoLoad: true);
+            XAnimationPreviewWindow.ShowWindow(textAsset, autoLoad: true);
             return true;
         }
     }

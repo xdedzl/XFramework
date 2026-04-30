@@ -7,6 +7,7 @@ using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 using XFramework.Animation;
+using XFramework.Resource;
 using XFramework.UI;
 
 namespace XFramework.Editor
@@ -14,8 +15,6 @@ namespace XFramework.Editor
     public sealed class XAnimationPreviewWindow : EditorWindow
     {
         private const string MenuPath = "XFramework/Tools/XAnimation Preview";
-        private const string DefaultSampleAssetPath = "Assets/Animation/XAnimationSamples/XAnimationPreview_WolfLite.xasset";
-        private const string DefaultPrefabPath = "Assets/ThirdParty/malbers-animations/Animal Controller/Wolf Lite/Wolf Lite.prefab";
         private const float DebugPaneInitialWidth = 360f;
         private const float DebugPaneMinWidth = 280f;
         private const float PreviewPaneMinWidth = 520f;
@@ -26,7 +25,7 @@ namespace XFramework.Editor
         private const float CueLogSectionMinHeight = 72f;
         private const float ClipIconButtonSize = 22f;
         private const float ChannelStateLabelHeight = 64f;
-        private const string ClipDragDataKey = nameof(XAnimationPreviewWindow) + ".ClipKey";
+        private const string StateDragDataKey = nameof(XAnimationPreviewWindow) + ".StateKey";
 
         // ── Theme Colors ──
         private static readonly Color PaneBg = new(0.18f, 0.18f, 0.19f, 1f);
@@ -52,6 +51,11 @@ namespace XFramework.Editor
         [SerializeField] private bool m_ShouldAutoReloadPreview;
         [SerializeField] private bool m_AssetsSectionExpanded = true;
         [SerializeField] private bool m_PlaybackSectionExpanded = true;
+        [SerializeField] private bool m_PlayTargetSectionExpanded = true;
+        [SerializeField] private bool m_PlayTransitionSectionExpanded;
+        [SerializeField] private bool m_PlayPlaybackSectionExpanded;
+        [SerializeField] private bool m_ParametersSectionExpanded = true;
+        [SerializeField] private bool m_StatesSectionExpanded = true;
         [SerializeField] private bool m_ClipsSectionExpanded = true;
         [SerializeField] private bool m_ChannelsSectionExpanded = true;
 
@@ -64,18 +68,39 @@ namespace XFramework.Editor
         private Image m_PreviewImage;
         private Label m_StatusLabel;
         private FloatField m_PlaySpeedField;
-        private Toggle m_RootMotionToggle;
+        private FloatField m_PlayFadeInField;
+        private FloatField m_PlayFadeOutField;
+        private FloatField m_PlayWeightField;
+        private FloatField m_PlayNormalizedTimeField;
+        private IntegerField m_PlayPriorityField;
+        private Toggle m_ApplyTransitionRequestToggle;
+        private Toggle m_ApplyPlaybackOverrideToggle;
+        private Toggle m_PlayInterruptibleToggle;
+        private Toggle m_PlayOverrideLoopToggle;
+        private Toggle m_PlayLoopValueToggle;
+        private Toggle m_PlayOverrideRootMotionToggle;
+        private Toggle m_PlayRootMotionValueToggle;
         private Toggle m_GridToggle;
+        private DropdownField m_PlayTargetChannelField;
         private Button m_PauseButton;
         private Button m_StopAllButton;
+        private Button m_AddClipButton;
         private Button m_AddChannelButton;
+        private Button m_AddParameterButton;
+        private VisualElement m_ParameterListView;
+        private VisualElement m_StateListView;
         private VisualElement m_ClipListView;
+        private readonly HashSet<string> m_ExpandedStateKeys = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, EditableLabel> m_StateLabelMap = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, VisualElement> m_StateRowMap = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, Button> m_StateButtonMap = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> m_StateChannelMap = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, EditableLabel> m_ParameterLabelMap = new(StringComparer.Ordinal);
         private readonly HashSet<string> m_ExpandedClipKeys = new(StringComparer.Ordinal);
         private readonly Dictionary<string, EditableLabel> m_ClipLabelMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, VisualElement> m_ClipRowMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, ClipRowVisualState> m_ClipVisualStateMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, Button> m_ClipButtonMap = new(StringComparer.Ordinal);
-        private readonly Dictionary<string, string> m_ClipChannelMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, EditableLabel> m_ChannelLabelMap = new(StringComparer.Ordinal);
         private VisualElement m_ChannelControlsContainer;
         private ScrollView m_CueLogContainer;
@@ -89,7 +114,24 @@ namespace XFramework.Editor
         private Vector2 m_LastPreviewMousePosition;
         private int m_LastCueLogCount = -1;
         private string m_PendingClipRenameKey;
+        private string m_PendingStateRenameKey;
+        private string m_PendingParameterRenameKey;
         private string m_PendingChannelRenameKey;
+        private string m_PlayTargetChannelName;
+        private float m_PlayFadeInOverride;
+        private float m_PlayFadeOutOverride;
+        private float m_PlayWeightOverride = 1f;
+        private float m_PlayNormalizedTimeOverride;
+        private int m_PlayPriorityOverride;
+        private bool m_PlayInterruptibleOverride = true;
+        private bool m_ApplyTransitionRequestOverrides;
+        private bool m_ApplyPlaybackOverrides;
+        private float m_PlaySpeed = 1f;
+        private bool m_PlayUseLoopOverride;
+        private bool m_PlayLoopOverride = true;
+        private bool m_PlayUseRootMotionOverride;
+        private bool m_PlayRootMotionOverride;
+        private bool m_PlaybackPrefsLoaded;
         private readonly HashSet<KeyCode> m_PressedKeys = new();
 
         private sealed class ClipRowVisualState
@@ -108,7 +150,7 @@ namespace XFramework.Editor
         [MenuItem(MenuPath)]
         public static void ShowWindow()
         {
-            XAnimationPreviewWindow window = GetWindow<XAnimationPreviewWindow>();
+            XAnimationPreviewWindow window = GetOpenWindow() ?? CreateDockedWindow();
             window.titleContent = new GUIContent("XAnimation Preview");
             window.minSize = new Vector2(1180f, 680f);
             window.Show();
@@ -116,7 +158,7 @@ namespace XFramework.Editor
 
         public static XAnimationPreviewWindow ShowWindow(TextAsset animationAsset, GameObject prefab = null, bool autoLoad = true)
         {
-            XAnimationPreviewWindow window = GetWindow<XAnimationPreviewWindow>();
+            XAnimationPreviewWindow window = GetOpenWindow() ?? CreateDockedWindow();
             window.titleContent = new GUIContent("XAnimation Preview");
             window.minSize = new Vector2(1180f, 680f);
             window.SetPendingOpenRequest(animationAsset, prefab, autoLoad);
@@ -125,10 +167,33 @@ namespace XFramework.Editor
             return window;
         }
 
+        private static XAnimationPreviewWindow GetOpenWindow()
+        {
+            XAnimationPreviewWindow[] windows = Resources.FindObjectsOfTypeAll<XAnimationPreviewWindow>();
+            for (int i = 0; i < windows.Length; i++)
+            {
+                if (windows[i] != null)
+                {
+                    return windows[i];
+                }
+            }
+
+            return null;
+        }
+
+        private static XAnimationPreviewWindow CreateDockedWindow()
+        {
+            Type gameViewType = typeof(UnityEditor.Editor).Assembly.GetType("UnityEditor.GameView");
+            return gameViewType != null
+                ? CreateWindow<XAnimationPreviewWindow>("XAnimation Preview", typeof(SceneView), gameViewType)
+                : CreateWindow<XAnimationPreviewWindow>("XAnimation Preview", typeof(SceneView));
+        }
+
         internal GameObject CurrentSelectedPrefab => m_PrefabField?.value as GameObject;
 
         private void OnEnable()
         {
+            LoadPlaybackPrefs();
             EditorApplication.update += HandleEditorUpdate;
             m_LastEditorTime = EditorApplication.timeSinceStartup;
         }
@@ -143,7 +208,7 @@ namespace XFramework.Editor
         {
             BuildUI();
             ApplyDefaultSelections();
-            SetStatus("拖入 prefab 和 .xasset，或直接加载默认样例。");
+            SetStatus("拖入 prefab 和 .xasset，或打开已配置默认 prefab 的 XAnimationAsset。");
             ScheduleAutoReloadPreview();
             ApplyPendingOpenRequest();
         }
@@ -167,6 +232,68 @@ namespace XFramework.Editor
             splitView.Add(BuildPreviewPane());
         }
 
+        private void LoadPlaybackPrefs()
+        {
+            XAnimationPlaybackSettings settings = XAnimationPlaybackSettingsPrefs.Load();
+            m_PlaybackSectionExpanded = settings.PlaybackSectionExpanded;
+            m_PlayTargetSectionExpanded = settings.TargetSectionExpanded;
+            m_PlayTransitionSectionExpanded = settings.TransitionSectionExpanded;
+            m_PlayPlaybackSectionExpanded = settings.PlaybackOptionsSectionExpanded;
+            m_PlayTargetChannelName = settings.ChannelName;
+            m_PlaySpeed = Mathf.Approximately(settings.Speed, 0f) ? 1f : settings.Speed;
+            m_ApplyTransitionRequestOverrides = settings.ApplyTransition;
+            m_PlayFadeInOverride = Mathf.Max(0f, settings.FadeIn);
+            m_PlayFadeOutOverride = Mathf.Max(0f, settings.FadeOut);
+            m_PlayPriorityOverride = settings.Priority;
+            m_PlayInterruptibleOverride = settings.Interruptible;
+            m_ApplyPlaybackOverrides = settings.ApplyPlayback;
+            m_PlayWeightOverride = settings.Weight;
+            m_PlayNormalizedTimeOverride = Mathf.Clamp01(settings.NormalizedTime);
+            m_PlayUseLoopOverride = settings.UseLoopOverride;
+            m_PlayLoopOverride = settings.LoopOverride;
+            m_PlayUseRootMotionOverride = settings.UseRootMotionOverride;
+            m_PlayRootMotionOverride = settings.RootMotionOverride;
+            m_PlaybackPrefsLoaded = true;
+        }
+
+        private float GetPlaybackSpeed()
+        {
+            return Mathf.Approximately(m_PlaySpeed, 0f) ? 1f : m_PlaySpeed;
+        }
+
+        private void SavePlaybackPrefs()
+        {
+            if (!m_PlaybackPrefsLoaded)
+            {
+                return;
+            }
+
+            float speed = m_PlaySpeedField?.value ?? m_PlaySpeed;
+            m_PlaySpeed = Mathf.Approximately(speed, 0f) ? 1f : speed;
+
+            XAnimationPlaybackSettingsPrefs.Save(new XAnimationPlaybackSettings
+            {
+                PlaybackSectionExpanded = m_PlaybackSectionExpanded,
+                TargetSectionExpanded = m_PlayTargetSectionExpanded,
+                TransitionSectionExpanded = m_PlayTransitionSectionExpanded,
+                PlaybackOptionsSectionExpanded = m_PlayPlaybackSectionExpanded,
+                ChannelName = m_PlayTargetChannelName,
+                Speed = m_PlaySpeed,
+                ApplyTransition = m_ApplyTransitionRequestOverrides,
+                FadeIn = m_PlayFadeInOverride,
+                FadeOut = m_PlayFadeOutOverride,
+                Priority = m_PlayPriorityOverride,
+                Interruptible = m_PlayInterruptibleOverride,
+                ApplyPlayback = m_ApplyPlaybackOverrides,
+                Weight = m_PlayWeightOverride,
+                NormalizedTime = m_PlayNormalizedTimeOverride,
+                UseLoopOverride = m_PlayUseLoopOverride,
+                LoopOverride = m_PlayLoopOverride,
+                UseRootMotionOverride = m_PlayUseRootMotionOverride,
+                RootMotionOverride = m_PlayRootMotionOverride,
+            });
+        }
+
         private static Button CreateStyledButton(string label, Action onClick, Color bgColor, float marginLeft = 0f)
         {
             Button btn = new(onClick) { text = label };
@@ -177,6 +304,7 @@ namespace XFramework.Editor
                 "重置视角" => "将预览相机恢复到默认视角。",
                 "停止全部" => "停止所有正在播放的 channel。",
                 "暂停" => "暂停或继续当前预览播放。",
+                "设为默认" => "用当前 Prefab 覆盖 XAnimationAsset 的 DefaultPrefabPath。",
                 _ => label
             };
             btn.style.backgroundColor = bgColor;
@@ -319,7 +447,21 @@ namespace XFramework.Editor
                 m_SelectedPrefab = evt.newValue as GameObject;
             });
             m_PrefabField.style.marginBottom = 4;
-            assetsCard.Content.Add(m_PrefabField);
+
+            VisualElement prefabRow = new()
+            {
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    alignItems = Align.Center,
+                    marginBottom = 4
+                }
+            };
+            m_PrefabField.style.flexGrow = 1;
+            m_PrefabField.style.marginBottom = 0;
+            prefabRow.Add(m_PrefabField);
+            prefabRow.Add(CreateStyledButton("设为默认", SaveCurrentPrefabAsDefault, AccentColor, 6f));
+            assetsCard.Content.Add(prefabRow);
 
             m_AssetField = new ObjectField("XAnimation / Override Asset")
             {
@@ -337,40 +479,201 @@ namespace XFramework.Editor
             assetsCard.Content.Add(CreateStyledButton("重载", LoadPreview, AccentColor));
 
             // ── Card: Playback Settings ──
-            FoldoutCard playbackCard = CreateFoldoutCard("播放设置", m_PlaybackSectionExpanded, value => m_PlaybackSectionExpanded = value);
+            FoldoutCard playbackCard = CreateFoldoutCard("播放设置", m_PlaybackSectionExpanded, value =>
+            {
+                m_PlaybackSectionExpanded = value;
+                SavePlaybackPrefs();
+            });
 
             VisualElement speedRow = new VisualElement();
             speedRow.style.flexDirection = FlexDirection.Row;
             speedRow.style.alignItems = Align.Center;
 
-            m_PlaySpeedField = new FloatField("播放速度") { value = 1f };
-            m_PlaySpeedField.tooltip = "点击播放 clip 时使用的预览速度，只影响当前预览，不写入配置。";
+            m_PlaySpeedField = new FloatField("speed") { value = m_PlaybackPrefsLoaded ? GetPlaybackSpeed() : 1f };
+            m_PlaySpeedField.tooltip = "request.speed。0 会按 1 处理，只影响当前预览请求。";
             m_PlaySpeedField.style.flexGrow = 1;
+            m_PlaySpeedField.RegisterValueChangedCallback(_ => SavePlaybackPrefs());
             speedRow.Add(m_PlaySpeedField);
 
             m_PauseButton = CreateStyledButton("暂停", TogglePause, AccentColor, 8f);
             SetPauseButtonState(false, false);
             speedRow.Add(m_PauseButton);
 
+            m_StopAllButton = CreateStyledButton("停止全部", StopAllClips, DangerColor, 8f);
+            SetStopAllButtonEnabled(false);
+            speedRow.Add(m_StopAllButton);
+
             playbackCard.Content.Add(speedRow);
 
-            VisualElement optionsRow = new VisualElement();
-            optionsRow.style.flexDirection = FlexDirection.Row;
-            optionsRow.style.alignItems = Align.Center;
-            optionsRow.style.marginTop = 4;
-
-            m_RootMotionToggle = new Toggle("Root Motion") { value = false };
-            m_RootMotionToggle.tooltip = "切换预览时是否应用 Root Motion，只影响当前预览，不写入配置。";
-            m_RootMotionToggle.style.flexShrink = 0;
-            m_RootMotionToggle.RegisterValueChangedCallback(evt =>
+            FoldoutCard targetCard = CreateSectionFoldoutCard("Targte", m_PlayTargetSectionExpanded, value =>
             {
-                if (m_Session == null || !m_Session.IsLoaded) return;
-                m_Session.SetRootMotionEnabled(evt.newValue);
-                SetStatus(evt.newValue ? "已开启 Root Motion 预览。" : "已关闭 Root Motion，预览对象回到初始位置。");
+                m_PlayTargetSectionExpanded = value;
+                SavePlaybackPrefs();
             });
-            optionsRow.Add(m_RootMotionToggle);
+            targetCard.Root.style.marginTop = 4;
 
-            playbackCard.Content.Add(optionsRow);
+            m_PlayTargetChannelField = CreateChannelDropdown("channelName", m_PlayTargetChannelName);
+            m_PlayTargetChannelField.tooltip = "播放 target.channelName。用于 clip 调试播放，也可覆盖 state 的默认 channel。";
+            m_PlayTargetChannelField.RegisterValueChangedCallback(evt =>
+            {
+                m_PlayTargetChannelName = evt.newValue ?? string.Empty;
+                SavePlaybackPrefs();
+            });
+            targetCard.Content.Add(m_PlayTargetChannelField);
+
+            playbackCard.Content.Add(targetCard.Root);
+
+            FoldoutCard transitionCard = CreateSectionFoldoutCard("Transition", m_PlayTransitionSectionExpanded, value =>
+            {
+                m_PlayTransitionSectionExpanded = value;
+                SavePlaybackPrefs();
+            });
+            transitionCard.Root.style.marginTop = 4;
+
+            m_ApplyTransitionRequestToggle = new Toggle("Apply Transition Request") { value = m_ApplyTransitionRequestOverrides };
+            m_ApplyTransitionRequestToggle.tooltip = "只应用 command.transition.fadeIn / fadeOut / priority / interruptible。";
+            m_ApplyTransitionRequestToggle.style.marginBottom = 3;
+            m_ApplyTransitionRequestToggle.RegisterValueChangedCallback(evt =>
+            {
+                m_ApplyTransitionRequestOverrides = evt.newValue;
+                SavePlaybackPrefs();
+            });
+            transitionCard.Content.Add(m_ApplyTransitionRequestToggle);
+
+            m_PlayFadeInField = new FloatField { value = m_PlayFadeInOverride };
+            m_PlayFadeInField.tooltip = "0 表示使用 state/channel 默认值；大于 0 时写入 request.fadeIn。";
+            ConfigureCompactPlaybackField(m_PlayFadeInField, "fadeIn", 66);
+            m_PlayFadeInField.RegisterValueChangedCallback(evt =>
+            {
+                m_PlayFadeInOverride = Mathf.Max(0f, evt.newValue);
+                if (!Mathf.Approximately(m_PlayFadeInOverride, evt.newValue))
+                {
+                    m_PlayFadeInField.SetValueWithoutNotify(m_PlayFadeInOverride);
+                }
+
+                SavePlaybackPrefs();
+            });
+            transitionCard.Content.Add(CreatePlaybackFieldContainer("fadeIn", m_PlayFadeInField, 66));
+
+            m_PlayFadeOutField = new FloatField { value = m_PlayFadeOutOverride };
+            m_PlayFadeOutField.tooltip = "0 表示使用 state/channel 默认值；大于 0 时写入 request.fadeOut。";
+            ConfigureCompactPlaybackField(m_PlayFadeOutField, "fadeOut", 66);
+            m_PlayFadeOutField.RegisterValueChangedCallback(evt =>
+            {
+                m_PlayFadeOutOverride = Mathf.Max(0f, evt.newValue);
+                if (!Mathf.Approximately(m_PlayFadeOutOverride, evt.newValue))
+                {
+                    m_PlayFadeOutField.SetValueWithoutNotify(m_PlayFadeOutOverride);
+                }
+
+                SavePlaybackPrefs();
+            });
+            transitionCard.Content.Add(CreatePlaybackFieldContainer("fadeOut", m_PlayFadeOutField, 66));
+
+            m_PlayPriorityField = new IntegerField { value = m_PlayPriorityOverride };
+            m_PlayPriorityField.tooltip = "request.priority。";
+            ConfigureCompactPlaybackElement(m_PlayPriorityField, 66);
+            m_PlayPriorityField.RegisterValueChangedCallback(evt =>
+            {
+                m_PlayPriorityOverride = evt.newValue;
+                SavePlaybackPrefs();
+            });
+            transitionCard.Content.Add(CreatePlaybackFieldContainer("priority", m_PlayPriorityField, 66));
+
+            m_PlayInterruptibleToggle = new Toggle("interruptible") { value = m_PlayInterruptibleOverride };
+            m_PlayInterruptibleToggle.tooltip = "request.interruptible。";
+            m_PlayInterruptibleToggle.RegisterValueChangedCallback(evt =>
+            {
+                m_PlayInterruptibleOverride = evt.newValue;
+                SavePlaybackPrefs();
+            });
+            transitionCard.Content.Add(m_PlayInterruptibleToggle);
+
+            playbackCard.Content.Add(transitionCard.Root);
+
+            FoldoutCard playbackOptionsCard = CreateSectionFoldoutCard("PlayBack", m_PlayPlaybackSectionExpanded, value =>
+            {
+                m_PlayPlaybackSectionExpanded = value;
+                SavePlaybackPrefs();
+            });
+            playbackOptionsCard.Root.style.marginTop = 4;
+
+            m_ApplyPlaybackOverrideToggle = new Toggle("Apply Playback Override") { value = m_ApplyPlaybackOverrides };
+            m_ApplyPlaybackOverrideToggle.tooltip = "应用 command.playback.weight / normalizedTime / loopOverride / rootMotionOverride。";
+            m_ApplyPlaybackOverrideToggle.style.marginBottom = 3;
+            m_ApplyPlaybackOverrideToggle.RegisterValueChangedCallback(evt =>
+            {
+                m_ApplyPlaybackOverrides = evt.newValue;
+                SavePlaybackPrefs();
+            });
+            playbackOptionsCard.Content.Add(m_ApplyPlaybackOverrideToggle);
+
+            m_PlayWeightField = new FloatField { value = m_PlayWeightOverride };
+            m_PlayWeightField.tooltip = "request.weight。小于等于 0 会被运行时按默认 1 处理。";
+            ConfigureCompactPlaybackField(m_PlayWeightField, "weight", 66);
+            m_PlayWeightField.RegisterValueChangedCallback(evt =>
+            {
+                m_PlayWeightOverride = evt.newValue;
+                SavePlaybackPrefs();
+            });
+            playbackOptionsCard.Content.Add(CreatePlaybackFieldContainer("weight", m_PlayWeightField, 66));
+
+            m_PlayNormalizedTimeField = new FloatField { value = m_PlayNormalizedTimeOverride };
+            m_PlayNormalizedTimeField.tooltip = "request.normalizedTime，会被夹到 [0, 1]。";
+            ConfigureCompactPlaybackField(m_PlayNormalizedTimeField, "normalized", 72);
+            m_PlayNormalizedTimeField.RegisterValueChangedCallback(evt =>
+            {
+                m_PlayNormalizedTimeOverride = Mathf.Clamp01(evt.newValue);
+                if (!Mathf.Approximately(m_PlayNormalizedTimeOverride, evt.newValue))
+                {
+                    m_PlayNormalizedTimeField.SetValueWithoutNotify(m_PlayNormalizedTimeOverride);
+                }
+
+                SavePlaybackPrefs();
+            });
+            playbackOptionsCard.Content.Add(CreatePlaybackFieldContainer("normalized", m_PlayNormalizedTimeField, 72));
+
+            m_PlayOverrideLoopToggle = new Toggle("overrideLoop") { value = m_PlayUseLoopOverride };
+            m_PlayOverrideLoopToggle.tooltip = "开启后写入 request.loopOverride。";
+            m_PlayOverrideLoopToggle.RegisterValueChangedCallback(evt =>
+            {
+                m_PlayUseLoopOverride = evt.newValue;
+                m_PlayLoopValueToggle.SetEnabled(evt.newValue);
+                SavePlaybackPrefs();
+            });
+            playbackOptionsCard.Content.Add(m_PlayOverrideLoopToggle);
+
+            m_PlayLoopValueToggle = new Toggle("loopValue") { value = m_PlayLoopOverride };
+            m_PlayLoopValueToggle.tooltip = "request.loopOverride 的值。";
+            m_PlayLoopValueToggle.SetEnabled(m_PlayUseLoopOverride);
+            m_PlayLoopValueToggle.RegisterValueChangedCallback(evt =>
+            {
+                m_PlayLoopOverride = evt.newValue;
+                SavePlaybackPrefs();
+            });
+            playbackOptionsCard.Content.Add(m_PlayLoopValueToggle);
+
+            m_PlayOverrideRootMotionToggle = new Toggle("overrideRootMotion") { value = m_PlayUseRootMotionOverride };
+            m_PlayOverrideRootMotionToggle.tooltip = "开启后写入 request.rootMotionOverride。";
+            m_PlayOverrideRootMotionToggle.RegisterValueChangedCallback(evt =>
+            {
+                m_PlayUseRootMotionOverride = evt.newValue;
+                m_PlayRootMotionValueToggle.SetEnabled(evt.newValue);
+                SavePlaybackPrefs();
+            });
+            playbackOptionsCard.Content.Add(m_PlayOverrideRootMotionToggle);
+
+            m_PlayRootMotionValueToggle = new Toggle("rootMotionValue") { value = m_PlayRootMotionOverride };
+            m_PlayRootMotionValueToggle.tooltip = "request.rootMotionOverride 的值。";
+            m_PlayRootMotionValueToggle.SetEnabled(m_PlayUseRootMotionOverride);
+            m_PlayRootMotionValueToggle.RegisterValueChangedCallback(evt =>
+            {
+                m_PlayRootMotionOverride = evt.newValue;
+                SavePlaybackPrefs();
+            });
+            playbackOptionsCard.Content.Add(m_PlayRootMotionValueToggle);
+
+            playbackCard.Content.Add(playbackOptionsCard.Root);
 
             ScrollView inspectorScrollView = new ScrollView();
             inspectorScrollView.verticalScrollerVisibility = ScrollerVisibility.Auto;
@@ -380,17 +683,33 @@ namespace XFramework.Editor
             inspectorScrollView.Add(assetsCard.Root);
             inspectorScrollView.Add(playbackCard.Root);
 
+            // ── Card: Parameters ──
+            m_AddParameterButton = CreateStyledButton("+", AddParameter, AccentColor);
+            m_AddParameterButton.tooltip = "新增一个 XAnimation 参数。";
+            SetAddParameterButtonEnabled(false);
+            FoldoutCard parametersCard = CreateFoldoutCard("Parameters", m_ParametersSectionExpanded, value => m_ParametersSectionExpanded = value, m_AddParameterButton);
+            m_ParameterListView = new VisualElement();
+            parametersCard.Content.Add(m_ParameterListView);
+            inspectorScrollView.Add(parametersCard.Root);
+
+            // ── Card: States ──
+            FoldoutCard statesCard = CreateFoldoutCard("States", m_StatesSectionExpanded, value => m_StatesSectionExpanded = value);
+            m_StateListView = new VisualElement();
+            statesCard.Content.Add(m_StateListView);
+            inspectorScrollView.Add(statesCard.Root);
+
             // ── Card: Clips ──
-            m_StopAllButton = CreateStyledButton("停止全部", StopAllClips, DangerColor);
-            SetStopAllButtonEnabled(false);
-            FoldoutCard clipsCard = CreateFoldoutCard("Clips", m_ClipsSectionExpanded, value => m_ClipsSectionExpanded = value, m_StopAllButton);
+            m_AddClipButton = CreateStyledButton("+", AddClip, AccentColor);
+            m_AddClipButton.tooltip = "新增一个全局 clip 资源叶子。";
+            SetAddClipButtonEnabled(false);
+            FoldoutCard clipsCard = CreateFoldoutCard("Clips", m_ClipsSectionExpanded, value => m_ClipsSectionExpanded = value, m_AddClipButton);
 
             m_ClipListView = new VisualElement();
             clipsCard.Content.Add(m_ClipListView);
             inspectorScrollView.Add(clipsCard.Root);
 
             // ── Card: Channels ──
-            m_AddChannelButton = CreateStyledButton("+ Channel", AddChannel, AccentColor);
+            m_AddChannelButton = CreateStyledButton("+", AddChannel, AccentColor);
             m_AddChannelButton.tooltip = "新增一个 channel。";
             SetAddChannelButtonEnabled(false);
             FoldoutCard channelsCard = CreateFoldoutCard("Channels", m_ChannelsSectionExpanded, value => m_ChannelsSectionExpanded = value, m_AddChannelButton);
@@ -530,6 +849,59 @@ namespace XFramework.Editor
             {
                 Root = card,
                 Content = content
+            };
+        }
+
+        private static FoldoutCard CreateSectionFoldoutCard(
+            string titleText,
+            bool expanded,
+            Action<bool> setExpanded)
+        {
+            VisualElement root = CreateSubBox();
+            VisualElement header = new();
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.alignItems = Align.Center;
+            header.style.marginBottom = 0;
+            header.style.paddingBottom = 0;
+
+            Label label = new();
+            label.style.color = TextNormal;
+            label.style.fontSize = BodyFontSize;
+            label.style.unityFontStyleAndWeight = FontStyle.Bold;
+            label.style.flexGrow = 1;
+            header.Add(label);
+
+            VisualElement content = new();
+            content.style.marginTop = 4;
+            root.Add(header);
+            root.Add(content);
+
+            void ApplyExpanded(bool value)
+            {
+                expanded = value;
+                setExpanded?.Invoke(value);
+                label.text = value ? $"▾ {titleText}" : $"▸ {titleText}";
+                content.style.display = value ? DisplayStyle.Flex : DisplayStyle.None;
+                header.style.marginBottom = value ? 3 : 0;
+            }
+
+            ApplyExpanded(expanded);
+            header.tooltip = $"点击展开/收起 {titleText}。";
+            header.RegisterCallback<MouseDownEvent>(evt =>
+            {
+                if (evt.button != 0)
+                {
+                    return;
+                }
+
+                ApplyExpanded(!expanded);
+                evt.StopPropagation();
+            });
+
+            return new FoldoutCard
+            {
+                Root = root,
+                Content = content,
             };
         }
 
@@ -715,6 +1087,7 @@ namespace XFramework.Editor
             }
             ProcessCameraMovement(deltaTime);
             RenderPreview();
+            RefreshStatePlayingStates();
             RefreshClipPlayingStates();
             RefreshChannelStates();
             RefreshCueLogView();
@@ -727,26 +1100,8 @@ namespace XFramework.Editor
             {
                 m_PrefabField.SetValueWithoutNotify(m_SelectedPrefab);
             }
-            else
-            {
-                m_SelectedPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(DefaultPrefabPath);
-            }
 
             if (m_SelectedAsset != null)
-            {
-                m_AssetField.SetValueWithoutNotify(m_SelectedAsset);
-            }
-            else
-            {
-                m_SelectedAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(DefaultSampleAssetPath);
-            }
-
-            if (m_PrefabField.value == null)
-            {
-                m_PrefabField.SetValueWithoutNotify(m_SelectedPrefab);
-            }
-
-            if (m_AssetField.value == null)
             {
                 m_AssetField.SetValueWithoutNotify(m_SelectedAsset);
             }
@@ -790,13 +1145,24 @@ namespace XFramework.Editor
                 m_SelectedPrefab = m_PendingPrefab;
                 m_PrefabField.SetValueWithoutNotify(m_SelectedPrefab);
             }
-            else if (m_PrefabField.value == null)
+            else if (m_PendingAsset != null)
             {
-                m_SelectedPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(DefaultPrefabPath);
+                GameObject defaultPrefab = m_SelectedAsset != null
+                    ? LoadDefaultPrefabForAsset(m_SelectedAsset)
+                    : null;
+                if (defaultPrefab != null)
+                {
+                    m_SelectedPrefab = defaultPrefab;
+                    m_PrefabField.SetValueWithoutNotify(m_SelectedPrefab);
+                }
+            }
+            else if (m_PrefabField.value == null && m_SelectedAsset != null)
+            {
+                m_SelectedPrefab = LoadDefaultPrefabForAsset(m_SelectedAsset);
                 m_PrefabField.SetValueWithoutNotify(m_SelectedPrefab);
             }
 
-            bool shouldAutoLoad = m_PendingAutoLoad && m_AssetField.value != null;
+            bool shouldAutoLoad = m_PendingAutoLoad && m_AssetField.value != null && m_PrefabField.value != null;
 
             m_PendingAsset = null;
             m_PendingPrefab = null;
@@ -842,6 +1208,101 @@ namespace XFramework.Editor
             LoadPreview();
         }
 
+        private GameObject LoadDefaultPrefabForAsset(TextAsset assetText)
+        {
+            if (!TryGetDefaultPrefabPath(assetText, out string defaultPrefabPath) || string.IsNullOrWhiteSpace(defaultPrefabPath))
+            {
+                return null;
+            }
+
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(defaultPrefabPath);
+            if (prefab == null)
+            {
+                SetStatus($"默认 prefab 不存在：{defaultPrefabPath}", true);
+                return null;
+            }
+
+            return prefab;
+        }
+
+        private bool TryGetDefaultPrefabPath(TextAsset assetText, out string defaultPrefabPath)
+        {
+            defaultPrefabPath = string.Empty;
+            if (assetText == null)
+            {
+                return false;
+            }
+
+            XAnimationOverrideAsset overrideAsset = assetText.ToXTextAsset<XAnimationOverrideAsset>();
+            if (overrideAsset != null && !string.IsNullOrWhiteSpace(overrideAsset.baseAssetPath))
+            {
+                if (!string.IsNullOrWhiteSpace(overrideAsset.DefaultPrefabPath))
+                {
+                    defaultPrefabPath = overrideAsset.DefaultPrefabPath;
+                    return true;
+                }
+
+                TextAsset baseTextAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(overrideAsset.baseAssetPath);
+                if (baseTextAsset == null)
+                {
+                    SetStatus($"Override base asset 不存在：{overrideAsset.baseAssetPath}", true);
+                    return false;
+                }
+
+                XAnimationAsset baseAsset = baseTextAsset.ToXTextAsset<XAnimationAsset>();
+                defaultPrefabPath = baseAsset?.DefaultPrefabPath ?? string.Empty;
+                return true;
+            }
+
+            XAnimationAsset asset = assetText.ToXTextAsset<XAnimationAsset>();
+            defaultPrefabPath = asset?.DefaultPrefabPath ?? string.Empty;
+            return true;
+        }
+
+        private void SaveCurrentPrefabAsDefault()
+        {
+            GameObject prefab = m_PrefabField?.value as GameObject;
+            if (prefab == null)
+            {
+                SetStatus("请选择一个 prefab 后再设为默认。", true);
+                return;
+            }
+
+            TextAsset assetText = m_AssetField?.value as TextAsset;
+            if (assetText == null)
+            {
+                SetStatus("请选择一个 XAnimationAsset 后再设为默认。", true);
+                return;
+            }
+
+            string prefabPath = AssetDatabase.GetAssetPath(prefab);
+            if (string.IsNullOrWhiteSpace(prefabPath))
+            {
+                SetStatus("无法获取当前 prefab 的资源路径。", true);
+                return;
+            }
+
+            XAnimationOverrideAsset overrideAsset = assetText.ToXTextAsset<XAnimationOverrideAsset>();
+            if (overrideAsset != null && !string.IsNullOrWhiteSpace(overrideAsset.baseAssetPath))
+            {
+                overrideAsset.DefaultPrefabPath = prefabPath;
+                overrideAsset.SaveAsset();
+                SetStatus($"已写入 Override 默认 prefab：{prefabPath}");
+                return;
+            }
+
+            XAnimationAsset asset = assetText.ToXTextAsset<XAnimationAsset>();
+            if (asset == null)
+            {
+                SetStatus("当前资源不是有效的 XAnimationAsset。", true);
+                return;
+            }
+
+            asset.DefaultPrefabPath = prefabPath;
+            asset.SaveAsset();
+            SetStatus($"已写入默认 prefab：{prefabPath}");
+        }
+
         private void LoadPreview()
         {
             try
@@ -872,10 +1333,13 @@ namespace XFramework.Editor
                 m_ShouldAutoReloadPreview = true;
                 m_IsPaused = false;
                 SetPauseButtonState(false, false);
-                m_RootMotionToggle.SetValueWithoutNotify(false);
                 m_GridToggle.SetValueWithoutNotify(true);
+                RebuildParameterList();
+                RebuildStateList();
                 RebuildClipList();
                 RebuildChannelControls();
+                RefreshPlayTargetChannelChoices();
+                RefreshStatePlayingStates();
                 RefreshClipPlayingStates();
                 RefreshChannelStates();
                 RefreshCueLogView(force: true);
@@ -901,6 +1365,7 @@ namespace XFramework.Editor
             m_Session.StopAll();
             m_IsPaused = false;
             SetPauseButtonState(false, false);
+            RefreshStatePlayingStates();
             RefreshClipPlayingStates();
             RefreshChannelStates();
             SetStatus("已停止全部通道。");
@@ -988,123 +1453,430 @@ namespace XFramework.Editor
             m_ClipRowMap.Clear();
             m_ClipVisualStateMap.Clear();
             m_ClipButtonMap.Clear();
-            m_ClipChannelMap.Clear();
             if (m_Session == null || !m_Session.IsLoaded)
             {
                 return;
             }
 
             IReadOnlyList<XAnimationCompiledClip> clips = m_Session.CompiledAsset.Clips;
-            IReadOnlyList<XAnimationCompiledChannel> channels = m_Session.CompiledAsset.Channels;
-            Dictionary<string, List<XAnimationCompiledClip>> clipsByChannel = new(StringComparer.Ordinal);
-            for (int i = 0; i < clips.Count; i++)
+            for (int clipIndex = 0; clipIndex < clips.Count; clipIndex++)
             {
-                XAnimationCompiledClip clip = (XAnimationCompiledClip)clips[i];
-                if (!clipsByChannel.TryGetValue(clip.Config.defaultChannel, out List<XAnimationCompiledClip> channelClips))
+                XAnimationCompiledClip clip = (XAnimationCompiledClip)clips[clipIndex];
+                m_ClipListView.Add(CreateClipRow(clip, clipIndex));
+            }
+
+            if (clips.Count == 0)
+            {
+                Label emptyLabel = new("No clips");
+                emptyLabel.style.color = TextMuted;
+                emptyLabel.style.fontSize = BodyFontSize;
+                emptyLabel.style.marginLeft = 4;
+                m_ClipListView.Add(emptyLabel);
+            }
+
+            TryBeginPendingRename();
+        }
+
+        private void RebuildStateList()
+        {
+            m_StateListView.Clear();
+            m_StateLabelMap.Clear();
+            m_StateRowMap.Clear();
+            m_StateButtonMap.Clear();
+            m_StateChannelMap.Clear();
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                return;
+            }
+
+            IReadOnlyList<XAnimationCompiledState> states = m_Session.CompiledAsset.States;
+            if (states.Count == 0)
+            {
+                Label emptyLabel = new("No states");
+                emptyLabel.style.color = TextMuted;
+                emptyLabel.style.fontSize = BodyFontSize;
+                emptyLabel.style.marginLeft = 4;
+                m_StateListView.Add(emptyLabel);
+                return;
+            }
+
+            IReadOnlyList<XAnimationCompiledChannel> channels = m_Session.CompiledAsset.Channels;
+            Dictionary<string, List<XAnimationCompiledState>> statesByChannel = new(StringComparer.Ordinal);
+            for (int i = 0; i < states.Count; i++)
+            {
+                XAnimationCompiledState state = states[i];
+                string channelName = state.Config.channelName;
+                if (!statesByChannel.TryGetValue(channelName, out List<XAnimationCompiledState> channelStates))
                 {
-                    channelClips = new List<XAnimationCompiledClip>();
-                    clipsByChannel.Add(clip.Config.defaultChannel, channelClips);
+                    channelStates = new List<XAnimationCompiledState>();
+                    statesByChannel.Add(channelName, channelStates);
                 }
 
-                channelClips.Add(clip);
+                channelStates.Add(state);
             }
 
             for (int i = 0; i < channels.Count; i++)
             {
-                XAnimationCompiledChannel channel = (XAnimationCompiledChannel)channels[i];
-                if (!clipsByChannel.TryGetValue(channel.Name, out List<XAnimationCompiledClip> channelClips))
+                XAnimationCompiledChannel channel = channels[i];
+                if (!statesByChannel.TryGetValue(channel.Name, out List<XAnimationCompiledState> channelStates))
                 {
-                    channelClips = new List<XAnimationCompiledClip>();
+                    channelStates = new List<XAnimationCompiledState>();
                 }
 
-                VisualElement group = new VisualElement();
-                group.style.marginBottom = 3;
-                group.style.paddingLeft = 3;
-                group.style.paddingRight = 3;
-                group.style.paddingTop = 3;
-                group.style.paddingBottom = 2;
-                group.style.backgroundColor = ListGroupBg;
-                group.style.borderTopWidth = 1;
-                group.style.borderBottomWidth = 1;
-                group.style.borderLeftWidth = 1;
-                group.style.borderRightWidth = 1;
-                group.style.borderTopColor = SectionDivider;
-                group.style.borderBottomColor = SectionDivider;
-                group.style.borderLeftColor = SectionDivider;
-                group.style.borderRightColor = SectionDivider;
-                group.style.borderTopLeftRadius = 3;
-                group.style.borderTopRightRadius = 3;
-                group.style.borderBottomLeftRadius = 3;
-                group.style.borderBottomRightRadius = 3;
-
-                VisualElement groupHeader = new VisualElement();
-                groupHeader.style.flexDirection = FlexDirection.Row;
-                groupHeader.style.alignItems = Align.Center;
-                groupHeader.style.marginBottom = 2;
-                groupHeader.style.paddingLeft = 3;
-                groupHeader.style.paddingRight = 3;
-                groupHeader.style.paddingTop = 2;
-                groupHeader.style.paddingBottom = 2;
-                groupHeader.style.backgroundColor = ListHeaderBg;
-                groupHeader.style.borderTopLeftRadius = 3;
-                groupHeader.style.borderTopRightRadius = 3;
-                groupHeader.style.borderBottomLeftRadius = 3;
-                groupHeader.style.borderBottomRightRadius = 3;
-
-                Label groupTitle = new($"▾ {channel.Name}");
-                groupTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
-                groupTitle.style.color = TextNormal;
-                groupTitle.style.flexGrow = 1;
-                groupTitle.tooltip = "点击展开/收起这个 channel 的 clip 列表；也可以将 clip 拖到这里以移动到该 channel 末尾。";
-                groupHeader.Add(groupTitle);
-
-                Label groupInfo = new($"{channel.Config.layerType} | {channelClips.Count} clips");
-                groupInfo.style.color = TextMuted;
-                groupInfo.style.fontSize = 10;
-                groupInfo.style.flexShrink = 0;
-                groupHeader.Add(groupInfo);
-
-                Button addClipButton = new(() => AddClip(channel.Name))
-                {
-                    text = "+"
-                };
-                addClipButton.tooltip = m_Session.IsOverrideAsset
-                    ? "Override 资源不能新增 clip。"
-                    : "在这个 channel 下新增一个 clip。";
-                addClipButton.SetEnabled(!m_Session.IsOverrideAsset);
-                ApplyClipIconButtonStyle(addClipButton, AccentColor);
-                addClipButton.style.marginLeft = 6;
-                groupHeader.Add(addClipButton);
-                group.Add(groupHeader);
-                RegisterClipChannelDropTarget(group, groupHeader, channel.Name);
-
-                VisualElement clipsContainer = new VisualElement();
-                for (int clipIndex = 0; clipIndex < channelClips.Count; clipIndex++)
-                {
-                    XAnimationCompiledClip clip = channelClips[clipIndex];
-                    VisualElement row = CreateClipRow(clip, clipIndex);
-                    RegisterClipRowDropTarget(row, channel.Name, clip.Key);
-                    clipsContainer.Add(row);
-                }
-
-                groupTitle.RegisterCallback<MouseDownEvent>(evt =>
-                {
-                    if (evt.button != 0)
-                    {
-                        return;
-                    }
-
-                    bool expanded = clipsContainer.style.display != DisplayStyle.None;
-                    clipsContainer.style.display = expanded ? DisplayStyle.None : DisplayStyle.Flex;
-                    groupTitle.text = expanded ? $"▸ {channel.Name}" : $"▾ {channel.Name}";
-                    evt.StopPropagation();
-                });
-
-                group.Add(clipsContainer);
-                m_ClipListView.Add(group);
+                VisualElement group = CreateStateChannelGroup(channel, channelStates);
+                m_StateListView.Add(group);
             }
 
             TryBeginPendingRename();
+        }
+
+        private void RebuildParameterList()
+        {
+            m_ParameterListView.Clear();
+            m_ParameterLabelMap.Clear();
+            SetAddParameterButtonEnabled(m_Session != null && m_Session.IsLoaded && !m_Session.IsOverrideAsset);
+
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                return;
+            }
+
+            IReadOnlyList<XAnimationCompiledParameter> parameters = m_Session.CompiledAsset.Parameters;
+            if (parameters.Count == 0)
+            {
+                Label emptyLabel = new("No parameters");
+                emptyLabel.style.color = TextMuted;
+                emptyLabel.style.fontSize = BodyFontSize;
+                emptyLabel.style.marginLeft = 4;
+                m_ParameterListView.Add(emptyLabel);
+                return;
+            }
+
+            for (int i = 0; i < parameters.Count; i++)
+            {
+                m_ParameterListView.Add(CreateParameterRow(parameters[i], i));
+            }
+
+            TryBeginPendingRename();
+        }
+
+        private VisualElement CreateParameterRow(XAnimationCompiledParameter parameter, int rowIndex)
+        {
+            XAnimationParameterConfig config = parameter.Config;
+            VisualElement container = new VisualElement();
+            container.style.marginBottom = 2;
+            container.style.paddingLeft = 4;
+            container.style.paddingRight = 4;
+            container.style.paddingTop = 3;
+            container.style.paddingBottom = 3;
+            container.style.borderTopLeftRadius = 2;
+            container.style.borderTopRightRadius = 2;
+            container.style.borderBottomLeftRadius = 2;
+            container.style.borderBottomRightRadius = 2;
+            container.style.backgroundColor = rowIndex % 2 == 0 ? ListRowEvenBg : ListRowOddBg;
+
+            VisualElement row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            container.Add(row);
+
+            string parameterName = parameter.Name;
+            EditableLabel label = new(parameterName);
+            ConfigureEditableNameLabel(label, 112f);
+            label.tooltip = "右键 Rename 编辑参数名。";
+            label.SetEditable(true, EditableLabelEditTrigger.ContextMenu);
+            label.EditStarted += BeginNameEdit;
+            label.EditEnded += EndNameEdit;
+            label.ValueCommitted += (_, newValue) => RenameParameter(parameterName, newValue, label);
+            m_ParameterLabelMap[parameterName] = label;
+            row.Add(label);
+
+            List<string> typeNames = new(Enum.GetNames(typeof(XAnimationParameterType)));
+            DropdownField typeField = new(
+                typeNames,
+                Mathf.Max(0, typeNames.IndexOf(config.type.ToString())));
+            typeField.tooltip = "参数类型。Blend1D 只能绑定 Float 参数。";
+            typeField.style.width = 88;
+            typeField.style.marginLeft = 4;
+            typeField.RegisterValueChangedCallback(evt => ChangeParameterType(parameterName, evt.newValue, evt.previousValue, typeField));
+            row.Add(typeField);
+
+            VisualElement valueField = CreateParameterDefaultValueField(parameterName, config);
+            valueField.style.flexGrow = 1;
+            valueField.style.marginLeft = 6;
+            row.Add(valueField);
+
+            Button deleteButton = new(() => DeleteParameter(parameterName))
+            {
+                text = "⌫"
+            };
+            deleteButton.tooltip = m_Session != null && m_Session.IsOverrideAsset
+                ? "Override 资源不能删除 parameter。"
+                : "删除这个 parameter。";
+            deleteButton.SetEnabled(m_Session != null && !m_Session.IsOverrideAsset);
+            ApplyTrashButtonIcon(deleteButton);
+            ApplyClipIconButtonStyle(deleteButton);
+            deleteButton.style.marginLeft = 4;
+            row.Add(deleteButton);
+
+            VisualElement previewEditor = CreateParameterPreviewEditor(parameter);
+            if (previewEditor != null)
+            {
+                previewEditor.style.marginTop = 4;
+                container.Add(previewEditor);
+            }
+
+            return container;
+        }
+
+        private VisualElement CreateParameterDefaultValueField(string parameterName, XAnimationParameterConfig config)
+        {
+            switch (config.type)
+            {
+                case XAnimationParameterType.Float:
+                {
+                    FloatField field = new("default")
+                    {
+                        value = ConvertParameterDefaultToFloat(config.defaultValue)
+                    };
+                    field.tooltip = "Float 参数默认值，会保存到资源。";
+                    field.RegisterValueChangedCallback(evt => ChangeParameterDefaultValue(parameterName, evt.newValue));
+                    return field;
+                }
+                case XAnimationParameterType.Bool:
+                {
+                    Toggle toggle = new("default")
+                    {
+                        value = ConvertParameterDefaultToBool(config.defaultValue)
+                    };
+                    toggle.tooltip = "Bool 参数默认值，会保存到资源。";
+                    toggle.RegisterValueChangedCallback(evt => ChangeParameterDefaultValue(parameterName, evt.newValue));
+                    return toggle;
+                }
+                case XAnimationParameterType.Trigger:
+                default:
+                {
+                    Label label = new("Trigger has no default value");
+                    label.style.color = TextMuted;
+                    label.style.fontSize = BodyFontSize;
+                    return label;
+                }
+            }
+        }
+
+        private VisualElement CreateStateChannelGroup(XAnimationCompiledChannel channel, List<XAnimationCompiledState> channelStates)
+        {
+            VisualElement group = new VisualElement();
+            group.style.marginBottom = 3;
+            group.style.paddingLeft = 3;
+            group.style.paddingRight = 3;
+            group.style.paddingTop = 3;
+            group.style.paddingBottom = 2;
+            group.style.backgroundColor = ListGroupBg;
+            group.style.borderTopWidth = 1;
+            group.style.borderBottomWidth = 1;
+            group.style.borderLeftWidth = 1;
+            group.style.borderRightWidth = 1;
+            group.style.borderTopColor = SectionDivider;
+            group.style.borderBottomColor = SectionDivider;
+            group.style.borderLeftColor = SectionDivider;
+            group.style.borderRightColor = SectionDivider;
+            group.style.borderTopLeftRadius = 3;
+            group.style.borderTopRightRadius = 3;
+            group.style.borderBottomLeftRadius = 3;
+            group.style.borderBottomRightRadius = 3;
+
+            VisualElement groupHeader = new VisualElement();
+            groupHeader.style.flexDirection = FlexDirection.Row;
+            groupHeader.style.alignItems = Align.Center;
+            groupHeader.style.marginBottom = 2;
+            groupHeader.style.paddingLeft = 3;
+            groupHeader.style.paddingRight = 3;
+            groupHeader.style.paddingTop = 2;
+            groupHeader.style.paddingBottom = 2;
+            groupHeader.style.backgroundColor = ListHeaderBg;
+            groupHeader.style.borderTopLeftRadius = 3;
+            groupHeader.style.borderTopRightRadius = 3;
+            groupHeader.style.borderBottomLeftRadius = 3;
+            groupHeader.style.borderBottomRightRadius = 3;
+
+            Label groupTitle = new($"▾ {channel.Name}");
+            groupTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
+            groupTitle.style.color = TextNormal;
+            groupTitle.style.flexGrow = 1;
+            groupTitle.tooltip = "点击展开/收起这个 channel 的 state 列表。";
+            groupHeader.Add(groupTitle);
+
+            Label groupInfo = new($"{channel.Config.layerType} | {channelStates.Count} states");
+            groupInfo.style.color = TextMuted;
+            groupInfo.style.fontSize = 10;
+            groupInfo.style.flexShrink = 0;
+            groupHeader.Add(groupInfo);
+
+            Button addStateButton = new(() => AddState(channel.Name))
+            {
+                text = "+"
+            };
+            addStateButton.tooltip = m_Session.IsOverrideAsset
+                ? "Override 资源不能新增 state。"
+                : "在这个 channel 下新增一个 state。";
+            addStateButton.SetEnabled(!m_Session.IsOverrideAsset);
+            ApplyClipIconButtonStyle(addStateButton, AccentColor);
+            addStateButton.style.marginLeft = 6;
+            groupHeader.Add(addStateButton);
+            group.Add(groupHeader);
+            RegisterStateChannelDropTarget(group, groupHeader, channel.Name);
+
+            VisualElement statesContainer = new VisualElement();
+            for (int stateIndex = 0; stateIndex < channelStates.Count; stateIndex++)
+            {
+                XAnimationCompiledState state = channelStates[stateIndex];
+                VisualElement row = CreateStateRow(state, stateIndex);
+                RegisterStateRowDropTarget(row, channel.Name, state.Key);
+                statesContainer.Add(row);
+            }
+
+            groupTitle.RegisterCallback<MouseDownEvent>(evt =>
+            {
+                if (evt.button != 0)
+                {
+                    return;
+                }
+
+                bool expanded = statesContainer.style.display != DisplayStyle.None;
+                statesContainer.style.display = expanded ? DisplayStyle.None : DisplayStyle.Flex;
+                groupTitle.text = expanded ? $"▸ {channel.Name}" : $"▾ {channel.Name}";
+                evt.StopPropagation();
+            });
+
+            group.Add(statesContainer);
+            return group;
+        }
+
+        private VisualElement CreateStateRow(XAnimationCompiledState state, int rowIndex)
+        {
+            VisualElement container = new VisualElement();
+            container.style.flexDirection = FlexDirection.Column;
+            container.style.marginBottom = 1;
+
+            VisualElement row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.paddingLeft = 4;
+            row.style.paddingRight = 4;
+            row.style.paddingTop = 3;
+            row.style.paddingBottom = 3;
+            row.style.borderTopLeftRadius = 2;
+            row.style.borderTopRightRadius = 2;
+            row.style.borderBottomLeftRadius = 2;
+            row.style.borderBottomRightRadius = 2;
+            row.style.backgroundColor = rowIndex % 2 == 0 ? ListRowEvenBg : ListRowOddBg;
+            m_StateRowMap[state.Key] = row;
+            m_StateChannelMap[state.Key] = state.Config.channelName;
+
+            string stateKey = state.Key;
+            EditableLabel label = new(stateKey);
+            ConfigureEditableNameLabel(label, 78f);
+            label.tooltip = "单击展开/收起 state 配置；右键 Rename 编辑名称。";
+            label.SetEditable(true, EditableLabelEditTrigger.ContextMenu);
+            label.EditStarted += BeginNameEdit;
+            label.EditEnded += EndNameEdit;
+            label.ValueCommitted += (_, newValue) => RenameState(stateKey, newValue, label);
+            m_StateLabelMap[stateKey] = label;
+            row.Add(label);
+
+            Label infoLabel = new(BuildStateInfoText(state));
+            infoLabel.style.flexGrow = 1;
+            infoLabel.style.flexShrink = 1;
+            infoLabel.style.whiteSpace = WhiteSpace.Normal;
+            infoLabel.style.color = TextMuted;
+            infoLabel.style.fontSize = BodyFontSize;
+            infoLabel.tooltip = infoLabel.text;
+            row.Add(infoLabel);
+
+            VisualElement editor = CreateStateEditor(state);
+            editor.style.display = m_ExpandedStateKeys.Contains(stateKey) ? DisplayStyle.Flex : DisplayStyle.None;
+            RegisterStateNameInteractions(label, editor, stateKey);
+
+            Button playButton = new(() => ToggleStatePlayback(state))
+            {
+                text = "▶"
+            };
+            playButton.tooltip = "播放或停止这个 state。Blend1D 会读取绑定参数实时混合。";
+            ApplyClipButtonStyle(playButton, false);
+            playButton.style.flexShrink = 0;
+            playButton.style.marginLeft = 4;
+            row.Add(playButton);
+            m_StateButtonMap[state.Key] = playButton;
+
+            Button deleteButton = new(() => DeleteState(stateKey))
+            {
+                text = "⌫"
+            };
+            deleteButton.tooltip = m_Session != null && m_Session.IsOverrideAsset
+                ? "Override 资源不能删除 state。"
+                : "删除这个 state。";
+            deleteButton.SetEnabled(m_Session != null && !m_Session.IsOverrideAsset);
+            ApplyTrashButtonIcon(deleteButton);
+            ApplyClipIconButtonStyle(deleteButton);
+            deleteButton.style.flexShrink = 0;
+            deleteButton.style.marginLeft = 3;
+            row.Add(deleteButton);
+
+            container.Add(row);
+            container.Add(editor);
+            return container;
+        }
+
+        private static string BuildStateInfoText(XAnimationCompiledState state)
+        {
+            string channelName = state.Config.channelName;
+            return state switch
+            {
+                XAnimationCompiledSingleState singleState => $"{state.StateType} | channel={channelName} | clip={state.Config.clipKey}",
+                XAnimationCompiledBlend1DState blendState => $"{state.StateType} | channel={channelName} | param={state.Config.parameterName} | {BuildBlendSampleSummary(blendState)}",
+                _ => $"{state.StateType} | channel={channelName}",
+            };
+        }
+
+        private static string BuildBlendSampleSummary(XAnimationCompiledBlend1DState state)
+        {
+            List<string> parts = new();
+            for (int i = 0; i < state.Samples.Count; i++)
+            {
+                XAnimationCompiledBlend1DSample sample = state.Samples[i];
+                parts.Add($"{sample.Config.clipKey}@{sample.Threshold:0.###}");
+            }
+
+            return string.Join(", ", parts);
+        }
+
+        private void ToggleStatePlayback(XAnimationCompiledState state)
+        {
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                return;
+            }
+
+            XAnimationChannelState channelState = m_Session.GetChannelState(state.Config.channelName);
+            bool isPlaying = channelState != null && string.Equals(channelState.stateKey, state.Key, StringComparison.Ordinal);
+            if (isPlaying)
+            {
+                m_Session.StopChannel(state.Config.channelName);
+                RefreshStatePlayingStates();
+                RefreshClipPlayingStates();
+                RefreshChannelStates();
+                SetStatus($"已停止 state {state.Key}。");
+                return;
+            }
+
+            m_IsPaused = false;
+            SetPauseButtonState(true, false);
+            m_Session.Play(BuildPreviewPlayCommand(stateKey: state.Key, channelName: state.Config.channelName));
+            RefreshStatePlayingStates();
+            RefreshClipPlayingStates();
+            RefreshChannelStates();
+            SetStatus($"正在播放 state {state.Key}。");
         }
 
         private VisualElement CreateCueRow(int cueIndex, XAnimationCueConfig cue, bool editable)
@@ -1269,7 +2041,7 @@ namespace XFramework.Editor
 
             EditableLabel label = new(clipKey);
             ConfigureEditableNameLabel(label, 78f);
-            label.tooltip = "单击展开/收起 clip 配置；右键 Rename 编辑名称；按住拖动可移动到其他 channel，或拖到 clip 行上方调整顺序。";
+            label.tooltip = "单击展开/收起 clip 配置；右键 Rename 编辑名称。";
             label.SetEditable(true, EditableLabelEditTrigger.ContextMenu);
             label.EditStarted += BeginNameEdit;
             label.EditEnded += EndNameEdit;
@@ -1287,7 +2059,6 @@ namespace XFramework.Editor
             row.Add(fileInfo);
 
             string activeClipPath = clip.Config.clipPath;
-            m_ClipChannelMap[clipKey] = clip.Config.defaultChannel;
 
             ObjectField activeClipField = CreateClipObjectField(activeClipPath, editable: true);
             activeClipField.tooltip = m_Session != null && m_Session.IsOverrideAsset
@@ -1308,15 +2079,21 @@ namespace XFramework.Editor
             {
                 if (m_Session == null || !m_Session.IsLoaded) return;
 
-                // Check if this clip is currently playing
-                string channelName = clip.Config.defaultChannel;
-                XAnimationChannelState state = m_Session.GetChannelState(channelName);
-                bool isPlaying = state != null && string.Equals(state.clipKey, clipKey, StringComparison.Ordinal);
+                string channelName = m_PlayTargetChannelName;
+                if (string.IsNullOrWhiteSpace(channelName))
+                {
+                    SetStatus("请先在 XAnimationPlayTarget 中选择 channelName 后再调试播放 clip。", true);
+                    return;
+                }
+
+                string playingChannelName = FindPlayingChannelName(clipKey);
+                bool isPlaying = !string.IsNullOrWhiteSpace(playingChannelName);
 
                 if (isPlaying)
                 {
-                    m_Session.StopChannel(channelName);
+                    m_Session.StopChannel(playingChannelName, 0f);
                     RefreshClipPlayingStates();
+                    RefreshStatePlayingStates();
                     RefreshChannelStates();
                     SetStatus($"已停止 {clipKey}。");
                 }
@@ -1324,16 +2101,18 @@ namespace XFramework.Editor
                 {
                     m_IsPaused = false;
                     SetPauseButtonState(true, false);
-                    m_Session.Play(clipKey, m_PlaySpeedField.value, clip.Config.defaultChannel);
+                    XAnimationPlayCommand command = BuildPreviewPlayCommand(clipKey: clipKey, channelName: channelName);
+                    m_Session.Play(command);
                     RefreshClipPlayingStates();
+                    RefreshStatePlayingStates();
                     RefreshChannelStates();
-                    SetStatus($"正在播放 {clipKey} ({clip.Clip.name})。");
+                    SetStatus($"正在 {channelName} 调试播放 {clipKey} ({clip.Clip.name})。");
                 }
             })
             {
                 text = "▶"
             };
-            toggleButton.tooltip = "播放或停止这个 clip。";
+            toggleButton.tooltip = "使用 XAnimationPlayTarget.channelName 调试播放或停止这个 clip。";
             ApplyClipButtonStyle(toggleButton, false);
             toggleButton.style.flexShrink = 0;
             toggleButton.style.marginLeft = 4;
@@ -1392,6 +2171,52 @@ namespace XFramework.Editor
         private void RegisterClipNameInteractions(EditableLabel label, VisualElement editor, XAnimationCompiledClip clip)
         {
             bool isPressed = false;
+
+            label.RegisterCallback<MouseDownEvent>(evt =>
+            {
+                if (evt.button != 0 || m_Session == null || !m_Session.IsLoaded)
+                {
+                    return;
+                }
+
+                if (label.IsEditing)
+                {
+                    isPressed = false;
+                    return;
+                }
+
+                isPressed = true;
+                evt.StopPropagation();
+            });
+            label.RegisterCallback<MouseUpEvent>(evt =>
+            {
+                if (!isPressed || evt.button != 0)
+                {
+                    return;
+                }
+
+                if (!label.IsEditing)
+                {
+                    bool expanded = editor.style.display == DisplayStyle.None;
+                    editor.style.display = expanded ? DisplayStyle.Flex : DisplayStyle.None;
+                    if (expanded)
+                    {
+                        m_ExpandedClipKeys.Add(clip.Key);
+                    }
+                    else
+                    {
+                        m_ExpandedClipKeys.Remove(clip.Key);
+                    }
+                }
+
+                isPressed = false;
+                evt.StopPropagation();
+            });
+        }
+
+        private void RegisterStateNameInteractions(EditableLabel label, VisualElement editor, string stateKey)
+        {
+            bool isPressed = false;
             Vector2 startPosition = Vector2.zero;
             bool movedBeyondClickThreshold = false;
             bool dragStarted = false;
@@ -1405,7 +2230,7 @@ namespace XFramework.Editor
 
                 if (label.IsEditing)
                 {
-                    ClearClipDragData();
+                    ClearStateDragData();
                     isPressed = false;
                     movedBeyondClickThreshold = false;
                     dragStarted = false;
@@ -1416,7 +2241,7 @@ namespace XFramework.Editor
                 movedBeyondClickThreshold = false;
                 dragStarted = false;
                 startPosition = evt.mousePosition;
-                ClearClipDragData();
+                ClearStateDragData();
                 evt.StopPropagation();
             });
             label.RegisterCallback<MouseMoveEvent>(evt =>
@@ -1430,8 +2255,8 @@ namespace XFramework.Editor
                 {
                     movedBeyondClickThreshold = true;
                     DragAndDrop.PrepareStartDrag();
-                    DragAndDrop.SetGenericData(ClipDragDataKey, clip.Key);
-                    DragAndDrop.StartDrag($"Move {clip.Key}");
+                    DragAndDrop.SetGenericData(StateDragDataKey, stateKey);
+                    DragAndDrop.StartDrag($"Move {stateKey}");
                     dragStarted = true;
                     evt.StopPropagation();
                 }
@@ -1443,26 +2268,23 @@ namespace XFramework.Editor
                     return;
                 }
 
-                if (!movedBeyondClickThreshold)
+                if (!movedBeyondClickThreshold && !label.IsEditing)
                 {
-                    if (!label.IsEditing)
+                    bool expanded = editor.style.display == DisplayStyle.None;
+                    editor.style.display = expanded ? DisplayStyle.Flex : DisplayStyle.None;
+                    if (expanded)
                     {
-                        bool expanded = editor.style.display == DisplayStyle.None;
-                        editor.style.display = expanded ? DisplayStyle.Flex : DisplayStyle.None;
-                        if (expanded)
-                        {
-                            m_ExpandedClipKeys.Add(clip.Key);
-                        }
-                        else
-                        {
-                            m_ExpandedClipKeys.Remove(clip.Key);
-                        }
+                        m_ExpandedStateKeys.Add(stateKey);
+                    }
+                    else
+                    {
+                        m_ExpandedStateKeys.Remove(stateKey);
                     }
                 }
 
                 if (!dragStarted)
                 {
-                    ClearClipDragData();
+                    ClearStateDragData();
                 }
 
                 isPressed = false;
@@ -1475,18 +2297,18 @@ namespace XFramework.Editor
         private void BeginNameEdit()
         {
             m_IsEditingName = true;
-            ClearClipDragData();
+            ClearStateDragData();
         }
 
         private void EndNameEdit()
         {
             m_IsEditingName = false;
-            ClearClipDragData();
+            ClearStateDragData();
         }
 
-        private static void ClearClipDragData()
+        private static void ClearStateDragData()
         {
-            DragAndDrop.SetGenericData(ClipDragDataKey, null);
+            DragAndDrop.SetGenericData(StateDragDataKey, null);
         }
 
         private void AddChannel()
@@ -1495,8 +2317,11 @@ namespace XFramework.Editor
             {
                 string channelName = m_Session.AddChannel();
                 m_PendingChannelRenameKey = channelName;
+                RebuildStateList();
                 RebuildClipList();
                 RebuildChannelControls();
+                RefreshPlayTargetChannelChoices();
+                RefreshStatePlayingStates();
                 RefreshClipPlayingStates();
                 RefreshChannelStates();
                 SetStatus($"已新增 Channel {channelName}。");
@@ -1510,9 +2335,9 @@ namespace XFramework.Editor
 
         private void DeleteChannel(string channelName)
         {
-            int clipCount = CountClipsInChannel(channelName);
-            string message = clipCount > 0
-                ? $"确定删除 Channel '{channelName}'？\n\n将同时删除该 Channel 下的 {clipCount} 个 Clip。"
+            int stateCount = CountStatesInChannel(channelName);
+            string message = stateCount > 0
+                ? $"确定删除 Channel '{channelName}'？\n\n将同时移除该 Channel 下的 {stateCount} 个 State；Clip 资源不会被删除。"
                 : $"确定删除 Channel '{channelName}'？";
             if (!EditorUtility.DisplayDialog("删除 Channel", message, "删除", "取消"))
             {
@@ -1522,8 +2347,10 @@ namespace XFramework.Editor
             try
             {
                 m_Session.DeleteChannel(channelName);
-                RebuildClipList();
+                RebuildStateList();
                 RebuildChannelControls();
+                RefreshPlayTargetChannelChoices();
+                RefreshStatePlayingStates();
                 RefreshClipPlayingStates();
                 RefreshChannelStates();
                 SetStatus($"已删除 Channel {channelName}。");
@@ -1535,7 +2362,105 @@ namespace XFramework.Editor
             }
         }
 
-        private int CountClipsInChannel(string channelName)
+        private void AddParameter()
+        {
+            try
+            {
+                string parameterName = m_Session.AddParameter();
+                m_PendingParameterRenameKey = parameterName;
+                RebuildParameterList();
+                RebuildStateList();
+                SetStatus($"已新增 Parameter {parameterName}。");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void DeleteParameter(string parameterName)
+        {
+            if (!EditorUtility.DisplayDialog("删除 Parameter", $"确定删除 Parameter '{parameterName}'？\n\n引用它的 Blend1D state 会清空 parameter。", "删除", "取消"))
+            {
+                return;
+            }
+
+            try
+            {
+                m_Session.DeleteParameter(parameterName);
+                RebuildParameterList();
+                RebuildStateList();
+                RefreshStatePlayingStates();
+                RefreshChannelStates();
+                SetStatus($"已删除 Parameter {parameterName}。");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void RenameParameter(string oldName, string newName, EditableLabel label)
+        {
+            newName = newName?.Trim();
+            try
+            {
+                m_Session.RenameParameter(oldName, newName);
+                SetStatus($"Parameter {oldName} 已重命名为 {newName}。");
+                RebuildParameterList();
+                RebuildStateList();
+                RefreshStatePlayingStates();
+                RefreshChannelStates();
+            }
+            catch (Exception ex)
+            {
+                label.text = oldName;
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void ChangeParameterType(string parameterName, string typeName, string previousValue, DropdownField field)
+        {
+            try
+            {
+                if (!Enum.TryParse(typeName, out XAnimationParameterType type))
+                {
+                    return;
+                }
+
+                m_Session.SetParameterType(parameterName, type);
+                RebuildParameterList();
+                RebuildStateList();
+                RefreshStatePlayingStates();
+                RefreshChannelStates();
+                SetStatus($"{parameterName} type = {type}。");
+            }
+            catch (Exception ex)
+            {
+                field.SetValueWithoutNotify(previousValue);
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void ChangeParameterDefaultValue(string parameterName, object value)
+        {
+            try
+            {
+                m_Session.SetParameterDefaultValue(parameterName, value);
+                SetStatus($"{parameterName} defaultValue 已更新。");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private int CountStatesInChannel(string channelName)
         {
             if (m_Session == null || !m_Session.IsLoaded)
             {
@@ -1543,11 +2468,11 @@ namespace XFramework.Editor
             }
 
             int count = 0;
-            IReadOnlyList<XAnimationCompiledClip> clips = m_Session.CompiledAsset.Clips;
-            for (int i = 0; i < clips.Count; i++)
+            IReadOnlyList<XAnimationCompiledState> states = m_Session.CompiledAsset.States;
+            for (int i = 0; i < states.Count; i++)
             {
-                XAnimationCompiledClip clip = clips[i];
-                if (clip != null && string.Equals(clip.Config.defaultChannel, channelName, StringComparison.Ordinal))
+                XAnimationCompiledState state = states[i];
+                if (state != null && string.Equals(state.Config.channelName, channelName, StringComparison.Ordinal))
                 {
                     count++;
                 }
@@ -1556,17 +2481,61 @@ namespace XFramework.Editor
             return count;
         }
 
-        private void AddClip(string channelName)
+        private void AddState(string channelName)
         {
             try
             {
-                string clipKey = m_Session.AddClip(channelName);
+                string stateKey = m_Session.AddState(channelName);
+                m_PendingStateRenameKey = stateKey;
+                RebuildStateList();
+                RebuildChannelControls();
+                RefreshStatePlayingStates();
+                RefreshChannelStates();
+                SetStatus($"已在 {channelName} 新增 State {stateKey}。");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void DeleteState(string stateKey)
+        {
+            if (!EditorUtility.DisplayDialog("删除 State", $"确定删除 State '{stateKey}'？", "删除", "取消"))
+            {
+                return;
+            }
+
+            try
+            {
+                m_Session.DeleteState(stateKey);
+                m_ExpandedStateKeys.Remove(stateKey);
+                RebuildStateList();
+                RefreshStatePlayingStates();
+                RefreshChannelStates();
+                SetStatus($"已删除 State {stateKey}。");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void AddClip()
+        {
+            try
+            {
+                string clipKey = m_Session.AddClip();
                 m_PendingClipRenameKey = clipKey;
+                RebuildStateList();
                 RebuildClipList();
                 RebuildChannelControls();
+                RefreshStatePlayingStates();
                 RefreshClipPlayingStates();
                 RefreshChannelStates();
-                SetStatus($"已在 {channelName} 新增 Clip {clipKey}。");
+                SetStatus($"已新增 Clip {clipKey}。");
             }
             catch (Exception ex)
             {
@@ -1586,8 +2555,10 @@ namespace XFramework.Editor
             {
                 m_Session.DeleteClip(clipKey);
                 m_ExpandedClipKeys.Remove(clipKey);
+                RebuildStateList();
                 RebuildClipList();
                 RebuildChannelControls();
+                RefreshStatePlayingStates();
                 RefreshClipPlayingStates();
                 RefreshChannelStates();
                 SetStatus($"已删除 Clip {clipKey}。");
@@ -1738,8 +2709,10 @@ namespace XFramework.Editor
                 {
                     m_ExpandedClipKeys.Add(newKey.Trim());
                 }
+                RebuildStateList();
                 RebuildClipList();
                 RebuildChannelControls();
+                RefreshStatePlayingStates();
                 RefreshClipPlayingStates();
                 RefreshChannelStates();
             }
@@ -1758,8 +2731,10 @@ namespace XFramework.Editor
             {
                 m_Session.RenameChannel(oldName, newName);
                 SetStatus($"Channel {oldName} 已重命名为 {newName}。");
-                RebuildClipList();
+                RebuildStateList();
                 RebuildChannelControls();
+                RefreshPlayTargetChannelChoices();
+                RefreshStatePlayingStates();
                 RefreshClipPlayingStates();
                 RefreshChannelStates();
             }
@@ -1771,12 +2746,195 @@ namespace XFramework.Editor
             }
         }
 
-        private void RegisterClipChannelDropTarget(VisualElement group, VisualElement groupHeader, string channelName)
+        private void RenameState(string oldKey, string newKey, EditableLabel label)
+        {
+            newKey = newKey?.Trim();
+            try
+            {
+                m_Session.RenameState(oldKey, newKey);
+                SetStatus($"State {oldKey} 已重命名为 {newKey}。");
+                if (m_ExpandedStateKeys.Remove(oldKey) && !string.IsNullOrWhiteSpace(newKey))
+                {
+                    m_ExpandedStateKeys.Add(newKey.Trim());
+                }
+                RebuildStateList();
+                RefreshStatePlayingStates();
+                RefreshChannelStates();
+            }
+            catch (Exception ex)
+            {
+                label.text = oldKey;
+                SetStatus(ex.Message);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void ChangeStateType(string stateKey, XAnimationStateType stateType, string previousValue, DropdownField field)
+        {
+            try
+            {
+                m_Session.SetStateType(stateKey, stateType);
+                RebuildStateList();
+                RefreshStatePlayingStates();
+                RefreshChannelStates();
+                SetStatus($"{stateKey} stateType = {stateType}。");
+            }
+            catch (Exception ex)
+            {
+                field.SetValueWithoutNotify(previousValue);
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void ChangeStateChannel(string stateKey, string channelName, DropdownField field, string previousValue)
+        {
+            try
+            {
+                m_Session.SetStateChannel(stateKey, channelName);
+                RebuildStateList();
+                RefreshStatePlayingStates();
+                RefreshChannelStates();
+                SetStatus($"{stateKey} channel = {channelName}。");
+            }
+            catch (Exception ex)
+            {
+                field.SetValueWithoutNotify(previousValue);
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void ChangeStateClipKey(string stateKey, string clipKey, DropdownField field, string previousValue)
+        {
+            try
+            {
+                m_Session.SetStateClipKey(stateKey, clipKey);
+                RebuildStateList();
+                RestartStateIfPlaying(stateKey, null);
+                RefreshStatePlayingStates();
+                RefreshChannelStates();
+                SetStatus($"{stateKey} clipKey = {clipKey}。");
+            }
+            catch (Exception ex)
+            {
+                field.SetValueWithoutNotify(previousValue);
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void ChangeStateBlendParameter(string stateKey, string parameterName, DropdownField field, string previousValue)
+        {
+            try
+            {
+                m_Session.SetStateBlendParameter(stateKey, parameterName);
+                RebuildStateList();
+                RefreshStatePlayingStates();
+                RefreshChannelStates();
+                SetStatus($"{stateKey} parameter = {parameterName}。");
+            }
+            catch (Exception ex)
+            {
+                field.SetValueWithoutNotify(previousValue);
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void ChangeStateRootMotionMode(string stateKey, XAnimationClipRootMotionMode mode, string previousValue, DropdownField field)
+        {
+            try
+            {
+                m_Session.SetStateRootMotionMode(stateKey, mode);
+                RestartStateIfPlaying(stateKey, null);
+                RefreshChannelStates();
+                SetStatus($"{stateKey} rootMotionMode = {mode}。");
+            }
+            catch (Exception ex)
+            {
+                field.SetValueWithoutNotify(previousValue);
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void AddBlendSample(string stateKey)
+        {
+            try
+            {
+                m_Session.AddBlendSample(stateKey);
+                RebuildStateList();
+                RefreshStatePlayingStates();
+                RefreshChannelStates();
+                SetStatus($"{stateKey} 已新增 Blend1D sample。");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void DeleteBlendSample(string stateKey, int sampleIndex)
+        {
+            try
+            {
+                m_Session.DeleteBlendSample(stateKey, sampleIndex);
+                RebuildStateList();
+                RefreshStatePlayingStates();
+                RefreshChannelStates();
+                SetStatus($"{stateKey} 已删除 Blend1D sample #{sampleIndex}。");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void ChangeBlendSampleClipKey(string stateKey, int sampleIndex, string clipKey, DropdownField field, string previousValue)
+        {
+            try
+            {
+                m_Session.SetBlendSampleClipKey(stateKey, sampleIndex, clipKey);
+                RebuildStateList();
+                RefreshStatePlayingStates();
+                RefreshChannelStates();
+                SetStatus($"{stateKey} sample #{sampleIndex} clip = {clipKey}。");
+            }
+            catch (Exception ex)
+            {
+                field.SetValueWithoutNotify(previousValue);
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void ChangeBlendSampleThreshold(string stateKey, int sampleIndex, float threshold, FloatField field, float previousValue)
+        {
+            try
+            {
+                m_Session.SetBlendSampleThreshold(stateKey, sampleIndex, threshold);
+                RebuildStateList();
+                RefreshStatePlayingStates();
+                RefreshChannelStates();
+                SetStatus($"{stateKey} sample #{sampleIndex} threshold = {threshold:0.###}。");
+            }
+            catch (Exception ex)
+            {
+                field.SetValueWithoutNotify(previousValue);
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void RegisterStateChannelDropTarget(VisualElement group, VisualElement groupHeader, string channelName)
         {
             group.RegisterCallback<DragUpdatedEvent>(evt =>
             {
-                string clipKey = DragAndDrop.GetGenericData(ClipDragDataKey) as string;
-                if (!CanDropClip(clipKey, channelName))
+                string stateKey = DragAndDrop.GetGenericData(StateDragDataKey) as string;
+                if (!CanDropState(stateKey, channelName))
                 {
                     return;
                 }
@@ -1788,25 +2946,25 @@ namespace XFramework.Editor
             group.RegisterCallback<DragLeaveEvent>(_ => groupHeader.style.backgroundColor = ListHeaderBg);
             group.RegisterCallback<DragPerformEvent>(evt =>
             {
-                string clipKey = DragAndDrop.GetGenericData(ClipDragDataKey) as string;
-                if (!CanDropClip(clipKey, channelName))
+                string stateKey = DragAndDrop.GetGenericData(StateDragDataKey) as string;
+                if (!CanDropState(stateKey, channelName))
                 {
                     return;
                 }
 
                 DragAndDrop.AcceptDrag();
                 groupHeader.style.backgroundColor = ListHeaderBg;
-                MoveClip(clipKey, channelName);
+                MoveState(stateKey, channelName);
                 evt.StopPropagation();
             });
         }
 
-        private void RegisterClipRowDropTarget(VisualElement row, string channelName, string insertBeforeClipKey)
+        private void RegisterStateRowDropTarget(VisualElement row, string channelName, string insertBeforeStateKey)
         {
             row.RegisterCallback<DragUpdatedEvent>(evt =>
             {
-                string clipKey = DragAndDrop.GetGenericData(ClipDragDataKey) as string;
-                if (!CanDropClip(clipKey, channelName, insertBeforeClipKey))
+                string stateKey = DragAndDrop.GetGenericData(StateDragDataKey) as string;
+                if (!CanDropState(stateKey, channelName, insertBeforeStateKey))
                 {
                     return;
                 }
@@ -1823,8 +2981,8 @@ namespace XFramework.Editor
             });
             row.RegisterCallback<DragPerformEvent>(evt =>
             {
-                string clipKey = DragAndDrop.GetGenericData(ClipDragDataKey) as string;
-                if (!CanDropClip(clipKey, channelName, insertBeforeClipKey))
+                string stateKey = DragAndDrop.GetGenericData(StateDragDataKey) as string;
+                if (!CanDropState(stateKey, channelName, insertBeforeStateKey))
                 {
                     return;
                 }
@@ -1832,38 +2990,38 @@ namespace XFramework.Editor
                 DragAndDrop.AcceptDrag();
                 row.style.borderTopColor = Color.clear;
                 row.style.borderTopWidth = 0;
-                MoveClip(clipKey, channelName, insertBeforeClipKey);
+                MoveState(stateKey, channelName, insertBeforeStateKey);
                 evt.StopPropagation();
             });
         }
 
-        private bool CanDropClip(string clipKey, string channelName, string insertBeforeClipKey = null)
+        private bool CanDropState(string stateKey, string channelName, string insertBeforeStateKey = null)
         {
             if (m_IsEditingName ||
                 m_Session == null || !m_Session.IsLoaded ||
-                string.IsNullOrWhiteSpace(clipKey) ||
+                string.IsNullOrWhiteSpace(stateKey) ||
                 string.IsNullOrWhiteSpace(channelName))
             {
                 return false;
             }
 
-            if (!m_ClipChannelMap.TryGetValue(clipKey, out string currentChannel))
+            if (!m_StateChannelMap.TryGetValue(stateKey, out string currentChannel))
             {
                 return false;
             }
 
-            return !string.Equals(clipKey, insertBeforeClipKey, StringComparison.Ordinal) ||
+            return !string.Equals(stateKey, insertBeforeStateKey, StringComparison.Ordinal) ||
                 !string.Equals(currentChannel, channelName, StringComparison.Ordinal);
         }
 
-        private void MoveClip(string clipKey, string channelName, string insertBeforeClipKey = null)
+        private void MoveState(string stateKey, string channelName, string insertBeforeStateKey = null)
         {
-            m_Session.MoveClip(clipKey, channelName, insertBeforeClipKey);
-            m_ClipChannelMap[clipKey] = channelName;
-            RebuildClipList();
-            RefreshClipPlayingStates();
+            m_Session.MoveState(stateKey, channelName, insertBeforeStateKey);
+            m_StateChannelMap[stateKey] = channelName;
+            RebuildStateList();
+            RefreshStatePlayingStates();
             RefreshChannelStates();
-            SetStatus($"{clipKey} 已移动到 {channelName}。");
+            SetStatus($"{stateKey} 已移动到 {channelName}。");
         }
 
         private void TryBeginPendingRename()
@@ -1885,6 +3043,31 @@ namespace XFramework.Editor
                         m_ExpandedClipKeys.Remove(clipKey);
                         clipLabel.BeginEdit();
                     }
+                }).StartingIn(0);
+            }
+
+            if (!string.IsNullOrWhiteSpace(m_PendingStateRenameKey) &&
+                m_StateLabelMap.TryGetValue(m_PendingStateRenameKey, out EditableLabel stateLabel))
+            {
+                string stateKey = m_PendingStateRenameKey;
+                m_PendingStateRenameKey = null;
+                rootVisualElement.schedule.Execute(() =>
+                {
+                    if (stateLabel != null)
+                    {
+                        m_ExpandedStateKeys.Remove(stateKey);
+                        stateLabel.BeginEdit();
+                    }
+                }).StartingIn(0);
+            }
+
+            if (!string.IsNullOrWhiteSpace(m_PendingParameterRenameKey) &&
+                m_ParameterLabelMap.TryGetValue(m_PendingParameterRenameKey, out EditableLabel parameterLabel))
+            {
+                m_PendingParameterRenameKey = null;
+                rootVisualElement.schedule.Execute(() =>
+                {
+                    parameterLabel?.BeginEdit();
                 }).StartingIn(0);
             }
 
@@ -1958,6 +3141,611 @@ namespace XFramework.Editor
             btn.Add(image);
         }
 
+        private VisualElement CreateStateEditor(XAnimationCompiledState state)
+        {
+            XAnimationStateConfig config = state.Config;
+            VisualElement editor = CreateFoldoutRowEditor();
+
+            List<string> stateTypeNames = new(Enum.GetNames(typeof(XAnimationStateType)));
+            DropdownField stateTypeField = new(
+                "stateType",
+                stateTypeNames,
+                Mathf.Max(0, stateTypeNames.IndexOf(config.stateType.ToString())));
+            stateTypeField.tooltip = "State 类型。Single 播放一个 clip；Blend1D 根据 float 参数混合采样点。";
+            stateTypeField.RegisterValueChangedCallback(evt =>
+            {
+                if (!Enum.TryParse(evt.newValue, out XAnimationStateType stateType))
+                {
+                    return;
+                }
+
+                ChangeStateType(state.Key, stateType, evt.previousValue, stateTypeField);
+            });
+            editor.Add(stateTypeField);
+
+            DropdownField channelField = CreateChannelDropdown("channel", config.channelName);
+            channelField.tooltip = "State 默认播放 channel。";
+            channelField.RegisterValueChangedCallback(evt => ChangeStateChannel(state.Key, evt.newValue, channelField, evt.previousValue));
+            editor.Add(channelField);
+
+            if (config.stateType == XAnimationStateType.Single)
+            {
+                DropdownField clipField = CreateClipKeyDropdown("clipKey", config.clipKey);
+                clipField.tooltip = "Single state 播放的 clip。";
+                clipField.RegisterValueChangedCallback(evt => ChangeStateClipKey(state.Key, evt.newValue, clipField, evt.previousValue));
+                editor.Add(clipField);
+            }
+            else if (config.stateType == XAnimationStateType.Blend1D)
+            {
+                DropdownField parameterField = CreateFloatParameterDropdown("parameter", config.parameterName);
+                parameterField.tooltip = "Blend1D 绑定的 Float 参数。";
+                parameterField.RegisterValueChangedCallback(evt => ChangeStateBlendParameter(state.Key, evt.newValue, parameterField, evt.previousValue));
+                editor.Add(parameterField);
+                editor.Add(CreateBlendSampleEditor(state.Key, config));
+            }
+
+            Toggle loopField = new("loop") { value = config.loop };
+            loopField.tooltip = "State 是否循环。";
+            loopField.RegisterValueChangedCallback(evt =>
+            {
+                if (m_Session == null || !m_Session.IsLoaded) return;
+
+                m_Session.SetStateLoop(state.Key, evt.newValue);
+                RestartStateIfPlaying(state.Key, config.channelName);
+                SetStatus($"{state.Key} loop = {evt.newValue}。");
+            });
+            editor.Add(loopField);
+
+            FloatField speedField = new("speed") { value = config.speed };
+            speedField.tooltip = "State 默认速度。0 会按 1 处理。";
+            speedField.RegisterValueChangedCallback(evt =>
+            {
+                if (m_Session == null || !m_Session.IsLoaded) return;
+
+                float speed = Mathf.Approximately(evt.newValue, 0f) ? 1f : evt.newValue;
+                if (!Mathf.Approximately(speed, evt.newValue))
+                {
+                    speedField.SetValueWithoutNotify(speed);
+                }
+
+                m_Session.SetStateSpeed(state.Key, speed, save: false);
+                ScheduleAssetSave();
+                SetStatus($"{state.Key} speed = {speed:0.###}。");
+            });
+            editor.Add(speedField);
+
+            VisualElement fadeRow = new VisualElement();
+            fadeRow.style.flexDirection = FlexDirection.Row;
+            fadeRow.style.alignItems = Align.Center;
+
+            FloatField fadeInField = new("fadeIn") { value = config.fadeIn };
+            fadeInField.tooltip = "State 默认淡入时间。";
+            fadeInField.style.flexGrow = 1;
+            fadeInField.RegisterValueChangedCallback(evt =>
+            {
+                if (m_Session == null || !m_Session.IsLoaded) return;
+
+                float fadeIn = Mathf.Max(0f, evt.newValue);
+                if (!Mathf.Approximately(fadeIn, evt.newValue))
+                {
+                    fadeInField.SetValueWithoutNotify(fadeIn);
+                }
+
+                m_Session.SetStateFade(state.Key, fadeIn, config.fadeOut, save: false);
+                ScheduleAssetSave();
+                SetStatus($"{state.Key} fadeIn = {fadeIn:0.###}。");
+            });
+            fadeRow.Add(fadeInField);
+
+            FloatField fadeOutField = new("fadeOut") { value = config.fadeOut };
+            fadeOutField.tooltip = "State 默认淡出时间。";
+            fadeOutField.style.flexGrow = 1;
+            fadeOutField.style.marginLeft = 8;
+            fadeOutField.RegisterValueChangedCallback(evt =>
+            {
+                if (m_Session == null || !m_Session.IsLoaded) return;
+
+                float fadeOut = Mathf.Max(0f, evt.newValue);
+                if (!Mathf.Approximately(fadeOut, evt.newValue))
+                {
+                    fadeOutField.SetValueWithoutNotify(fadeOut);
+                }
+
+                m_Session.SetStateFade(state.Key, config.fadeIn, fadeOut, save: false);
+                ScheduleAssetSave();
+                SetStatus($"{state.Key} fadeOut = {fadeOut:0.###}。");
+            });
+            fadeRow.Add(fadeOutField);
+            editor.Add(fadeRow);
+
+            List<string> rootMotionModeNames = new(Enum.GetNames(typeof(XAnimationClipRootMotionMode)));
+            DropdownField rootMotionModeField = new(
+                "rootMotionMode",
+                rootMotionModeNames,
+                Mathf.Max(0, rootMotionModeNames.IndexOf(config.rootMotionMode.ToString())));
+            rootMotionModeField.tooltip = "State 的 Root Motion 策略：继承 channel、强制开启或强制关闭。";
+            rootMotionModeField.RegisterValueChangedCallback(evt =>
+            {
+                if (!Enum.TryParse(evt.newValue, out XAnimationClipRootMotionMode mode))
+                {
+                    return;
+                }
+
+                ChangeStateRootMotionMode(state.Key, mode, evt.previousValue, rootMotionModeField);
+            });
+            editor.Add(rootMotionModeField);
+            return editor;
+        }
+
+        private static VisualElement CreateFoldoutRowEditor()
+        {
+            VisualElement editor = new VisualElement();
+            editor.style.marginLeft = 4;
+            editor.style.marginRight = 4;
+            editor.style.marginTop = 1;
+            editor.style.marginBottom = 3;
+            editor.style.paddingLeft = 6;
+            editor.style.paddingRight = 6;
+            editor.style.paddingTop = 4;
+            editor.style.paddingBottom = 4;
+            editor.style.backgroundColor = new Color(0.12f, 0.12f, 0.13f, 1f);
+            editor.style.borderTopWidth = 1;
+            editor.style.borderBottomWidth = 1;
+            editor.style.borderLeftWidth = 1;
+            editor.style.borderRightWidth = 1;
+            editor.style.borderTopColor = SectionDivider;
+            editor.style.borderBottomColor = SectionDivider;
+            editor.style.borderLeftColor = SectionDivider;
+            editor.style.borderRightColor = SectionDivider;
+            editor.style.borderTopLeftRadius = 3;
+            editor.style.borderTopRightRadius = 3;
+            editor.style.borderBottomLeftRadius = 3;
+            editor.style.borderBottomRightRadius = 3;
+            return editor;
+        }
+
+        private VisualElement CreateBlendSampleEditor(string stateKey, XAnimationStateConfig config)
+        {
+            VisualElement box = CreateSubBox();
+            box.style.marginTop = 5;
+
+            VisualElement header = new VisualElement();
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.alignItems = Align.Center;
+            header.style.marginBottom = 3;
+
+            Label title = new("Samples");
+            title.style.flexGrow = 1;
+            title.style.color = TextNormal;
+            title.style.fontSize = BodyFontSize;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            header.Add(title);
+
+            bool editable = m_Session != null && !m_Session.IsOverrideAsset;
+            Button addButton = new(() => AddBlendSample(stateKey))
+            {
+                text = "+"
+            };
+            addButton.tooltip = editable ? "为这个 Blend1D state 新增采样点。" : "Override 资源不能新增采样点。";
+            addButton.SetEnabled(editable);
+            ApplyClipIconButtonStyle(addButton, AccentColor);
+            header.Add(addButton);
+            box.Add(header);
+
+            XAnimationBlend1DSampleConfig[] samples = config.samples ?? Array.Empty<XAnimationBlend1DSampleConfig>();
+            for (int i = 0; i < samples.Length; i++)
+            {
+                box.Add(CreateBlendSampleRow(stateKey, i, samples[i], editable));
+            }
+
+            if (samples.Length == 0)
+            {
+                Label emptyLabel = new("No samples");
+                emptyLabel.style.color = TextMuted;
+                emptyLabel.style.fontSize = BodyFontSize;
+                emptyLabel.style.marginLeft = 4;
+                box.Add(emptyLabel);
+            }
+
+            return box;
+        }
+
+        private VisualElement CreateParameterPreviewEditor(XAnimationCompiledParameter parameter)
+        {
+            if (parameter == null || parameter.Type != XAnimationParameterType.Float)
+            {
+                return null;
+            }
+
+            float defaultValue = ConvertParameterDefaultToFloat(parameter.Config.defaultValue);
+            if (TryGetBlend1DPreviewRange(parameter.Name, out float min, out float max))
+            {
+                return CreateFloatPreviewParameterRow(parameter.Name, defaultValue, min, max, useSlider: true);
+            }
+
+            return CreateFloatPreviewParameterRow(parameter.Name, defaultValue, defaultValue, defaultValue, useSlider: false);
+        }
+
+        private bool TryGetBlend1DPreviewRange(string parameterName, out float min, out float max)
+        {
+            min = 0f;
+            max = 0f;
+            if (m_Session == null || !m_Session.IsLoaded || string.IsNullOrWhiteSpace(parameterName))
+            {
+                return false;
+            }
+
+            bool found = false;
+            IReadOnlyList<XAnimationCompiledState> states = m_Session.CompiledAsset.States;
+            for (int i = 0; i < states.Count; i++)
+            {
+                if (states[i] is not XAnimationCompiledBlend1DState blendState)
+                {
+                    continue;
+                }
+
+                if (!string.Equals(blendState.Config.parameterName, parameterName, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (blendState.Samples.Count == 0)
+                {
+                    continue;
+                }
+
+                float stateMin = blendState.Samples[0].Threshold;
+                float stateMax = blendState.Samples[blendState.Samples.Count - 1].Threshold;
+                if (!found)
+                {
+                    min = stateMin;
+                    max = stateMax;
+                    found = true;
+                }
+                else
+                {
+                    min = Mathf.Min(min, stateMin);
+                    max = Mathf.Max(max, stateMax);
+                }
+            }
+
+            if (!found)
+            {
+                return false;
+            }
+
+            if (Mathf.Approximately(min, max))
+            {
+                max = min + 1f;
+            }
+
+            return true;
+        }
+
+        private VisualElement CreateFloatPreviewParameterRow(
+            string parameterName,
+            float defaultValue,
+            float min,
+            float max,
+            bool useSlider)
+        {
+            VisualElement row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginBottom = 3;
+
+            Label label = new(parameterName);
+            label.style.width = 82;
+            label.style.flexShrink = 0;
+            label.style.color = TextMuted;
+            label.style.fontSize = BodyFontSize;
+            label.style.unityFontStyleAndWeight = FontStyle.Bold;
+            row.Add(label);
+
+            FloatField valueField = new()
+            {
+                value = defaultValue
+            };
+            valueField.tooltip = "预览参数值，只影响当前 Preview Session，不保存到资源。";
+            ConfigureCompactNumberField(valueField);
+
+            if (useSlider)
+            {
+                Slider slider = new(min, max)
+                {
+                    value = defaultValue
+                };
+                slider.tooltip = $"Blend 参数范围来自 samples: [{min:0.###}, {max:0.###}]。";
+                slider.style.flexGrow = 1;
+                slider.RegisterValueChangedCallback(evt =>
+                {
+                    valueField.SetValueWithoutNotify(evt.newValue);
+                    SetPreviewFloatParameter(parameterName, evt.newValue);
+                });
+                valueField.RegisterValueChangedCallback(evt =>
+                {
+                    slider.SetValueWithoutNotify(Mathf.Clamp(evt.newValue, min, max));
+                    SetPreviewFloatParameter(parameterName, evt.newValue);
+                });
+                row.Add(slider);
+                row.Add(valueField);
+            }
+            else
+            {
+                valueField.style.flexGrow = 1;
+                valueField.style.width = StyleKeyword.Auto;
+                valueField.style.minWidth = 64;
+                valueField.style.maxWidth = StyleKeyword.None;
+                valueField.RegisterValueChangedCallback(evt => SetPreviewFloatParameter(parameterName, evt.newValue));
+                row.Add(valueField);
+            }
+
+            Button zeroButton = new(() =>
+            {
+                valueField.SetValueWithoutNotify(0f);
+                SetPreviewFloatParameter(parameterName, 0f);
+            })
+            {
+                text = "0"
+            };
+            zeroButton.tooltip = "把这个预览参数重置为 0。";
+            ApplyClipIconButtonStyle(zeroButton);
+            zeroButton.style.marginLeft = 4;
+            row.Add(zeroButton);
+
+            return row;
+        }
+
+        private List<XAnimationCompiledParameter> GetFloatParameters()
+        {
+            List<XAnimationCompiledParameter> parameters = new();
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                return parameters;
+            }
+
+            IReadOnlyList<XAnimationCompiledParameter> compiledParameters = m_Session.CompiledAsset.Parameters;
+            for (int i = 0; i < compiledParameters.Count; i++)
+            {
+                XAnimationCompiledParameter parameter = compiledParameters[i];
+                if (parameter.Type == XAnimationParameterType.Float)
+                {
+                    parameters.Add(parameter);
+                }
+            }
+
+            return parameters;
+        }
+
+        private void SetPreviewFloatParameter(string parameterName, float value)
+        {
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                return;
+            }
+
+            try
+            {
+                m_Session.SetPreviewParameter(parameterName, value);
+                SetStatus($"Preview parameter {parameterName} = {value:0.###}。");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private static float ConvertParameterDefaultToFloat(object value)
+        {
+            if (value == null)
+            {
+                return 0f;
+            }
+
+            try
+            {
+                return Convert.ToSingle(value, System.Globalization.CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                return 0f;
+            }
+        }
+
+        private static bool ConvertParameterDefaultToBool(object value)
+        {
+            if (value == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                return Convert.ToBoolean(value, System.Globalization.CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private VisualElement CreateBlendSampleRow(string stateKey, int sampleIndex, XAnimationBlend1DSampleConfig sample, bool editable)
+        {
+            VisualElement row = CreateSubBox();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginBottom = 3;
+
+            Label indexLabel = new($"#{sampleIndex}");
+            indexLabel.style.width = 28;
+            indexLabel.style.flexShrink = 0;
+            indexLabel.style.color = TextMuted;
+            indexLabel.style.fontSize = BodyFontSize;
+            indexLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            row.Add(indexLabel);
+
+            DropdownField clipField = CreateClipKeyDropdown("clip", sample?.clipKey);
+            clipField.SetEnabled(editable);
+            clipField.style.flexGrow = 1;
+            clipField.RegisterValueChangedCallback(evt => ChangeBlendSampleClipKey(stateKey, sampleIndex, evt.newValue, clipField, evt.previousValue));
+            row.Add(clipField);
+
+            FloatField thresholdField = new("threshold")
+            {
+                value = sample?.threshold ?? 0f
+            };
+            thresholdField.SetEnabled(editable);
+            thresholdField.tooltip = "一维 Blend 轴上的采样位置，必须保持严格递增。";
+            thresholdField.style.width = 120;
+            thresholdField.style.marginLeft = 6;
+            thresholdField.RegisterValueChangedCallback(evt => ChangeBlendSampleThreshold(stateKey, sampleIndex, evt.newValue, thresholdField, evt.previousValue));
+            row.Add(thresholdField);
+
+            Button deleteButton = new(() => DeleteBlendSample(stateKey, sampleIndex))
+            {
+                text = "⌫"
+            };
+            deleteButton.tooltip = editable ? "删除这个采样点。" : "Override 资源不能删除采样点。";
+            deleteButton.SetEnabled(editable);
+            ApplyTrashButtonIcon(deleteButton);
+            ApplyClipIconButtonStyle(deleteButton);
+            deleteButton.style.marginLeft = 4;
+            row.Add(deleteButton);
+
+            return row;
+        }
+
+        private DropdownField CreateChannelDropdown(string label, string currentValue)
+        {
+            List<string> choices = new();
+            if (m_Session != null && m_Session.IsLoaded)
+            {
+                IReadOnlyList<XAnimationCompiledChannel> channels = m_Session.CompiledAsset.Channels;
+                for (int i = 0; i < channels.Count; i++)
+                {
+                    choices.Add(channels[i].Name);
+                }
+            }
+
+            EnsureDropdownChoice(choices, currentValue);
+            return new DropdownField(label, choices, Mathf.Max(0, choices.IndexOf(currentValue ?? string.Empty)));
+        }
+
+        private void RefreshPlayTargetChannelChoices()
+        {
+            if (m_PlayTargetChannelField == null)
+            {
+                return;
+            }
+
+            List<string> choices = new();
+            if (m_Session != null && m_Session.IsLoaded)
+            {
+                IReadOnlyList<XAnimationCompiledChannel> channels = m_Session.CompiledAsset.Channels;
+                for (int i = 0; i < channels.Count; i++)
+                {
+                    choices.Add(channels[i].Name);
+                }
+            }
+
+            string selected = !string.IsNullOrWhiteSpace(m_PlayTargetChannelName) && choices.Contains(m_PlayTargetChannelName)
+                ? m_PlayTargetChannelName
+                : choices.Count > 0
+                    ? choices[0]
+                    : string.Empty;
+
+            m_PlayTargetChannelField.choices = choices;
+            m_PlayTargetChannelField.SetValueWithoutNotify(selected);
+            m_PlayTargetChannelField.SetEnabled(choices.Count > 0);
+            m_PlayTargetChannelName = selected;
+        }
+
+        private XAnimationPlayCommand BuildPreviewPlayCommand(string stateKey = null, string clipKey = null, string channelName = null)
+        {
+            XAnimationPlayCommand command = new()
+            {
+                target = new XAnimationPlayTarget
+                {
+                    stateKey = stateKey,
+                    clipKey = clipKey,
+                    channelName = channelName,
+                },
+                transition = new XAnimationTransitionOptions
+                {
+                    interruptible = true,
+                },
+                playback = new XAnimationPlaybackOptions
+                {
+                    speed = Mathf.Approximately(m_PlaySpeedField?.value ?? 0f, 0f) ? 1f : m_PlaySpeedField.value,
+                    weight = 1f,
+                },
+            };
+
+            if (m_ApplyTransitionRequestOverrides)
+            {
+                command.transition.fadeIn = Mathf.Max(0f, m_PlayFadeInOverride);
+                command.transition.fadeOut = Mathf.Max(0f, m_PlayFadeOutOverride);
+                command.transition.priority = m_PlayPriorityOverride;
+                command.transition.interruptible = m_PlayInterruptibleOverride;
+            }
+
+            if (m_ApplyPlaybackOverrides)
+            {
+                command.playback.weight = m_PlayWeightOverride;
+                command.playback.normalizedTime = Mathf.Clamp01(m_PlayNormalizedTimeOverride);
+                command.playback.loopOverride = m_PlayUseLoopOverride ? m_PlayLoopOverride : null;
+                command.playback.rootMotionOverride = m_PlayUseRootMotionOverride ? m_PlayRootMotionOverride : null;
+            }
+
+            return command;
+        }
+
+        private DropdownField CreateClipKeyDropdown(string label, string currentValue)
+        {
+            List<string> choices = new();
+            if (m_Session != null && m_Session.IsLoaded)
+            {
+                IReadOnlyList<XAnimationCompiledClip> clips = m_Session.CompiledAsset.Clips;
+                for (int i = 0; i < clips.Count; i++)
+                {
+                    choices.Add(clips[i].Key);
+                }
+            }
+
+            EnsureDropdownChoice(choices, currentValue);
+            return new DropdownField(label, choices, Mathf.Max(0, choices.IndexOf(currentValue ?? string.Empty)));
+        }
+
+        private DropdownField CreateFloatParameterDropdown(string label, string currentValue)
+        {
+            List<string> choices = new();
+            if (m_Session != null && m_Session.IsLoaded)
+            {
+                IReadOnlyList<XAnimationCompiledParameter> parameters = m_Session.CompiledAsset.Parameters;
+                for (int i = 0; i < parameters.Count; i++)
+                {
+                    XAnimationCompiledParameter parameter = parameters[i];
+                    if (parameter.Type == XAnimationParameterType.Float)
+                    {
+                        choices.Add(parameter.Name);
+                    }
+                }
+            }
+
+            EnsureDropdownChoice(choices, currentValue);
+            return new DropdownField(label, choices, Mathf.Max(0, choices.IndexOf(currentValue ?? string.Empty)));
+        }
+
+        private static void EnsureDropdownChoice(List<string> choices, string currentValue)
+        {
+            currentValue ??= string.Empty;
+            if (choices.Count == 0 || !choices.Contains(currentValue))
+            {
+                choices.Insert(0, currentValue);
+            }
+        }
+
         private VisualElement CreateClipEditor(XAnimationCompiledClip clip)
         {
             XAnimationClipConfig config = clip.Config;
@@ -1992,83 +3780,6 @@ namespace XFramework.Editor
                 editor.Add(originalClipField);
             }
 
-            Toggle loopField = new("loop") { value = config.loop };
-            loopField.tooltip = "是否循环播放该 clip。会保存到 XAnimation 文件。";
-            loopField.RegisterValueChangedCallback(evt =>
-            {
-                if (m_Session == null || !m_Session.IsLoaded) return;
-
-                m_Session.SetClipLoop(clip.Key, evt.newValue);
-                RestartClipIfPlaying(clip.Key, config.defaultChannel);
-                SetStatus($"{clip.Key} loop = {evt.newValue}。");
-            });
-            editor.Add(loopField);
-
-            VisualElement fadeRow = new VisualElement();
-            fadeRow.style.flexDirection = FlexDirection.Row;
-            fadeRow.style.alignItems = Align.Center;
-
-            FloatField fadeInField = new("defaultFadeIn") { value = config.defaultFadeIn };
-            fadeInField.tooltip = "该 clip 默认淡入时间。会延迟保存到 XAnimation 文件。";
-            fadeInField.style.flexGrow = 1;
-            fadeInField.RegisterValueChangedCallback(evt =>
-            {
-                if (m_Session == null || !m_Session.IsLoaded) return;
-
-                float fadeIn = Mathf.Max(0f, evt.newValue);
-                if (!Mathf.Approximately(fadeIn, evt.newValue))
-                {
-                    fadeInField.SetValueWithoutNotify(fadeIn);
-                }
-
-                m_Session.SetClipFade(clip.Key, fadeIn, config.defaultFadeOut, save: false);
-                ScheduleAssetSave();
-                SetStatus($"{clip.Key} defaultFadeIn = {fadeIn:0.###}。");
-            });
-            fadeRow.Add(fadeInField);
-
-            FloatField fadeOutField = new("defaultFadeOut") { value = config.defaultFadeOut };
-            fadeOutField.tooltip = "该 clip 默认淡出时间。会延迟保存到 XAnimation 文件。";
-            fadeOutField.style.flexGrow = 1;
-            fadeOutField.style.marginLeft = 8;
-            fadeOutField.RegisterValueChangedCallback(evt =>
-            {
-                if (m_Session == null || !m_Session.IsLoaded) return;
-
-                float fadeOut = Mathf.Max(0f, evt.newValue);
-                if (!Mathf.Approximately(fadeOut, evt.newValue))
-                {
-                    fadeOutField.SetValueWithoutNotify(fadeOut);
-                }
-
-                m_Session.SetClipFade(clip.Key, config.defaultFadeIn, fadeOut, save: false);
-                ScheduleAssetSave();
-                SetStatus($"{clip.Key} defaultFadeOut = {fadeOut:0.###}。");
-            });
-            fadeRow.Add(fadeOutField);
-            editor.Add(fadeRow);
-
-            List<string> rootMotionModeNames = new(Enum.GetNames(typeof(XAnimationClipRootMotionMode)));
-            DropdownField rootMotionModeField = new(
-                "rootMotionMode",
-                rootMotionModeNames,
-                Mathf.Max(0, rootMotionModeNames.IndexOf(config.rootMotionMode.ToString())));
-            rootMotionModeField.tooltip = "该 clip 的 Root Motion 策略：继承 channel、强制开启或强制关闭。会保存到 XAnimation 文件。";
-            rootMotionModeField.RegisterValueChangedCallback(evt =>
-            {
-                if (m_Session == null || !m_Session.IsLoaded) return;
-
-                if (!Enum.TryParse(evt.newValue, out XAnimationClipRootMotionMode mode))
-                {
-                    return;
-                }
-
-                m_Session.SetClipRootMotionMode(clip.Key, mode);
-                RestartClipIfPlaying(clip.Key, config.defaultChannel);
-                RefreshChannelStates();
-                SetStatus($"{clip.Key} rootMotionMode = {mode}。");
-            });
-            editor.Add(rootMotionModeField);
             editor.Add(CreateClipCueEditor(clip.Key));
 
             return editor;
@@ -2087,11 +3798,55 @@ namespace XFramework.Editor
                 return false;
             }
 
-            m_Session.StopChannel(playingChannelName);
-            m_Session.Play(clipKey, m_PlaySpeedField.value, channelName);
+            m_Session.Play(BuildPreviewPlayCommand(
+                clipKey: clipKey,
+                channelName: string.IsNullOrWhiteSpace(channelName) ? playingChannelName : channelName));
             RefreshClipPlayingStates();
+            RefreshStatePlayingStates();
             RefreshChannelStates();
             return true;
+        }
+
+        private bool RestartStateIfPlaying(string stateKey, string channelName)
+        {
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                return false;
+            }
+
+            string playingChannelName = FindPlayingStateChannelName(stateKey);
+            if (string.IsNullOrEmpty(playingChannelName))
+            {
+                return false;
+            }
+
+            m_Session.Play(BuildPreviewPlayCommand(
+                stateKey: stateKey,
+                channelName: string.IsNullOrWhiteSpace(channelName) ? playingChannelName : channelName));
+            RefreshStatePlayingStates();
+            RefreshChannelStates();
+            return true;
+        }
+
+        private string FindPlayingStateChannelName(string stateKey)
+        {
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                return null;
+            }
+
+            IReadOnlyList<XAnimationCompiledChannel> channels = m_Session.CompiledAsset.Channels;
+            for (int i = 0; i < channels.Count; i++)
+            {
+                string channelName = channels[i].Name;
+                XAnimationChannelState state = m_Session.GetChannelState(channelName);
+                if (state != null && string.Equals(state.stateKey, stateKey, StringComparison.Ordinal))
+                {
+                    return channelName;
+                }
+            }
+
+            return null;
         }
 
         private string FindPlayingChannelName(string clipKey)
@@ -2175,10 +3930,9 @@ namespace XFramework.Editor
             try
             {
                 m_Session.SetClipPath(clip.Key, clipPath);
-                RestartClipIfPlaying(clip.Key, clip.Config.defaultChannel);
+                RestartClipIfPlaying(clip.Key, m_PlayTargetChannelName);
                 SetStatus($"{clip.Key} clip = {newClip.name}。");
                 RebuildClipList();
-                RebuildChannelControls();
                 RefreshClipPlayingStates();
                 RefreshChannelStates();
             }
@@ -2221,6 +3975,34 @@ namespace XFramework.Editor
                 : "新增一个 channel。";
         }
 
+        private void SetAddParameterButtonEnabled(bool enabled)
+        {
+            if (m_AddParameterButton == null)
+            {
+                return;
+            }
+
+            m_AddParameterButton.SetEnabled(enabled);
+            m_AddParameterButton.style.opacity = enabled ? 1f : 0.45f;
+            m_AddParameterButton.tooltip = m_Session != null && m_Session.IsOverrideAsset
+                ? "Override 资源不能新增 parameter。"
+                : "新增一个 parameter。";
+        }
+
+        private void SetAddClipButtonEnabled(bool enabled)
+        {
+            if (m_AddClipButton == null)
+            {
+                return;
+            }
+
+            m_AddClipButton.SetEnabled(enabled);
+            m_AddClipButton.style.opacity = enabled ? 1f : 0.45f;
+            m_AddClipButton.tooltip = m_Session != null && m_Session.IsOverrideAsset
+                ? "Override 资源不能新增 clip。"
+                : "新增一个全局 clip 资源叶子。";
+        }
+
         private void SetPauseButtonState(bool enabled, bool paused)
         {
             if (m_PauseButton == null)
@@ -2259,13 +4041,13 @@ namespace XFramework.Editor
                 }
             }
 
-            SetStopAllButtonEnabled(playingClipKeys != null && playingClipKeys.Count > 0);
-            bool hasPlayingClip = playingClipKeys != null && playingClipKeys.Count > 0;
-            if (!hasPlayingClip)
+            bool hasPlaying = HasAnyPlayingChannel();
+            SetStopAllButtonEnabled(hasPlaying);
+            if (!hasPlaying)
             {
                 m_IsPaused = false;
             }
-            SetPauseButtonState(hasPlayingClip, m_IsPaused);
+            SetPauseButtonState(hasPlaying, m_IsPaused);
 
             foreach (KeyValuePair<string, VisualElement> kvp in m_ClipRowMap)
             {
@@ -2289,6 +4071,58 @@ namespace XFramework.Editor
                     ApplyClipButtonStyle(btn, isPlaying);
                 }
             }
+        }
+
+        private void RefreshStatePlayingStates()
+        {
+            if (m_StateRowMap.Count == 0)
+            {
+                return;
+            }
+
+            HashSet<string> playingStateKeys = null;
+            if (m_Session != null && m_Session.IsLoaded)
+            {
+                IReadOnlyList<XAnimationCompiledChannel> channels = m_Session.CompiledAsset.Channels;
+                for (int i = 0; i < channels.Count; i++)
+                {
+                    XAnimationChannelState state = m_Session.GetChannelState(channels[i].Name);
+                    if (state != null && !string.IsNullOrEmpty(state.stateKey))
+                    {
+                        playingStateKeys ??= new HashSet<string>(StringComparer.Ordinal);
+                        playingStateKeys.Add(state.stateKey);
+                    }
+                }
+            }
+
+            foreach (KeyValuePair<string, VisualElement> kvp in m_StateRowMap)
+            {
+                bool isPlaying = playingStateKeys != null && playingStateKeys.Contains(kvp.Key);
+                kvp.Value.style.backgroundColor = isPlaying ? PlayingBg : ListRowEvenBg;
+                if (m_StateButtonMap.TryGetValue(kvp.Key, out Button button))
+                {
+                    ApplyClipButtonStyle(button, isPlaying);
+                }
+            }
+        }
+
+        private bool HasAnyPlayingChannel()
+        {
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                return false;
+            }
+
+            IReadOnlyList<XAnimationCompiledChannel> channels = m_Session.CompiledAsset.Channels;
+            for (int i = 0; i < channels.Count; i++)
+            {
+                if (m_Session.GetChannelState(channels[i].Name) != null)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void ApplyClipRowVisualState(string clipKey)
@@ -2443,7 +4277,6 @@ namespace XFramework.Editor
 
                     if (channelLabel.IsEditing)
                     {
-                        ClearClipDragData();
                         return;
                     }
 
@@ -2506,6 +4339,49 @@ namespace XFramework.Editor
             field.style.maxWidth = 64;
             field.style.flexShrink = 0;
             field.style.alignSelf = Align.Center;
+        }
+
+        private static void ConfigureCompactPlaybackField(BaseField<float> field, string labelText, float valueWidth)
+        {
+            field.label = string.Empty;
+            field.style.width = valueWidth;
+            field.style.minWidth = valueWidth;
+            field.style.maxWidth = valueWidth;
+            field.style.flexShrink = 0;
+            field.style.alignSelf = Align.Center;
+        }
+
+        private static void ConfigureCompactPlaybackElement(VisualElement field, float valueWidth)
+        {
+            field.style.width = valueWidth;
+            field.style.minWidth = valueWidth;
+            field.style.maxWidth = valueWidth;
+            field.style.flexShrink = 0;
+            field.style.alignSelf = Align.Center;
+        }
+
+        private static VisualElement CreatePlaybackFieldContainer(string labelText, VisualElement field, float labelWidth)
+        {
+            VisualElement container = new();
+            container.style.flexDirection = FlexDirection.Row;
+            container.style.alignItems = Align.Center;
+            container.style.marginTop = 2;
+            container.style.marginBottom = 2;
+            container.style.minWidth = 0;
+
+            Label label = new(labelText);
+            label.style.width = labelWidth;
+            label.style.minWidth = labelWidth;
+            label.style.maxWidth = labelWidth;
+            label.style.flexShrink = 0;
+            label.style.fontSize = 10;
+            label.style.color = TextMuted;
+            label.style.unityTextAlign = TextAnchor.MiddleLeft;
+            label.style.whiteSpace = WhiteSpace.NoWrap;
+            label.style.marginRight = 6;
+            container.Add(label);
+            container.Add(field);
+            return container;
         }
 
         private VisualElement CreateChannelConfigEditor(XAnimationCompiledChannel channel)
@@ -2696,9 +4572,28 @@ namespace XFramework.Editor
             string loop = state.isLooping ? "Loop" : "Once";
             string fade = state.isFading ? "Fading" : "Stable";
             string interrupt = state.interruptible ? "Interruptible" : "Locked";
-            return $"State: {state.clipKey} | PlayId: {state.playbackId} | {loop} | {fade} | {interrupt}\n"
-                + $"Time: {state.normalizedTime:0.000} / Total: {state.totalNormalizedTime:0.000} | Channel Weight: {state.channelWeight:0.000} | Clip Weight: {state.weight:0.000}\n"
-                + $"TimeScale: {state.timeScale:0.000} | Effective Speed: {state.speed:0.000} | Priority: {state.priority}";
+            string stateKey = string.IsNullOrWhiteSpace(state.stateKey) ? state.clipKey : state.stateKey;
+            string blend = BuildBlendStateDebugText(state);
+            return $"State: {stateKey} ({state.stateType}) | Clip: {state.clipKey} | PlayId: {state.playbackId} | {loop} | {fade} | {interrupt}\n"
+                + $"Time: {state.normalizedTime:0.000} / Total: {state.totalNormalizedTime:0.000} | Channel Weight: {state.channelWeight:0.000} | State Weight: {state.weight:0.000}\n"
+                + $"TimeScale: {state.timeScale:0.000} | Effective Speed: {state.speed:0.000} | Priority: {state.priority}{blend}";
+        }
+
+        private static string BuildBlendStateDebugText(XAnimationChannelState state)
+        {
+            if (state.blendClips == null || state.blendClips.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            List<string> parts = new();
+            for (int i = 0; i < state.blendClips.Length; i++)
+            {
+                XAnimationBlendClipState clipState = state.blendClips[i];
+                parts.Add($"{clipState.clipKey}:{clipState.weight:0.000}");
+            }
+
+            return $"\nBlend: {string.Join(", ", parts)}";
         }
 
         private void RefreshCueLogView(bool force = false)
@@ -2755,18 +4650,21 @@ namespace XFramework.Editor
             m_ClipRowMap.Clear();
             m_ClipVisualStateMap.Clear();
             m_ClipButtonMap.Clear();
-            m_ClipChannelMap.Clear();
             m_ChannelControlsContainer?.Clear();
             m_ChannelLabelMap.Clear();
             m_CueLogContainer?.Clear();
             m_ChannelStateLabels.Clear();
             m_PendingClipRenameKey = null;
             m_PendingChannelRenameKey = null;
-            m_PreviewImage.image = null;
+            if (m_PreviewImage != null)
+            {
+                m_PreviewImage.image = null;
+            }
             m_LastCueLogCount = -1;
             m_IsPaused = false;
             SetPauseButtonState(false, false);
             SetStopAllButtonEnabled(false);
+            SetAddClipButtonEnabled(false);
             SetAddChannelButtonEnabled(false);
         }
 
@@ -2779,7 +4677,10 @@ namespace XFramework.Editor
 
             m_Session.Dispose();
             m_Session = null;
-            m_PreviewImage.image = null;
+            if (m_PreviewImage != null)
+            {
+                m_PreviewImage.image = null;
+            }
             m_LastCueLogCount = -1;
         }
 

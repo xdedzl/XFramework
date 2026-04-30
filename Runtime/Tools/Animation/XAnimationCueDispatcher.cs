@@ -40,14 +40,18 @@ namespace XFramework.Animation
             m_PlaybackStates.Remove(playbackId);
         }
 
-        public void Update(XAnimationPlaybackInstance instance, float previousTotalNormalizedTime, float currentTotalNormalizedTime)
+        public void Update(
+            XAnimationStatePlaybackInstance instance,
+            string clipKey,
+            float previousTotalNormalizedTime,
+            float currentTotalNormalizedTime)
         {
             if (instance == null || instance.SuppressCues)
             {
                 return;
             }
 
-            if (!m_CuesByClipKey.TryGetValue(instance.ClipKey, out List<XAnimationCompiledCue> cues) || cues.Count == 0)
+            if (!m_CuesByClipKey.TryGetValue(clipKey, out List<XAnimationCompiledCue> cues) || cues.Count == 0)
             {
                 return;
             }
@@ -91,7 +95,7 @@ namespace XFramework.Animation
                     CueTriggered?.Invoke(new XAnimationCueEvent
                     {
                         playbackId = instance.PlaybackId,
-                        clipKey = instance.ClipKey,
+                        clipKey = clipKey,
                         channelName = instance.ChannelName,
                         eventKey = cueConfig.eventKey,
                         payload = cueConfig.payload,

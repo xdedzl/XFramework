@@ -15,6 +15,7 @@ namespace XFramework.Animation
             ValidateChannels(asset.channels);
             ValidateClips(asset.channels, asset.clips);
             ValidateParameters(asset.parameters);
+            ValidateStates(asset.channels, asset.clips, asset.parameters, asset.states);
             ValidateCues(asset.clips, asset.cues);
             ValidateGraph(asset.graph);
         }
@@ -108,25 +109,6 @@ namespace XFramework.Animation
                     throw new XFrameworkException($"XAnimation clip '{clip.key}' has an empty clipPath.");
                 }
 
-                if (string.IsNullOrWhiteSpace(clip.defaultChannel))
-                {
-                    throw new XFrameworkException($"XAnimation clip '{clip.key}' has an empty defaultChannel.");
-                }
-
-                if (!channelMap.TryGetValue(clip.defaultChannel, out XAnimationChannelConfig defaultChannel))
-                {
-                    throw new XFrameworkException($"XAnimation clip '{clip.key}' references unknown channel '{clip.defaultChannel}'.");
-                }
-
-                if (clip.defaultFadeIn < 0f || clip.defaultFadeOut < 0f)
-                {
-                    throw new XFrameworkException($"XAnimation clip '{clip.key}' has negative fade settings.");
-                }
-
-                if (clip.rootMotionMode == XAnimationClipRootMotionMode.ForceOn && !defaultChannel.canDriveRootMotion)
-                {
-                    throw new XFrameworkException($"XAnimation clip '{clip.key}' forces root motion, but default channel '{clip.defaultChannel}' cannot drive root motion.");
-                }
             }
         }
 
@@ -199,6 +181,164 @@ namespace XFramework.Animation
             }
         }
 
+        private static void ValidateStates(
+            IReadOnlyList<XAnimationChannelConfig> channels,
+            IReadOnlyList<XAnimationClipConfig> clips,
+            IReadOnlyList<XAnimationParameterConfig> parameters,
+            IReadOnlyList<XAnimationStateConfig> states)
+        {
+            if (states == null || states.Count == 0)
+            {
+                throw new XFrameworkException("XAnimation asset must contain at least one state.");
+            }
+
+            Dictionary<string, XAnimationChannelConfig> channelMap = new(StringComparer.Ordinal);
+            foreach (XAnimationChannelConfig channel in channels)
+            {
+                channelMap[channel.name] = channel;
+            }
+
+            Dictionary<string, XAnimationClipConfig> clipMap = new(StringComparer.Ordinal);
+            foreach (XAnimationClipConfig clip in clips)
+            {
+                clipMap[clip.key] = clip;
+            }
+
+            Dictionary<string, XAnimationParameterConfig> parameterMap = new(StringComparer.Ordinal);
+            if (parameters != null)
+            {
+                foreach (XAnimationParameterConfig parameter in parameters)
+                {
+                    parameterMap[parameter.name] = parameter;
+                }
+            }
+
+            HashSet<string> stateKeys = new(StringComparer.Ordinal);
+            foreach (XAnimationStateConfig state in states)
+            {
+                if (state == null)
+                {
+                    throw new XFrameworkException("XAnimation state config is null.");
+                }
+
+                if (string.IsNullOrWhiteSpace(state.key))
+                {
+                    throw new XFrameworkException("XAnimation state key cannot be empty.");
+                }
+
+                if (!stateKeys.Add(state.key))
+                {
+                    throw new XFrameworkException($"XAnimation state '{state.key}' is duplicated.");
+                }
+
+                if (string.IsNullOrWhiteSpace(state.channelName))
+                {
+                    throw new XFrameworkException($"XAnimation state '{state.key}' has an empty channelName.");
+                }
+
+                if (!channelMap.TryGetValue(state.channelName, out XAnimationChannelConfig channel))
+                {
+                    throw new XFrameworkException($"XAnimation state '{state.key}' references unknown channel '{state.channelName}'.");
+                }
+
+                if (state.fadeIn < 0f || state.fadeOut < 0f)
+                {
+                    throw new XFrameworkException($"XAnimation state '{state.key}' has negative fade settings.");
+                }
+
+                ValidateStateRootMotion(state, channel);
+
+                switch (state.stateType)
+                {
+                    case XAnimationStateType.Single:
+                        ValidateSingleState(state, clipMap);
+                        break;
+                    case XAnimationStateType.Blend1D:
+                        ValidateBlend1DState(state, clipMap, parameterMap);
+                        break;
+                    default:
+                        throw new XFrameworkException($"XAnimation state '{state.key}' has unsupported stateType '{state.stateType}'.");
+                }
+            }
+        }
+
+        private static void ValidateSingleState(
+            XAnimationStateConfig state,
+            IReadOnlyDictionary<string, XAnimationClipConfig> clipMap)
+        {
+            if (string.IsNullOrWhiteSpace(state.clipKey))
+            {
+                throw new XFrameworkException($"XAnimation Single state '{state.key}' has an empty clipKey.");
+            }
+
+            if (!clipMap.ContainsKey(state.clipKey))
+            {
+                throw new XFrameworkException($"XAnimation Single state '{state.key}' references unknown clip '{state.clipKey}'.");
+            }
+        }
+
+        private static void ValidateBlend1DState(
+            XAnimationStateConfig state,
+            IReadOnlyDictionary<string, XAnimationClipConfig> clipMap,
+            IReadOnlyDictionary<string, XAnimationParameterConfig> parameterMap)
+        {
+            if (string.IsNullOrWhiteSpace(state.parameterName))
+            {
+                throw new XFrameworkException($"XAnimation Blend1D state '{state.key}' has an empty parameterName.");
+            }
+
+            if (!parameterMap.TryGetValue(state.parameterName, out XAnimationParameterConfig parameter))
+            {
+                throw new XFrameworkException($"XAnimation Blend1D state '{state.key}' references unknown parameter '{state.parameterName}'.");
+            }
+
+            if (parameter.type != XAnimationParameterType.Float)
+            {
+                throw new XFrameworkException($"XAnimation Blend1D state '{state.key}' parameter '{state.parameterName}' must be Float.");
+            }
+
+            XAnimationBlend1DSampleConfig[] samples = state.samples ?? Array.Empty<XAnimationBlend1DSampleConfig>();
+            if (samples.Length < 2)
+            {
+                throw new XFrameworkException($"XAnimation Blend1D state '{state.key}' must contain at least two samples.");
+            }
+
+            float previousThreshold = 0f;
+            for (int i = 0; i < samples.Length; i++)
+            {
+                XAnimationBlend1DSampleConfig sample = samples[i];
+                if (sample == null)
+                {
+                    throw new XFrameworkException($"XAnimation Blend1D state '{state.key}' sample at index {i} is null.");
+                }
+
+                if (string.IsNullOrWhiteSpace(sample.clipKey))
+                {
+                    throw new XFrameworkException($"XAnimation Blend1D state '{state.key}' sample at index {i} has an empty clipKey.");
+                }
+
+                if (!clipMap.ContainsKey(sample.clipKey))
+                {
+                    throw new XFrameworkException($"XAnimation Blend1D state '{state.key}' sample references unknown clip '{sample.clipKey}'.");
+                }
+
+                if (i > 0 && sample.threshold <= previousThreshold)
+                {
+                    throw new XFrameworkException($"XAnimation Blend1D state '{state.key}' sample thresholds must be strictly increasing.");
+                }
+
+                previousThreshold = sample.threshold;
+            }
+        }
+
+        private static void ValidateStateRootMotion(XAnimationStateConfig state, XAnimationChannelConfig channel)
+        {
+            if (state.rootMotionMode == XAnimationClipRootMotionMode.ForceOn && !channel.canDriveRootMotion)
+            {
+                throw new XFrameworkException($"XAnimation state '{state.key}' forces root motion, but channel '{state.channelName}' cannot drive root motion.");
+            }
+        }
+
         private static void ValidateGraph(XAnimationStateGraphConfig graph)
         {
             if (graph == null || !graph.enabled)
@@ -214,7 +354,7 @@ namespace XFramework.Animation
             HashSet<string> stateNames = new(StringComparer.Ordinal);
             if (graph.states != null)
             {
-                foreach (XAnimationStateConfig state in graph.states)
+                foreach (XAnimationGraphStateConfig state in graph.states)
                 {
                     if (state == null)
                     {

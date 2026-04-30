@@ -12,16 +12,20 @@ namespace XFramework.Animation
         private readonly Dictionary<string, XAnimationChannel> m_ChannelMap = new(StringComparer.Ordinal);
         private readonly XAnimationCueDispatcher m_CueDispatcher = new();
         private readonly XAnimationRootMotionResolver m_RootMotionResolver = new();
+        private const string TemporaryClipStateKeyPrefix = "__xanimation_temp_clip_state:";
 
         private PlayableGraph m_Graph;
         private AnimationLayerMixerPlayable m_LayerMixer;
         private AnimationPlayableOutput m_Output;
+        private RuntimeAnimatorController m_OriginalController;
         private int m_NextPlaybackId = 1;
+        private int m_NextTemporaryStateId = 1;
 
-        public XAnimationPlayer(XAnimationCompiledAsset compiledAsset, Animator animator)
+        public XAnimationPlayer(XAnimationCompiledAsset compiledAsset, Animator animator, XAnimationContext context)
         {
             CompiledAsset = compiledAsset ?? throw new ArgumentNullException(nameof(compiledAsset));
             Animator = animator ? animator : throw new ArgumentNullException(nameof(animator));
+            Context = context ?? throw new ArgumentNullException(nameof(context));
             BuildGraph();
         }
 
@@ -33,39 +37,79 @@ namespace XFramework.Animation
 
         public XAnimationCompiledAsset CompiledAsset { get; }
         public Animator Animator { get; }
+        public XAnimationContext Context { get; }
         public bool IsDisposed { get; private set; }
 
-        public void Play(XAnimationPlayRequest request)
+        public void Play(XAnimationPlayCommand command)
         {
             ThrowIfDisposed();
-            if (string.IsNullOrWhiteSpace(request.clipKey))
+            if (!string.IsNullOrWhiteSpace(command.target.stateKey))
             {
-                throw new XFrameworkException("XAnimation Play request.clipKey cannot be empty.");
+                PlayStateCommand(command);
+                return;
             }
 
-            XAnimationCompiledClip clip = CompiledAsset.GetClip(request.clipKey);
-            XAnimationCompiledChannel channel = ResolveChannel(clip, request.channelName);
-            bool isLooping = request.loopOverride ?? clip.Config.loop;
-            float fadeIn = request.fadeIn > 0f ? request.fadeIn : clip.Config.defaultFadeIn;
-            float fadeOut = request.fadeOut > 0f ? request.fadeOut : clip.Config.defaultFadeOut;
-            float weight = request.weight > 0f ? request.weight : 1f;
-            float normalizedTime = Mathf.Clamp01(request.normalizedTime);
-            float speed = Mathf.Approximately(request.speed, 0f) ? 1f : request.speed;
-            bool interruptible = request.interruptible;
-            bool drivesRootMotion = ResolveRootMotion(clip, channel, request.rootMotionOverride);
+            if (string.IsNullOrWhiteSpace(command.target.clipKey))
+            {
+                throw new XFrameworkException("XAnimation Play command.target.stateKey or command.target.clipKey cannot be empty.");
+            }
 
-            XAnimationPlaybackOptions options = new(
+            PlayClipCommand(command);
+        }
+
+        private void PlayClipCommand(XAnimationPlayCommand command)
+        {
+            if (!CompiledAsset.TryGetClipIndex(command.target.clipKey, out int clipIndex))
+            {
+                throw new XFrameworkException($"XAnimation clip '{command.target.clipKey}' does not exist.");
+            }
+
+            XAnimationCompiledClip clip = (XAnimationCompiledClip)CompiledAsset.Clips[clipIndex];
+            XAnimationCompiledChannel channel = ResolveChannel(clip, command.target.channelName);
+            if (!CompiledAsset.TryGetChannelIndex(channel.Name, out int channelIndex))
+            {
+                throw new XFrameworkException($"XAnimation channel '{channel.Name}' does not exist.");
+            }
+
+            XAnimationCompiledSingleState temporaryState = CreateTemporaryClipState(clip, clipIndex, channel, channelIndex);
+            PlayCompiledStateCommand(command, temporaryState, channel);
+        }
+
+        private void PlayStateCommand(XAnimationPlayCommand command)
+        {
+            XAnimationCompiledState state = CompiledAsset.GetState(command.target.stateKey);
+            XAnimationCompiledChannel channel = ResolveChannel(state, command.target.channelName);
+            PlayCompiledStateCommand(command, state, channel);
+        }
+
+        private void PlayCompiledStateCommand(XAnimationPlayCommand command, XAnimationCompiledState state, XAnimationCompiledChannel channel)
+        {
+            float fadeIn = command.transition.fadeIn > 0f ? command.transition.fadeIn : state.Config.fadeIn;
+            float fadeOut = command.transition.fadeOut > 0f ? command.transition.fadeOut : state.Config.fadeOut;
+            float weight = command.playback.weight > 0f ? command.playback.weight : 1f;
+            float normalizedTime = Mathf.Clamp01(command.playback.normalizedTime);
+            float speed = Mathf.Approximately(command.playback.speed, 0f)
+                ? Mathf.Approximately(state.Config.speed, 0f) ? 1f : state.Config.speed
+                : command.playback.speed;
+            bool interruptible = command.transition.interruptible;
+            bool drivesRootMotion = ResolveRootMotion(state, channel, command.playback.rootMotionOverride);
+            bool isLooping = command.playback.loopOverride ?? state.Config.loop;
+
+            XAnimationPlaybackRuntimeOptions options = new(
                 fadeIn,
                 fadeOut,
                 weight,
                 normalizedTime,
                 speed,
                 isLooping,
-                request.priority,
+                command.transition.priority,
                 interruptible,
                 drivesRootMotion);
 
-            if (!m_ChannelMap[channel.Name].TryPlay(clip, options, m_CueDispatcher))
+            if (!m_ChannelMap[channel.Name].TryPlay(
+                (playbackId, actualOptions) => CreateStatePlayback(playbackId, channel.Name, state, actualOptions),
+                options,
+                m_CueDispatcher))
             {
                 return;
             }
@@ -124,7 +168,7 @@ namespace XFramework.Animation
             for (int i = 0; i < m_Channels.Count; i++)
             {
                 XAnimationChannel channel = m_Channels[i];
-                channel.PrepareFrame(deltaTime);
+                channel.PrepareFrame(deltaTime, Context);
                 m_LayerMixer.SetInputWeight(i, channel.HasActivePlayback ? channel.ChannelWeight : 0f);
             }
 
@@ -162,12 +206,15 @@ namespace XFramework.Animation
                 m_Graph.Destroy();
             }
 
+            RestoreAnimatorController();
+
             IsDisposed = true;
         }
 
         private void BuildGraph()
         {
             m_CueDispatcher.Register(CompiledAsset.CuesByClipKey);
+            DisableAnimatorController();
 
             m_Graph = PlayableGraph.Create($"XAnimationPlayer_{Animator.name}");
             m_Graph.SetTimeUpdateMode(DirectorUpdateMode.Manual);
@@ -195,6 +242,22 @@ namespace XFramework.Animation
             m_RootMotionResolver.ApplyToAnimator(Animator);
         }
 
+        private void DisableAnimatorController()
+        {
+            m_OriginalController = Animator.runtimeAnimatorController;
+            Animator.runtimeAnimatorController = null;
+        }
+
+        private void RestoreAnimatorController()
+        {
+            if (Animator == null || m_OriginalController == null || Animator.runtimeAnimatorController != null)
+            {
+                return;
+            }
+
+            Animator.runtimeAnimatorController = m_OriginalController;
+        }
+
         private XAnimationCompiledChannel ResolveChannel(XAnimationCompiledClip clip, string channelName)
         {
             if (!string.IsNullOrWhiteSpace(channelName))
@@ -202,10 +265,20 @@ namespace XFramework.Animation
                 return CompiledAsset.GetChannel(channelName);
             }
 
-            return (XAnimationCompiledChannel)CompiledAsset.Channels[clip.DefaultChannelIndex];
+            throw new XFrameworkException($"XAnimation clip '{clip.Key}' direct playback requires an explicit channelName.");
         }
 
-        private bool ResolveRootMotion(XAnimationCompiledClip clip, XAnimationCompiledChannel channel, bool? rootMotionOverride)
+        private XAnimationCompiledChannel ResolveChannel(XAnimationCompiledState state, string channelName)
+        {
+            if (!string.IsNullOrWhiteSpace(channelName))
+            {
+                return CompiledAsset.GetChannel(channelName);
+            }
+
+            return (XAnimationCompiledChannel)CompiledAsset.Channels[state.DefaultChannelIndex];
+        }
+
+        private bool ResolveRootMotion(XAnimationCompiledState state, XAnimationCompiledChannel channel, bool? rootMotionOverride)
         {
             bool drivesRootMotion;
             if (rootMotionOverride.HasValue)
@@ -214,7 +287,7 @@ namespace XFramework.Animation
             }
             else
             {
-                drivesRootMotion = clip.Config.rootMotionMode switch
+                drivesRootMotion = state.Config.rootMotionMode switch
                 {
                     XAnimationClipRootMotionMode.ForceOn => true,
                     XAnimationClipRootMotionMode.ForceOff => false,
@@ -224,10 +297,97 @@ namespace XFramework.Animation
 
             if (drivesRootMotion && !channel.Config.canDriveRootMotion)
             {
-                throw new XFrameworkException($"XAnimation clip '{clip.Key}' cannot drive root motion on channel '{channel.Name}'.");
+                throw new XFrameworkException($"XAnimation state '{state.Key}' cannot drive root motion on channel '{channel.Name}'.");
             }
 
             return drivesRootMotion;
+        }
+
+        private XAnimationCompiledSingleState CreateTemporaryClipState(
+            XAnimationCompiledClip clip,
+            int clipIndex,
+            XAnimationCompiledChannel channel,
+            int channelIndex)
+        {
+            XAnimationStateConfig config = new()
+            {
+                key = CreateTemporaryClipStateKey(clip.Key),
+                stateType = XAnimationStateType.Single,
+                clipKey = clip.Key,
+                channelName = channel.Name,
+                fadeIn = channel.Config.defaultFadeIn,
+                fadeOut = channel.Config.defaultFadeOut,
+                speed = 1f,
+                loop = clip.Clip.isLooping,
+                rootMotionMode = XAnimationClipRootMotionMode.Inherit,
+                parameterName = string.Empty,
+                samples = Array.Empty<XAnimationBlend1DSampleConfig>(),
+            };
+
+            return new XAnimationCompiledSingleState(config, channelIndex, clipIndex);
+        }
+
+        private string CreateTemporaryClipStateKey(string clipKey)
+        {
+            string stateKey;
+            do
+            {
+                stateKey = $"{TemporaryClipStateKeyPrefix}{clipKey}:{m_NextTemporaryStateId++}";
+            }
+            while (CompiledAsset.TryGetStateIndex(stateKey, out _));
+
+            return stateKey;
+        }
+
+        private XAnimationStatePlaybackInstance CreateStatePlayback(
+            int playbackId,
+            string channelName,
+            XAnimationCompiledState state,
+            XAnimationPlaybackRuntimeOptions options)
+        {
+            return state switch
+            {
+                XAnimationCompiledSingleState singleState => CreateSinglePlayback(
+                    playbackId,
+                    channelName,
+                    singleState.Key,
+                    (XAnimationCompiledClip)CompiledAsset.Clips[singleState.ClipIndex],
+                    options),
+                XAnimationCompiledBlend1DState blendState => CreateBlend1DPlayback(
+                    playbackId,
+                    channelName,
+                    blendState,
+                    options),
+                _ => throw new XFrameworkException($"XAnimation state '{state.Key}' has unsupported stateType '{state.StateType}'."),
+            };
+        }
+
+        private XAnimationSingleStatePlaybackInstance CreateSinglePlayback(
+            int playbackId,
+            string channelName,
+            string stateKey,
+            XAnimationCompiledClip clip,
+            XAnimationPlaybackRuntimeOptions options)
+        {
+            AnimationClipPlayable playable = AnimationClipPlayable.Create(m_Graph, clip.Clip);
+            playable.SetApplyFootIK(false);
+            playable.SetTime(Mathf.Clamp01(options.NormalizedTime) * Mathf.Max(clip.Clip.length, 0.0001f));
+            return new XAnimationSingleStatePlaybackInstance(playbackId, channelName, stateKey, clip, playable, options);
+        }
+
+        private XAnimationBlend1DStatePlaybackInstance CreateBlend1DPlayback(
+            int playbackId,
+            string channelName,
+            XAnimationCompiledBlend1DState state,
+            XAnimationPlaybackRuntimeOptions options)
+        {
+            XAnimationCompiledClip[] clips = new XAnimationCompiledClip[state.Samples.Count];
+            for (int i = 0; i < state.Samples.Count; i++)
+            {
+                clips[i] = (XAnimationCompiledClip)CompiledAsset.Clips[state.Samples[i].ClipIndex];
+            }
+
+            return new XAnimationBlend1DStatePlaybackInstance(m_Graph, playbackId, channelName, state, clips, options);
         }
 
         private XAnimationChannel GetChannel(string channelName)

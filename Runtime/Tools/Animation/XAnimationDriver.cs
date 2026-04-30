@@ -34,6 +34,23 @@ namespace XFramework.Animation
             Initialize(m_AssetLoader.Load(assetPath), animator);
         }
 
+        public void Initialize(TextAsset animationAsset, Animator animator)
+        {
+            if (animationAsset == null)
+            {
+                throw new XFrameworkException("XAnimationDriver animationAsset cannot be null.");
+            }
+
+            if (animator == null)
+            {
+                throw new XFrameworkException("XAnimationDriver animator cannot be null.");
+            }
+
+            DisposePlayer();
+
+            Initialize(m_AssetLoader.Load(animationAsset), animator);
+        }
+
         public void Initialize(XAnimationCompiledAsset compiledAsset, Animator animator)
         {
             if (compiledAsset == null)
@@ -56,7 +73,7 @@ namespace XFramework.Animation
 
             Animator = animator;
             m_Context = new XAnimationContext(m_CompiledAsset.Parameters);
-            m_Player = new XAnimationPlayer(m_CompiledAsset, animator);
+            m_Player = new XAnimationPlayer(m_CompiledAsset, animator, m_Context);
             m_Player.CueTriggered += OnCueTriggered;
         }
 
@@ -84,23 +101,46 @@ namespace XFramework.Animation
             m_Context.ResetTrigger(key);
         }
 
-        public void Play(string clipKey, string channelName = null)
+        public void PlayClip(
+            string clipName,
+            string channelName,
+            XAnimationTransitionOptions transition = default,
+            XAnimationPlaybackOptions playback = default)
         {
             EnsureInitialized();
-            m_Player.Play(new XAnimationPlayRequest
+            m_Player.Play(new XAnimationPlayCommand
             {
-                clipKey = clipKey,
-                channelName = channelName,
-                speed = 1f,
-                weight = 1f,
-                interruptible = true,
+                target = new XAnimationPlayTarget
+                {
+                    clipKey = clipName,
+                    channelName = channelName,
+                },
+                transition = NormalizeTransitionOptions(transition),
+                playback = NormalizePlaybackOptions(playback),
             });
         }
 
-        public void Play(XAnimationPlayRequest request)
+        public void PlayState(
+            string stateName,
+            XAnimationTransitionOptions transition = default,
+            XAnimationPlaybackOptions playback = default)
         {
             EnsureInitialized();
-            m_Player.Play(request);
+            m_Player.Play(new XAnimationPlayCommand
+            {
+                target = new XAnimationPlayTarget
+                {
+                    stateKey = stateName,
+                },
+                transition = NormalizeTransitionOptions(transition),
+                playback = NormalizePlaybackOptions(playback),
+            });
+        }
+
+        public void Play(XAnimationPlayCommand command)
+        {
+            EnsureInitialized();
+            m_Player.Play(NormalizeCommand(command));
         }
 
         public void Stop(string channelName, float fadeOut = default)
@@ -176,6 +216,41 @@ namespace XFramework.Animation
         private void OnCueTriggered(XAnimationCueEvent cueEvent)
         {
             CueTriggered?.Invoke(cueEvent);
+        }
+
+        private static XAnimationPlayCommand NormalizeCommand(XAnimationPlayCommand command)
+        {
+            return new XAnimationPlayCommand
+            {
+                target = command?.target ?? new XAnimationPlayTarget(),
+                transition = NormalizeTransitionOptions(command?.transition),
+                playback = NormalizePlaybackOptions(command?.playback),
+            };
+        }
+
+        private static XAnimationTransitionOptions NormalizeTransitionOptions(XAnimationTransitionOptions options)
+        {
+            options ??= new XAnimationTransitionOptions();
+            return new XAnimationTransitionOptions
+            {
+                fadeIn = Mathf.Max(0f, options.fadeIn),
+                fadeOut = Mathf.Max(0f, options.fadeOut),
+                priority = options.priority,
+                interruptible = options.interruptible,
+            };
+        }
+
+        private static XAnimationPlaybackOptions NormalizePlaybackOptions(XAnimationPlaybackOptions options)
+        {
+            options ??= new XAnimationPlaybackOptions();
+            return new XAnimationPlaybackOptions
+            {
+                weight = options.weight > 0f ? options.weight : 1f,
+                normalizedTime = Mathf.Clamp01(options.normalizedTime),
+                speed = Mathf.Approximately(options.speed, 0f) ? 1f : options.speed,
+                loopOverride = options.loopOverride,
+                rootMotionOverride = options.rootMotionOverride,
+            };
         }
     }
 }

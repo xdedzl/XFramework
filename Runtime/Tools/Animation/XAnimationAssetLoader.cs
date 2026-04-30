@@ -40,6 +40,18 @@ namespace XFramework.Animation
             return Compile(asset);
         }
 
+        public XAnimationCompiledAsset Load(TextAsset textAsset)
+        {
+            if (textAsset == null)
+            {
+                throw new XFrameworkException("XAnimation TextAsset cannot be null.");
+            }
+
+            XAnimationAsset asset = LoadAsset(textAsset, textAsset.name);
+            m_Validator.Validate(asset);
+            return Compile(asset);
+        }
+
         public static bool IsXAnimationAssetText(string text)
         {
             if (string.IsNullOrWhiteSpace(text))
@@ -97,8 +109,7 @@ namespace XFramework.Animation
                     throw new XFrameworkException($"XAnimation clip '{clipConfig.key}' failed to load AnimationClip at '{clipConfig.clipPath}'.");
                 }
 
-                int defaultChannelIndex = channelIndexByName[clipConfig.defaultChannel];
-                compiledClips[i] = new XAnimationCompiledClip(clipConfig, clip, defaultChannelIndex);
+                compiledClips[i] = new XAnimationCompiledClip(clipConfig, clip);
                 clipIndexByKey[clipConfig.key] = i;
             }
 
@@ -109,6 +120,28 @@ namespace XFramework.Animation
                 XAnimationCompiledParameter parameter = new(asset.parameters[i], i);
                 compiledParameters[i] = parameter;
                 parameterIndexByName[parameter.Name] = i;
+            }
+
+            XAnimationCompiledState[] compiledStates = new XAnimationCompiledState[asset.states.Length];
+            Dictionary<string, int> stateIndexByKey = new(StringComparer.Ordinal);
+            for (int i = 0; i < asset.states.Length; i++)
+            {
+                XAnimationStateConfig stateConfig = asset.states[i];
+                int defaultChannelIndex = channelIndexByName[stateConfig.channelName];
+                compiledStates[i] = stateConfig.stateType switch
+                {
+                    XAnimationStateType.Single => new XAnimationCompiledSingleState(
+                        stateConfig,
+                        defaultChannelIndex,
+                        clipIndexByKey[stateConfig.clipKey]),
+                    XAnimationStateType.Blend1D => CompileBlend1DState(
+                        stateConfig,
+                        defaultChannelIndex,
+                        clipIndexByKey,
+                        parameterIndexByName),
+                    _ => throw new XFrameworkException($"XAnimation state '{stateConfig.key}' has unsupported stateType '{stateConfig.stateType}'."),
+                };
+                stateIndexByKey[stateConfig.key] = i;
             }
 
             Dictionary<string, List<XAnimationCompiledCue>> cuesByClipKey = new(StringComparer.Ordinal);
@@ -133,11 +166,33 @@ namespace XFramework.Animation
                 asset,
                 compiledChannels,
                 compiledClips,
+                compiledStates,
                 compiledParameters,
                 cuesByClipKey,
                 channelIndexByName,
                 clipIndexByKey,
-                parameterIndexByName);
+                parameterIndexByName,
+                stateIndexByKey);
+        }
+
+        private static XAnimationCompiledBlend1DState CompileBlend1DState(
+            XAnimationStateConfig stateConfig,
+            int defaultChannelIndex,
+            IReadOnlyDictionary<string, int> clipIndexByKey,
+            IReadOnlyDictionary<string, int> parameterIndexByName)
+        {
+            XAnimationBlend1DSampleConfig[] samples = stateConfig.samples ?? Array.Empty<XAnimationBlend1DSampleConfig>();
+            XAnimationCompiledBlend1DSample[] compiledSamples = new XAnimationCompiledBlend1DSample[samples.Length];
+            for (int i = 0; i < samples.Length; i++)
+            {
+                compiledSamples[i] = new XAnimationCompiledBlend1DSample(samples[i], clipIndexByKey[samples[i].clipKey]);
+            }
+
+            return new XAnimationCompiledBlend1DState(
+                stateConfig,
+                defaultChannelIndex,
+                parameterIndexByName[stateConfig.parameterName],
+                compiledSamples);
         }
 
         private XAnimationAsset LoadAsset(TextAsset textAsset, string assetPath)

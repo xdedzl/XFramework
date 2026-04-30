@@ -104,10 +104,11 @@ flowchart TB
 | **通信系统**       | [Core/Messenger/](./Core/Messenger/)                     | [消息系统 (`MessageManager`)](#34-消息广播系统-messagemanager)                    |
 | **任务系统**       | [Runtime/Modules/Task/](./Runtime/Modules/Task/)         | [异步任务 (`XTask`)](#35-异步与并发处理-xtask)                                    |
 | **持久化**         | [Runtime/Modules/Save/](./Runtime/Modules/Save/)         | [存档系统 (`SaveManager`)](#41-存档持久化-savemanager)                            |
-| **数据配置**       | [Runtime/Modules/Data/](./Runtime/Modules/Data/)         | [配表系统 (`XDataTable`)](#42-数据表驱动配置-xdatatable)                          |
+| **数据配置**       | [Runtime/Modules/Data/](./Runtime/Modules/Data/)         | [配表系统 (`XDataTable`)](#37-数据表驱动配置-xdatatable)                          |
 | **状态机**         | [Runtime/Modules/FSM/](./Runtime/Modules/FSM/)           | [有限状态机 (`FSM`)](#36-有限状态机-fsm)                                          |
 | **工具库 (Core)**  | [Core/Utility/](./Core/Utility/)                         | [通用工具 (`Utility`)](#51-通用底层-utility)                                      |
 | **工具库 (Unity)** | [Runtime/Tools/](./Runtime/Tools/)                       | [引擎工具 (`UUtility`)](#52-引擎特定高级工具-uutility)                            |
+| **动画工具**       | [Runtime/Tools/Animation/](./Runtime/Tools/Animation/)   | [XAnimation 播放系统](#46-xanimation-播放系统)                                    |
 | **控制台**         | [Runtime/Tools/XConsole/](./Runtime/Tools/XConsole/)     | [XConsole 运行时控制台](#55-xconsole-运行时控制台)                                |
 
 ---
@@ -470,6 +471,64 @@ actorFsm.Start<IdleState>();
 - `FsmOld` / `FsmManagerOld` / `FsmStateOld` 不再扩展新能力。
 - 若需要子状态，请在状态内部再组合一个新的 `Fsm<TSubContext>`，不要继续依赖旧的 `TowLevel` 风格设计。
 
+### 3.7 数据表驱动配置 (`XDataTable`)
+
+`XDataTable` 用于加载 `.xasset` 配表文本资源，并按数据类型缓存表数据。业务表通常继承 `XDataTable<TData>`、`XDataTableHasKey<TKey, TData>` 或 `XDataTableHasAlias<TKey, TData>`，再通过 `[DataResourcePath]` 与 `[TargetDataType]` 绑定资源路径和数据结构。
+
+#### 1. 基础访问
+```csharp
+// 加载完整列表
+IReadOnlyList<DrinkData> drinks = DrinkDataTable.LoadData();
+
+// 按主键访问
+DrinkData drink = DrinkDataTable.GetData(1001);
+
+// 按别名访问
+DrinkData tavernAle = DrinkDataTable.GetDataByAlias("tavern_ale");
+```
+
+#### 2. 加载后处理 (`AfterLoad`)
+当配表需要构建额外索引、分类缓存或预计算字段时，重写 `AfterLoad()`。该方法会在表资源首次反序列化后调用一次，适合把 `items` 转换为运行期高效查询结构。
+
+```csharp
+using System.Collections.Generic;
+using XFramework.Data;
+
+[DataResourcePath("Assets/ABRes/Data/DrinkDataTable.xasset")]
+[TargetDataType(typeof(DrinkData))]
+public class DrinkDataTable : XDataTableHasAlias<uint, DrinkData>
+{
+    public Dictionary<DrinkType, List<DrinkData>> DataByType { get; private set; }
+
+    protected override void AfterLoad()
+    {
+        base.AfterLoad();
+
+        DataByType = new Dictionary<DrinkType, List<DrinkData>>();
+        foreach (var data in items)
+        {
+            if (!DataByType.TryGetValue(data.type, out var list))
+            {
+                list = new List<DrinkData>();
+                DataByType.Add(data.type, list);
+            }
+
+            list.Add(data);
+        }
+    }
+}
+```
+
+需要访问这些派生表字段时，使用 `LoadTable<TTable>()` 获取表实例：
+
+```csharp
+var drinkTable = XDataTable.LoadTable<DrinkDataTable>();
+IReadOnlyList<DrinkData> wines = drinkTable.DataByType[DrinkType.Wine];
+```
+
+> [!TIP]
+> `LoadData<T>()`、`LoadDictData<TKey, TValue>()` 和 `LoadTable<TTable>()` 共享同一份表缓存；`AfterLoad()` 只会在首次加载该表时执行，不要在其中放依赖外部运行时状态的临时逻辑。
+
 ---
 
 ## 4. 实用工具合集 (Utility & Tools)
@@ -558,6 +617,225 @@ IReadOnlyList<Transform> spawnPoints = UObjectFinder.FindList<Transform>("NpcSpa
 - 具有实时运行时日志系统(Log输出与筛选)。
 - 支持添加并使用 GM 指令 (通过 `[XConsoleCommand]` 标记)。
 - **最强特性**: 内置微型 C# 解释器驱动，支持游戏进程中执行动态 C# 代码调整变量。
+
+### 4.6 XAnimation 播放系统
+
+`XAnimation` 是基于 Unity Playables 的轻量动画播放系统，核心代码位于 `Runtime/Tools/Animation/`，统一命名空间为 `XFramework.Animation`。它用 `.xasset` 文本配置描述动画通道、状态、动画片段、事件点和换装覆盖关系，运行时由 `XAnimationDriver` 手动驱动播放。
+
+#### 1. 适用场景
+- 需要用代码显式播放动画状态，不想为简单角色维护复杂 Animator Controller。
+- 需要 Base / Override / Additive 多通道混合，并可选 `AvatarMask`。
+- 需要 1D Blend，例如 `idle / walk / run` 随速度参数连续混合。
+- 需要按动画归一化时间触发脚步、攻击判定、音效等 `Cue` 事件。
+- 需要通过 Override Asset 复用同一套动作 key，只替换部分角色动画资源。
+
+#### 2. 创建和预览资源
+- 菜单 **`XFramework/Tools/XAnimation Preview`** 可打开预览与编辑窗口。
+- `XAnimation / Override Asset` 支持加载普通 XAnimation Asset 或 Override Asset。
+- 普通资源可编辑 `Channels`、`States`、`Clips`、`Parameters`、`Cues`，并可预览 state 播放；Override 资源只覆盖已有 clip 的 `clipPath`，不会修改 base 资源结构。
+- 示例资源可参考 `Assets/Animation/XAnimationSamples/XAnimationPreview_WolfLite.xasset` 与 `XAnimationOverride_WolfLite.xasset`。
+
+#### 3. 配置结构
+
+普通 XAnimation Asset 的核心字段如下：
+
+```json
+{
+  "alias": "hero",
+  "channels": [
+    {
+      "name": "base",
+      "layerType": "Base",
+      "defaultWeight": 1.0,
+      "maskPath": "",
+      "allowInterrupt": true,
+      "defaultFadeIn": 0.15,
+      "defaultFadeOut": 0.15,
+      "canDriveRootMotion": true
+    }
+  ],
+  "clips": [
+    {
+      "key": "idle",
+      "clipPath": "Assets/Art/Hero/Hero.fbx|Idle"
+    }
+  ],
+  "states": [
+    {
+      "key": "idle",
+      "stateType": "Single",
+      "clipKey": "idle",
+      "channelName": "base",
+      "fadeIn": 0.15,
+      "fadeOut": 0.15,
+      "speed": 1.0,
+      "loop": true,
+      "rootMotionMode": "Inherit"
+    },
+    {
+      "key": "locomotion",
+      "stateType": "Blend1D",
+      "channelName": "base",
+      "parameterName": "moveSpeed",
+      "fadeIn": 0.15,
+      "fadeOut": 0.15,
+      "speed": 1.0,
+      "loop": true,
+      "rootMotionMode": "Inherit",
+      "samples": [
+        { "clipKey": "idle", "threshold": 0.0 },
+        { "clipKey": "walk", "threshold": 1.0 },
+        { "clipKey": "run", "threshold": 3.0 }
+      ]
+    }
+  ],
+  "parameters": [
+    {
+      "name": "moveSpeed",
+      "type": "Float",
+      "defaultValue": 0.0
+    }
+  ],
+  "cues": [
+    {
+      "clipKey": "idle",
+      "time": 0.5,
+      "eventKey": "footstep",
+      "payload": "L"
+    }
+  ],
+  "graph": {
+    "enabled": false,
+    "entryState": "idle",
+    "states": [],
+    "transitions": []
+  }
+}
+```
+
+字段说明：
+- `channels`：动画混合通道。`layerType` 支持 `Base`、`Override`、`Additive`；`maskPath` 可绑定 `AvatarMask`；`canDriveRootMotion` 表示该通道是否允许驱动 Root Motion。
+- `clips`：动画片段索引，是 state 引用的叶子资源，只描述 `key` 与 `clipPath`。`clipPath` 支持普通资源路径，也支持 `FBX路径|子动画名`。
+- `states`：业务播放单位。`Single` 引用一个 `clipKey`；`Blend1D` 绑定一个 Float 参数和若干采样点，运行时只混合相邻两个采样 clip；channel、fade、loop、speed、Root Motion 等播放语义都属于 state。
+- `parameters`：状态运行时参数。`Blend1D` 每帧从 `XAnimationContext` 读取绑定的 Float 参数。
+- `cues`：动画事件点。`time` 是 `[0, 1]` 归一化时间；循环动画每轮都会按 `loopCount` 分发一次。
+- `graph`：状态图配置目前仅保留结构。运行时 `XAnimationDriver` 在 Phase 1 不支持状态图，使用时必须保持 `enabled = false`。
+
+Override Asset 用于复用 base 配置，只替换指定 clip：
+
+```json
+{
+  "baseAssetPath": "Assets/Animation/Hero/Hero.xasset",
+  "clips": [
+    {
+      "key": "run",
+      "clipPath": "Assets/Animation/HeroSkin/HeroSkin_Run.anim"
+    }
+  ]
+}
+```
+
+#### 4. 运行时播放
+
+业务侧通常持有一个 `XAnimationDriver`，在对象初始化时绑定资源和 `Animator`，在每帧 `Update` 中手动推进。
+
+```csharp
+using UnityEngine;
+using XFramework.Animation;
+
+public sealed class HeroAnimationController : MonoBehaviour
+{
+    [SerializeField] private Animator m_Animator;
+    [SerializeField] private string m_AnimationAssetPath = "Assets/Animation/Hero/Hero.xasset";
+
+    private readonly XAnimationDriver m_Driver = new XAnimationDriver();
+
+    private void Awake()
+    {
+        m_Driver.Initialize(m_AnimationAssetPath, m_Animator);
+        m_Driver.CueTriggered += OnCueTriggered;
+        m_Driver.PlayState("idle");
+    }
+
+    private void Update()
+    {
+        m_Driver.Update(Time.deltaTime);
+    }
+
+    public void PlayRun()
+    {
+        m_Driver.SetParameter("moveSpeed", 3f);
+        m_Driver.PlayState("locomotion");
+    }
+
+    public void PlayAttack()
+    {
+        m_Driver.Play(new XAnimationPlayCommand
+        {
+            target = new XAnimationPlayTarget
+            {
+                stateKey = "attack",
+                channelName = "upperBody",
+            },
+            transition = new XAnimationTransitionOptions
+            {
+                fadeIn = 0.08f,
+                fadeOut = 0.12f,
+                priority = 10,
+                interruptible = true,
+            },
+            playback = new XAnimationPlaybackOptions
+            {
+                weight = 1f,
+                speed = 1f,
+            },
+        });
+    }
+
+    private void OnCueTriggered(XAnimationCueEvent cueEvent)
+    {
+        if (cueEvent.eventKey == "footstep")
+        {
+            Debug.Log($"Footstep: {cueEvent.payload}");
+        }
+    }
+
+    private void OnDestroy()
+    {
+        m_Driver.CueTriggered -= OnCueTriggered;
+        m_Driver.Dispose();
+    }
+}
+```
+
+常用控制接口：
+- `PlayState(string stateKey, XAnimationTransitionOptions transition = default, XAnimationPlaybackOptions playback = default)`：按 state key 播放，推荐业务层统一使用。
+- `PlayClip(string clipKey, string channelName, XAnimationTransitionOptions transition = default, XAnimationPlaybackOptions playback = default)`：底层/调试接口，按 clip key 直接播放；必须显式提供 `channelName`。
+- `Play(XAnimationPlayCommand command)`：统一底层入口，显式指定 `target / transition / playback`。
+- `SetParameter(key, float/bool)` / `SetTrigger(key)`：写入运行时参数，`Blend1D` 默认从 Float 参数读取混合值。
+- `Stop(channelName, fadeOut)` / `StopAll(fadeOut)`：停止指定通道或全部通道。
+- `SetChannelWeight(channelName, weight)`：调整通道混合权重。
+- `SetChannelTimeScale(channelName, timeScale)`：调整通道时间缩放，最小值会被限制为 0。
+- `SetRootMotionEnabled(enabled)`：全局启停 Root Motion 输出。
+- `GetChannelState(channelName)`：查询当前播放 clip、归一化时间、权重、速度、优先级等调试信息。
+
+#### 5. 打断与 Root Motion 规则
+- 同一 channel 内播放新 state 时，会把当前 state 作为 previous 输入淡出，新 state 作为 current 输入淡入。
+- `Blend1D` 的子 clip 混合只负责状态内部权重，不负责跨状态自动过渡。
+- 当 channel 的 `allowInterrupt = false`，或当前播放请求设置 `interruptible = false` 时，新请求不能打断当前播放。
+- 新请求只有在 `priority >= 当前播放 priority` 时才能打断。
+- Root Motion 默认由 `channel.canDriveRootMotion` 决定；state 可用 `rootMotionMode` 设置 `ForceOn` / `ForceOff` 覆盖。
+- `Additive` channel 不能驱动 Root Motion。
+
+#### 6. 资源加载规则
+默认解析器 `XAnimationRuntimeAssetResolver` 通过 `ResourceManager` 加载资源：
+- `.xasset` 文本资源：`ResourceManager.Instance.Load<TextAsset>(assetPath)`。
+- 普通 `AnimationClip`：`ResourceManager.Instance.Load<AnimationClip>(clipPath)`。
+- FBX 子动画：`clipPath` 写为 `Assets/Path/Model.fbx|ClipName`，内部会调用 `LoadSubAsset<AnimationClip>`。
+- `AvatarMask`：`ResourceManager.Instance.Load<AvatarMask>(maskPath)`。
+
+> [!IMPORTANT]
+> `XAnimationDriver` 创建的是手动更新的 PlayableGraph，必须每帧调用 `Update(deltaTime)`；对象销毁或换资源前必须调用 `Dispose()`，否则 PlayableGraph 不会释放。
 
 ---
 

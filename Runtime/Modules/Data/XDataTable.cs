@@ -11,6 +11,7 @@ namespace XFramework.Data
     abstract partial class XDataTable : XTextAsset
     {
         private static readonly Dictionary<Type, Type> S_DataToTableType = new();
+        private static readonly Dictionary<Type, XDataTable> S_DataTableMap = new();
         
         private static readonly Dictionary<Type, IList> S_DataListMap = new();
         private static readonly Dictionary<Type, IDictionary> S_DataDictMap = new();
@@ -44,8 +45,8 @@ namespace XFramework.Data
                 }
             }
         }
-        
-        public static IReadOnlyList<T> LoadData<T>() where T : IData
+
+        protected static IReadOnlyList<T> LoadData<T>() where T : IData
         {
             var dataType = typeof(T);
             if (!S_DataListMap.ContainsKey(dataType))
@@ -55,22 +56,54 @@ namespace XFramework.Data
                     throw new Exception($"Data type {dataType.FullName} not registered");
                 }
 
-                var dataResourcePathAttr = tableType.GetCustomAttribute<DataResourcePath>(false);
-                if (dataResourcePathAttr == null)
+                if (LoadTable(tableType) is not XDataTable<T> so)
                 {
-                    throw new Exception($"Data type {tableType.FullName} missing DataResourcePath attribute");
+                    throw new Exception($"Data table type {tableType.FullName} cannot convert to {typeof(XDataTable<T>).FullName}");
                 }
-                var textAsset = ResourceManager.Instance.Load<TextAsset>(dataResourcePathAttr.path);
-                if (textAsset == null)
-                {
-                    throw new Exception($"Data text asset missing at path: {dataResourcePathAttr.path}");
-                }
-                var so = textAsset.ToXTextAsset<XDataTable<T>>(tableType);
                 S_DataListMap[dataType] = so.items;
             }
             
             var soItems = S_DataListMap[dataType];
             return (IReadOnlyList<T>)soItems;
+        }
+
+        public static TTable LoadTable<TTable>() where TTable : XDataTable
+        {
+            return (TTable)LoadTable(typeof(TTable));
+        }
+
+        protected virtual void AfterLoad()
+        {
+        }
+
+        private static XDataTable LoadTable(Type tableType)
+        {
+            if (S_DataTableMap.TryGetValue(tableType, out var table))
+            {
+                return table;
+            }
+
+            var dataResourcePathAttr = tableType.GetCustomAttribute<DataResourcePath>(false);
+            if (dataResourcePathAttr == null)
+            {
+                throw new Exception($"Data type {tableType.FullName} missing DataResourcePath attribute");
+            }
+
+            var textAsset = ResourceManager.Instance.Load<TextAsset>(dataResourcePathAttr.path);
+            if (textAsset == null)
+            {
+                throw new Exception($"Data text asset missing at path: {dataResourcePathAttr.path}");
+            }
+
+            table = textAsset.ToXTextAsset<XDataTable>(tableType);
+            if (table == null)
+            {
+                throw new Exception($"Data text asset at path {dataResourcePathAttr.path} cannot convert to {tableType.FullName}");
+            }
+
+            table.AfterLoad();
+            S_DataTableMap[tableType] = table;
+            return table;
         }
 
         public static IReadOnlyDictionary<TKey, TValue> LoadDictData<TKey, TValue>() where TValue : IDataHasKey<TKey>
