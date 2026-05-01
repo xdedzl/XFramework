@@ -206,5 +206,17 @@ namespace XFramework.Data
         {
             return XDataTable.GetDataByAlias<TData>(alias);
         }
+
+        public static string[] GetAllAlias()
+        {
+            IReadOnlyDictionary<string, TData> dict = LoadAliasDictData<TData>();
+            string[] aliases = new string[dict.Count];
+            int index = 0;
+            foreach (string alias in dict.Keys)
+            {
+                aliases[index++] = alias;
+            }
+            return aliases;
+        }
     }
 }

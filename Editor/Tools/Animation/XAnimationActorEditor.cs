@@ -15,6 +15,7 @@ namespace XFramework.Editor
     {
         private const float SectionTitleFontSize = 12f;
         private const float BodyFontSize = 11f;
+        private const float PlaybackLabelWidth = 118f;
 
         private static readonly Color SectionDivider = new(0.28f, 0.28f, 0.30f, 1f);
         private static readonly Color AccentColor = new(0.30f, 0.55f, 0.95f, 1f);
@@ -51,6 +52,8 @@ namespace XFramework.Editor
         {
             public VisualElement Root;
             public VisualElement Content;
+            public Action<bool> SetExpanded;
+            public Action RefreshState;
         }
 
         private readonly Dictionary<string, VisualElement> m_StateRowMap = new(StringComparer.Ordinal);
@@ -59,21 +62,19 @@ namespace XFramework.Editor
         private readonly Dictionary<string, VisualElement> m_ClipRowMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, Button> m_ClipButtonMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, ClipRowVisualState> m_ClipVisualStateMap = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, float> m_RuntimeFloatPreviewValues = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, int> m_RuntimeIntPreviewValues = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, bool> m_RuntimeBoolPreviewValues = new(StringComparer.Ordinal);
 
         private FloatField m_PlaySpeedField;
         private DropdownField m_PlayTargetChannelField;
+        private Toggle m_ApplyTargetToggle;
         private FloatField m_PlayFadeInField;
         private FloatField m_PlayFadeOutField;
         private IntegerField m_PlayPriorityField;
         private Toggle m_ApplyTransitionToggle;
         private Toggle m_PlayInterruptibleToggle;
-        private FloatField m_PlayWeightField;
-        private FloatField m_PlayNormalizedTimeField;
-        private Toggle m_ApplyPlaybackToggle;
-        private Toggle m_PlayOverrideLoopToggle;
-        private Toggle m_PlayLoopValueToggle;
-        private Toggle m_PlayOverrideRootMotionToggle;
-        private Toggle m_PlayRootMotionValueToggle;
+        private FloatField m_PlayEnterTimeField;
         private Button m_PlayCommandButton;
         private VisualElement m_ParametersListView;
         private VisualElement m_StatesListView;
@@ -90,25 +91,19 @@ namespace XFramework.Editor
         private readonly Dictionary<string, AnimationClip> m_CachedClipObjectMap = new(StringComparer.Ordinal);
 
         private string m_PlayTargetChannelName;
+        private bool m_ApplyTargetOverrides;
         private float m_PlayFadeInOverride;
         private float m_PlayFadeOutOverride;
         private int m_PlayPriorityOverride;
         private bool m_PlayInterruptibleOverride = true;
         private bool m_ApplyTransitionOverrides;
-        private float m_PlayWeightOverride = 1f;
-        private float m_PlayNormalizedTimeOverride;
-        private bool m_ApplyPlaybackOverrides;
-        private bool m_PlayUseLoopOverride;
-        private bool m_PlayLoopOverride = true;
-        private bool m_PlayUseRootMotionOverride;
-        private bool m_PlayRootMotionOverride;
+        private float m_PlayEnterTimeOverride;
         private float m_PlaySpeed = 1f;
         private bool m_PlaybackPrefsLoaded;
 
         [SerializeField] private bool m_PlaybackSectionExpanded = true;
         [SerializeField] private bool m_PlayTargetSectionExpanded = true;
         [SerializeField] private bool m_PlayTransitionSectionExpanded;
-        [SerializeField] private bool m_PlayPlaybackSectionExpanded;
         [SerializeField] private bool m_ParametersSectionExpanded = true;
         [SerializeField] private bool m_StatesSectionExpanded = true;
         [SerializeField] private bool m_ClipsSectionExpanded = true;
@@ -201,21 +196,15 @@ namespace XFramework.Editor
             m_PlaybackSectionExpanded = settings.PlaybackSectionExpanded;
             m_PlayTargetSectionExpanded = settings.TargetSectionExpanded;
             m_PlayTransitionSectionExpanded = settings.TransitionSectionExpanded;
-            m_PlayPlaybackSectionExpanded = settings.PlaybackOptionsSectionExpanded;
             m_PlayTargetChannelName = settings.ChannelName;
+            m_ApplyTargetOverrides = settings.ApplyTarget;
             m_PlaySpeed = Mathf.Approximately(settings.Speed, 0f) ? 1f : settings.Speed;
             m_ApplyTransitionOverrides = settings.ApplyTransition;
             m_PlayFadeInOverride = Mathf.Max(0f, settings.FadeIn);
             m_PlayFadeOutOverride = Mathf.Max(0f, settings.FadeOut);
             m_PlayPriorityOverride = settings.Priority;
             m_PlayInterruptibleOverride = settings.Interruptible;
-            m_ApplyPlaybackOverrides = settings.ApplyPlayback;
-            m_PlayWeightOverride = settings.Weight;
-            m_PlayNormalizedTimeOverride = Mathf.Clamp01(settings.NormalizedTime);
-            m_PlayUseLoopOverride = settings.UseLoopOverride;
-            m_PlayLoopOverride = settings.LoopOverride;
-            m_PlayUseRootMotionOverride = settings.UseRootMotionOverride;
-            m_PlayRootMotionOverride = settings.RootMotionOverride;
+            m_PlayEnterTimeOverride = Mathf.Clamp01(settings.EnterTime);
             m_PlaybackPrefsLoaded = true;
         }
 
@@ -239,21 +228,15 @@ namespace XFramework.Editor
                 PlaybackSectionExpanded = m_PlaybackSectionExpanded,
                 TargetSectionExpanded = m_PlayTargetSectionExpanded,
                 TransitionSectionExpanded = m_PlayTransitionSectionExpanded,
-                PlaybackOptionsSectionExpanded = m_PlayPlaybackSectionExpanded,
                 ChannelName = m_PlayTargetChannelName,
+                ApplyTarget = m_ApplyTargetOverrides,
                 Speed = m_PlaySpeed,
                 ApplyTransition = m_ApplyTransitionOverrides,
                 FadeIn = m_PlayFadeInOverride,
                 FadeOut = m_PlayFadeOutOverride,
                 Priority = m_PlayPriorityOverride,
                 Interruptible = m_PlayInterruptibleOverride,
-                ApplyPlayback = m_ApplyPlaybackOverrides,
-                Weight = m_PlayWeightOverride,
-                NormalizedTime = m_PlayNormalizedTimeOverride,
-                UseLoopOverride = m_PlayUseLoopOverride,
-                LoopOverride = m_PlayLoopOverride,
-                UseRootMotionOverride = m_PlayUseRootMotionOverride,
-                RootMotionOverride = m_PlayRootMotionOverride,
+                EnterTime = m_PlayEnterTimeOverride,
             });
         }
 
@@ -266,10 +249,12 @@ namespace XFramework.Editor
             speedRow.style.alignItems = Align.Center;
             content.Add(speedRow);
 
-            m_PlaySpeedField = new FloatField("speed") { value = GetPlaybackSpeed() };
-            m_PlaySpeedField.style.flexGrow = 1;
+            m_PlaySpeedField = new FloatField { value = GetPlaybackSpeed() };
+            ConfigureCompactPlaybackField(m_PlaySpeedField, 66);
             m_PlaySpeedField.RegisterValueChangedCallback(_ => SavePlaybackPrefs());
-            speedRow.Add(m_PlaySpeedField);
+            VisualElement speedFieldRow = CreatePlaybackFieldContainer("speed", m_PlaySpeedField, PlaybackLabelWidth);
+            speedFieldRow.style.flexGrow = 1;
+            speedRow.Add(speedFieldRow);
 
             m_PlayCommandButton = new Button(PlayConfiguredCommand)
             {
@@ -278,36 +263,52 @@ namespace XFramework.Editor
             m_PlayCommandButton.style.marginLeft = 8;
             speedRow.Add(m_PlayCommandButton);
 
-            FoldoutCard targetCard = CreateSectionFoldoutCard("Targte", m_PlayTargetSectionExpanded, value =>
+            m_ApplyTargetToggle = CreateHeaderApplyToggle(m_ApplyTargetOverrides, "播放 state 时是否应用 target.channelName 覆盖；播放 clip 时始终会应用。");
+            m_ApplyTargetToggle.RegisterValueChangedCallback(evt =>
+            {
+                m_ApplyTargetOverrides = evt.newValue;
+                SavePlaybackPrefs();
+            });
+
+            FoldoutCard targetCard = CreateSectionFoldoutCard("Target", m_PlayTargetSectionExpanded, value =>
             {
                 m_PlayTargetSectionExpanded = value;
                 SavePlaybackPrefs();
-            });
+            }, m_ApplyTargetToggle);
             targetCard.Root.style.marginTop = 4;
-            m_PlayTargetChannelField = new DropdownField("channelName");
+
+            m_PlayTargetChannelField = new DropdownField();
+            m_PlayTargetChannelField.tooltip = "播放 target.channelName。用于 clip 调试播放，也可在 Apply Target 开启时覆盖 state 的默认 channel。";
+            m_PlayTargetChannelField.style.flexGrow = 1;
+            m_PlayTargetChannelField.style.minWidth = 0;
             m_PlayTargetChannelField.RegisterValueChangedCallback(evt =>
             {
                 m_PlayTargetChannelName = NormalizeChannelOptionValue(evt.newValue) ?? string.Empty;
                 SavePlaybackPrefs();
             });
-            targetCard.Content.Add(m_PlayTargetChannelField);
+            targetCard.Content.Add(CreatePlaybackFieldContainer("channelName", m_PlayTargetChannelField, PlaybackLabelWidth));
             content.Add(targetCard.Root);
 
+            m_ApplyTransitionToggle = CreateHeaderApplyToggle(m_ApplyTransitionOverrides, "是否应用 command.transition。关闭时本分区会自动收起。");
             FoldoutCard transitionCard = CreateSectionFoldoutCard("Transition", m_PlayTransitionSectionExpanded, value =>
             {
                 m_PlayTransitionSectionExpanded = value;
                 SavePlaybackPrefs();
-            });
+            }, m_ApplyTransitionToggle, () => m_ApplyTransitionOverrides);
             transitionCard.Root.style.marginTop = 4;
-            m_ApplyTransitionToggle = new Toggle("Apply Transition Request") { value = m_ApplyTransitionOverrides };
             m_ApplyTransitionToggle.RegisterValueChangedCallback(evt =>
             {
                 m_ApplyTransitionOverrides = evt.newValue;
+                if (!evt.newValue)
+                {
+                    transitionCard.SetExpanded?.Invoke(false);
+                }
+                transitionCard.RefreshState?.Invoke();
                 SavePlaybackPrefs();
             });
-            transitionCard.Content.Add(m_ApplyTransitionToggle);
 
             m_PlayFadeInField = new FloatField { value = m_PlayFadeInOverride };
+            ConfigureCompactPlaybackField(m_PlayFadeInField, 66);
             m_PlayFadeInField.RegisterValueChangedCallback(evt =>
             {
                 m_PlayFadeInOverride = Mathf.Max(0f, evt.newValue);
@@ -318,9 +319,10 @@ namespace XFramework.Editor
 
                 SavePlaybackPrefs();
             });
-            transitionCard.Content.Add(CreatePlaybackFieldContainer("fadeIn", m_PlayFadeInField, 66));
+            transitionCard.Content.Add(CreatePlaybackFieldContainer("fadeIn", m_PlayFadeInField, PlaybackLabelWidth));
 
             m_PlayFadeOutField = new FloatField { value = m_PlayFadeOutOverride };
+            ConfigureCompactPlaybackField(m_PlayFadeOutField, 66);
             m_PlayFadeOutField.RegisterValueChangedCallback(evt =>
             {
                 m_PlayFadeOutOverride = Mathf.Max(0f, evt.newValue);
@@ -331,96 +333,39 @@ namespace XFramework.Editor
 
                 SavePlaybackPrefs();
             });
-            transitionCard.Content.Add(CreatePlaybackFieldContainer("fadeOut", m_PlayFadeOutField, 66));
+            transitionCard.Content.Add(CreatePlaybackFieldContainer("fadeOut", m_PlayFadeOutField, PlaybackLabelWidth));
 
             m_PlayPriorityField = new IntegerField { value = m_PlayPriorityOverride };
+            ConfigureCompactPlaybackElement(m_PlayPriorityField, 66);
             m_PlayPriorityField.RegisterValueChangedCallback(evt =>
             {
                 m_PlayPriorityOverride = evt.newValue;
                 SavePlaybackPrefs();
             });
-            transitionCard.Content.Add(CreatePlaybackFieldContainer("priority", m_PlayPriorityField, 66));
+            transitionCard.Content.Add(CreatePlaybackFieldContainer("priority", m_PlayPriorityField, PlaybackLabelWidth));
 
-            m_PlayInterruptibleToggle = new Toggle("interruptible") { value = m_PlayInterruptibleOverride };
+            m_PlayInterruptibleToggle = new Toggle { value = m_PlayInterruptibleOverride };
             m_PlayInterruptibleToggle.RegisterValueChangedCallback(evt =>
             {
                 m_PlayInterruptibleOverride = evt.newValue;
                 SavePlaybackPrefs();
             });
-            transitionCard.Content.Add(m_PlayInterruptibleToggle);
-            content.Add(transitionCard.Root);
+            transitionCard.Content.Add(CreatePlaybackToggleRow("interruptible", m_PlayInterruptibleToggle, PlaybackLabelWidth));
 
-            FoldoutCard playbackCard = CreateSectionFoldoutCard("PlayBack", m_PlayPlaybackSectionExpanded, value =>
+            m_PlayEnterTimeField = new FloatField { value = m_PlayEnterTimeOverride };
+            ConfigureCompactPlaybackField(m_PlayEnterTimeField, 72);
+            m_PlayEnterTimeField.RegisterValueChangedCallback(evt =>
             {
-                m_PlayPlaybackSectionExpanded = value;
-                SavePlaybackPrefs();
-            });
-            playbackCard.Root.style.marginTop = 4;
-            m_ApplyPlaybackToggle = new Toggle("Apply Playback Override") { value = m_ApplyPlaybackOverrides };
-            m_ApplyPlaybackToggle.RegisterValueChangedCallback(evt =>
-            {
-                m_ApplyPlaybackOverrides = evt.newValue;
-                SavePlaybackPrefs();
-            });
-            playbackCard.Content.Add(m_ApplyPlaybackToggle);
-
-            m_PlayWeightField = new FloatField { value = m_PlayWeightOverride };
-            m_PlayWeightField.RegisterValueChangedCallback(evt =>
-            {
-                m_PlayWeightOverride = evt.newValue;
-                SavePlaybackPrefs();
-            });
-            playbackCard.Content.Add(CreatePlaybackFieldContainer("weight", m_PlayWeightField, 66));
-
-            m_PlayNormalizedTimeField = new FloatField { value = m_PlayNormalizedTimeOverride };
-            m_PlayNormalizedTimeField.RegisterValueChangedCallback(evt =>
-            {
-                m_PlayNormalizedTimeOverride = Mathf.Clamp01(evt.newValue);
-                if (!Mathf.Approximately(m_PlayNormalizedTimeOverride, evt.newValue))
+                m_PlayEnterTimeOverride = Mathf.Clamp01(evt.newValue);
+                if (!Mathf.Approximately(m_PlayEnterTimeOverride, evt.newValue))
                 {
-                    m_PlayNormalizedTimeField.SetValueWithoutNotify(m_PlayNormalizedTimeOverride);
+                    m_PlayEnterTimeField.SetValueWithoutNotify(m_PlayEnterTimeOverride);
                 }
 
                 SavePlaybackPrefs();
             });
-            playbackCard.Content.Add(CreatePlaybackFieldContainer("normalized", m_PlayNormalizedTimeField, 72));
-
-            m_PlayOverrideLoopToggle = new Toggle("overrideLoop") { value = m_PlayUseLoopOverride };
-            m_PlayOverrideLoopToggle.RegisterValueChangedCallback(evt =>
-            {
-                m_PlayUseLoopOverride = evt.newValue;
-                m_PlayLoopValueToggle.SetEnabled(evt.newValue);
-                SavePlaybackPrefs();
-            });
-            playbackCard.Content.Add(m_PlayOverrideLoopToggle);
-
-            m_PlayLoopValueToggle = new Toggle("loopValue") { value = m_PlayLoopOverride };
-            m_PlayLoopValueToggle.SetEnabled(m_PlayUseLoopOverride);
-            m_PlayLoopValueToggle.RegisterValueChangedCallback(evt =>
-            {
-                m_PlayLoopOverride = evt.newValue;
-                SavePlaybackPrefs();
-            });
-            playbackCard.Content.Add(m_PlayLoopValueToggle);
-
-            m_PlayOverrideRootMotionToggle = new Toggle("overrideRootMotion") { value = m_PlayUseRootMotionOverride };
-            m_PlayOverrideRootMotionToggle.RegisterValueChangedCallback(evt =>
-            {
-                m_PlayUseRootMotionOverride = evt.newValue;
-                m_PlayRootMotionValueToggle.SetEnabled(evt.newValue);
-                SavePlaybackPrefs();
-            });
-            playbackCard.Content.Add(m_PlayOverrideRootMotionToggle);
-
-            m_PlayRootMotionValueToggle = new Toggle("rootMotionValue") { value = m_PlayRootMotionOverride };
-            m_PlayRootMotionValueToggle.SetEnabled(m_PlayUseRootMotionOverride);
-            m_PlayRootMotionValueToggle.RegisterValueChangedCallback(evt =>
-            {
-                m_PlayRootMotionOverride = evt.newValue;
-                SavePlaybackPrefs();
-            });
-            playbackCard.Content.Add(m_PlayRootMotionValueToggle);
-            content.Add(playbackCard.Root);
+            transitionCard.Content.Add(CreatePlaybackFieldContainer("enterTime", m_PlayEnterTimeField, PlaybackLabelWidth));
+            content.Add(transitionCard.Root);
 
             return content;
         }
@@ -528,10 +473,16 @@ namespace XFramework.Editor
             XAnimationAsset asset = LoadCurrentAnimationAsset();
             if (m_ParametersListView == null || asset?.parameters == null || asset.parameters.Length == 0)
             {
+                m_RuntimeFloatPreviewValues.Clear();
+                m_RuntimeIntPreviewValues.Clear();
+                m_RuntimeBoolPreviewValues.Clear();
                 AddEmptyLabel(m_ParametersListView, "No parameters");
                 return;
             }
 
+            HashSet<string> validFloatKeys = new(StringComparer.Ordinal);
+            HashSet<string> validIntKeys = new(StringComparer.Ordinal);
+            HashSet<string> validBoolKeys = new(StringComparer.Ordinal);
             for (int i = 0; i < asset.parameters.Length; i++)
             {
                 XAnimationParameterConfig parameter = asset.parameters[i];
@@ -540,8 +491,37 @@ namespace XFramework.Editor
                     continue;
                 }
 
+                switch (parameter.type)
+                {
+                    case XAnimationParameterType.Float:
+                        validFloatKeys.Add(parameter.name);
+                        if (!m_RuntimeFloatPreviewValues.ContainsKey(parameter.name))
+                        {
+                            m_RuntimeFloatPreviewValues[parameter.name] = ConvertParameterDefaultToFloat(parameter.defaultValue);
+                        }
+                        break;
+                    case XAnimationParameterType.Int:
+                        validIntKeys.Add(parameter.name);
+                        if (!m_RuntimeIntPreviewValues.ContainsKey(parameter.name))
+                        {
+                            m_RuntimeIntPreviewValues[parameter.name] = ConvertParameterDefaultToInt(parameter.defaultValue);
+                        }
+                        break;
+                    case XAnimationParameterType.Bool:
+                        validBoolKeys.Add(parameter.name);
+                        if (!m_RuntimeBoolPreviewValues.ContainsKey(parameter.name))
+                        {
+                            m_RuntimeBoolPreviewValues[parameter.name] = ConvertParameterDefaultToBool(parameter.defaultValue);
+                        }
+                        break;
+                }
+
                 m_ParametersListView.Add(CreateParameterRow(parameter, i));
             }
+
+            RemoveStaleRuntimePreviewValues(m_RuntimeFloatPreviewValues, validFloatKeys);
+            RemoveStaleRuntimePreviewValues(m_RuntimeIntPreviewValues, validIntKeys);
+            RemoveStaleRuntimePreviewValues(m_RuntimeBoolPreviewValues, validBoolKeys);
         }
 
         private VisualElement CreateParameterRow(XAnimationParameterConfig parameter, int rowIndex)
@@ -582,11 +562,12 @@ namespace XFramework.Editor
                 {
                     FloatField field = new("value")
                     {
-                        value = ConvertParameterDefaultToFloat(parameter.defaultValue)
+                        value = GetRuntimeFloatPreviewValue(parameter)
                     };
                     field.SetEnabled(Application.isPlaying);
                     field.RegisterValueChangedCallback(evt =>
                     {
+                        m_RuntimeFloatPreviewValues[parameter.name] = evt.newValue;
                         if (!Application.isPlaying || actor == null)
                         {
                             return;
@@ -609,11 +590,12 @@ namespace XFramework.Editor
                 {
                     Toggle toggle = new("value")
                     {
-                        value = ConvertParameterDefaultToBool(parameter.defaultValue)
+                        value = GetRuntimeBoolPreviewValue(parameter)
                     };
                     toggle.SetEnabled(Application.isPlaying);
                     toggle.RegisterValueChangedCallback(evt =>
                     {
+                        m_RuntimeBoolPreviewValues[parameter.name] = evt.newValue;
                         if (!Application.isPlaying || actor == null)
                         {
                             return;
@@ -631,6 +613,34 @@ namespace XFramework.Editor
                         }
                     });
                     return toggle;
+                }
+                case XAnimationParameterType.Int:
+                {
+                    IntegerField field = new("value")
+                    {
+                        value = GetRuntimeIntPreviewValue(parameter)
+                    };
+                    field.SetEnabled(Application.isPlaying);
+                    field.RegisterValueChangedCallback(evt =>
+                    {
+                        m_RuntimeIntPreviewValues[parameter.name] = evt.newValue;
+                        if (!Application.isPlaying || actor == null)
+                        {
+                            return;
+                        }
+
+                        try
+                        {
+                            actor.SetParameter(parameter.name, evt.newValue);
+                            SetStatus($"{parameter.name} = {evt.newValue}");
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogException(ex, actor);
+                            SetStatus(ex.Message, true);
+                        }
+                    });
+                    return field;
                 }
                 case XAnimationParameterType.Trigger:
                 default:
@@ -659,6 +669,72 @@ namespace XFramework.Editor
                     button.SetEnabled(Application.isPlaying);
                     return button;
                 }
+            }
+        }
+
+        private float GetRuntimeFloatPreviewValue(XAnimationParameterConfig parameter)
+        {
+            if (parameter == null || string.IsNullOrWhiteSpace(parameter.name))
+            {
+                return 0f;
+            }
+
+            return m_RuntimeFloatPreviewValues.TryGetValue(parameter.name, out float value)
+                ? value
+                : ConvertParameterDefaultToFloat(parameter.defaultValue);
+        }
+
+        private bool GetRuntimeBoolPreviewValue(XAnimationParameterConfig parameter)
+        {
+            if (parameter == null || string.IsNullOrWhiteSpace(parameter.name))
+            {
+                return false;
+            }
+
+            return m_RuntimeBoolPreviewValues.TryGetValue(parameter.name, out bool value)
+                ? value
+                : ConvertParameterDefaultToBool(parameter.defaultValue);
+        }
+
+        private int GetRuntimeIntPreviewValue(XAnimationParameterConfig parameter)
+        {
+            if (parameter == null || string.IsNullOrWhiteSpace(parameter.name))
+            {
+                return 0;
+            }
+
+            return m_RuntimeIntPreviewValues.TryGetValue(parameter.name, out int value)
+                ? value
+                : ConvertParameterDefaultToInt(parameter.defaultValue);
+        }
+
+        private static void RemoveStaleRuntimePreviewValues<T>(Dictionary<string, T> cache, HashSet<string> validKeys)
+        {
+            if (cache.Count == 0)
+            {
+                return;
+            }
+
+            List<string> removedKeys = null;
+            foreach (string key in cache.Keys)
+            {
+                if (validKeys.Contains(key))
+                {
+                    continue;
+                }
+
+                removedKeys ??= new List<string>();
+                removedKeys.Add(key);
+            }
+
+            if (removedKeys == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < removedKeys.Count; i++)
+            {
+                cache.Remove(removedKeys[i]);
             }
         }
 
@@ -952,7 +1028,7 @@ namespace XFramework.Editor
             string channelName = m_PlayTargetChannelName;
             if (string.IsNullOrWhiteSpace(channelName))
             {
-                SetStatus("请先在 Targte 中选择 channelName 后再调试播放 clip。", true);
+                SetStatus("请先在 Target 中选择 channelName 后再调试播放 clip。", true);
                 return;
             }
 
@@ -1102,39 +1178,30 @@ namespace XFramework.Editor
 
         private XAnimationPlayCommand BuildPlayCommand(string stateKey, string clipKey, string channelName)
         {
+            bool isClipPlayback = !string.IsNullOrWhiteSpace(clipKey);
+            bool shouldApplyTarget = isClipPlayback || m_ApplyTargetOverrides;
             XAnimationPlayCommand command = new()
             {
                 target = new XAnimationPlayTarget
                 {
                     stateKey = stateKey,
                     clipKey = clipKey,
-                    channelName = channelName,
+                    channelName = shouldApplyTarget ? channelName : null,
                 },
                 transition = new XAnimationTransitionOptions
                 {
                     interruptible = true,
                 },
-                playback = new XAnimationPlaybackOptions
-                {
-                    speed = Mathf.Approximately(m_PlaySpeedField?.value ?? 0f, 0f) ? 1f : m_PlaySpeedField.value,
-                    weight = 1f,
-                },
             };
 
+            // TODO: Apply speed via SetChannelTimeScale
             if (m_ApplyTransitionOverrides)
             {
                 command.transition.fadeIn = Mathf.Max(0f, m_PlayFadeInOverride);
                 command.transition.fadeOut = Mathf.Max(0f, m_PlayFadeOutOverride);
                 command.transition.priority = m_PlayPriorityOverride;
                 command.transition.interruptible = m_PlayInterruptibleOverride;
-            }
-
-            if (m_ApplyPlaybackOverrides)
-            {
-                command.playback.weight = m_PlayWeightOverride;
-                command.playback.normalizedTime = Mathf.Clamp01(m_PlayNormalizedTimeOverride);
-                command.playback.loopOverride = m_PlayUseLoopOverride ? m_PlayLoopOverride : null;
-                command.playback.rootMotionOverride = m_PlayUseRootMotionOverride ? m_PlayRootMotionOverride : null;
+                command.transition.enterTime = Mathf.Clamp01(m_PlayEnterTimeOverride);
             }
 
             return command;
@@ -1142,7 +1209,12 @@ namespace XFramework.Editor
 
         private string GetStateTargetChannelName(XAnimationStateConfig state)
         {
-            return string.IsNullOrWhiteSpace(m_PlayTargetChannelName) ? null : m_PlayTargetChannelName;
+            if (!m_ApplyTargetOverrides || string.IsNullOrWhiteSpace(m_PlayTargetChannelName))
+            {
+                return null;
+            }
+
+            return m_PlayTargetChannelName;
         }
 
         private string FindPlayingChannelForState(XAnimationActor actor, string stateKey)
@@ -1388,6 +1460,18 @@ namespace XFramework.Editor
             };
         }
 
+        private static int ConvertParameterDefaultToInt(object value)
+        {
+            return value switch
+            {
+                int i => i,
+                long l => (int)l,
+                float f => Mathf.RoundToInt(f),
+                double d => (int)Math.Round(d),
+                _ => 0,
+            };
+        }
+
         private static string BuildStateInfoText(XAnimationStateConfig state)
         {
             if (state == null)
@@ -1503,7 +1587,12 @@ namespace XFramework.Editor
             };
         }
 
-        private static FoldoutCard CreateSectionFoldoutCard(string titleText, bool expanded, Action<bool> setExpanded)
+        private static FoldoutCard CreateSectionFoldoutCard(
+            string titleText,
+            bool expanded,
+            Action<bool> setExpanded,
+            VisualElement titleAction = null,
+            Func<bool> canToggle = null)
         {
             VisualElement root = CreateSubBox();
             VisualElement header = new();
@@ -1516,24 +1605,50 @@ namespace XFramework.Editor
             label.style.unityFontStyleAndWeight = FontStyle.Bold;
             label.style.flexGrow = 1;
             header.Add(label);
+            if (titleAction != null)
+            {
+                titleAction.style.flexShrink = 0;
+                titleAction.style.marginLeft = 6;
+                header.Add(titleAction);
+            }
 
             VisualElement content = new();
             content.style.marginTop = 4;
             root.Add(header);
             root.Add(content);
 
+            void RefreshState()
+            {
+                bool toggleable = canToggle?.Invoke() ?? true;
+                bool isExpanded = toggleable && expanded;
+                label.text = isExpanded ? $"▾ {titleText}" : $"▸ {titleText}";
+                label.style.color = toggleable ? TextNormal : TextMuted;
+                content.style.display = isExpanded ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+
             void ApplyExpanded(bool value)
             {
                 expanded = value;
                 setExpanded?.Invoke(value);
-                label.text = value ? $"▾ {titleText}" : $"▸ {titleText}";
-                content.style.display = value ? DisplayStyle.Flex : DisplayStyle.None;
+                RefreshState();
             }
 
-            ApplyExpanded(expanded);
+            RefreshState();
             header.RegisterCallback<MouseDownEvent>(evt =>
             {
                 if (evt.button != 0)
+                {
+                    return;
+                }
+
+                if (titleAction != null &&
+                    evt.target is VisualElement target &&
+                    (ReferenceEquals(target, titleAction) || titleAction.Contains(target)))
+                {
+                    return;
+                }
+
+                if (!(canToggle?.Invoke() ?? true))
                 {
                     return;
                 }
@@ -1546,6 +1661,8 @@ namespace XFramework.Editor
             {
                 Root = root,
                 Content = content,
+                SetExpanded = ApplyExpanded,
+                RefreshState = RefreshState,
             };
         }
 
@@ -1620,6 +1737,34 @@ namespace XFramework.Editor
             return box;
         }
 
+        private static Toggle CreateHeaderApplyToggle(bool value, string tooltip)
+        {
+            Toggle toggle = new("Apply") { value = value };
+            toggle.tooltip = tooltip;
+            toggle.style.flexShrink = 0;
+            toggle.style.unityFontStyleAndWeight = FontStyle.Normal;
+            return toggle;
+        }
+
+        private static void ConfigureCompactPlaybackField(BaseField<float> field, float valueWidth)
+        {
+            field.label = string.Empty;
+            field.style.width = valueWidth;
+            field.style.minWidth = valueWidth;
+            field.style.maxWidth = valueWidth;
+            field.style.flexShrink = 0;
+            field.style.alignSelf = Align.Center;
+        }
+
+        private static void ConfigureCompactPlaybackElement(VisualElement field, float valueWidth)
+        {
+            field.style.width = valueWidth;
+            field.style.minWidth = valueWidth;
+            field.style.maxWidth = valueWidth;
+            field.style.flexShrink = 0;
+            field.style.alignSelf = Align.Center;
+        }
+
         private static VisualElement CreatePlaybackFieldContainer(string labelText, VisualElement field, float labelWidth)
         {
             VisualElement container = new();
@@ -1627,6 +1772,7 @@ namespace XFramework.Editor
             container.style.alignItems = Align.Center;
             container.style.marginTop = 2;
             container.style.marginBottom = 2;
+            container.style.minWidth = 0;
 
             Label label = new(labelText);
             label.style.width = labelWidth;
@@ -1636,10 +1782,19 @@ namespace XFramework.Editor
             label.style.fontSize = 10;
             label.style.color = TextMuted;
             label.style.unityTextAlign = TextAnchor.MiddleLeft;
+            label.style.whiteSpace = WhiteSpace.NoWrap;
             label.style.marginRight = 6;
             container.Add(label);
             container.Add(field);
             return container;
+        }
+
+        private static VisualElement CreatePlaybackToggleRow(string labelText, Toggle toggle, float labelWidth)
+        {
+            toggle.label = string.Empty;
+            toggle.style.flexShrink = 0;
+            toggle.style.marginLeft = 0;
+            return CreatePlaybackFieldContainer(labelText, toggle, labelWidth);
         }
 
         private static void ApplyIconButtonStyle(Button button, bool isPlaying)

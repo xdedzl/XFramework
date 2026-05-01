@@ -36,7 +36,6 @@ namespace XFramework.Animation
             }
 
             XAnimationAsset asset = LoadAsset(textAsset, assetPath);
-            m_Validator.Validate(asset);
             return Compile(asset);
         }
 
@@ -48,7 +47,6 @@ namespace XFramework.Animation
             }
 
             XAnimationAsset asset = LoadAsset(textAsset, textAsset.name);
-            m_Validator.Validate(asset);
             return Compile(asset);
         }
 
@@ -77,6 +75,7 @@ namespace XFramework.Animation
 
         public XAnimationCompiledAsset Compile(XAnimationAsset asset)
         {
+            NormalizeAutoTransitionValues(asset);
             m_Validator.Validate(asset);
 
             XAnimationCompiledChannel[] compiledChannels = new XAnimationCompiledChannel[asset.channels.Length];
@@ -144,6 +143,16 @@ namespace XFramework.Animation
                 stateIndexByKey[stateConfig.key] = i;
             }
 
+            XAnimationAutoTransitionConfig[] autoTransitionConfigs = asset.autoTransitions ?? Array.Empty<XAnimationAutoTransitionConfig>();
+            XAnimationCompiledAutoTransition[] compiledAutoTransitions = new XAnimationCompiledAutoTransition[autoTransitionConfigs.Length];
+            Dictionary<string, int> autoTransitionIndexByPreStateKey = new(StringComparer.Ordinal);
+            for (int i = 0; i < autoTransitionConfigs.Length; i++)
+            {
+                XAnimationAutoTransitionConfig autoTransitionConfig = autoTransitionConfigs[i];
+                compiledAutoTransitions[i] = new XAnimationCompiledAutoTransition(autoTransitionConfig);
+                autoTransitionIndexByPreStateKey[autoTransitionConfig.preStateKey] = i;
+            }
+
             Dictionary<string, List<XAnimationCompiledCue>> cuesByClipKey = new(StringComparer.Ordinal);
             for (int i = 0; i < asset.cues.Length; i++)
             {
@@ -167,12 +176,14 @@ namespace XFramework.Animation
                 compiledChannels,
                 compiledClips,
                 compiledStates,
+                compiledAutoTransitions,
                 compiledParameters,
                 cuesByClipKey,
                 channelIndexByName,
                 clipIndexByKey,
                 parameterIndexByName,
-                stateIndexByKey);
+                stateIndexByKey,
+                autoTransitionIndexByPreStateKey);
         }
 
         private static XAnimationCompiledBlend1DState CompileBlend1DState(
@@ -271,6 +282,30 @@ namespace XFramework.Animation
         {
             string json = JsonConvert.SerializeObject(asset);
             return JsonConvert.DeserializeObject<XAnimationAsset>(json);
+        }
+
+        private static void NormalizeAutoTransitionValues(XAnimationAsset asset)
+        {
+            if (asset == null)
+            {
+                return;
+            }
+
+            asset.autoTransitions ??= Array.Empty<XAnimationAutoTransitionConfig>();
+            for (int i = 0; i < asset.autoTransitions.Length; i++)
+            {
+                XAnimationAutoTransitionConfig transition = asset.autoTransitions[i];
+                if (transition == null)
+                {
+                    continue;
+                }
+
+                transition.preStateKey = transition.preStateKey?.Trim();
+                transition.nextStateKey = string.IsNullOrWhiteSpace(transition.nextStateKey)
+                    ? string.Empty
+                    : transition.nextStateKey.Trim();
+                transition.transitionDuration = Mathf.Max(0f, transition.transitionDuration);
+            }
         }
 
         private static void ValidateOverrideAsset(XAnimationOverrideAsset overrideAsset, string assetPath)

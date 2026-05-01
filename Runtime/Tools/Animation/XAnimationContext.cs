@@ -8,6 +8,7 @@ namespace XFramework.Animation
     {
         private readonly Dictionary<string, XAnimationParameterType> m_ParameterTypes = new(StringComparer.Ordinal);
         private readonly Dictionary<string, float> m_FloatValues = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, int> m_IntValues = new(StringComparer.Ordinal);
         private readonly Dictionary<string, bool> m_BoolValues = new(StringComparer.Ordinal);
         private readonly Dictionary<string, bool> m_TriggerValues = new(StringComparer.Ordinal);
 
@@ -26,6 +27,9 @@ namespace XFramework.Animation
                 {
                     case XAnimationParameterType.Float:
                         m_FloatValues[parameterName] = ConvertToFloat(parameter.Config.defaultValue);
+                        break;
+                    case XAnimationParameterType.Int:
+                        m_IntValues[parameterName] = ConvertToInt(parameter.Config.defaultValue);
                         break;
                     case XAnimationParameterType.Bool:
                         m_BoolValues[parameterName] = ConvertToBool(parameter.Config.defaultValue);
@@ -51,6 +55,12 @@ namespace XFramework.Animation
             m_BoolValues[key] = value;
         }
 
+        public void SetInt(string key, int value)
+        {
+            EnsureType(key, XAnimationParameterType.Int);
+            m_IntValues[key] = value;
+        }
+
         public void SetTrigger(string key)
         {
             EnsureType(key, XAnimationParameterType.Trigger);
@@ -71,6 +81,11 @@ namespace XFramework.Animation
         public bool TryGetBool(string key, out bool value)
         {
             return m_BoolValues.TryGetValue(key, out value);
+        }
+
+        public bool TryGetInt(string key, out int value)
+        {
+            return m_IntValues.TryGetValue(key, out value);
         }
 
         public bool ConsumeTrigger(string key)
@@ -102,6 +117,16 @@ namespace XFramework.Animation
             }
 
             return Convert.ToSingle(value, CultureInfo.InvariantCulture);
+        }
+
+        private static int ConvertToInt(object value)
+        {
+            if (value == null)
+            {
+                return 0;
+            }
+
+            return Convert.ToInt32(value, CultureInfo.InvariantCulture);
         }
 
         private static bool ConvertToBool(object value)

@@ -12,6 +12,8 @@ namespace XFramework.Animation
         private XAnimationPlayer m_Player;
 
         public event Action<XAnimationCueEvent> CueTriggered;
+        public event Action<XAnimationStateEvent> OnStateEnter;
+        public event Action<XAnimationStateEvent> OnStateExit;
 
         public Animator Animator { get; private set; }
         public XAnimationAsset Asset => m_CompiledAsset?.Asset;
@@ -75,6 +77,8 @@ namespace XFramework.Animation
             m_Context = new XAnimationContext(m_CompiledAsset.Parameters);
             m_Player = new XAnimationPlayer(m_CompiledAsset, animator, m_Context);
             m_Player.CueTriggered += OnCueTriggered;
+            m_Player.StateEntered += OnPlayerStateEntered;
+            m_Player.StateExited += OnPlayerStateExited;
         }
 
         public void SetParameter(string key, float value)
@@ -87,6 +91,12 @@ namespace XFramework.Animation
         {
             EnsureInitialized();
             m_Context.SetBool(key, value);
+        }
+
+        public void SetParameter(string key, int value)
+        {
+            EnsureInitialized();
+            m_Context.SetInt(key, value);
         }
 
         public void SetTrigger(string key)
@@ -104,8 +114,7 @@ namespace XFramework.Animation
         public void PlayClip(
             string clipName,
             string channelName,
-            XAnimationTransitionOptions transition = default,
-            XAnimationPlaybackOptions playback = default)
+            XAnimationTransitionOptions transition = default)
         {
             EnsureInitialized();
             m_Player.Play(new XAnimationPlayCommand
@@ -116,14 +125,12 @@ namespace XFramework.Animation
                     channelName = channelName,
                 },
                 transition = NormalizeTransitionOptions(transition),
-                playback = NormalizePlaybackOptions(playback),
             });
         }
 
         public void PlayState(
             string stateName,
-            XAnimationTransitionOptions transition = default,
-            XAnimationPlaybackOptions playback = default)
+            XAnimationTransitionOptions transition = default)
         {
             EnsureInitialized();
             m_Player.Play(new XAnimationPlayCommand
@@ -133,7 +140,6 @@ namespace XFramework.Animation
                     stateKey = stateName,
                 },
                 transition = NormalizeTransitionOptions(transition),
-                playback = NormalizePlaybackOptions(playback),
             });
         }
 
@@ -179,6 +185,30 @@ namespace XFramework.Animation
             return m_Player.GetChannelState(channelName);
         }
 
+        public bool TryGetCurrentState(string channelName, out XAnimationChannelState state)
+        {
+            EnsureInitialized();
+            return m_Player.TryGetCurrentState(channelName, out state);
+        }
+
+        public bool IsPlaying(string stateKey, string channelName = null)
+        {
+            EnsureInitialized();
+            return m_Player.IsPlaying(stateKey, channelName);
+        }
+
+        public float GetStateDuration(string stateKey)
+        {
+            EnsureInitialized();
+            return m_Player.GetStateDuration(stateKey);
+        }
+
+        public float GetClipDuration(string clipKey)
+        {
+            EnsureInitialized();
+            return m_Player.GetClipDuration(clipKey);
+        }
+
         public void Update(float deltaTime)
         {
             EnsureInitialized();
@@ -209,6 +239,8 @@ namespace XFramework.Animation
             }
 
             m_Player.CueTriggered -= OnCueTriggered;
+            m_Player.StateEntered -= OnPlayerStateEntered;
+            m_Player.StateExited -= OnPlayerStateExited;
             m_Player.Dispose();
             m_Player = null;
         }
@@ -218,13 +250,22 @@ namespace XFramework.Animation
             CueTriggered?.Invoke(cueEvent);
         }
 
+        private void OnPlayerStateEntered(XAnimationStateEvent stateEvent)
+        {
+            OnStateEnter?.Invoke(stateEvent);
+        }
+
+        private void OnPlayerStateExited(XAnimationStateEvent stateEvent)
+        {
+            OnStateExit?.Invoke(stateEvent);
+        }
+
         private static XAnimationPlayCommand NormalizeCommand(XAnimationPlayCommand command)
         {
             return new XAnimationPlayCommand
             {
                 target = command?.target ?? new XAnimationPlayTarget(),
                 transition = NormalizeTransitionOptions(command?.transition),
-                playback = NormalizePlaybackOptions(command?.playback),
             };
         }
 
@@ -235,21 +276,9 @@ namespace XFramework.Animation
             {
                 fadeIn = Mathf.Max(0f, options.fadeIn),
                 fadeOut = Mathf.Max(0f, options.fadeOut),
+                enterTime = Mathf.Clamp01(options.enterTime),
                 priority = options.priority,
                 interruptible = options.interruptible,
-            };
-        }
-
-        private static XAnimationPlaybackOptions NormalizePlaybackOptions(XAnimationPlaybackOptions options)
-        {
-            options ??= new XAnimationPlaybackOptions();
-            return new XAnimationPlaybackOptions
-            {
-                weight = options.weight > 0f ? options.weight : 1f,
-                normalizedTime = Mathf.Clamp01(options.normalizedTime),
-                speed = Mathf.Approximately(options.speed, 0f) ? 1f : options.speed,
-                loopOverride = options.loopOverride,
-                rootMotionOverride = options.rootMotionOverride,
             };
         }
     }

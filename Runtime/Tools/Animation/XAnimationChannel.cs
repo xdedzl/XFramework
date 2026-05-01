@@ -50,12 +50,14 @@ namespace XFramework.Animation
             string channelName,
             string stateKey,
             XAnimationStateType stateType,
+            bool isTemporaryState,
             XAnimationPlaybackRuntimeOptions options)
         {
             PlaybackId = playbackId;
             ChannelName = channelName;
             StateKey = stateKey;
             StateType = stateType;
+            IsTemporaryState = isTemporaryState;
             TargetWeight = Mathf.Max(0f, options.Weight);
             CurrentWeight = options.FadeIn > 0f ? 0f : TargetWeight;
             Speed = options.Speed;
@@ -73,6 +75,7 @@ namespace XFramework.Animation
         public string ChannelName { get; }
         public string StateKey { get; }
         public XAnimationStateType StateType { get; }
+        public bool IsTemporaryState { get; }
         public abstract string PrimaryClipKey { get; }
         public abstract Playable OutputPlayable { get; }
         public float CurrentWeight { get; private set; }
@@ -84,6 +87,7 @@ namespace XFramework.Animation
         public bool Interruptible { get; }
         public bool DrivesRootMotion { get; }
         public bool SuppressCues { get; set; }
+        public bool HasCompletedExitOrTransition { get; private set; }
 
         private float FadeFrom { get; set; }
         private float FadeTo { get; set; }
@@ -102,6 +106,11 @@ namespace XFramework.Animation
             }
         }
 
+        public void MarkCompletedExitOrTransition()
+        {
+            HasCompletedExitOrTransition = true;
+        }
+
         public void PrepareFrame(float deltaTime, float channelTimeScale, XAnimationContext context)
         {
             PrepareStateFrame(deltaTime, channelTimeScale, context);
@@ -111,6 +120,9 @@ namespace XFramework.Animation
         public abstract void FinalizeFrame(XAnimationCueDispatcher cueDispatcher);
         public abstract XAnimationChannelState BuildState(float channelWeight, float channelTimeScale);
         public abstract void Dispose(XAnimationCueDispatcher cueDispatcher);
+        public abstract float GetNormalizedTime();
+        public abstract float GetTotalNormalizedTime();
+        public abstract float GetCueWeight(string clipKey);
 
         public bool HasFinishedFadeOut()
         {
@@ -135,6 +147,7 @@ namespace XFramework.Animation
 
     public sealed class XAnimationSingleStatePlaybackInstance : XAnimationStatePlaybackInstance
     {
+        private readonly Animator m_Animator;
         private readonly XAnimationCompiledClip m_Clip;
         private readonly AnimationClipPlayable m_Playable;
         private readonly float m_ClipLength;
@@ -146,11 +159,14 @@ namespace XFramework.Animation
             int playbackId,
             string channelName,
             string stateKey,
+            Animator animator,
             XAnimationCompiledClip clip,
             AnimationClipPlayable playable,
+            bool isTemporaryState,
             XAnimationPlaybackRuntimeOptions options)
-            : base(playbackId, channelName, stateKey, XAnimationStateType.Single, options)
+            : base(playbackId, channelName, stateKey, XAnimationStateType.Single, isTemporaryState, options)
         {
+            m_Animator = animator ? animator : throw new ArgumentNullException(nameof(animator));
             m_Clip = clip ?? throw new ArgumentNullException(nameof(clip));
             m_Playable = playable;
             m_ClipLength = Mathf.Max(clip.Clip.length, 0.0001f);
@@ -210,6 +226,13 @@ namespace XFramework.Animation
             if (!SuppressCues)
             {
                 cueDispatcher?.Update(this, m_Clip.Key, m_PreviousTotalNormalizedTime, m_TotalNormalizedTime);
+                XAnimationClipEventInvoker.Dispatch(
+                    m_Clip.Clip,
+                    this,
+                    m_PreviousTotalNormalizedTime,
+                    m_TotalNormalizedTime,
+                    CurrentWeight,
+                    cueEvent => cueDispatcher?.Raise(cueEvent));
             }
         }
 
@@ -232,6 +255,7 @@ namespace XFramework.Animation
                 isFading = IsFading,
                 priority = Priority,
                 interruptible = Interruptible,
+                isTemporaryState = IsTemporaryState,
             };
         }
 
@@ -243,12 +267,28 @@ namespace XFramework.Animation
                 m_Playable.Destroy();
             }
         }
+
+        public override float GetNormalizedTime()
+        {
+            return NormalizedTime;
+        }
+
+        public override float GetTotalNormalizedTime()
+        {
+            return m_TotalNormalizedTime;
+        }
+
+        public override float GetCueWeight(string clipKey)
+        {
+            return CurrentWeight;
+        }
     }
 
     public sealed class XAnimationBlend1DStatePlaybackInstance : XAnimationStatePlaybackInstance
     {
         private const float ActiveCueWeightThreshold = 0.0001f;
 
+        private readonly Animator m_Animator;
         private readonly PlayableGraph m_Graph;
         private readonly XAnimationCompiledBlend1DState m_State;
         private readonly XAnimationCompiledClip[] m_Clips;
@@ -265,11 +305,14 @@ namespace XFramework.Animation
             PlayableGraph graph,
             int playbackId,
             string channelName,
+            Animator animator,
             XAnimationCompiledBlend1DState state,
             XAnimationCompiledClip[] clips,
+            bool isTemporaryState,
             XAnimationPlaybackRuntimeOptions options)
-            : base(playbackId, channelName, state?.Key, XAnimationStateType.Blend1D, options)
+            : base(playbackId, channelName, state?.Key, XAnimationStateType.Blend1D, isTemporaryState, options)
         {
+            m_Animator = animator ? animator : throw new ArgumentNullException(nameof(animator));
             m_Graph = graph;
             m_State = state ?? throw new ArgumentNullException(nameof(state));
             m_Clips = clips ?? throw new ArgumentNullException(nameof(clips));
@@ -363,6 +406,13 @@ namespace XFramework.Animation
                 if (!SuppressCues && m_SampleWeights[i] > ActiveCueWeightThreshold)
                 {
                     cueDispatcher?.Update(this, m_Clips[i].Key, m_PreviousTotalNormalizedTimes[i], m_TotalNormalizedTimes[i]);
+                    XAnimationClipEventInvoker.Dispatch(
+                        m_Clips[i].Clip,
+                        this,
+                        m_PreviousTotalNormalizedTimes[i],
+                        m_TotalNormalizedTimes[i],
+                        CurrentWeight * m_SampleWeights[i],
+                        cueEvent => cueDispatcher?.Raise(cueEvent));
                 }
             }
         }
@@ -387,6 +437,7 @@ namespace XFramework.Animation
                 isFading = IsFading,
                 priority = Priority,
                 interruptible = Interruptible,
+                isTemporaryState = IsTemporaryState,
             };
         }
 
@@ -405,6 +456,34 @@ namespace XFramework.Animation
             {
                 m_Mixer.Destroy();
             }
+        }
+
+        public override float GetNormalizedTime()
+        {
+            return GetNormalizedTime(m_PrimaryClipIndex);
+        }
+
+        public override float GetTotalNormalizedTime()
+        {
+            return m_TotalNormalizedTimes[m_PrimaryClipIndex];
+        }
+
+        public override float GetCueWeight(string clipKey)
+        {
+            if (string.IsNullOrWhiteSpace(clipKey))
+            {
+                return 0f;
+            }
+
+            for (int i = 0; i < m_Clips.Length; i++)
+            {
+                if (string.Equals(m_Clips[i].Key, clipKey, StringComparison.Ordinal))
+                {
+                    return CurrentWeight * m_SampleWeights[i];
+                }
+            }
+
+            return 0f;
         }
 
         private void ResolveWeights(float parameterValue)
@@ -508,17 +587,26 @@ namespace XFramework.Animation
     {
         private readonly PlayableGraph m_Graph;
         private readonly Func<int> m_NextPlaybackIdProvider;
+        private readonly Action<XAnimationStatePlaybackInstance> m_OnStateEnter;
+        private readonly Action<XAnimationStatePlaybackInstance, XAnimationStateExitReason> m_OnStateExit;
 
         private XAnimationStatePlaybackInstance m_Current;
         private XAnimationStatePlaybackInstance m_Previous;
         private float m_ChannelWeight;
         private float m_TimeScale = 1f;
 
-        public XAnimationChannel(PlayableGraph graph, XAnimationCompiledChannel channel, Func<int> nextPlaybackIdProvider)
+        public XAnimationChannel(
+            PlayableGraph graph,
+            XAnimationCompiledChannel channel,
+            Func<int> nextPlaybackIdProvider,
+            Action<XAnimationStatePlaybackInstance> onStateEnter,
+            Action<XAnimationStatePlaybackInstance, XAnimationStateExitReason> onStateExit)
         {
             m_Graph = graph;
             CompiledChannel = channel ?? throw new ArgumentNullException(nameof(channel));
             m_NextPlaybackIdProvider = nextPlaybackIdProvider ?? throw new ArgumentNullException(nameof(nextPlaybackIdProvider));
+            m_OnStateEnter = onStateEnter;
+            m_OnStateExit = onStateExit;
             Mixer = AnimationMixerPlayable.Create(graph, 2, true);
             m_ChannelWeight = Mathf.Max(0f, channel.Config.defaultWeight);
         }
@@ -532,6 +620,12 @@ namespace XFramework.Animation
         public float TimeScale => m_TimeScale;
         public XAnimationStatePlaybackInstance CurrentPlayback => m_Current;
         public bool HasActivePlayback => m_Current != null || m_Previous != null;
+
+        public bool TryGetCurrentPlayback(out XAnimationStatePlaybackInstance playback)
+        {
+            playback = m_Current;
+            return playback != null;
+        }
 
         internal bool TryPlay(Func<int, XAnimationPlaybackRuntimeOptions, XAnimationStatePlaybackInstance> playbackFactory, XAnimationPlaybackRuntimeOptions options, XAnimationCueDispatcher cueDispatcher)
         {
@@ -555,6 +649,11 @@ namespace XFramework.Animation
             {
                 m_Current.SuppressCues = true;
                 cueDispatcher?.RemovePlayback(m_Current.PlaybackId);
+                if (!m_Current.HasCompletedExitOrTransition)
+                {
+                    NotifyStateExit(m_Current, XAnimationStateExitReason.Interrupted);
+                }
+
                 m_Current.BeginFade(0f, Mathf.Max(0f, options.FadeOut));
                 SetInputPlayable(1, m_Current.OutputPlayable, m_Current.CurrentWeight);
                 m_Previous = m_Current;
@@ -580,6 +679,7 @@ namespace XFramework.Animation
             cueDispatcher?.ResetForPlayback(playbackId);
             m_Current = playback;
             SetInputPlayable(0, playback.OutputPlayable, playback.CurrentWeight);
+            NotifyStateEnter(playback);
             return true;
         }
 
@@ -597,6 +697,11 @@ namespace XFramework.Animation
 
             m_Current.SuppressCues = true;
             cueDispatcher?.RemovePlayback(m_Current.PlaybackId);
+            if (!m_Current.HasCompletedExitOrTransition)
+            {
+                NotifyStateExit(m_Current, XAnimationStateExitReason.Stopped);
+            }
+
             m_Current.BeginFade(0f, Mathf.Max(0f, fadeOut));
             SetInputPlayable(1, m_Current.OutputPlayable, m_Current.CurrentWeight);
             m_Previous = m_Current;
@@ -656,7 +761,25 @@ namespace XFramework.Animation
 
         public XAnimationChannelState GetState()
         {
-            return m_Current?.BuildState(m_ChannelWeight, m_TimeScale);
+            XAnimationChannelState state = m_Current?.BuildState(m_ChannelWeight, m_TimeScale);
+            if (state != null && !string.IsNullOrWhiteSpace(state.stateKey))
+            {
+                state.nextStateKey = string.Empty;
+            }
+
+            return state;
+        }
+
+        public bool TryMarkCompletedExit(out XAnimationStatePlaybackInstance playback)
+        {
+            playback = m_Current;
+            if (playback == null || playback.HasCompletedExitOrTransition)
+            {
+                return false;
+            }
+
+            NotifyStateExit(playback, XAnimationStateExitReason.Completed);
+            return true;
         }
 
         public bool IsRootMotionSourceCandidate()
@@ -669,6 +792,11 @@ namespace XFramework.Animation
 
         public void Dispose(XAnimationCueDispatcher cueDispatcher)
         {
+            if (m_Current != null)
+            {
+                NotifyStateExit(m_Current, XAnimationStateExitReason.Disposed);
+            }
+
             DestroyPlayback(ref m_Current, cueDispatcher);
             DestroyPlayback(ref m_Previous, cueDispatcher);
             if (Mixer.IsValid())
@@ -736,6 +864,17 @@ namespace XFramework.Animation
 
             playback.Dispose(cueDispatcher);
             playback = null;
+        }
+
+        private void NotifyStateEnter(XAnimationStatePlaybackInstance playback)
+        {
+            m_OnStateEnter?.Invoke(playback);
+        }
+
+        private void NotifyStateExit(XAnimationStatePlaybackInstance playback, XAnimationStateExitReason reason)
+        {
+            playback?.MarkCompletedExitOrTransition();
+            m_OnStateExit?.Invoke(playback, reason);
         }
     }
 }

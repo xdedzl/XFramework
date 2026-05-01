@@ -717,7 +717,7 @@ IReadOnlyList<Transform> spawnPoints = UObjectFinder.FindList<Transform>("NpcSpa
 - `channels`：动画混合通道。`layerType` 支持 `Base`、`Override`、`Additive`；`maskPath` 可绑定 `AvatarMask`；`canDriveRootMotion` 表示该通道是否允许驱动 Root Motion。
 - `clips`：动画片段索引，是 state 引用的叶子资源，只描述 `key` 与 `clipPath`。`clipPath` 支持普通资源路径，也支持 `FBX路径|子动画名`。
 - `states`：业务播放单位。`Single` 引用一个 `clipKey`；`Blend1D` 绑定一个 Float 参数和若干采样点，运行时只混合相邻两个采样 clip；channel、fade、loop、speed、Root Motion 等播放语义都属于 state。
-- `parameters`：状态运行时参数。`Blend1D` 每帧从 `XAnimationContext` 读取绑定的 Float 参数。
+- `parameters`：状态运行时参数，支持 `Float`、`Int`、`Bool`、`Trigger`。`Blend1D` 每帧从 `XAnimationContext` 读取绑定的 Float 参数。
 - `cues`：动画事件点。`time` 是 `[0, 1]` 归一化时间；循环动画每轮都会按 `loopCount` 分发一次。
 - `graph`：状态图配置目前仅保留结构。运行时 `XAnimationDriver` 在 Phase 1 不支持状态图，使用时必须保持 `enabled = false`。
 
@@ -812,7 +812,7 @@ public sealed class HeroAnimationController : MonoBehaviour
 - `PlayState(string stateKey, XAnimationTransitionOptions transition = default, XAnimationPlaybackOptions playback = default)`：按 state key 播放，推荐业务层统一使用。
 - `PlayClip(string clipKey, string channelName, XAnimationTransitionOptions transition = default, XAnimationPlaybackOptions playback = default)`：底层/调试接口，按 clip key 直接播放；必须显式提供 `channelName`。
 - `Play(XAnimationPlayCommand command)`：统一底层入口，显式指定 `target / transition / playback`。
-- `SetParameter(key, float/bool)` / `SetTrigger(key)`：写入运行时参数，`Blend1D` 默认从 Float 参数读取混合值。
+- `SetParameter(key, float/int/bool)` / `SetTrigger(key)`：写入运行时参数，`Blend1D` 默认从 Float 参数读取混合值。
 - `Stop(channelName, fadeOut)` / `StopAll(fadeOut)`：停止指定通道或全部通道。
 - `SetChannelWeight(channelName, weight)`：调整通道混合权重。
 - `SetChannelTimeScale(channelName, timeScale)`：调整通道时间缩放，最小值会被限制为 0。

@@ -15,7 +15,8 @@ namespace XFramework.Animation
             ValidateChannels(asset.channels);
             ValidateClips(asset.channels, asset.clips);
             ValidateParameters(asset.parameters);
-            ValidateStates(asset.channels, asset.clips, asset.parameters, asset.states);
+            Dictionary<string, XAnimationStateConfig> stateMap = ValidateStates(asset.channels, asset.clips, asset.parameters, asset.states);
+            ValidateAutoTransitions(asset.autoTransitions, stateMap);
             ValidateCues(asset.clips, asset.cues);
             ValidateGraph(asset.graph);
         }
@@ -181,7 +182,7 @@ namespace XFramework.Animation
             }
         }
 
-        private static void ValidateStates(
+        private static Dictionary<string, XAnimationStateConfig> ValidateStates(
             IReadOnlyList<XAnimationChannelConfig> channels,
             IReadOnlyList<XAnimationClipConfig> clips,
             IReadOnlyList<XAnimationParameterConfig> parameters,
@@ -213,7 +214,7 @@ namespace XFramework.Animation
                 }
             }
 
-            HashSet<string> stateKeys = new(StringComparer.Ordinal);
+            Dictionary<string, XAnimationStateConfig> stateMap = new(StringComparer.Ordinal);
             foreach (XAnimationStateConfig state in states)
             {
                 if (state == null)
@@ -226,10 +227,12 @@ namespace XFramework.Animation
                     throw new XFrameworkException("XAnimation state key cannot be empty.");
                 }
 
-                if (!stateKeys.Add(state.key))
+                if (stateMap.ContainsKey(state.key))
                 {
                     throw new XFrameworkException($"XAnimation state '{state.key}' is duplicated.");
                 }
+
+                stateMap.Add(state.key, state);
 
                 if (string.IsNullOrWhiteSpace(state.channelName))
                 {
@@ -260,6 +263,8 @@ namespace XFramework.Animation
                         throw new XFrameworkException($"XAnimation state '{state.key}' has unsupported stateType '{state.stateType}'.");
                 }
             }
+
+            return stateMap;
         }
 
         private static void ValidateSingleState(
@@ -336,6 +341,70 @@ namespace XFramework.Animation
             if (state.rootMotionMode == XAnimationClipRootMotionMode.ForceOn && !channel.canDriveRootMotion)
             {
                 throw new XFrameworkException($"XAnimation state '{state.key}' forces root motion, but channel '{state.channelName}' cannot drive root motion.");
+            }
+        }
+
+        private static void ValidateAutoTransitions(
+            IReadOnlyList<XAnimationAutoTransitionConfig> autoTransitions,
+            IReadOnlyDictionary<string, XAnimationStateConfig> stateMap)
+        {
+            if (autoTransitions == null)
+            {
+                return;
+            }
+
+            HashSet<string> preStateKeys = new(StringComparer.Ordinal);
+            foreach (XAnimationAutoTransitionConfig transition in autoTransitions)
+            {
+                if (transition == null)
+                {
+                    throw new XFrameworkException("XAnimation auto transition config is null.");
+                }
+
+                if (string.IsNullOrWhiteSpace(transition.preStateKey))
+                {
+                    throw new XFrameworkException("XAnimation auto transition preStateKey cannot be empty.");
+                }
+
+                if (!preStateKeys.Add(transition.preStateKey))
+                {
+                    throw new XFrameworkException($"XAnimation auto transition preState '{transition.preStateKey}' is duplicated.");
+                }
+
+                if (!stateMap.TryGetValue(transition.preStateKey, out XAnimationStateConfig preState))
+                {
+                    throw new XFrameworkException($"XAnimation auto transition references unknown preStateKey '{transition.preStateKey}'.");
+                }
+
+                if (preState.loop)
+                {
+                    throw new XFrameworkException($"XAnimation state '{preState.key}' is looping and cannot configure auto transition.");
+                }
+
+                if (transition.exitTime < 0f || transition.exitTime > 1f)
+                {
+                    throw new XFrameworkException($"XAnimation auto transition '{transition.preStateKey}' ExitTime must be within [0, 1].");
+                }
+
+                if (transition.enterTime < 0f || transition.enterTime > 1f)
+                {
+                    throw new XFrameworkException($"XAnimation auto transition '{transition.preStateKey}' EnterTime must be within [0, 1].");
+                }
+
+                if (string.IsNullOrWhiteSpace(transition.nextStateKey))
+                {
+                    continue;
+                }
+
+                if (string.Equals(transition.preStateKey, transition.nextStateKey, StringComparison.Ordinal))
+                {
+                    throw new XFrameworkException($"XAnimation state '{transition.preStateKey}' cannot auto-transition to itself.");
+                }
+
+                if (!stateMap.ContainsKey(transition.nextStateKey))
+                {
+                    throw new XFrameworkException($"XAnimation auto transition '{transition.preStateKey}' references unknown nextStateKey '{transition.nextStateKey}'.");
+                }
             }
         }
 

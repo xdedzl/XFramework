@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using UnityEditor.Callbacks;
+using UnityEditorInternal;
 using UnityEngine;
 using XFramework.Resource;
 
@@ -77,6 +78,26 @@ namespace XFramework.Editor
             }
 
             return TryOpen(textAsset);
+        }
+
+        [MenuItem("Assets/Open with Text Editor", false, 20)]
+        private static void OpenWithTextEditor()
+        {
+            string assetPath = AssetDatabase.GetAssetPath(Selection.activeObject);
+            string fullPath = Path.GetFullPath(assetPath);
+            InternalEditorUtility.OpenFileAtLineExternal(fullPath, 0);
+        }
+
+        [MenuItem("Assets/Open with Text Editor", true)]
+        private static bool OpenWithTextEditorValidation()
+        {
+            if (Selection.activeObject == null)
+            {
+                return false;
+            }
+
+            string assetPath = AssetDatabase.GetAssetPath(Selection.activeObject);
+            return string.Equals(Path.GetExtension(assetPath), ".xasset", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

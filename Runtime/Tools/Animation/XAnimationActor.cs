@@ -23,22 +23,15 @@ namespace XFramework.Animation
             {
                 interruptible = true,
             },
-            playback = new XAnimationPlaybackOptions
-            {
-                weight = 1f,
-                speed = 1f,
-            },
         };
-        [SerializeField] private bool m_OverrideLoop;
-        [SerializeField] private bool m_LoopOverride;
-        [SerializeField] private bool m_OverrideRootMotion;
-        [SerializeField] private bool m_RootMotionOverride;
 
         private readonly XAnimationDriver m_Driver = new();
         private bool m_IsInitialized;
         private bool m_IsPaused;
 
         public event Action<XAnimationCueEvent> CueTriggered;
+        public event Action<XAnimationStateEvent> OnStateEnter;
+        public event Action<XAnimationStateEvent> OnStateExit;
 
         public TextAsset AnimationAsset => m_AnimationAsset;
         public Animator Animator => m_Animator;
@@ -143,26 +136,26 @@ namespace XFramework.Animation
             m_Animator = animator;
             m_Driver.Initialize(m_AnimationAsset, m_Animator);
             m_Driver.CueTriggered += HandleCueTriggered;
+            m_Driver.OnStateEnter += HandleStateEnter;
+            m_Driver.OnStateExit += HandleStateExit;
             m_IsInitialized = true;
         }
 
         public void PlayClip(
             string clipName,
             string channelName,
-            XAnimationTransitionOptions transition = default,
-            XAnimationPlaybackOptions playback = default)
+            XAnimationTransitionOptions transition = default)
         {
             EnsureInitialized();
-            m_Driver.PlayClip(clipName, channelName, transition, playback);
+            m_Driver.PlayClip(clipName, channelName, transition);
         }
 
         public void PlayState(
             string stateName,
-            XAnimationTransitionOptions transition = default,
-            XAnimationPlaybackOptions playback = default)
+            XAnimationTransitionOptions transition = default)
         {
             EnsureInitialized();
-            m_Driver.PlayState(stateName, transition, playback);
+            m_Driver.PlayState(stateName, transition);
         }
 
         public void Play(XAnimationPlayCommand command)
@@ -184,7 +177,7 @@ namespace XFramework.Animation
 
         public void PlayState(string stateKey)
         {
-            PlayState(stateKey, default, default);
+            PlayState(stateKey, default);
         }
 
         public void PlayConfiguredRequest()
@@ -231,6 +224,12 @@ namespace XFramework.Animation
             m_Driver.SetParameter(key, value);
         }
 
+        public void SetParameter(string key, int value)
+        {
+            EnsureInitialized();
+            m_Driver.SetParameter(key, value);
+        }
+
         public void SetTrigger(string key)
         {
             EnsureInitialized();
@@ -267,6 +266,30 @@ namespace XFramework.Animation
             return m_Driver.GetChannelState(channelName);
         }
 
+        public bool TryGetCurrentState(string channelName, out XAnimationChannelState state)
+        {
+            EnsureInitialized();
+            return m_Driver.TryGetCurrentState(channelName, out state);
+        }
+
+        public bool IsPlaying(string stateKey, string channelName = null)
+        {
+            EnsureInitialized();
+            return m_Driver.IsPlaying(stateKey, channelName);
+        }
+
+        public float GetStateDuration(string stateKey)
+        {
+            EnsureInitialized();
+            return m_Driver.GetStateDuration(stateKey);
+        }
+
+        public float GetClipDuration(string clipKey)
+        {
+            EnsureInitialized();
+            return m_Driver.GetClipDuration(clipKey);
+        }
+
         public void Dispose()
         {
             DisposeDriver();
@@ -287,20 +310,6 @@ namespace XFramework.Animation
         {
             XAnimationPlayCommand command = m_PlayCommand ?? new XAnimationPlayCommand();
             command.target ??= new XAnimationPlayTarget();
-            XAnimationPlaybackOptions playback = command.playback ?? new XAnimationPlaybackOptions();
-            playback.loopOverride = m_OverrideLoop ? m_LoopOverride : null;
-            playback.rootMotionOverride = m_OverrideRootMotion ? m_RootMotionOverride : null;
-            if (playback.weight <= 0f)
-            {
-                playback.weight = 1f;
-            }
-
-            if (Mathf.Approximately(playback.speed, 0f))
-            {
-                playback.speed = 1f;
-            }
-
-            command.playback = playback;
             command.transition ??= new XAnimationTransitionOptions();
             ValidatePlayCommand(command);
             return command;
@@ -348,6 +357,8 @@ namespace XFramework.Animation
             }
 
             m_Driver.CueTriggered -= HandleCueTriggered;
+            m_Driver.OnStateEnter -= HandleStateEnter;
+            m_Driver.OnStateExit -= HandleStateExit;
             m_Driver.Dispose();
             m_IsInitialized = false;
         }
@@ -355,6 +366,16 @@ namespace XFramework.Animation
         private void HandleCueTriggered(XAnimationCueEvent cueEvent)
         {
             CueTriggered?.Invoke(cueEvent);
+        }
+
+        private void HandleStateEnter(XAnimationStateEvent stateEvent)
+        {
+            OnStateEnter?.Invoke(stateEvent);
+        }
+
+        private void HandleStateExit(XAnimationStateEvent stateEvent)
+        {
+            OnStateExit?.Invoke(stateEvent);
         }
     }
 }

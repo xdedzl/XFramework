@@ -12,7 +12,18 @@ namespace XFramework.Editor
 {
     internal sealed class XAnimationEditorPreviewSession : IDisposable
     {
-        private const int MaxCueLogCount = 64;
+        public readonly struct PreviewLogEntry
+        {
+            public PreviewLogEntry(int id, string message)
+            {
+                Id = id;
+                Message = message ?? string.Empty;
+            }
+
+            public int Id { get; }
+            public string Message { get; }
+        }
+
         private const float CloseGridSpacing = 1f;
         private const float FarGridSpacing = 10f;
         private const float SwitchToFarGridCellPixels = 8f;
@@ -21,8 +32,11 @@ namespace XFramework.Editor
         private const float PreviewFarClipPlane = 500f;
 
         private readonly XAnimationAssetLoader m_AssetLoader = new(new XAnimationEditorAssetResolver());
-        private readonly List<string> m_CueLogs = new();
+        private readonly List<PreviewLogEntry> m_CueLogs = new();
         private readonly Dictionary<AnimationClip, PreviewRootMotionFallbackEvaluator> m_RootMotionFallbackEvaluatorByClip = new();
+        private readonly Dictionary<string, float> m_PreviewFloatParameters = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, int> m_PreviewIntParameters = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, bool> m_PreviewBoolParameters = new(StringComparer.Ordinal);
 
         private PreviewRenderUtility m_PreviewUtility;
         private RenderTexture m_RenderTexture;
@@ -56,12 +70,15 @@ namespace XFramework.Editor
         private GameObject m_GridPlane;
         private Material m_GridMaterial;
         private float m_GridSpacing = CloseGridSpacing;
+        private int m_NextLogId = 1;
+        private int m_LogVersion;
 
-        public IReadOnlyList<string> CueLogs => m_CueLogs;
+        public IReadOnlyList<PreviewLogEntry> CueLogs => m_CueLogs;
         public XAnimationCompiledAsset CompiledAsset => m_CompiledAsset;
         public Texture PreviewTexture => m_RenderTexture;
         public bool IsLoaded => m_Driver != null && m_Animator != null;
         public bool IsOverrideAsset => m_IsOverrideAsset;
+        public int LogVersion => m_LogVersion;
 
         public void Load(GameObject prefabAsset, string assetPath)
         {
@@ -115,6 +132,9 @@ namespace XFramework.Editor
             m_Driver = new XAnimationDriver();
             m_Driver.Initialize(m_CompiledAsset, m_Animator);
             m_Driver.CueTriggered += OnCueTriggered;
+            m_Driver.OnStateEnter += OnStateEnter;
+            m_Driver.OnStateExit += OnStateExit;
+            RestorePreviewParameters();
             SetRootMotionEnabled(false);
         }
 
@@ -166,16 +186,9 @@ namespace XFramework.Editor
         public void PlayClip(
             string clipKey,
             string channelName,
-            XAnimationTransitionOptions transition = default,
-            XAnimationPlaybackOptions playback = default)
+            XAnimationTransitionOptions transition = default)
         {
             transition ??= new XAnimationTransitionOptions();
-            playback ??= new XAnimationPlaybackOptions();
-            playback.speed = Mathf.Approximately(playback.speed, 0f) ? 1f : playback.speed;
-            if (playback.weight <= 0f)
-            {
-                playback.weight = 1f;
-            }
 
             Play(new XAnimationPlayCommand
             {
@@ -185,22 +198,14 @@ namespace XFramework.Editor
                     channelName = channelName,
                 },
                 transition = transition,
-                playback = playback,
             });
         }
 
         public void PlayState(
             string stateKey,
-            XAnimationTransitionOptions transition = default,
-            XAnimationPlaybackOptions playback = default)
+            XAnimationTransitionOptions transition = default)
         {
             transition ??= new XAnimationTransitionOptions();
-            playback ??= new XAnimationPlaybackOptions();
-            playback.speed = Mathf.Approximately(playback.speed, 0f) ? 1f : playback.speed;
-            if (playback.weight <= 0f)
-            {
-                playback.weight = 1f;
-            }
 
             Play(new XAnimationPlayCommand
             {
@@ -209,7 +214,6 @@ namespace XFramework.Editor
                     stateKey = stateKey,
                 },
                 transition = transition,
-                playback = playback,
             });
         }
 
@@ -248,13 +252,43 @@ namespace XFramework.Editor
         public void SetPreviewParameter(string key, float value)
         {
             EnsureLoaded();
+            m_PreviewFloatParameters[key] = value;
             m_Driver.SetParameter(key, value);
         }
 
         public void SetPreviewParameter(string key, bool value)
         {
             EnsureLoaded();
+            m_PreviewBoolParameters[key] = value;
             m_Driver.SetParameter(key, value);
+        }
+
+        public void SetPreviewParameter(string key, int value)
+        {
+            EnsureLoaded();
+            m_PreviewIntParameters[key] = value;
+            m_Driver.SetParameter(key, value);
+        }
+
+        public bool TryGetPreviewParameter(string key, out float value)
+        {
+            return m_PreviewFloatParameters.TryGetValue(key, out value);
+        }
+
+        public bool TryGetPreviewParameter(string key, out bool value)
+        {
+            return m_PreviewBoolParameters.TryGetValue(key, out value);
+        }
+
+        public bool TryGetPreviewParameter(string key, out int value)
+        {
+            return m_PreviewIntParameters.TryGetValue(key, out value);
+        }
+
+        public void ClearCueLogs()
+        {
+            m_CueLogs.Clear();
+            m_LogVersion++;
         }
 
         public string AddParameter()
@@ -346,6 +380,7 @@ namespace XFramework.Editor
             config.defaultValue = type switch
             {
                 XAnimationParameterType.Float => ConvertParameterDefaultToFloat(config.defaultValue),
+                XAnimationParameterType.Int => ConvertParameterDefaultToInt(config.defaultValue),
                 XAnimationParameterType.Bool => ConvertParameterDefaultToBool(config.defaultValue),
                 XAnimationParameterType.Trigger => null,
                 _ => config.defaultValue,
@@ -369,8 +404,9 @@ namespace XFramework.Editor
             XAnimationParameterConfig config = m_CompiledAsset.GetParameter(parameterName).Config;
             config.defaultValue = config.type switch
             {
-                XAnimationParameterType.Float => Convert.ToSingle(defaultValue),
-                XAnimationParameterType.Bool => Convert.ToBoolean(defaultValue),
+                XAnimationParameterType.Float => Convert.ToSingle(defaultValue, CultureInfo.InvariantCulture),
+                XAnimationParameterType.Int => Convert.ToInt32(defaultValue, CultureInfo.InvariantCulture),
+                XAnimationParameterType.Bool => Convert.ToBoolean(defaultValue, CultureInfo.InvariantCulture),
                 XAnimationParameterType.Trigger => null,
                 _ => defaultValue,
             };
@@ -987,6 +1023,7 @@ namespace XFramework.Editor
             }
 
             asset.states = orderedStates.ToArray();
+            ClearAutoTransitionReferences(asset, stateKey);
             RebuildDriverAndSave();
         }
 
@@ -1009,7 +1046,9 @@ namespace XFramework.Editor
                 throw new XFrameworkException($"XAnimation state '{newKey}' is duplicated.");
             }
 
+            XAnimationAsset asset = m_CompiledAsset.Asset;
             m_CompiledAsset.GetState(oldKey).Config.key = newKey;
+            RenameAutoTransitionReferences(asset, oldKey, newKey);
             RebuildDriverAndSave();
         }
 
@@ -1774,6 +1813,16 @@ namespace XFramework.Editor
             return Convert.ToBoolean(value, CultureInfo.InvariantCulture);
         }
 
+        private static int ConvertParameterDefaultToInt(object value)
+        {
+            if (value == null)
+            {
+                return 0;
+            }
+
+            return Convert.ToInt32(value, CultureInfo.InvariantCulture);
+        }
+
         private void SaveCompiledAsset()
         {
             if (m_CompiledAsset?.Asset == null)
@@ -1792,9 +1841,14 @@ namespace XFramework.Editor
 
         private void RebuildDriverAndSave()
         {
-            m_CompiledAsset = m_AssetLoader.Compile(m_CompiledAsset.Asset);
+            RebuildCompiledAsset();
             RebuildDriver();
             SaveCompiledAsset();
+        }
+
+        private void RebuildCompiledAsset()
+        {
+            m_CompiledAsset = m_AssetLoader.Compile(m_CompiledAsset.Asset);
         }
 
         private void RebuildDriver()
@@ -1802,11 +1856,251 @@ namespace XFramework.Editor
             if (m_Driver != null && m_Animator != null)
             {
                 m_Driver.CueTriggered -= OnCueTriggered;
+                m_Driver.OnStateEnter -= OnStateEnter;
+                m_Driver.OnStateExit -= OnStateExit;
                 m_Driver.Dispose();
                 m_Driver = new XAnimationDriver();
                 m_Driver.Initialize(m_CompiledAsset, m_Animator);
                 m_Driver.CueTriggered += OnCueTriggered;
+                m_Driver.OnStateEnter += OnStateEnter;
+                m_Driver.OnStateExit += OnStateExit;
                 m_Driver.SetRootMotionEnabled(m_RootMotionEnabled);
+                RestorePreviewParameters();
+            }
+        }
+
+        public void SetAutoTransitionNextState(string stateKey, string nextStateKey, bool save = true)
+        {
+            EnsureLoaded();
+            m_CompiledAsset.GetState(stateKey);
+            XAnimationAutoTransitionConfig config = GetOrCreateAutoTransition(m_CompiledAsset.Asset, stateKey);
+            config.nextStateKey = string.IsNullOrWhiteSpace(nextStateKey) ? string.Empty : nextStateKey.Trim();
+            RebuildCompiledAsset();
+            RebuildDriver();
+            if (save)
+            {
+                SaveCompiledAsset();
+            }
+        }
+
+        public void SetAutoTransitionTiming(
+            string stateKey,
+            float exitTime,
+            float transitionDuration,
+            float enterTime,
+            bool save = true)
+        {
+            EnsureLoaded();
+            m_CompiledAsset.GetState(stateKey);
+            XAnimationAutoTransitionConfig config = GetOrCreateAutoTransition(m_CompiledAsset.Asset, stateKey);
+            config.exitTime = Mathf.Clamp01(exitTime);
+            config.transitionDuration = Mathf.Max(0f, transitionDuration);
+            config.enterTime = Mathf.Clamp01(enterTime);
+            RebuildCompiledAsset();
+            RebuildDriver();
+            if (save)
+            {
+                SaveCompiledAsset();
+            }
+        }
+
+        public string AddAutoTransition(string preferredPreStateKey = null)
+        {
+            EnsureBaseAssetEditable();
+            string preStateKey = ResolveAutoTransitionPreStateKey(preferredPreStateKey);
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            if (FindAutoTransition(asset, preStateKey) == null)
+            {
+                List<XAnimationAutoTransitionConfig> transitions = new(asset.autoTransitions ?? Array.Empty<XAnimationAutoTransitionConfig>())
+                {
+                    new XAnimationAutoTransitionConfig
+                    {
+                        preStateKey = preStateKey,
+                        nextStateKey = string.Empty,
+                        exitTime = 1f,
+                        transitionDuration = 0f,
+                        enterTime = 0f,
+                    }
+                };
+                asset.autoTransitions = transitions.ToArray();
+            }
+
+            RebuildDriverAndSave();
+            return preStateKey;
+        }
+
+        public void DeleteAutoTransition(string preStateKey)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationAutoTransitionConfig[] transitions = m_CompiledAsset.Asset.autoTransitions ?? Array.Empty<XAnimationAutoTransitionConfig>();
+            List<XAnimationAutoTransitionConfig> remaining = new(transitions.Length);
+            bool removed = false;
+            for (int i = 0; i < transitions.Length; i++)
+            {
+                XAnimationAutoTransitionConfig transition = transitions[i];
+                if (transition == null)
+                {
+                    continue;
+                }
+
+                if (string.Equals(transition.preStateKey, preStateKey, StringComparison.Ordinal))
+                {
+                    removed = true;
+                    continue;
+                }
+
+                remaining.Add(transition);
+            }
+
+            if (!removed)
+            {
+                throw new XFrameworkException($"XAnimation auto transition '{preStateKey}' does not exist.");
+            }
+
+            m_CompiledAsset.Asset.autoTransitions = remaining.ToArray();
+            RebuildDriverAndSave();
+        }
+
+        public void SetAutoTransitionPreState(string currentPreStateKey, string newPreStateKey, bool save = true)
+        {
+            EnsureBaseAssetEditable();
+            newPreStateKey = newPreStateKey?.Trim();
+            if (string.Equals(currentPreStateKey, newPreStateKey, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(newPreStateKey))
+            {
+                throw new XFrameworkException("XAnimation auto transition preStateKey cannot be empty.");
+            }
+
+            XAnimationCompiledState newPreState = m_CompiledAsset.GetState(newPreStateKey);
+            if (newPreState.Config.loop)
+            {
+                throw new XFrameworkException($"XAnimation state '{newPreStateKey}' is looping and cannot configure auto transition.");
+            }
+
+            XAnimationAutoTransitionConfig transition = FindAutoTransition(m_CompiledAsset.Asset, currentPreStateKey);
+            if (transition == null)
+            {
+                throw new XFrameworkException($"XAnimation auto transition '{currentPreStateKey}' does not exist.");
+            }
+
+            if (FindAutoTransition(m_CompiledAsset.Asset, newPreStateKey) != null)
+            {
+                throw new XFrameworkException($"XAnimation auto transition preState '{newPreStateKey}' is duplicated.");
+            }
+
+            transition.preStateKey = newPreStateKey;
+            RebuildCompiledAsset();
+            RebuildDriver();
+            if (save)
+            {
+                SaveCompiledAsset();
+            }
+        }
+
+        public bool TryGetAutoTransition(string preStateKey, out XAnimationAutoTransitionConfig config)
+        {
+            EnsureLoaded();
+            config = FindAutoTransition(m_CompiledAsset.Asset, preStateKey);
+            return config != null;
+        }
+
+        private void RestorePreviewParameters()
+        {
+            if (m_Driver == null || m_CompiledAsset == null)
+            {
+                return;
+            }
+
+            HashSet<string> validFloatKeys = new(StringComparer.Ordinal);
+            HashSet<string> validIntKeys = new(StringComparer.Ordinal);
+            HashSet<string> validBoolKeys = new(StringComparer.Ordinal);
+            IReadOnlyList<XAnimationCompiledParameter> parameters = m_CompiledAsset.Parameters;
+            for (int i = 0; i < parameters.Count; i++)
+            {
+                XAnimationCompiledParameter parameter = parameters[i];
+                string parameterName = parameter?.Name;
+                if (string.IsNullOrWhiteSpace(parameterName))
+                {
+                    continue;
+                }
+
+                switch (parameter.Type)
+                {
+                    case XAnimationParameterType.Float:
+                    {
+                        if (!m_PreviewFloatParameters.TryGetValue(parameterName, out float floatValue))
+                        {
+                            floatValue = ConvertParameterDefaultToFloat(parameter.Config.defaultValue);
+                            m_PreviewFloatParameters[parameterName] = floatValue;
+                        }
+
+                        validFloatKeys.Add(parameterName);
+                        m_Driver.SetParameter(parameterName, floatValue);
+                        break;
+                    }
+                    case XAnimationParameterType.Int:
+                    {
+                        if (!m_PreviewIntParameters.TryGetValue(parameterName, out int intValue))
+                        {
+                            intValue = ConvertParameterDefaultToInt(parameter.Config.defaultValue);
+                            m_PreviewIntParameters[parameterName] = intValue;
+                        }
+
+                        validIntKeys.Add(parameterName);
+                        m_Driver.SetParameter(parameterName, intValue);
+                        break;
+                    }
+                    case XAnimationParameterType.Bool:
+                    {
+                        if (!m_PreviewBoolParameters.TryGetValue(parameterName, out bool boolValue))
+                        {
+                            boolValue = ConvertParameterDefaultToBool(parameter.Config.defaultValue);
+                            m_PreviewBoolParameters[parameterName] = boolValue;
+                        }
+
+                        validBoolKeys.Add(parameterName);
+                        m_Driver.SetParameter(parameterName, boolValue);
+                        break;
+                    }
+                }
+            }
+
+            RemoveStalePreviewParameters(m_PreviewFloatParameters, validFloatKeys);
+            RemoveStalePreviewParameters(m_PreviewIntParameters, validIntKeys);
+            RemoveStalePreviewParameters(m_PreviewBoolParameters, validBoolKeys);
+        }
+
+        private static void RemoveStalePreviewParameters<T>(Dictionary<string, T> cache, HashSet<string> validKeys)
+        {
+            if (cache.Count == 0)
+            {
+                return;
+            }
+
+            List<string> removedKeys = null;
+            foreach (string key in cache.Keys)
+            {
+                if (validKeys.Contains(key))
+                {
+                    continue;
+                }
+
+                removedKeys ??= new List<string>();
+                removedKeys.Add(key);
+            }
+
+            if (removedKeys == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < removedKeys.Count; i++)
+            {
+                cache.Remove(removedKeys[i]);
             }
         }
 
@@ -1830,6 +2124,8 @@ namespace XFramework.Editor
             if (m_Driver != null)
             {
                 m_Driver.CueTriggered -= OnCueTriggered;
+                m_Driver.OnStateEnter -= OnStateEnter;
+                m_Driver.OnStateExit -= OnStateExit;
                 m_Driver.Dispose();
                 m_Driver = null;
             }
@@ -2296,12 +2592,157 @@ namespace XFramework.Editor
 
         private void OnCueTriggered(XAnimationCueEvent cueEvent)
         {
-            string message = $"[{cueEvent.channelName}] {cueEvent.clipKey} -> {cueEvent.eventKey} @ {cueEvent.normalizedTime:0.00}";
-            m_CueLogs.Insert(0, message);
-            if (m_CueLogs.Count > MaxCueLogCount)
+            AppendLog($"Cue [{cueEvent.channelName}] {cueEvent.clipKey} -> {cueEvent.eventKey} @ {cueEvent.normalizedTime:0.00}");
+        }
+
+        private void OnStateEnter(XAnimationStateEvent stateEvent)
+        {
+            AppendLog($"Enter [{stateEvent.channelName}] {stateEvent.stateKey}{FormatTemporaryStateSuffix(stateEvent.isTemporaryState)}");
+        }
+
+        private void OnStateExit(XAnimationStateEvent stateEvent)
+        {
+            string reason = stateEvent.exitReason?.ToString() ?? "Unknown";
+            AppendLog($"Exit [{stateEvent.channelName}] {stateEvent.stateKey}{FormatTemporaryStateSuffix(stateEvent.isTemporaryState)} ({reason})");
+        }
+
+        private void AppendLog(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
             {
-                m_CueLogs.RemoveAt(m_CueLogs.Count - 1);
+                return;
             }
+
+            m_CueLogs.Add(new PreviewLogEntry(m_NextLogId++, message));
+            m_LogVersion++;
+        }
+
+        private static string FormatTemporaryStateSuffix(bool isTemporaryState)
+        {
+            return isTemporaryState ? " (temp)" : string.Empty;
+        }
+
+        private static XAnimationAutoTransitionConfig FindAutoTransition(XAnimationAsset asset, string preStateKey)
+        {
+            XAnimationAutoTransitionConfig[] transitions = asset?.autoTransitions ?? Array.Empty<XAnimationAutoTransitionConfig>();
+            for (int i = 0; i < transitions.Length; i++)
+            {
+                XAnimationAutoTransitionConfig transition = transitions[i];
+                if (transition != null && string.Equals(transition.preStateKey, preStateKey, StringComparison.Ordinal))
+                {
+                    return transition;
+                }
+            }
+
+            return null;
+        }
+
+        private string ResolveAutoTransitionPreStateKey(string preferredPreStateKey)
+        {
+            if (!string.IsNullOrWhiteSpace(preferredPreStateKey) &&
+                m_CompiledAsset.TryGetStateIndex(preferredPreStateKey, out int preferredStateIndex) &&
+                !m_CompiledAsset.States[preferredStateIndex].Config.loop &&
+                FindAutoTransition(m_CompiledAsset.Asset, preferredPreStateKey) == null)
+            {
+                return preferredPreStateKey.Trim();
+            }
+
+            IReadOnlyList<XAnimationCompiledState> states = m_CompiledAsset.States;
+            for (int i = 0; i < states.Count; i++)
+            {
+                string stateKey = states[i].Key;
+                if (!states[i].Config.loop &&
+                    FindAutoTransition(m_CompiledAsset.Asset, stateKey) == null)
+                {
+                    return stateKey;
+                }
+            }
+
+            throw new XFrameworkException("所有可用的非循环 state 都已经配置了 Auto Transition。");
+        }
+
+        private static XAnimationAutoTransitionConfig GetOrCreateAutoTransition(XAnimationAsset asset, string preStateKey)
+        {
+            XAnimationAutoTransitionConfig transition = FindAutoTransition(asset, preStateKey);
+            if (transition != null)
+            {
+                return transition;
+            }
+
+            List<XAnimationAutoTransitionConfig> transitions = new(asset?.autoTransitions ?? Array.Empty<XAnimationAutoTransitionConfig>())
+            {
+                new XAnimationAutoTransitionConfig
+                {
+                    preStateKey = preStateKey,
+                    nextStateKey = string.Empty,
+                    exitTime = 1f,
+                    transitionDuration = 0f,
+                    enterTime = 0f,
+                }
+            };
+
+            transition = transitions[transitions.Count - 1];
+            asset.autoTransitions = transitions.ToArray();
+            return transition;
+        }
+
+        private static void RenameAutoTransitionReferences(XAnimationAsset asset, string oldKey, string newKey)
+        {
+            XAnimationAutoTransitionConfig[] transitions = asset?.autoTransitions ?? Array.Empty<XAnimationAutoTransitionConfig>();
+            for (int i = 0; i < transitions.Length; i++)
+            {
+                XAnimationAutoTransitionConfig transition = transitions[i];
+                if (transition == null)
+                {
+                    continue;
+                }
+
+                if (string.Equals(transition.preStateKey, oldKey, StringComparison.Ordinal))
+                {
+                    transition.preStateKey = newKey;
+                }
+
+                if (string.Equals(transition.nextStateKey, oldKey, StringComparison.Ordinal))
+                {
+                    transition.nextStateKey = newKey;
+                }
+            }
+        }
+
+        private static void ClearAutoTransitionReferences(XAnimationAsset asset, string deletedStateKey)
+        {
+            XAnimationAutoTransitionConfig[] transitions = asset?.autoTransitions ?? Array.Empty<XAnimationAutoTransitionConfig>();
+            if (transitions.Length == 0)
+            {
+                return;
+            }
+
+            List<XAnimationAutoTransitionConfig> remaining = new(transitions.Length);
+            for (int i = 0; i < transitions.Length; i++)
+            {
+                XAnimationAutoTransitionConfig transition = transitions[i];
+                if (transition == null)
+                {
+                    continue;
+                }
+
+                if (string.Equals(transition.preStateKey, deletedStateKey, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (string.Equals(transition.nextStateKey, deletedStateKey, StringComparison.Ordinal))
+                {
+                    transition.nextStateKey = string.Empty;
+                    transition.exitTime = 1f;
+                    transition.transitionDuration = 0f;
+                    transition.enterTime = 0f;
+                }
+
+                remaining.Add(transition);
+            }
+
+            asset.autoTransitions = remaining.ToArray();
         }
 
         private sealed class PreviewRootMotionFallbackEvaluator

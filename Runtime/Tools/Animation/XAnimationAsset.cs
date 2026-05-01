@@ -15,9 +15,10 @@ namespace XFramework.Animation
 
     public enum XAnimationParameterType
     {
-        Float,
-        Bool,
-        Trigger,
+        Float = 0,
+        Bool = 1,
+        Trigger = 2,
+        Int = 3,
     }
 
     public enum XAnimationClipRootMotionMode
@@ -91,6 +92,19 @@ namespace XFramework.Animation
     }
 
     [Serializable]
+    public class XAnimationAutoTransitionConfig
+    {
+        public string preStateKey;
+        public string nextStateKey;
+        [JsonProperty("ExitTime")]
+        public float exitTime = 1f;
+        [JsonProperty("TransitionDuration")]
+        public float transitionDuration;
+        [JsonProperty("EnterTime")]
+        public float enterTime;
+    }
+
+    [Serializable]
     public class XAnimationBlend1DSampleConfig
     {
         public string clipKey;
@@ -132,6 +146,7 @@ namespace XFramework.Animation
         public XAnimationChannelConfig[] channels = Array.Empty<XAnimationChannelConfig>();
         public XAnimationClipConfig[] clips = Array.Empty<XAnimationClipConfig>();
         public XAnimationStateConfig[] states = Array.Empty<XAnimationStateConfig>();
+        public XAnimationAutoTransitionConfig[] autoTransitions = Array.Empty<XAnimationAutoTransitionConfig>();
         public XAnimationParameterConfig[] parameters = Array.Empty<XAnimationParameterConfig>();
         public XAnimationCueConfig[] cues = Array.Empty<XAnimationCueConfig>();
         public XAnimationStateGraphConfig graph = new XAnimationStateGraphConfig();
@@ -210,6 +225,22 @@ namespace XFramework.Animation
         public int CueIndex { get; }
     }
 
+    public sealed class XAnimationCompiledAutoTransition
+    {
+        public XAnimationCompiledAutoTransition(XAnimationAutoTransitionConfig config)
+        {
+            Config = config ?? throw new ArgumentNullException(nameof(config));
+        }
+
+        public XAnimationAutoTransitionConfig Config { get; }
+        public string PreStateKey => Config.preStateKey;
+        public string NextStateKey => Config.nextStateKey;
+        public float ExitTime => Config.exitTime;
+        public float TransitionDuration => Config.transitionDuration;
+        public float EnterTime => Config.enterTime;
+        public bool HasNextState => !string.IsNullOrWhiteSpace(Config.nextStateKey);
+    }
+
     public abstract class XAnimationCompiledState
     {
         protected XAnimationCompiledState(XAnimationStateConfig config, int defaultChannelIndex)
@@ -271,35 +302,41 @@ namespace XFramework.Animation
         private readonly Dictionary<string, int> m_ClipIndexByKey;
         private readonly Dictionary<string, int> m_ParameterIndexByName;
         private readonly Dictionary<string, int> m_StateIndexByKey;
+        private readonly Dictionary<string, int> m_AutoTransitionIndexByPreStateKey;
 
         public XAnimationCompiledAsset(
             XAnimationAsset asset,
             XAnimationCompiledChannel[] channels,
             XAnimationCompiledClip[] clips,
             XAnimationCompiledState[] states,
+            XAnimationCompiledAutoTransition[] autoTransitions,
             XAnimationCompiledParameter[] parameters,
             Dictionary<string, List<XAnimationCompiledCue>> cuesByClipKey,
             Dictionary<string, int> channelIndexByName,
             Dictionary<string, int> clipIndexByKey,
             Dictionary<string, int> parameterIndexByName,
-            Dictionary<string, int> stateIndexByKey)
+            Dictionary<string, int> stateIndexByKey,
+            Dictionary<string, int> autoTransitionIndexByPreStateKey)
         {
             Asset = asset ?? throw new ArgumentNullException(nameof(asset));
             Channels = channels ?? Array.Empty<XAnimationCompiledChannel>();
             Clips = clips ?? Array.Empty<XAnimationCompiledClip>();
             States = states ?? Array.Empty<XAnimationCompiledState>();
+            AutoTransitions = autoTransitions ?? Array.Empty<XAnimationCompiledAutoTransition>();
             Parameters = parameters ?? Array.Empty<XAnimationCompiledParameter>();
             CuesByClipKey = cuesByClipKey ?? new Dictionary<string, List<XAnimationCompiledCue>>(StringComparer.Ordinal);
             m_ChannelIndexByName = channelIndexByName ?? new Dictionary<string, int>(StringComparer.Ordinal);
             m_ClipIndexByKey = clipIndexByKey ?? new Dictionary<string, int>(StringComparer.Ordinal);
             m_ParameterIndexByName = parameterIndexByName ?? new Dictionary<string, int>(StringComparer.Ordinal);
             m_StateIndexByKey = stateIndexByKey ?? new Dictionary<string, int>(StringComparer.Ordinal);
+            m_AutoTransitionIndexByPreStateKey = autoTransitionIndexByPreStateKey ?? new Dictionary<string, int>(StringComparer.Ordinal);
         }
 
         public XAnimationAsset Asset { get; }
         public IReadOnlyList<XAnimationCompiledChannel> Channels { get; }
         public IReadOnlyList<XAnimationCompiledClip> Clips { get; }
         public IReadOnlyList<XAnimationCompiledState> States { get; }
+        public IReadOnlyList<XAnimationCompiledAutoTransition> AutoTransitions { get; }
         public IReadOnlyList<XAnimationCompiledParameter> Parameters { get; }
         public IReadOnlyDictionary<string, List<XAnimationCompiledCue>> CuesByClipKey { get; }
 
@@ -321,6 +358,19 @@ namespace XFramework.Animation
         public bool TryGetStateIndex(string stateKey, out int stateIndex)
         {
             return m_StateIndexByKey.TryGetValue(stateKey, out stateIndex);
+        }
+
+        public bool TryGetAutoTransition(string preStateKey, out XAnimationCompiledAutoTransition transition)
+        {
+            if (string.IsNullOrWhiteSpace(preStateKey) ||
+                !m_AutoTransitionIndexByPreStateKey.TryGetValue(preStateKey, out int transitionIndex))
+            {
+                transition = null;
+                return false;
+            }
+
+            transition = AutoTransitions[transitionIndex];
+            return true;
         }
 
         public XAnimationCompiledChannel GetChannel(string channelName)
@@ -362,6 +412,87 @@ namespace XFramework.Animation
 
             return States[stateIndex];
         }
+
+        public XAnimationCompiledAutoTransition GetAutoTransition(string preStateKey)
+        {
+            if (!TryGetAutoTransition(preStateKey, out XAnimationCompiledAutoTransition transition))
+            {
+                throw new XFrameworkException($"XAnimation auto transition for state '{preStateKey}' does not exist.");
+            }
+
+            return transition;
+        }
+
+        public float GetStateDuration(string stateKey)
+        {
+            if (!TryGetStateDuration(stateKey, out float duration))
+            {
+                throw new XFrameworkException($"XAnimation state '{stateKey}' does not provide a fixed duration.");
+            }
+
+            return duration;
+        }
+
+        public bool TryGetStateDuration(string stateKey, out float duration)
+        {
+            XAnimationCompiledState state = GetState(stateKey);
+            float speed = Mathf.Approximately(state.Config.speed, 0f) ? 1f : state.Config.speed;
+            switch (state)
+            {
+                case XAnimationCompiledSingleState singleState:
+                {
+                    XAnimationCompiledClip clip = (XAnimationCompiledClip)Clips[singleState.ClipIndex];
+                    duration = clip.Clip.length / speed;
+                    return true;
+                }
+                case XAnimationCompiledBlend1DState blend1DState:
+                {
+                    float maxClipLength = 0f;
+                    IReadOnlyList<XAnimationCompiledBlend1DSample> samples = blend1DState.Samples;
+                    for (int i = 0; i < samples.Count; i++)
+                    {
+                        XAnimationCompiledBlend1DSample sample = samples[i];
+                        XAnimationCompiledClip clip = (XAnimationCompiledClip)Clips[sample.ClipIndex];
+                        maxClipLength = Mathf.Max(maxClipLength, clip.Clip.length);
+                    }
+
+                    if (maxClipLength <= 0f)
+                    {
+                        duration = 0f;
+                        return false;
+                    }
+
+                    duration = maxClipLength / speed;
+                    return true;
+                }
+                default:
+                    duration = 0f;
+                    return false;
+            }
+        }
+
+        public float GetClipDuration(string clipKey)
+        {
+            if (!TryGetClipDuration(clipKey, out float duration))
+            {
+                throw new XFrameworkException($"XAnimation clip '{clipKey}' does not exist.");
+            }
+
+            return duration;
+        }
+
+        public bool TryGetClipDuration(string clipKey, out float duration)
+        {
+            if (!TryGetClipIndex(clipKey, out int clipIndex))
+            {
+                duration = 0f;
+                return false;
+            }
+
+            XAnimationCompiledClip clip = (XAnimationCompiledClip)Clips[clipIndex];
+            duration = clip.Clip.length;
+            return true;
+        }
     }
 
     [Serializable]
@@ -377,18 +508,9 @@ namespace XFramework.Animation
     {
         public float fadeIn;
         public float fadeOut;
+        public float enterTime;
         public int priority;
         public bool interruptible = true;
-    }
-
-    [Serializable]
-    public class XAnimationPlaybackOptions
-    {
-        public float weight = 1f;
-        public float normalizedTime;
-        public float speed = 1f;
-        public bool? loopOverride;
-        public bool? rootMotionOverride;
     }
 
     [Serializable]
@@ -396,7 +518,6 @@ namespace XFramework.Animation
     {
         public XAnimationPlayTarget target = new();
         public XAnimationTransitionOptions transition = new();
-        public XAnimationPlaybackOptions playback = new();
     }
 
     public sealed class XAnimationChannelState
@@ -417,6 +538,27 @@ namespace XFramework.Animation
         public bool isFading;
         public int priority;
         public bool interruptible;
+        public bool isTemporaryState;
+        public string nextStateKey;
+    }
+
+    public enum XAnimationStateExitReason
+    {
+        Interrupted,
+        Completed,
+        Stopped,
+        Disposed,
+    }
+
+    public sealed class XAnimationStateEvent
+    {
+        public string stateKey;
+        public string channelName;
+        public int playbackId;
+        public bool isTemporaryState;
+        public float normalizedTime;
+        public float totalNormalizedTime;
+        public XAnimationStateExitReason? exitReason;
     }
 
     public sealed class XAnimationBlendClipState
@@ -434,6 +576,7 @@ namespace XFramework.Animation
         public string channelName;
         public string eventKey;
         public string payload;
+        public float weight;
         public float normalizedTime;
         public int loopCount;
     }

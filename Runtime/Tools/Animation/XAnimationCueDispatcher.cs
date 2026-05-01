@@ -40,6 +40,11 @@ namespace XFramework.Animation
             m_PlaybackStates.Remove(playbackId);
         }
 
+        public void Raise(XAnimationCueEvent cueEvent)
+        {
+            CueTriggered?.Invoke(cueEvent);
+        }
+
         public void Update(
             XAnimationStatePlaybackInstance instance,
             string clipKey,
@@ -81,7 +86,11 @@ namespace XFramework.Animation
                 for (int i = 0; i < cues.Count; i++)
                 {
                     XAnimationCueConfig cueConfig = cues[i].Config;
-                    if (cueConfig.time <= segmentStart || cueConfig.time > segmentEnd)
+                    bool isSegmentStartInclusive = loopIndex == startLoop && Mathf.Approximately(segmentStart, 0f);
+                    bool isBeforeSegment = isSegmentStartInclusive
+                        ? cueConfig.time < segmentStart
+                        : cueConfig.time <= segmentStart;
+                    if (isBeforeSegment || cueConfig.time > segmentEnd)
                     {
                         continue;
                     }
