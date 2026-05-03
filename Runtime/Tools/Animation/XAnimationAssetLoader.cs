@@ -9,6 +9,7 @@ namespace XFramework.Animation
 {
     public sealed class XAnimationAssetLoader
     {
+        private static readonly Dictionary<int, AnimationClip> s_RuntimePlaybackClipCache = new();
         private readonly XAnimationAssetValidator m_Validator = new();
         private readonly IXAnimationAssetResolver m_Resolver;
 
@@ -105,10 +106,13 @@ namespace XFramework.Animation
                 AnimationClip clip = m_Resolver.LoadAnimationClip(clipConfig.clipPath);
                 if (clip == null)
                 {
-                    throw new XFrameworkException($"XAnimation clip '{clipConfig.key}' failed to load AnimationClip at '{clipConfig.clipPath}'.");
+                    string message = $"XAnimation clip '{clipConfig.key}' failed to load AnimationClip at '{clipConfig.clipPath}'.";
+                    Debug.LogError($"[XFramework] {message}");
+                    throw new XFrameworkException(message);
                 }
 
-                compiledClips[i] = new XAnimationCompiledClip(clipConfig, clip);
+                AnimationClip playbackClip = CreatePlaybackClip(clip);
+                compiledClips[i] = new XAnimationCompiledClip(clipConfig, clip, playbackClip);
                 clipIndexByKey[clipConfig.key] = i;
             }
 
@@ -204,6 +208,58 @@ namespace XFramework.Animation
                 defaultChannelIndex,
                 parameterIndexByName[stateConfig.parameterName],
                 compiledSamples);
+        }
+
+        private static AnimationClip CreatePlaybackClip(AnimationClip clip)
+        {
+            if (clip == null)
+            {
+                return null;
+            }
+
+            AnimationEvent[] events = clip.events;
+            if (events == null || events.Length == 0)
+            {
+                return clip;
+            }
+
+            int instanceId = clip.GetInstanceID();
+            if (s_RuntimePlaybackClipCache.TryGetValue(instanceId, out AnimationClip cachedClip) && cachedClip != null)
+            {
+                return cachedClip;
+            }
+
+            AnimationClip playbackClip = UnityEngine.Object.Instantiate(clip);
+            playbackClip.name = $"{clip.name}_XAnimationRuntime";
+            ClearAnimationEvents(playbackClip);
+            playbackClip.hideFlags = HideFlags.HideAndDontSave;
+            s_RuntimePlaybackClipCache[instanceId] = playbackClip;
+            return playbackClip;
+        }
+
+        private static void ClearAnimationEvents(AnimationClip clip)
+        {
+            if (clip == null)
+            {
+                return;
+            }
+
+#if UNITY_EDITOR
+            Type animationUtilityType = Type.GetType("UnityEditor.AnimationUtility, UnityEditor");
+            System.Reflection.MethodInfo setAnimationEventsMethod = animationUtilityType?.GetMethod(
+                "SetAnimationEvents",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
+                null,
+                new[] { typeof(AnimationClip), typeof(AnimationEvent[]) },
+                null);
+            if (setAnimationEventsMethod != null)
+            {
+                setAnimationEventsMethod.Invoke(null, new object[] { clip, Array.Empty<AnimationEvent>() });
+                return;
+            }
+#endif
+
+            clip.events = Array.Empty<AnimationEvent>();
         }
 
         private XAnimationAsset LoadAsset(TextAsset textAsset, string assetPath)

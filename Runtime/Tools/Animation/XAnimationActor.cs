@@ -13,17 +13,6 @@ namespace XFramework.Animation
         [SerializeField] private bool m_PlayOnStart = true;
         [SerializeField] private string m_StartStateKey = "idle";
         [SerializeField] private float m_TimeScale = 1f;
-        [SerializeField] private XAnimationPlayCommand m_PlayCommand = new()
-        {
-            target = new XAnimationPlayTarget
-            {
-                stateKey = string.Empty,
-            },
-            transition = new XAnimationTransitionOptions
-            {
-                interruptible = true,
-            },
-        };
 
         private readonly XAnimationDriver m_Driver = new();
         private bool m_IsInitialized;
@@ -40,7 +29,6 @@ namespace XFramework.Animation
         public XAnimationCompiledAsset CompiledAsset => m_Driver.CompiledAsset;
         public bool IsInitialized => m_IsInitialized;
         public bool IsPaused => m_IsPaused;
-        public XAnimationPlayCommand InspectorPlayCommand => BuildPlayCommand();
         public float TimeScale
         {
             get => m_TimeScale;
@@ -141,28 +129,16 @@ namespace XFramework.Animation
             m_IsInitialized = true;
         }
 
-        public void PlayClip(
-            string clipName,
-            string channelName,
-            XAnimationTransitionOptions transition = default)
+        public void PlayClip(string clipName, string channelName, XAnimationTransitionOptions transition = default)
         {
             EnsureInitialized();
             m_Driver.PlayClip(clipName, channelName, transition);
         }
 
-        public void PlayState(
-            string stateName,
-            XAnimationTransitionOptions transition = default)
+        public void PlayState(string stateName, XAnimationTransitionOptions transition = default)
         {
             EnsureInitialized();
             m_Driver.PlayState(stateName, transition);
-        }
-
-        public void Play(XAnimationPlayCommand command)
-        {
-            EnsureInitialized();
-            ValidatePlayCommand(command);
-            m_Driver.Play(command);
         }
 
         public void Play(string clipKey)
@@ -178,11 +154,6 @@ namespace XFramework.Animation
         public void PlayState(string stateKey)
         {
             PlayState(stateKey, default);
-        }
-
-        public void PlayConfiguredRequest()
-        {
-            Play(BuildPlayCommand());
         }
 
         public void Stop(string channelName, float fadeOut = default)
@@ -304,41 +275,6 @@ namespace XFramework.Animation
 
             m_Animator = GetComponentInChildren<Animator>();
             return m_Animator;
-        }
-
-        private XAnimationPlayCommand BuildPlayCommand()
-        {
-            XAnimationPlayCommand command = m_PlayCommand ?? new XAnimationPlayCommand();
-            command.target ??= new XAnimationPlayTarget();
-            command.transition ??= new XAnimationTransitionOptions();
-            ValidatePlayCommand(command);
-            return command;
-        }
-
-        private void ValidatePlayCommand(XAnimationPlayCommand command)
-        {
-            if (command == null)
-            {
-                throw new XFrameworkException("XAnimationActor play command cannot be null.");
-            }
-
-            command.target ??= new XAnimationPlayTarget();
-            if (string.IsNullOrWhiteSpace(command.target.stateKey) && string.IsNullOrWhiteSpace(command.target.clipKey))
-            {
-                throw new XFrameworkException("XAnimationActor play target requires either stateKey or clipKey.");
-            }
-
-            if (!string.IsNullOrWhiteSpace(command.target.stateKey) && !string.IsNullOrWhiteSpace(command.target.clipKey))
-            {
-                Debug.LogWarning($"{nameof(XAnimationActor)} on '{name}' has both stateKey and clipKey configured. stateKey will take priority.", this);
-            }
-
-            if (string.IsNullOrWhiteSpace(command.target.stateKey) &&
-                !string.IsNullOrWhiteSpace(command.target.clipKey) &&
-                string.IsNullOrWhiteSpace(command.target.channelName))
-            {
-                throw new XFrameworkException($"XAnimationActor clip '{command.target.clipKey}' direct playback requires channelName.");
-            }
         }
 
         private void EnsureInitialized()

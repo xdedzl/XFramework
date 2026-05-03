@@ -43,55 +43,45 @@ namespace XFramework.Animation
         public XAnimationContext Context { get; }
         public bool IsDisposed { get; private set; }
 
-        public void Play(XAnimationPlayCommand command)
+        public void PlayClip(string clipKey, string channelName, XAnimationTransitionOptions transition = default)
         {
             ThrowIfDisposed();
-            if (!string.IsNullOrWhiteSpace(command.target.stateKey))
+            if (!CompiledAsset.TryGetClipIndex(clipKey, out int clipIndex))
             {
-                PlayStateCommand(command);
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(command.target.clipKey))
-            {
-                throw new XFrameworkException("XAnimation Play command.target.stateKey or command.target.clipKey cannot be empty.");
-            }
-
-            PlayClipCommand(command);
-        }
-
-        private void PlayClipCommand(XAnimationPlayCommand command)
-        {
-            if (!CompiledAsset.TryGetClipIndex(command.target.clipKey, out int clipIndex))
-            {
-                throw new XFrameworkException($"XAnimation clip '{command.target.clipKey}' does not exist.");
+                throw new XFrameworkException($"XAnimation clip '{clipKey}' does not exist.");
             }
 
             XAnimationCompiledClip clip = (XAnimationCompiledClip)CompiledAsset.Clips[clipIndex];
-            XAnimationCompiledChannel channel = ResolveChannel(clip, command.target.channelName);
+            XAnimationCompiledChannel channel = ResolveClipChannel(clip, channelName);
             if (!CompiledAsset.TryGetChannelIndex(channel.Name, out int channelIndex))
             {
                 throw new XFrameworkException($"XAnimation channel '{channel.Name}' does not exist.");
             }
 
             XAnimationCompiledSingleState temporaryState = CreateTemporaryClipState(clip, clipIndex, channel, channelIndex);
-            TryPlayCompiledStateCommand(command, temporaryState, channel);
+            TryPlayCompiledState(temporaryState, channel, transition);
         }
 
-        private void PlayStateCommand(XAnimationPlayCommand command)
+        public void PlayState(string stateKey, XAnimationTransitionOptions transition = default)
         {
-            XAnimationCompiledState state = CompiledAsset.GetState(command.target.stateKey);
-            XAnimationCompiledChannel channel = ResolveChannel(state, command.target.channelName);
-            TryPlayCompiledStateCommand(command, state, channel);
+            ThrowIfDisposed();
+            XAnimationCompiledState state = CompiledAsset.GetState(stateKey);
+            XAnimationCompiledChannel channel = GetStateChannel(state);
+            TryPlayCompiledState(state, channel, transition);
         }
 
-        private bool TryPlayCompiledStateCommand(XAnimationPlayCommand command, XAnimationCompiledState state, XAnimationCompiledChannel channel)
+        private bool TryPlayCompiledState(
+            XAnimationCompiledState state,
+            XAnimationCompiledChannel channel,
+            XAnimationTransitionOptions transition)
         {
-            float fadeIn = command.transition.fadeIn > 0f ? command.transition.fadeIn : state.Config.fadeIn;
-            float fadeOut = command.transition.fadeOut > 0f ? command.transition.fadeOut : state.Config.fadeOut;
-            float normalizedTime = Mathf.Clamp01(command.transition.enterTime);
+            transition ??= new XAnimationTransitionOptions();
+
+            float fadeIn = transition.fadeIn > 0f ? transition.fadeIn : state.Config.fadeIn;
+            float fadeOut = transition.fadeOut > 0f ? transition.fadeOut : state.Config.fadeOut;
+            float normalizedTime = Mathf.Clamp01(transition.enterTime);
             float speed = Mathf.Approximately(state.Config.speed, 0f) ? 1f : state.Config.speed;
-            bool interruptible = command.transition.interruptible;
+            bool interruptible = transition.interruptible;
             bool drivesRootMotion = ResolveRootMotion(state, channel);
             bool isLooping = state.Config.loop;
 
@@ -102,7 +92,7 @@ namespace XFramework.Animation
                 normalizedTime,
                 speed,
                 isLooping,
-                command.transition.priority,
+                transition.priority,
                 interruptible,
                 drivesRootMotion);
 
@@ -325,7 +315,7 @@ namespace XFramework.Animation
             Animator.runtimeAnimatorController = m_OriginalController;
         }
 
-        private XAnimationCompiledChannel ResolveChannel(XAnimationCompiledClip clip, string channelName)
+        private XAnimationCompiledChannel ResolveClipChannel(XAnimationCompiledClip clip, string channelName)
         {
             if (!string.IsNullOrWhiteSpace(channelName))
             {
@@ -335,13 +325,8 @@ namespace XFramework.Animation
             throw new XFrameworkException($"XAnimation clip '{clip.Key}' direct playback requires an explicit channelName.");
         }
 
-        private XAnimationCompiledChannel ResolveChannel(XAnimationCompiledState state, string channelName)
+        private XAnimationCompiledChannel GetStateChannel(XAnimationCompiledState state)
         {
-            if (!string.IsNullOrWhiteSpace(channelName))
-            {
-                return CompiledAsset.GetChannel(channelName);
-            }
-
             return (XAnimationCompiledChannel)CompiledAsset.Channels[state.DefaultChannelIndex];
         }
 
@@ -377,7 +362,7 @@ namespace XFramework.Animation
                 fadeIn = channel.Config.defaultFadeIn,
                 fadeOut = channel.Config.defaultFadeOut,
                 speed = 1f,
-                loop = clip.Clip.isLooping,
+                loop = clip.PlaybackClip.isLooping,
                 rootMotionMode = XAnimationClipRootMotionMode.Inherit,
                 parameterName = string.Empty,
                 samples = Array.Empty<XAnimationBlend1DSampleConfig>(),
@@ -432,9 +417,9 @@ namespace XFramework.Animation
             bool isTemporaryState,
             XAnimationPlaybackRuntimeOptions options)
         {
-            AnimationClipPlayable playable = AnimationClipPlayable.Create(m_Graph, clip.Clip);
+            AnimationClipPlayable playable = AnimationClipPlayable.Create(m_Graph, clip.PlaybackClip);
             playable.SetApplyFootIK(false);
-            playable.SetTime(Mathf.Clamp01(options.NormalizedTime) * Mathf.Max(clip.Clip.length, 0.0001f));
+            playable.SetTime(Mathf.Clamp01(options.NormalizedTime) * Mathf.Max(clip.PlaybackClip.length, 0.0001f));
             return new XAnimationSingleStatePlaybackInstance(playbackId, channelName, stateKey, Animator, clip, playable, isTemporaryState, options);
         }
 
@@ -523,22 +508,17 @@ namespace XFramework.Animation
                 XAnimationCompiledState nextState = CompiledAsset.GetState(autoTransition.NextStateKey);
                 float fadeIn = autoTransition.TransitionDuration > 0f ? autoTransition.TransitionDuration : nextState.Config.fadeIn;
                 float fadeOut = autoTransition.TransitionDuration > 0f ? autoTransition.TransitionDuration : nextState.Config.fadeOut;
-                bool played = TryPlayCompiledStateCommand(new XAnimationPlayCommand
-                {
-                    target = new XAnimationPlayTarget
-                    {
-                        stateKey = nextState.Key,
-                        channelName = channel.Name,
-                    },
-                    transition = new XAnimationTransitionOptions
+                bool played = TryPlayCompiledState(
+                    nextState,
+                    channel.CompiledChannel,
+                    new XAnimationTransitionOptions
                     {
                         fadeIn = fadeIn,
                         fadeOut = fadeOut,
                         enterTime = autoTransition.EnterTime,
                         priority = playback.Priority,
                         interruptible = true,
-                    },
-                }, nextState, channel.CompiledChannel);
+                    });
 
                 if (!played)
                 {

@@ -188,14 +188,16 @@ namespace XFramework.Animation
 
     public sealed class XAnimationCompiledClip
     {
-        public XAnimationCompiledClip(XAnimationClipConfig config, AnimationClip clip)
+        public XAnimationCompiledClip(XAnimationClipConfig config, AnimationClip clip, AnimationClip playbackClip = null)
         {
             Config = config ?? throw new ArgumentNullException(nameof(config));
             Clip = clip ? clip : throw new ArgumentNullException(nameof(clip));
+            PlaybackClip = playbackClip ? playbackClip : Clip;
         }
 
         public XAnimationClipConfig Config { get; }
         public AnimationClip Clip { get; }
+        public AnimationClip PlaybackClip { get; }
         public string Key => Config.key;
     }
 
@@ -496,14 +498,6 @@ namespace XFramework.Animation
     }
 
     [Serializable]
-    public class XAnimationPlayTarget
-    {
-        public string stateKey;
-        public string clipKey;
-        public string channelName;
-    }
-
-    [Serializable]
     public class XAnimationTransitionOptions
     {
         public float fadeIn;
@@ -511,13 +505,6 @@ namespace XFramework.Animation
         public float enterTime;
         public int priority;
         public bool interruptible = true;
-    }
-
-    [Serializable]
-    public class XAnimationPlayCommand
-    {
-        public XAnimationPlayTarget target = new();
-        public XAnimationTransitionOptions transition = new();
     }
 
     public sealed class XAnimationChannelState

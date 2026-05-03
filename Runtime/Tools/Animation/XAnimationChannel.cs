@@ -169,7 +169,7 @@ namespace XFramework.Animation
             m_Animator = animator ? animator : throw new ArgumentNullException(nameof(animator));
             m_Clip = clip ?? throw new ArgumentNullException(nameof(clip));
             m_Playable = playable;
-            m_ClipLength = Mathf.Max(clip.Clip.length, 0.0001f);
+            m_ClipLength = Mathf.Max(clip.PlaybackClip.length, 0.0001f);
             m_TotalNormalizedTime = Mathf.Clamp01(options.NormalizedTime);
             m_PreviousTotalNormalizedTime = m_TotalNormalizedTime;
         }
@@ -327,9 +327,9 @@ namespace XFramework.Animation
             for (int i = 0; i < m_Clips.Length; i++)
             {
                 XAnimationCompiledClip clip = m_Clips[i];
-                AnimationClipPlayable playable = AnimationClipPlayable.Create(graph, clip.Clip);
+                AnimationClipPlayable playable = AnimationClipPlayable.Create(graph, clip.PlaybackClip);
                 playable.SetApplyFootIK(false);
-                float clipLength = Mathf.Max(clip.Clip.length, 0.0001f);
+                float clipLength = Mathf.Max(clip.PlaybackClip.length, 0.0001f);
                 playable.SetTime(normalizedTime * clipLength);
                 m_Playables[i] = playable;
                 m_ClipLengths[i] = clipLength;

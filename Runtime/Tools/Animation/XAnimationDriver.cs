@@ -117,15 +117,7 @@ namespace XFramework.Animation
             XAnimationTransitionOptions transition = default)
         {
             EnsureInitialized();
-            m_Player.Play(new XAnimationPlayCommand
-            {
-                target = new XAnimationPlayTarget
-                {
-                    clipKey = clipName,
-                    channelName = channelName,
-                },
-                transition = NormalizeTransitionOptions(transition),
-            });
+            m_Player.PlayClip(clipName, channelName, NormalizeTransitionOptions(transition));
         }
 
         public void PlayState(
@@ -133,20 +125,7 @@ namespace XFramework.Animation
             XAnimationTransitionOptions transition = default)
         {
             EnsureInitialized();
-            m_Player.Play(new XAnimationPlayCommand
-            {
-                target = new XAnimationPlayTarget
-                {
-                    stateKey = stateName,
-                },
-                transition = NormalizeTransitionOptions(transition),
-            });
-        }
-
-        public void Play(XAnimationPlayCommand command)
-        {
-            EnsureInitialized();
-            m_Player.Play(NormalizeCommand(command));
+            m_Player.PlayState(stateName, NormalizeTransitionOptions(transition));
         }
 
         public void Stop(string channelName, float fadeOut = default)
@@ -258,15 +237,6 @@ namespace XFramework.Animation
         private void OnPlayerStateExited(XAnimationStateEvent stateEvent)
         {
             OnStateExit?.Invoke(stateEvent);
-        }
-
-        private static XAnimationPlayCommand NormalizeCommand(XAnimationPlayCommand command)
-        {
-            return new XAnimationPlayCommand
-            {
-                target = command?.target ?? new XAnimationPlayTarget(),
-                transition = NormalizeTransitionOptions(command?.transition),
-            };
         }
 
         private static XAnimationTransitionOptions NormalizeTransitionOptions(XAnimationTransitionOptions options)

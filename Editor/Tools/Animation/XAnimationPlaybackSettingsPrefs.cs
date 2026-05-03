@@ -6,10 +6,8 @@ namespace XFramework.Editor
     internal sealed class XAnimationPlaybackSettings
     {
         public bool PlaybackSectionExpanded = true;
-        public bool TargetSectionExpanded = true;
         public bool TransitionSectionExpanded;
         public string ChannelName = string.Empty;
-        public bool ApplyTarget;
         public float Speed = 1f;
         public bool ApplyTransition;
         public float FadeIn;
@@ -28,10 +26,8 @@ namespace XFramework.Editor
             return new XAnimationPlaybackSettings
             {
                 PlaybackSectionExpanded = EditorPrefs.GetBool(Prefix + nameof(XAnimationPlaybackSettings.PlaybackSectionExpanded), true),
-                TargetSectionExpanded = EditorPrefs.GetBool(Prefix + nameof(XAnimationPlaybackSettings.TargetSectionExpanded), true),
                 TransitionSectionExpanded = EditorPrefs.GetBool(Prefix + nameof(XAnimationPlaybackSettings.TransitionSectionExpanded), false),
                 ChannelName = EditorPrefs.GetString(Prefix + nameof(XAnimationPlaybackSettings.ChannelName), string.Empty),
-                ApplyTarget = EditorPrefs.GetBool(Prefix + nameof(XAnimationPlaybackSettings.ApplyTarget), false),
                 Speed = EditorPrefs.GetFloat(Prefix + nameof(XAnimationPlaybackSettings.Speed), 1f),
                 ApplyTransition = EditorPrefs.GetBool(Prefix + nameof(XAnimationPlaybackSettings.ApplyTransition), false),
                 FadeIn = EditorPrefs.GetFloat(Prefix + nameof(XAnimationPlaybackSettings.FadeIn), 0f),
@@ -50,10 +46,8 @@ namespace XFramework.Editor
             }
 
             EditorPrefs.SetBool(Prefix + nameof(XAnimationPlaybackSettings.PlaybackSectionExpanded), settings.PlaybackSectionExpanded);
-            EditorPrefs.SetBool(Prefix + nameof(XAnimationPlaybackSettings.TargetSectionExpanded), settings.TargetSectionExpanded);
             EditorPrefs.SetBool(Prefix + nameof(XAnimationPlaybackSettings.TransitionSectionExpanded), settings.TransitionSectionExpanded);
             EditorPrefs.SetString(Prefix + nameof(XAnimationPlaybackSettings.ChannelName), settings.ChannelName ?? string.Empty);
-            EditorPrefs.SetBool(Prefix + nameof(XAnimationPlaybackSettings.ApplyTarget), settings.ApplyTarget);
             EditorPrefs.SetFloat(Prefix + nameof(XAnimationPlaybackSettings.Speed), settings.Speed);
             EditorPrefs.SetBool(Prefix + nameof(XAnimationPlaybackSettings.ApplyTransition), settings.ApplyTransition);
             EditorPrefs.SetFloat(Prefix + nameof(XAnimationPlaybackSettings.FadeIn), settings.FadeIn);

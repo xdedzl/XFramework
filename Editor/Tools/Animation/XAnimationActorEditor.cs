@@ -68,7 +68,6 @@ namespace XFramework.Editor
 
         private FloatField m_PlaySpeedField;
         private DropdownField m_PlayTargetChannelField;
-        private Toggle m_ApplyTargetToggle;
         private FloatField m_PlayFadeInField;
         private FloatField m_PlayFadeOutField;
         private IntegerField m_PlayPriorityField;
@@ -91,7 +90,6 @@ namespace XFramework.Editor
         private readonly Dictionary<string, AnimationClip> m_CachedClipObjectMap = new(StringComparer.Ordinal);
 
         private string m_PlayTargetChannelName;
-        private bool m_ApplyTargetOverrides;
         private float m_PlayFadeInOverride;
         private float m_PlayFadeOutOverride;
         private int m_PlayPriorityOverride;
@@ -102,7 +100,6 @@ namespace XFramework.Editor
         private bool m_PlaybackPrefsLoaded;
 
         [SerializeField] private bool m_PlaybackSectionExpanded = true;
-        [SerializeField] private bool m_PlayTargetSectionExpanded = true;
         [SerializeField] private bool m_PlayTransitionSectionExpanded;
         [SerializeField] private bool m_ParametersSectionExpanded = true;
         [SerializeField] private bool m_StatesSectionExpanded = true;
@@ -194,10 +191,8 @@ namespace XFramework.Editor
         {
             XAnimationPlaybackSettings settings = XAnimationPlaybackSettingsPrefs.Load();
             m_PlaybackSectionExpanded = settings.PlaybackSectionExpanded;
-            m_PlayTargetSectionExpanded = settings.TargetSectionExpanded;
             m_PlayTransitionSectionExpanded = settings.TransitionSectionExpanded;
             m_PlayTargetChannelName = settings.ChannelName;
-            m_ApplyTargetOverrides = settings.ApplyTarget;
             m_PlaySpeed = Mathf.Approximately(settings.Speed, 0f) ? 1f : settings.Speed;
             m_ApplyTransitionOverrides = settings.ApplyTransition;
             m_PlayFadeInOverride = Mathf.Max(0f, settings.FadeIn);
@@ -226,10 +221,8 @@ namespace XFramework.Editor
             XAnimationPlaybackSettingsPrefs.Save(new XAnimationPlaybackSettings
             {
                 PlaybackSectionExpanded = m_PlaybackSectionExpanded,
-                TargetSectionExpanded = m_PlayTargetSectionExpanded,
                 TransitionSectionExpanded = m_PlayTransitionSectionExpanded,
                 ChannelName = m_PlayTargetChannelName,
-                ApplyTarget = m_ApplyTargetOverrides,
                 Speed = m_PlaySpeed,
                 ApplyTransition = m_ApplyTransitionOverrides,
                 FadeIn = m_PlayFadeInOverride,
@@ -253,8 +246,21 @@ namespace XFramework.Editor
             ConfigureCompactPlaybackField(m_PlaySpeedField, 66);
             m_PlaySpeedField.RegisterValueChangedCallback(_ => SavePlaybackPrefs());
             VisualElement speedFieldRow = CreatePlaybackFieldContainer("speed", m_PlaySpeedField, PlaybackLabelWidth);
-            speedFieldRow.style.flexGrow = 1;
             speedRow.Add(speedFieldRow);
+
+            m_PlayTargetChannelField = new DropdownField();
+            m_PlayTargetChannelField.tooltip = "clip 调试播放使用的 channelName。state 播放始终使用 state 自己配置的 channel。";
+            m_PlayTargetChannelField.style.flexGrow = 1;
+            m_PlayTargetChannelField.style.minWidth = 0;
+            m_PlayTargetChannelField.RegisterValueChangedCallback(evt =>
+            {
+                m_PlayTargetChannelName = NormalizeChannelOptionValue(evt.newValue) ?? string.Empty;
+                SavePlaybackPrefs();
+            });
+            VisualElement channelFieldRow = CreatePlaybackFieldContainer("channelName", m_PlayTargetChannelField, PlaybackLabelWidth);
+            channelFieldRow.tooltip = "用于 clip 调试播放的目标 channel。";
+            channelFieldRow.style.flexGrow = 1;
+            speedRow.Add(channelFieldRow);
 
             m_PlayCommandButton = new Button(PlayConfiguredCommand)
             {
@@ -263,33 +269,7 @@ namespace XFramework.Editor
             m_PlayCommandButton.style.marginLeft = 8;
             speedRow.Add(m_PlayCommandButton);
 
-            m_ApplyTargetToggle = CreateHeaderApplyToggle(m_ApplyTargetOverrides, "播放 state 时是否应用 target.channelName 覆盖；播放 clip 时始终会应用。");
-            m_ApplyTargetToggle.RegisterValueChangedCallback(evt =>
-            {
-                m_ApplyTargetOverrides = evt.newValue;
-                SavePlaybackPrefs();
-            });
-
-            FoldoutCard targetCard = CreateSectionFoldoutCard("Target", m_PlayTargetSectionExpanded, value =>
-            {
-                m_PlayTargetSectionExpanded = value;
-                SavePlaybackPrefs();
-            }, m_ApplyTargetToggle);
-            targetCard.Root.style.marginTop = 4;
-
-            m_PlayTargetChannelField = new DropdownField();
-            m_PlayTargetChannelField.tooltip = "播放 target.channelName。用于 clip 调试播放，也可在 Apply Target 开启时覆盖 state 的默认 channel。";
-            m_PlayTargetChannelField.style.flexGrow = 1;
-            m_PlayTargetChannelField.style.minWidth = 0;
-            m_PlayTargetChannelField.RegisterValueChangedCallback(evt =>
-            {
-                m_PlayTargetChannelName = NormalizeChannelOptionValue(evt.newValue) ?? string.Empty;
-                SavePlaybackPrefs();
-            });
-            targetCard.Content.Add(CreatePlaybackFieldContainer("channelName", m_PlayTargetChannelField, PlaybackLabelWidth));
-            content.Add(targetCard.Root);
-
-            m_ApplyTransitionToggle = CreateHeaderApplyToggle(m_ApplyTransitionOverrides, "是否应用 command.transition。关闭时本分区会自动收起。");
+            m_ApplyTransitionToggle = CreateHeaderApplyToggle(m_ApplyTransitionOverrides, "是否应用 Transition 覆盖。关闭时本分区会自动收起。");
             FoldoutCard transitionCard = CreateSectionFoldoutCard("Transition", m_PlayTransitionSectionExpanded, value =>
             {
                 m_PlayTransitionSectionExpanded = value;
@@ -437,7 +417,7 @@ namespace XFramework.Editor
         {
             if (m_PlayCommandButton != null)
             {
-                m_PlayCommandButton.SetEnabled(Application.isPlaying);
+                m_PlayCommandButton.SetEnabled(target is XAnimationActor);
             }
         }
 
@@ -882,7 +862,7 @@ namespace XFramework.Editor
             };
             ApplyIconButtonStyle(playButton, false);
             playButton.style.marginLeft = 6;
-            playButton.SetEnabled(Application.isPlaying);
+            playButton.SetEnabled(true);
             row.Add(playButton);
 
             m_StateRowMap[state.key] = row;
@@ -893,14 +873,20 @@ namespace XFramework.Editor
         private void ToggleStatePlayback(XAnimationStateConfig state)
         {
             XAnimationActor actor = target as XAnimationActor;
-            if (actor == null || !Application.isPlaying)
+            if (actor == null)
             {
+                return;
+            }
+
+            if (!Application.isPlaying)
+            {
+                OpenPreviewAndPlayState(actor, state.key);
                 return;
             }
 
             try
             {
-                string channelName = FindPlayingChannelForState(actor, state.key) ?? GetStateTargetChannelName(state) ?? state.channelName;
+                string channelName = FindPlayingChannelForState(actor, state.key) ?? state.channelName;
                 XAnimationChannelState channelState = string.IsNullOrWhiteSpace(channelName) ? null : actor.GetChannelState(channelName);
                 bool isPlaying = channelState != null && string.Equals(channelState.stateKey, state.key, StringComparison.Ordinal);
                 if (isPlaying)
@@ -910,7 +896,8 @@ namespace XFramework.Editor
                 }
                 else
                 {
-                    actor.Play(BuildPlayCommand(stateKey: state.key, clipKey: null, channelName: GetStateTargetChannelName(state)));
+                    actor.PlayState(state.key, BuildTransitionOptions());
+                    actor.SetChannelTimeScale(state.channelName, GetPlaybackSpeed());
                     SetStatus($"正在播放 state {state.key}。");
                 }
             }
@@ -1010,7 +997,7 @@ namespace XFramework.Editor
             };
             ApplyIconButtonStyle(playButton, false);
             playButton.style.marginLeft = 6;
-            playButton.SetEnabled(Application.isPlaying);
+            playButton.SetEnabled(true);
             row.Add(playButton);
 
             m_ClipButtonMap[clip.key] = playButton;
@@ -1020,7 +1007,7 @@ namespace XFramework.Editor
         private void ToggleClipPlayback(XAnimationClipConfig clip)
         {
             XAnimationActor actor = target as XAnimationActor;
-            if (actor == null || !Application.isPlaying)
+            if (actor == null)
             {
                 return;
             }
@@ -1029,6 +1016,12 @@ namespace XFramework.Editor
             if (string.IsNullOrWhiteSpace(channelName))
             {
                 SetStatus("请先在 Target 中选择 channelName 后再调试播放 clip。", true);
+                return;
+            }
+
+            if (!Application.isPlaying)
+            {
+                OpenPreviewAndPlayClip(actor, clip.key, channelName);
                 return;
             }
 
@@ -1043,7 +1036,8 @@ namespace XFramework.Editor
                 }
                 else
                 {
-                    actor.Play(BuildPlayCommand(stateKey: null, clipKey: clip.key, channelName: channelName));
+                    actor.PlayClip(clip.key, channelName, BuildTransitionOptions());
+                    actor.SetChannelTimeScale(channelName, GetPlaybackSpeed());
                     SetStatus($"正在 {channelName} 播放 clip {clip.key}。");
                 }
             }
@@ -1159,15 +1153,40 @@ namespace XFramework.Editor
         private void PlayConfiguredCommand()
         {
             XAnimationActor actor = target as XAnimationActor;
-            if (actor == null || !Application.isPlaying)
+            if (actor == null)
             {
+                return;
+            }
+
+            if (!Application.isPlaying)
+            {
+                string startStateKey = serializedObject.FindProperty("m_StartStateKey")?.stringValue;
+                if (string.IsNullOrWhiteSpace(startStateKey))
+                {
+                    SetStatus("请先配置 Start State Key，或直接使用下方 state/clip 行内播放按钮。", true);
+                    return;
+                }
+
+                OpenPreviewAndPlayState(actor, startStateKey);
                 return;
             }
 
             try
             {
-                actor.PlayConfiguredRequest();
-                SetStatus("已执行当前播放命令。");
+                string startStateKey = serializedObject.FindProperty("m_StartStateKey")?.stringValue;
+                if (string.IsNullOrWhiteSpace(startStateKey))
+                {
+                    throw new XFrameworkException("请先配置 Start State Key，或直接使用下方 state/clip 行内播放按钮。");
+                }
+
+                actor.PlayState(startStateKey, BuildTransitionOptions());
+                XAnimationStateConfig state = FindStateConfig(startStateKey);
+                if (state != null && !string.IsNullOrWhiteSpace(state.channelName))
+                {
+                    actor.SetChannelTimeScale(state.channelName, GetPlaybackSpeed());
+                }
+
+                SetStatus($"已播放 Start State {startStateKey}。");
             }
             catch (Exception ex)
             {
@@ -1176,45 +1195,126 @@ namespace XFramework.Editor
             }
         }
 
-        private XAnimationPlayCommand BuildPlayCommand(string stateKey, string clipKey, string channelName)
+        private XAnimationTransitionOptions BuildTransitionOptions()
         {
-            bool isClipPlayback = !string.IsNullOrWhiteSpace(clipKey);
-            bool shouldApplyTarget = isClipPlayback || m_ApplyTargetOverrides;
-            XAnimationPlayCommand command = new()
+            XAnimationTransitionOptions transition = new()
             {
-                target = new XAnimationPlayTarget
-                {
-                    stateKey = stateKey,
-                    clipKey = clipKey,
-                    channelName = shouldApplyTarget ? channelName : null,
-                },
-                transition = new XAnimationTransitionOptions
-                {
-                    interruptible = true,
-                },
+                interruptible = true,
             };
 
-            // TODO: Apply speed via SetChannelTimeScale
             if (m_ApplyTransitionOverrides)
             {
-                command.transition.fadeIn = Mathf.Max(0f, m_PlayFadeInOverride);
-                command.transition.fadeOut = Mathf.Max(0f, m_PlayFadeOutOverride);
-                command.transition.priority = m_PlayPriorityOverride;
-                command.transition.interruptible = m_PlayInterruptibleOverride;
-                command.transition.enterTime = Mathf.Clamp01(m_PlayEnterTimeOverride);
+                transition.fadeIn = Mathf.Max(0f, m_PlayFadeInOverride);
+                transition.fadeOut = Mathf.Max(0f, m_PlayFadeOutOverride);
+                transition.priority = m_PlayPriorityOverride;
+                transition.interruptible = m_PlayInterruptibleOverride;
+                transition.enterTime = Mathf.Clamp01(m_PlayEnterTimeOverride);
             }
 
-            return command;
+            return transition;
         }
 
-        private string GetStateTargetChannelName(XAnimationStateConfig state)
+        private XAnimationStateConfig FindStateConfig(string stateKey)
         {
-            if (!m_ApplyTargetOverrides || string.IsNullOrWhiteSpace(m_PlayTargetChannelName))
+            if (string.IsNullOrWhiteSpace(stateKey))
             {
                 return null;
             }
 
-            return m_PlayTargetChannelName;
+            XAnimationAsset asset = LoadCurrentAnimationAsset();
+            XAnimationStateConfig[] states = asset?.states ?? Array.Empty<XAnimationStateConfig>();
+            for (int i = 0; i < states.Length; i++)
+            {
+                XAnimationStateConfig state = states[i];
+                if (state != null && string.Equals(state.key, stateKey, StringComparison.Ordinal))
+                {
+                    return state;
+                }
+            }
+
+            return null;
+        }
+
+        private void OpenPreviewAndPlayState(XAnimationActor actor, string stateKey)
+        {
+            if (!TryGetPreviewSelection(actor, out TextAsset animationAsset, out GameObject prefab))
+            {
+                return;
+            }
+
+            try
+            {
+                XAnimationPreviewWindow.ShowWindowAndPlayState(
+                    animationAsset,
+                    prefab,
+                    stateKey,
+                    GetPlaybackSpeed(),
+                    BuildTransitionOptions());
+                SetStatus($"已在预览窗口打开并播放 state {stateKey}。");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex, actor);
+                SetStatus(ex.Message, true);
+            }
+        }
+
+        private void OpenPreviewAndPlayClip(XAnimationActor actor, string clipKey, string channelName)
+        {
+            if (!TryGetPreviewSelection(actor, out TextAsset animationAsset, out GameObject prefab))
+            {
+                return;
+            }
+
+            try
+            {
+                XAnimationPreviewWindow.ShowWindowAndPlayClip(
+                    animationAsset,
+                    prefab,
+                    clipKey,
+                    channelName,
+                    GetPlaybackSpeed(),
+                    BuildTransitionOptions());
+                SetStatus($"已在预览窗口打开并播放 clip {clipKey}。");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex, actor);
+                SetStatus(ex.Message, true);
+            }
+        }
+
+        private bool TryGetPreviewSelection(XAnimationActor actor, out TextAsset animationAsset, out GameObject prefab)
+        {
+            animationAsset = actor?.AnimationAsset;
+            prefab = null;
+
+            if (animationAsset == null)
+            {
+                SetStatus("当前 XAnimationActor 没有绑定 animation asset。", true);
+                return false;
+            }
+
+            if (PrefabUtility.IsPartOfPrefabAsset(actor.gameObject))
+            {
+                prefab = actor.gameObject;
+            }
+            else
+            {
+                prefab = PrefabUtility.GetCorrespondingObjectFromSource(actor.gameObject);
+                if (prefab == null)
+                {
+                    prefab = PrefabUtility.GetCorrespondingObjectFromOriginalSource(actor.gameObject);
+                }
+            }
+
+            if (prefab == null)
+            {
+                SetStatus("非运行时播放需要当前对象关联到一个 prefab asset，才能在预览窗口中打开。", true);
+                return false;
+            }
+
+            return true;
         }
 
         private string FindPlayingChannelForState(XAnimationActor actor, string stateKey)

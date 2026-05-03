@@ -177,28 +177,14 @@ namespace XFramework.Editor
             camera.targetTexture = null;
         }
 
-        public void Play(XAnimationPlayCommand command)
-        {
-            EnsureLoaded();
-            m_Driver.Play(command);
-        }
-
         public void PlayClip(
             string clipKey,
             string channelName,
             XAnimationTransitionOptions transition = default)
         {
             transition ??= new XAnimationTransitionOptions();
-
-            Play(new XAnimationPlayCommand
-            {
-                target = new XAnimationPlayTarget
-                {
-                    clipKey = clipKey,
-                    channelName = channelName,
-                },
-                transition = transition,
-            });
+            EnsureLoaded();
+            m_Driver.PlayClip(clipKey, channelName, transition);
         }
 
         public void PlayState(
@@ -206,15 +192,8 @@ namespace XFramework.Editor
             XAnimationTransitionOptions transition = default)
         {
             transition ??= new XAnimationTransitionOptions();
-
-            Play(new XAnimationPlayCommand
-            {
-                target = new XAnimationPlayTarget
-                {
-                    stateKey = stateKey,
-                },
-                transition = transition,
-            });
+            EnsureLoaded();
+            m_Driver.PlayState(stateKey, transition);
         }
 
         public void StopAll()
@@ -2235,8 +2214,8 @@ namespace XFramework.Editor
             camera.fieldOfView = 30f;
             camera.nearClipPlane = 0.01f;
             camera.farClipPlane = PreviewFarClipPlane;
-            camera.allowMSAA = true;
-            camera.allowHDR = true;
+            camera.allowMSAA = false;
+            camera.allowHDR = false;
 
             // Use the editor default skybox, matching prefab preview appearance
             Material skybox = AssetDatabase.GetBuiltinExtraResource<Material>("Default-Skybox.mat");
