@@ -98,6 +98,8 @@ namespace XFramework.Editor
         private static readonly Color ListRowOddBg = new(0.19f, 0.19f, 0.20f, 1f);
         private static readonly Color ListHeaderBg = new(0.22f, 0.23f, 0.25f, 1f);
         private static readonly Color PlayingBg = new(0.20f, 0.35f, 0.55f, 0.65f);
+        private static readonly Color ProgressFillBg = new(0.20f, 0.55f, 0.95f, 0.55f);
+        private static readonly Color BlendWeightFillBg = new(0.25f, 0.72f, 0.34f, 0.55f);
         private static readonly Color ClipFocusFlashBg = new(0.92f, 0.73f, 0.20f, 0.95f);
 
         private readonly Dictionary<string, Label> m_ChannelStateLabels = new(StringComparer.Ordinal);
@@ -138,6 +140,7 @@ namespace XFramework.Editor
         private Toggle m_GridToggle;
         private DropdownField m_PlayTargetChannelField;
         private Button m_PauseButton;
+        private Button m_StepForwardButton;
         private Button m_StopAllButton;
         private Button m_AddClipButton;
         private Button m_AddChannelButton;
@@ -163,6 +166,7 @@ namespace XFramework.Editor
         private readonly HashSet<string> m_CollapsedAutoTransitionKeys = new(StringComparer.Ordinal);
         private readonly Dictionary<string, EditableLabel> m_StateLabelMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, VisualElement> m_StateRowMap = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, RowVisualState> m_StateVisualStateMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, Button> m_StateButtonMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, string> m_StateChannelMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, EditableLabel> m_ParameterLabelMap = new(StringComparer.Ordinal);
@@ -171,6 +175,7 @@ namespace XFramework.Editor
         private readonly Dictionary<string, EditableLabel> m_ClipLabelMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, VisualElement> m_ClipRowMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, ClipRowVisualState> m_ClipVisualStateMap = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, RowVisualState> m_BlendSampleRowMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, Button> m_ClipButtonMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, EditableLabel> m_ChannelLabelMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, VisualElement> m_ChannelRowMap = new(StringComparer.Ordinal);
@@ -226,11 +231,17 @@ namespace XFramework.Editor
         private FoldoutCard m_AutoTransitionCard;
         private FoldoutCard m_ChannelsCard;
 
-        private sealed class ClipRowVisualState
+        private class RowVisualState
         {
             public Color BaseColor;
             public bool Hovered;
             public bool Playing;
+            public float Progress;
+            public VisualElement ProgressFill;
+        }
+
+        private sealed class ClipRowVisualState : RowVisualState
+        {
             public bool Flashing;
             public int FlashVersion;
         }
@@ -623,6 +634,10 @@ namespace XFramework.Editor
             SetPauseButtonState(false, false);
             playbackActions.Add(m_PauseButton);
 
+            m_StepForwardButton = CreateStyledButton("后一帧", StepForward, AccentColor, 6f);
+            SetStepForwardButtonEnabled(false);
+            playbackActions.Add(m_StepForwardButton);
+
             m_StopAllButton = CreateStyledButton("停止全部", StopAllClips, DangerColor, 6f);
             SetStopAllButtonEnabled(false);
             playbackActions.Add(m_StopAllButton);
@@ -640,7 +655,16 @@ namespace XFramework.Editor
             m_PlaySpeedField = new FloatField { value = m_PlaybackPrefsLoaded ? GetPlaybackSpeed() : 1f };
             m_PlaySpeedField.tooltip = "request.speed。0 会按 1 处理，只影响当前预览请求。";
             ConfigureCompactPlaybackField(m_PlaySpeedField, "speed", 66);
-            m_PlaySpeedField.RegisterValueChangedCallback(_ => SavePlaybackPrefs());
+            m_PlaySpeedField.RegisterValueChangedCallback(evt =>
+            {
+                m_PlaySpeed = Mathf.Approximately(evt.newValue, 0f) ? 1f : evt.newValue;
+                if (m_Session != null && m_Session.IsLoaded)
+                {
+                    m_Session.SetTimeScale(GetPlaybackSpeed());
+                }
+
+                SavePlaybackPrefs();
+            });
             VisualElement speedFieldRow = CreatePlaybackFieldContainer("speed", m_PlaySpeedField, PlaybackLabelWidth);
             speedFieldRow.tooltip = "本次预览播放使用的时间缩放倍率。";
             playbackFields.Add(speedFieldRow);
@@ -1818,13 +1842,24 @@ namespace XFramework.Editor
 
             bool isPreviewVisible = IsPreviewTabVisible();
             bool becameVisible = isPreviewVisible && !m_WasPreviewVisible;
+            bool becameHidden = !isPreviewVisible && m_WasPreviewVisible;
             m_WasPreviewVisible = isPreviewVisible;
 
             if (!isPreviewVisible)
             {
+                if (becameHidden)
+                {
+                    m_Session.Pause();
+                }
+
                 m_LastActivePreviewUpdateTime = now;
                 m_PressedKeys.Clear();
                 return;
+            }
+
+            if (becameVisible)
+            {
+                m_Session.SetPaused(m_IsPaused);
             }
 
             bool shouldUpdatePreview = becameVisible || now - m_LastActivePreviewUpdateTime >= ActivePreviewUpdateIntervalSeconds;
@@ -1834,15 +1869,16 @@ namespace XFramework.Editor
             {
                 float deltaTime = (float)Math.Max(0d, now - m_LastActivePreviewUpdateTime);
                 m_LastActivePreviewUpdateTime = now;
-
-                if (!m_IsPaused)
-                {
-                    m_Session.Update(deltaTime);
-                    didVisualUpdate = true;
-                }
+                bool hadSchedulerAdvance = !m_IsPaused && deltaTime > 0f;
 
                 if (ProcessCameraMovement(deltaTime))
                 {
+                    didVisualUpdate = true;
+                }
+
+                if (hadSchedulerAdvance || becameVisible)
+                {
+                    m_Session.SyncPreviewFrame();
                     didVisualUpdate = true;
                 }
 
@@ -1872,14 +1908,14 @@ namespace XFramework.Editor
             }
 
             bool shouldRepaint = didContinuousUiUpdate;
-            if (becameVisible || m_StatePlaybackUiDirty)
+            if (becameVisible || didContinuousUiUpdate || m_StatePlaybackUiDirty)
             {
                 RefreshStatePlayingStates();
                 m_StatePlaybackUiDirty = false;
                 shouldRepaint = true;
             }
 
-            if (becameVisible || m_ClipPlaybackUiDirty)
+            if (becameVisible || didContinuousUiUpdate || m_ClipPlaybackUiDirty)
             {
                 RefreshClipPlayingStates();
                 m_ClipPlaybackUiDirty = false;
@@ -2268,8 +2304,11 @@ namespace XFramework.Editor
                 m_LastEditorTime = now;
                 m_LastActivePreviewUpdateTime = now;
                 m_WasPreviewVisible = IsPreviewTabVisible();
+                m_Session.SetPaused(!m_WasPreviewVisible);
+                m_Session.SetTimeScale(1f);
                 MarkEventUiDirty();
                 SetPauseButtonState(false, false);
+                SetStepForwardButtonEnabled(true);
                 m_GridToggle.SetValueWithoutNotify(true);
                 RebuildParameterList();
                 RebuildStateList();
@@ -2312,7 +2351,10 @@ namespace XFramework.Editor
                 if (request.IsStatePlayback)
                 {
                     m_IsPaused = false;
+                    m_Session.SetPaused(false);
                     SetPauseButtonState(true, false);
+                    SetStepForwardButtonEnabled(true);
+                    m_Session.SetTimeScale(GetPlaybackSpeed());
                     m_Session.PlayState(request.StateKey, CloneTransitionOptions(request.Transition));
                     string stateChannel = FindStateChannelName(request.StateKey);
                     if (!string.IsNullOrWhiteSpace(stateChannel))
@@ -2340,7 +2382,10 @@ namespace XFramework.Editor
                     SavePlaybackPrefs();
 
                     m_IsPaused = false;
+                    m_Session.SetPaused(false);
                     SetPauseButtonState(true, false);
+                    SetStepForwardButtonEnabled(true);
+                    m_Session.SetTimeScale(GetPlaybackSpeed());
                     m_Session.PlayClip(request.ClipKey, request.ChannelName, CloneTransitionOptions(request.Transition));
                     m_Session.SetChannelTimeScale(request.ChannelName, GetPlaybackSpeed());
                     RefreshClipPlayingStates();
@@ -2366,7 +2411,9 @@ namespace XFramework.Editor
 
             m_Session.StopAll();
             m_IsPaused = false;
+            m_Session.SetPaused(false);
             SetPauseButtonState(false, false);
+            SetStepForwardButtonEnabled(HasAnyPlayingChannel());
             MarkStatePlaybackUiDirty();
             MarkClipPlaybackUiDirty();
             RefreshStatePlayingStates();
@@ -2383,9 +2430,37 @@ namespace XFramework.Editor
             }
 
             m_IsPaused = !m_IsPaused;
+            m_Session.SetPaused(m_IsPaused);
             SetPauseButtonState(true, m_IsPaused);
+            SetStepForwardButtonEnabled(true);
             MarkClipPlaybackUiDirty();
             SetStatus(m_IsPaused ? "已暂停动画预览。" : "已继续动画预览。");
+        }
+
+        private void StepForward()
+        {
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                return;
+            }
+
+            if (!m_IsPaused)
+            {
+                m_IsPaused = true;
+                m_Session.SetPaused(true);
+            }
+
+            m_Session.Step(1f / 60f);
+            SetPauseButtonState(true, true);
+            SetStepForwardButtonEnabled(true);
+            MarkEventUiDirty();
+            RefreshStatePlayingStates();
+            RefreshClipPlayingStates();
+            RefreshChannelStates();
+            RefreshCueLogView(force: true);
+            RenderPreview();
+            Repaint();
+            SetStatus("已向后推进一帧。");
         }
 
         private void ResetPreviewTransform()
@@ -2489,6 +2564,8 @@ namespace XFramework.Editor
             m_StateListView.Clear();
             m_StateLabelMap.Clear();
             m_StateRowMap.Clear();
+            m_StateVisualStateMap.Clear();
+            m_BlendSampleRowMap.Clear();
             m_StateButtonMap.Clear();
             m_StateChannelMap.Clear();
             if (m_Session == null || !m_Session.IsLoaded)
@@ -2938,24 +3015,37 @@ namespace XFramework.Editor
 
         private VisualElement CreateStateRow(XAnimationCompiledState state, int rowIndex)
         {
-            VisualElement container = new VisualElement();
-            container.style.flexDirection = FlexDirection.Column;
-            container.style.marginBottom = 1;
+            VisualElement wrapper = new VisualElement();
+            wrapper.style.flexDirection = FlexDirection.Column;
+            wrapper.style.marginBottom = 1;
 
-            VisualElement row = new VisualElement();
-            row.style.flexDirection = FlexDirection.Row;
-            row.style.alignItems = Align.Center;
-            row.style.paddingLeft = 4;
-            row.style.paddingRight = 4;
-            row.style.paddingTop = 3;
-            row.style.paddingBottom = 3;
-            row.style.borderTopLeftRadius = 2;
-            row.style.borderTopRightRadius = 2;
-            row.style.borderBottomLeftRadius = 2;
-            row.style.borderBottomRightRadius = 2;
-            row.style.backgroundColor = rowIndex % 2 == 0 ? ListRowEvenBg : ListRowOddBg;
-            m_StateRowMap[state.Key] = row;
+            VisualElement container = CreateInteractiveRowContainer(rowIndex);
+            Color baseColor = rowIndex % 2 == 0 ? ListRowEvenBg : ListRowOddBg;
+            m_StateRowMap[state.Key] = container;
             m_StateChannelMap[state.Key] = state.Config.channelName;
+
+            VisualElement progressFill = CreateRowProgressFill();
+            container.Add(progressFill);
+
+            RowVisualState visualState = new()
+            {
+                BaseColor = baseColor,
+                ProgressFill = progressFill,
+            };
+            m_StateVisualStateMap[state.Key] = visualState;
+            container.RegisterCallback<MouseEnterEvent>(_ =>
+            {
+                visualState.Hovered = true;
+                ApplyStateRowVisualState(state.Key);
+            });
+            container.RegisterCallback<MouseLeaveEvent>(_ =>
+            {
+                visualState.Hovered = false;
+                ApplyStateRowVisualState(state.Key);
+            });
+
+            VisualElement row = CreateRowContent();
+            container.Add(row);
 
             string stateKey = state.Key;
             EditableLabel label = new(stateKey);
@@ -2966,6 +3056,7 @@ namespace XFramework.Editor
             label.EditEnded += EndNameEdit;
             label.ValueCommitted += (_, newValue) => RenameState(stateKey, newValue, label);
             m_StateLabelMap[stateKey] = label;
+            label.style.position = Position.Relative;
             row.Add(label);
 
             Label infoLabel = new(BuildStateInfoText(state));
@@ -2974,6 +3065,7 @@ namespace XFramework.Editor
             infoLabel.style.whiteSpace = WhiteSpace.Normal;
             infoLabel.style.color = TextMuted;
             infoLabel.style.fontSize = BodyFontSize;
+            infoLabel.style.position = Position.Relative;
             string focusClipKey = GetStatePrimaryClipKey(state);
             bool canFocusClip = !string.IsNullOrWhiteSpace(focusClipKey);
             infoLabel.tooltip = canFocusClip
@@ -3018,6 +3110,7 @@ namespace XFramework.Editor
             ApplyClipButtonStyle(playButton, false);
             playButton.style.flexShrink = 0;
             playButton.style.marginLeft = 4;
+            playButton.style.position = Position.Relative;
             row.Add(playButton);
             m_StateButtonMap[state.Key] = playButton;
 
@@ -3033,11 +3126,12 @@ namespace XFramework.Editor
             ApplyClipIconButtonStyle(deleteButton);
             deleteButton.style.flexShrink = 0;
             deleteButton.style.marginLeft = 3;
+            deleteButton.style.position = Position.Relative;
             row.Add(deleteButton);
 
-            container.Add(row);
-            container.Add(editor);
-            return container;
+            wrapper.Add(container);
+            wrapper.Add(editor);
+            return wrapper;
         }
 
         private static string BuildStateInfoText(XAnimationCompiledState state)
@@ -3093,7 +3187,10 @@ namespace XFramework.Editor
             }
 
             m_IsPaused = false;
+            m_Session.SetPaused(false);
             SetPauseButtonState(true, false);
+            SetStepForwardButtonEnabled(true);
+            m_Session.SetTimeScale(GetPlaybackSpeed());
             m_Session.PlayState(state.Key, BuildPreviewTransitionOptions());
             if (!string.IsNullOrEmpty(state.Config.channelName))
             {
@@ -3355,39 +3452,34 @@ namespace XFramework.Editor
 
         private VisualElement CreateClipRow(XAnimationCompiledClip clip, int rowIndex)
         {
-            VisualElement container = new VisualElement();
-            container.style.flexDirection = FlexDirection.Column;
-            container.style.marginBottom = 1;
+            VisualElement wrapper = new VisualElement();
+            wrapper.style.flexDirection = FlexDirection.Column;
+            wrapper.style.marginBottom = 1;
 
-            VisualElement row = new VisualElement();
-            row.style.flexDirection = FlexDirection.Row;
-            row.style.alignItems = Align.Center;
-            row.style.paddingLeft = 4;
-            row.style.paddingRight = 4;
-            row.style.paddingTop = 3;
-            row.style.paddingBottom = 3;
-            row.style.borderTopLeftRadius = 2;
-            row.style.borderTopRightRadius = 2;
-            row.style.borderBottomLeftRadius = 2;
-            row.style.borderBottomRightRadius = 2;
+            VisualElement container = CreateInteractiveRowContainer(rowIndex);
             Color baseColor = rowIndex % 2 == 0 ? ListRowEvenBg : ListRowOddBg;
-            row.style.backgroundColor = baseColor;
-            m_ClipRowMap[clip.Key] = row;
+            m_ClipRowMap[clip.Key] = container;
+            VisualElement progressFill = CreateRowProgressFill();
+            container.Add(progressFill);
             ClipRowVisualState visualState = new()
             {
-                BaseColor = baseColor
+                BaseColor = baseColor,
+                ProgressFill = progressFill,
             };
             m_ClipVisualStateMap[clip.Key] = visualState;
-            row.RegisterCallback<MouseEnterEvent>(_ =>
+            container.RegisterCallback<MouseEnterEvent>(_ =>
             {
                 visualState.Hovered = true;
                 ApplyClipRowVisualState(clip.Key);
             });
-            row.RegisterCallback<MouseLeaveEvent>(_ =>
+            container.RegisterCallback<MouseLeaveEvent>(_ =>
             {
                 visualState.Hovered = false;
                 ApplyClipRowVisualState(clip.Key);
             });
+
+            VisualElement row = CreateRowContent();
+            container.Add(row);
 
             string clipKey = clip.Key;
 
@@ -3399,6 +3491,7 @@ namespace XFramework.Editor
             label.EditEnded += EndNameEdit;
             label.ValueCommitted += (_, newValue) => RenameClip(clipKey, newValue, label);
             m_ClipLabelMap[clipKey] = label;
+            label.style.position = Position.Relative;
             row.Add(label);
 
             VisualElement fileInfo = new VisualElement();
@@ -3408,6 +3501,7 @@ namespace XFramework.Editor
             fileInfo.style.marginLeft = 4;
             fileInfo.style.marginRight = 4;
             fileInfo.style.flexDirection = FlexDirection.Row;
+            fileInfo.style.position = Position.Relative;
             row.Add(fileInfo);
 
             string activeClipPath = clip.Config.clipPath;
@@ -3452,7 +3546,10 @@ namespace XFramework.Editor
                 else
                 {
                     m_IsPaused = false;
+                    m_Session.SetPaused(false);
                     SetPauseButtonState(true, false);
+                    SetStepForwardButtonEnabled(true);
+                    m_Session.SetTimeScale(GetPlaybackSpeed());
                     m_Session.PlayClip(clipKey, channelName, BuildPreviewTransitionOptions());
                     if (!string.IsNullOrEmpty(channelName))
                     {
@@ -3471,6 +3568,7 @@ namespace XFramework.Editor
             ApplyClipButtonStyle(toggleButton, false);
             toggleButton.style.flexShrink = 0;
             toggleButton.style.marginLeft = 4;
+            toggleButton.style.position = Position.Relative;
             row.Add(toggleButton);
 
             Button deleteButton = new(() => DeleteClip(clipKey))
@@ -3485,12 +3583,13 @@ namespace XFramework.Editor
             ApplyClipIconButtonStyle(deleteButton);
             deleteButton.style.flexShrink = 0;
             deleteButton.style.marginLeft = 3;
+            deleteButton.style.position = Position.Relative;
             row.Add(deleteButton);
 
             m_ClipButtonMap[clipKey] = toggleButton;
-            container.Add(row);
-            container.Add(editor);
-            return container;
+            wrapper.Add(container);
+            wrapper.Add(editor);
+            return wrapper;
         }
 
         private static void ConfigureEditableNameLabel(EditableLabel label, float width)
@@ -3521,6 +3620,32 @@ namespace XFramework.Editor
                     input.style.fontSize = BodyFontSize;
                 }
             }
+        }
+
+        private static VisualElement CreateInteractiveRowContainer(int rowIndex)
+        {
+            VisualElement container = new VisualElement();
+            container.style.position = Position.Relative;
+            container.style.overflow = Overflow.Hidden;
+            container.style.borderTopLeftRadius = 2;
+            container.style.borderTopRightRadius = 2;
+            container.style.borderBottomLeftRadius = 2;
+            container.style.borderBottomRightRadius = 2;
+            container.style.backgroundColor = rowIndex % 2 == 0 ? ListRowEvenBg : ListRowOddBg;
+            return container;
+        }
+
+        private static VisualElement CreateRowContent()
+        {
+            VisualElement row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.paddingLeft = 4;
+            row.style.paddingRight = 4;
+            row.style.paddingTop = 3;
+            row.style.paddingBottom = 3;
+            row.style.position = Position.Relative;
+            return row;
         }
 
         private void RegisterClipNameInteractions(EditableLabel label, VisualElement editor, XAnimationCompiledClip clip)
@@ -5957,9 +6082,20 @@ namespace XFramework.Editor
         private VisualElement CreateBlendSampleRow(string stateKey, int sampleIndex, XAnimationBlend1DSampleConfig sample, bool editable)
         {
             VisualElement row = CreateSubBox();
+            string sampleClipKey = sample?.clipKey ?? string.Empty;
+            string rowKey = BuildBlendSampleRuntimeKey(stateKey, sampleIndex);
+            VisualElement weightFill = CreateProgressFill(BlendWeightFillBg);
+            row.Add(weightFill);
             row.style.flexDirection = FlexDirection.Row;
             row.style.alignItems = Align.Center;
             row.style.marginBottom = 3;
+            row.style.position = Position.Relative;
+            row.style.overflow = Overflow.Hidden;
+            m_BlendSampleRowMap[rowKey] = new RowVisualState
+            {
+                BaseColor = new Color(0.14f, 0.14f, 0.15f, 1f),
+                ProgressFill = weightFill,
+            };
 
             Label indexLabel = new($"#{sampleIndex}");
             indexLabel.style.width = 28;
@@ -5967,11 +6103,13 @@ namespace XFramework.Editor
             indexLabel.style.color = TextMuted;
             indexLabel.style.fontSize = BodyFontSize;
             indexLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            indexLabel.style.position = Position.Relative;
             row.Add(indexLabel);
 
-            DropdownField clipField = CreateClipKeyDropdown("clip", sample?.clipKey);
+            DropdownField clipField = CreateClipKeyDropdown("clip", sampleClipKey);
             clipField.SetEnabled(editable);
             clipField.style.flexGrow = 1;
+            clipField.style.position = Position.Relative;
             clipField.RegisterValueChangedCallback(evt => ChangeBlendSampleClipKey(stateKey, sampleIndex, evt.newValue, clipField, evt.previousValue));
             row.Add(clipField);
 
@@ -5982,6 +6120,7 @@ namespace XFramework.Editor
             thresholdLabel.style.color = TextMuted;
             thresholdLabel.style.fontSize = 10;
             thresholdLabel.style.whiteSpace = WhiteSpace.NoWrap;
+            thresholdLabel.style.position = Position.Relative;
             row.Add(thresholdLabel);
 
             FloatField thresholdField = new()
@@ -5994,6 +6133,7 @@ namespace XFramework.Editor
             thresholdField.style.width = 76;
             thresholdField.style.minWidth = 76;
             thresholdField.style.maxWidth = 76;
+            thresholdField.style.position = Position.Relative;
             thresholdField.RegisterValueChangedCallback(evt => ChangeBlendSampleThreshold(stateKey, sampleIndex, evt.newValue, thresholdField, evt.previousValue));
             row.Add(thresholdField);
 
@@ -6006,6 +6146,7 @@ namespace XFramework.Editor
             ApplyTrashButtonIcon(deleteButton);
             ApplyClipIconButtonStyle(deleteButton);
             deleteButton.style.marginLeft = 4;
+            deleteButton.style.position = Position.Relative;
             row.Add(deleteButton);
 
             return row;
@@ -6455,6 +6596,20 @@ namespace XFramework.Editor
                 : "新增一个全局 clip 资源叶子。";
         }
 
+        private void SetStepForwardButtonEnabled(bool enabled)
+        {
+            if (m_StepForwardButton == null)
+            {
+                return;
+            }
+
+            m_StepForwardButton.SetEnabled(enabled);
+            m_StepForwardButton.style.opacity = enabled ? 1f : 0.45f;
+            m_StepForwardButton.tooltip = enabled
+                ? "暂停状态下向后推进固定一帧（1/60s）。"
+                : "需要先加载预览并存在可调试播放。";
+        }
+
         private void SetAutoTransitionButtonsEnabled(bool addEnabled)
         {
             if (m_AddAutoTransitionButton != null)
@@ -6488,21 +6643,58 @@ namespace XFramework.Editor
                 SetStopAllButtonEnabled(false);
                 m_IsPaused = false;
                 SetPauseButtonState(false, false);
+                SetStepForwardButtonEnabled(false);
                 return;
             }
 
             // Collect currently playing clip keys
             HashSet<string> playingClipKeys = null;
+            Dictionary<string, float> clipProgressByKey = null;
             if (m_Session != null && m_Session.IsLoaded)
             {
                 IReadOnlyList<XAnimationCompiledChannel> channels = m_Session.CompiledAsset.Channels;
                 for (int i = 0; i < channels.Count; i++)
                 {
                     XAnimationChannelState state = m_Session.GetChannelState(channels[i].Name);
-                    if (state != null && !string.IsNullOrEmpty(state.clipKey))
+                    if (state == null)
+                    {
+                        continue;
+                    }
+
+                    if (!string.IsNullOrEmpty(state.clipKey))
                     {
                         playingClipKeys ??= new HashSet<string>(StringComparer.Ordinal);
                         playingClipKeys.Add(state.clipKey);
+                        clipProgressByKey ??= new Dictionary<string, float>(StringComparer.Ordinal);
+                        float progress = Mathf.Clamp01(state.normalizedTime);
+                        if (!clipProgressByKey.TryGetValue(state.clipKey, out float existingProgress) || progress > existingProgress)
+                        {
+                            clipProgressByKey[state.clipKey] = progress;
+                        }
+                    }
+
+                    XAnimationBlendClipState[] blendClips = state.blendClips;
+                    if (blendClips == null)
+                    {
+                        continue;
+                    }
+
+                    for (int blendIndex = 0; blendIndex < blendClips.Length; blendIndex++)
+                    {
+                        XAnimationBlendClipState blendClip = blendClips[blendIndex];
+                        if (blendClip == null || string.IsNullOrEmpty(blendClip.clipKey))
+                        {
+                            continue;
+                        }
+
+                        playingClipKeys ??= new HashSet<string>(StringComparer.Ordinal);
+                        playingClipKeys.Add(blendClip.clipKey);
+                        clipProgressByKey ??= new Dictionary<string, float>(StringComparer.Ordinal);
+                        float blendProgress = Mathf.Clamp01(blendClip.normalizedTime);
+                        if (!clipProgressByKey.TryGetValue(blendClip.clipKey, out float existingBlendProgress) || blendProgress > existingBlendProgress)
+                        {
+                            clipProgressByKey[blendClip.clipKey] = blendProgress;
+                        }
                     }
                 }
             }
@@ -6514,6 +6706,7 @@ namespace XFramework.Editor
                 m_IsPaused = false;
             }
             SetPauseButtonState(hasPlaying, m_IsPaused);
+            SetStepForwardButtonEnabled(hasPlaying);
 
             foreach (KeyValuePair<string, VisualElement> kvp in m_ClipRowMap)
             {
@@ -6521,6 +6714,9 @@ namespace XFramework.Editor
                 if (m_ClipVisualStateMap.TryGetValue(kvp.Key, out ClipRowVisualState visualState))
                 {
                     visualState.Playing = isPlaying;
+                    visualState.Progress = isPlaying && clipProgressByKey != null && clipProgressByKey.TryGetValue(kvp.Key, out float progress)
+                        ? progress
+                        : 0f;
                     ApplyClipRowVisualState(kvp.Key);
                 }
                 else
@@ -6543,10 +6739,12 @@ namespace XFramework.Editor
         {
             if (m_StateRowMap.Count == 0)
             {
+                RefreshBlendSampleRuntimeState();
                 return;
             }
 
             HashSet<string> playingStateKeys = null;
+            Dictionary<string, float> stateProgressByKey = null;
             if (m_Session != null && m_Session.IsLoaded)
             {
                 IReadOnlyList<XAnimationCompiledChannel> channels = m_Session.CompiledAsset.Channels;
@@ -6557,6 +6755,8 @@ namespace XFramework.Editor
                     {
                         playingStateKeys ??= new HashSet<string>(StringComparer.Ordinal);
                         playingStateKeys.Add(state.stateKey);
+                        stateProgressByKey ??= new Dictionary<string, float>(StringComparer.Ordinal);
+                        stateProgressByKey[state.stateKey] = Mathf.Clamp01(state.normalizedTime);
                     }
                 }
             }
@@ -6564,12 +6764,25 @@ namespace XFramework.Editor
             foreach (KeyValuePair<string, VisualElement> kvp in m_StateRowMap)
             {
                 bool isPlaying = playingStateKeys != null && playingStateKeys.Contains(kvp.Key);
-                kvp.Value.style.backgroundColor = isPlaying ? PlayingBg : ListRowEvenBg;
+                if (m_StateVisualStateMap.TryGetValue(kvp.Key, out RowVisualState visualState))
+                {
+                    visualState.Playing = isPlaying;
+                    visualState.Progress = isPlaying && stateProgressByKey != null && stateProgressByKey.TryGetValue(kvp.Key, out float progress)
+                        ? progress
+                        : 0f;
+                    ApplyStateRowVisualState(kvp.Key);
+                }
+                else
+                {
+                    kvp.Value.style.backgroundColor = isPlaying ? PlayingBg : ListRowEvenBg;
+                }
                 if (m_StateButtonMap.TryGetValue(kvp.Key, out Button button))
                 {
                     ApplyClipButtonStyle(button, isPlaying);
                 }
             }
+
+            RefreshBlendSampleRuntimeState();
         }
 
         private bool HasAnyPlayingChannel()
@@ -6591,6 +6804,138 @@ namespace XFramework.Editor
             return false;
         }
 
+        private static VisualElement CreateRowProgressFill()
+        {
+            return CreateProgressFill(ProgressFillBg);
+        }
+
+        private static VisualElement CreateProgressFill(Color color)
+        {
+            VisualElement fill = new();
+            fill.pickingMode = PickingMode.Ignore;
+            fill.style.position = Position.Absolute;
+            fill.style.left = 0f;
+            fill.style.top = 0f;
+            fill.style.bottom = 0f;
+            fill.style.width = Length.Percent(0f);
+            fill.style.backgroundColor = color;
+            fill.style.visibility = Visibility.Hidden;
+            return fill;
+        }
+
+        private void ApplyStateRowVisualState(string stateKey)
+        {
+            if (!m_StateRowMap.TryGetValue(stateKey, out VisualElement row) ||
+                !m_StateVisualStateMap.TryGetValue(stateKey, out RowVisualState visualState))
+            {
+                return;
+            }
+
+            row.style.backgroundColor = visualState.Playing
+                ? PlayingBg
+                : visualState.Hovered
+                    ? HoverBg
+                    : visualState.BaseColor;
+            ApplyRowProgressVisualState(visualState);
+        }
+
+        private static void ApplyRowProgressVisualState(RowVisualState visualState)
+        {
+            if (visualState?.ProgressFill == null)
+            {
+                return;
+            }
+
+            float progress = Mathf.Clamp01(visualState.Progress);
+            visualState.ProgressFill.style.width = Length.Percent(progress * 100f);
+            visualState.ProgressFill.style.visibility = progress > 0f ? Visibility.Visible : Visibility.Hidden;
+        }
+
+        private void RefreshBlendSampleRuntimeState()
+        {
+            if (m_BlendSampleRowMap.Count == 0)
+            {
+                return;
+            }
+
+            Dictionary<string, float> sampleWeightByRowKey = null;
+            if (m_Session != null && m_Session.IsLoaded)
+            {
+                IReadOnlyList<XAnimationCompiledChannel> channels = m_Session.CompiledAsset.Channels;
+                for (int i = 0; i < channels.Count; i++)
+                {
+                    XAnimationChannelState channelState = m_Session.GetChannelState(channels[i].Name);
+                    if (channelState?.blendClips == null || string.IsNullOrWhiteSpace(channelState.stateKey))
+                    {
+                        continue;
+                    }
+
+                    for (int blendIndex = 0; blendIndex < channelState.blendClips.Length; blendIndex++)
+                    {
+                        XAnimationBlendClipState blendClip = channelState.blendClips[blendIndex];
+                        if (blendClip == null || string.IsNullOrWhiteSpace(blendClip.clipKey))
+                        {
+                            continue;
+                        }
+
+                        if (!TryFindBlendSampleRowKey(channelState.stateKey, blendClip.clipKey, out string rowKey))
+                        {
+                            continue;
+                        }
+
+                        sampleWeightByRowKey ??= new Dictionary<string, float>(StringComparer.Ordinal);
+                        if (!sampleWeightByRowKey.TryGetValue(rowKey, out float existingWeight) || blendClip.weight > existingWeight)
+                        {
+                            sampleWeightByRowKey[rowKey] = Mathf.Clamp01(blendClip.weight);
+                        }
+                    }
+                }
+            }
+
+            foreach (KeyValuePair<string, RowVisualState> kvp in m_BlendSampleRowMap)
+            {
+                RowVisualState visualState = kvp.Value;
+                visualState.Playing = false;
+                visualState.Hovered = false;
+                visualState.Progress = sampleWeightByRowKey != null && sampleWeightByRowKey.TryGetValue(kvp.Key, out float weight)
+                    ? weight
+                    : 0f;
+                ApplyRowProgressVisualState(visualState);
+            }
+        }
+
+        private bool TryFindBlendSampleRowKey(string stateKey, string clipKey, out string rowKey)
+        {
+            rowKey = null;
+            if (m_Session == null || !m_Session.IsLoaded || string.IsNullOrWhiteSpace(stateKey) || string.IsNullOrWhiteSpace(clipKey))
+            {
+                return false;
+            }
+
+            if (m_Session.CompiledAsset.GetState(stateKey) is not XAnimationCompiledBlend1DState blendState)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < blendState.Samples.Count; i++)
+            {
+                if (!string.Equals(blendState.Samples[i].Config.clipKey, clipKey, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                rowKey = BuildBlendSampleRuntimeKey(stateKey, i);
+                return true;
+            }
+
+            return false;
+        }
+
+        private static string BuildBlendSampleRuntimeKey(string stateKey, int sampleIndex)
+        {
+            return $"blend-sample:{stateKey}:{sampleIndex}";
+        }
+
         private void ApplyClipRowVisualState(string clipKey)
         {
             if (!m_ClipRowMap.TryGetValue(clipKey, out VisualElement row) ||
@@ -6606,6 +6951,7 @@ namespace XFramework.Editor
                     : visualState.Hovered
                         ? HoverBg
                         : visualState.BaseColor;
+            ApplyRowProgressVisualState(visualState);
         }
 
         private void RebuildChannelControls()
@@ -7441,6 +7787,7 @@ namespace XFramework.Editor
             m_FollowLatestLog = true;
             m_IsPaused = false;
             SetPauseButtonState(false, false);
+            SetStepForwardButtonEnabled(false);
             SetStopAllButtonEnabled(false);
             SetAddClipButtonEnabled(false);
             SetAddChannelButtonEnabled(false);
@@ -7538,6 +7885,11 @@ namespace XFramework.Editor
                 return;
             }
 
+            if (target.parent != m_CueLogContainer.contentContainer)
+            {
+                return;
+            }
+
             m_CueLogContainer.ScrollTo(target);
 
             float viewportHeight = m_CueLogContainer.contentViewport.layout.height;
@@ -7564,6 +7916,11 @@ namespace XFramework.Editor
             void ApplyScroll()
             {
                 if (m_SelectedLogId.HasValue || !m_FollowLatestLog)
+                {
+                    return;
+                }
+
+                if (target.parent != m_CueLogContainer.contentContainer)
                 {
                     return;
                 }

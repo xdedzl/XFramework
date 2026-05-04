@@ -1,15 +1,22 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
+using XFramework.Tasks;
 
 namespace XFramework.Animation
 {
     public sealed class XAnimationDriver : IDisposable
     {
         private readonly XAnimationAssetLoader m_AssetLoader = new();
+        private readonly Dictionary<int, PendingPlaybackExit> m_PendingPlaybackExits = new();
 
         private XAnimationCompiledAsset m_CompiledAsset;
         private XAnimationContext m_Context;
         private XAnimationPlayer m_Player;
+        private bool m_IsPaused;
+        private float m_TimeScale = 1f;
+        private bool m_IsStepping;
+        private bool m_IsRegisteredForAutomaticUpdate;
 
         public event Action<XAnimationCueEvent> CueTriggered;
         public event Action<XAnimationStateEvent> OnStateEnter;
@@ -18,67 +25,58 @@ namespace XFramework.Animation
         public Animator Animator { get; private set; }
         public XAnimationAsset Asset => m_CompiledAsset?.Asset;
         public XAnimationCompiledAsset CompiledAsset => m_CompiledAsset;
+        public bool IsPaused => m_IsPaused;
+        public float TimeScale => m_TimeScale;
+        internal bool IsRegisteredForAutomaticUpdate => m_IsRegisteredForAutomaticUpdate && m_Player != null;
+
+        private sealed class PendingPlaybackExit
+        {
+            public PendingPlaybackExit(
+                int playbackId,
+                string channelName,
+                string requestedStateKey,
+                string requestedClipKey,
+                bool isTemporaryState,
+                XAwaitableTask<XAnimationPlaybackExitResult> task)
+            {
+                PlaybackId = playbackId;
+                ChannelName = channelName ?? string.Empty;
+                RequestedStateKey = requestedStateKey ?? string.Empty;
+                RequestedClipKey = requestedClipKey ?? string.Empty;
+                IsTemporaryState = isTemporaryState;
+                Task = task ?? throw new ArgumentNullException(nameof(task));
+            }
+
+            public int PlaybackId { get; }
+            public string ChannelName { get; }
+            public string RequestedStateKey { get; }
+            public string RequestedClipKey { get; }
+            public bool IsTemporaryState { get; }
+            public XAwaitableTask<XAnimationPlaybackExitResult> Task { get; }
+        }
 
         public void Initialize(string assetPath, Animator animator)
         {
-            if (string.IsNullOrWhiteSpace(assetPath))
-            {
-                throw new XFrameworkException("XAnimationDriver assetPath cannot be empty.");
-            }
-
-            if (animator == null)
-            {
-                throw new XFrameworkException("XAnimationDriver animator cannot be null.");
-            }
-
+            ValidateAssetPath(assetPath);
+            ValidateAnimator(animator);
             DisposePlayer();
-
-            Initialize(m_AssetLoader.Load(assetPath), animator);
+            InitializeLoadedAsset(m_AssetLoader.Load(assetPath), animator);
         }
 
         public void Initialize(TextAsset animationAsset, Animator animator)
         {
-            if (animationAsset == null)
-            {
-                throw new XFrameworkException("XAnimationDriver animationAsset cannot be null.");
-            }
-
-            if (animator == null)
-            {
-                throw new XFrameworkException("XAnimationDriver animator cannot be null.");
-            }
-
+            ValidateAnimationAsset(animationAsset);
+            ValidateAnimator(animator);
             DisposePlayer();
-
-            Initialize(m_AssetLoader.Load(animationAsset), animator);
+            InitializeLoadedAsset(m_AssetLoader.Load(animationAsset), animator);
         }
 
         public void Initialize(XAnimationCompiledAsset compiledAsset, Animator animator)
         {
-            if (compiledAsset == null)
-            {
-                throw new XFrameworkException("XAnimationDriver compiledAsset cannot be null.");
-            }
-
-            if (animator == null)
-            {
-                throw new XFrameworkException("XAnimationDriver animator cannot be null.");
-            }
-
+            ValidateCompiledAsset(compiledAsset);
+            ValidateAnimator(animator);
             DisposePlayer();
-
-            m_CompiledAsset = compiledAsset;
-            if (m_CompiledAsset.Asset.graph != null && m_CompiledAsset.Asset.graph.enabled)
-            {
-                throw new XFrameworkException("XAnimationStateGraph runtime is not supported in phase 1. Disable graph.enabled before initialization.");
-            }
-
-            Animator = animator;
-            m_Context = new XAnimationContext(m_CompiledAsset.Parameters);
-            m_Player = new XAnimationPlayer(m_CompiledAsset, animator, m_Context);
-            m_Player.CueTriggered += OnCueTriggered;
-            m_Player.StateEntered += OnPlayerStateEntered;
-            m_Player.StateExited += OnPlayerStateExited;
+            InitializeLoadedAsset(compiledAsset, animator);
         }
 
         public void SetParameter(string key, float value)
@@ -111,21 +109,23 @@ namespace XFramework.Animation
             m_Context.ResetTrigger(key);
         }
 
-        public void PlayClip(
+        public XAnimationPlaybackHandle PlayClip(
             string clipName,
             string channelName,
             XAnimationTransitionOptions transition = default)
         {
             EnsureInitialized();
-            m_Player.PlayClip(clipName, channelName, NormalizeTransitionOptions(transition));
+            XAnimationPlaybackStartInfo startInfo = m_Player.PlayClip(clipName, channelName, NormalizeTransitionOptions(transition));
+            return CreatePlaybackHandle(startInfo, string.Empty, clipName);
         }
 
-        public void PlayState(
+        public XAnimationPlaybackHandle PlayState(
             string stateName,
             XAnimationTransitionOptions transition = default)
         {
             EnsureInitialized();
-            m_Player.PlayState(stateName, NormalizeTransitionOptions(transition));
+            XAnimationPlaybackStartInfo startInfo = m_Player.PlayState(stateName, NormalizeTransitionOptions(transition));
+            return CreatePlaybackHandle(startInfo, stateName, string.Empty);
         }
 
         public void Stop(string channelName, float fadeOut = default)
@@ -158,6 +158,47 @@ namespace XFramework.Animation
             m_Player.SetRootMotionEnabled(enabled);
         }
 
+        public void Pause()
+        {
+            SetPaused(true);
+        }
+
+        public void Resume()
+        {
+            SetPaused(false);
+        }
+
+        public void SetPaused(bool paused)
+        {
+            m_IsPaused = paused;
+        }
+
+        public void SetTimeScale(float timeScale)
+        {
+            m_TimeScale = Mathf.Max(0f, timeScale);
+        }
+
+        public void Step(float deltaTime)
+        {
+            EnsureInitialized();
+            if (deltaTime <= 0f)
+            {
+                throw new XFrameworkException("XAnimation step deltaTime must be greater than 0.");
+            }
+
+            bool originalPaused = m_IsPaused;
+            m_IsStepping = true;
+            try
+            {
+                UpdateInternal(deltaTime);
+            }
+            finally
+            {
+                m_IsStepping = false;
+                m_IsPaused = originalPaused;
+            }
+        }
+
         public XAnimationChannelState GetChannelState(string channelName)
         {
             EnsureInitialized();
@@ -188,18 +229,42 @@ namespace XFramework.Animation
             return m_Player.GetClipDuration(clipKey);
         }
 
-        public void Update(float deltaTime)
+        internal void Update(float deltaTime)
         {
             EnsureInitialized();
-            m_Player.Update(deltaTime);
+            UpdateInternal(deltaTime);
         }
 
         public void Dispose()
         {
+            UnregisterFromAutomaticUpdate();
             DisposePlayer();
+            m_PendingPlaybackExits.Clear();
             m_Context = null;
             m_CompiledAsset = null;
             Animator = null;
+        }
+
+        internal bool TryGetPlaybackState(int playbackId, string channelName, out XAnimationChannelState state)
+        {
+            state = null;
+            if (m_Player == null || playbackId <= 0 || string.IsNullOrWhiteSpace(channelName))
+            {
+                return false;
+            }
+
+            if (!m_Player.TryGetCurrentState(channelName, out state) || state == null)
+            {
+                return false;
+            }
+
+            if (state.playbackId != playbackId)
+            {
+                state = null;
+                return false;
+            }
+
+            return true;
         }
 
         private void EnsureInitialized()
@@ -210,6 +275,53 @@ namespace XFramework.Animation
             }
         }
 
+        private static void ValidateAssetPath(string assetPath)
+        {
+            if (string.IsNullOrWhiteSpace(assetPath))
+            {
+                throw new XFrameworkException("XAnimationDriver assetPath cannot be empty.");
+            }
+        }
+
+        private static void ValidateAnimationAsset(TextAsset animationAsset)
+        {
+            if (animationAsset == null)
+            {
+                throw new XFrameworkException("XAnimationDriver animationAsset cannot be null.");
+            }
+        }
+
+        private static void ValidateCompiledAsset(XAnimationCompiledAsset compiledAsset)
+        {
+            if (compiledAsset == null)
+            {
+                throw new XFrameworkException("XAnimationDriver compiledAsset cannot be null.");
+            }
+        }
+
+        private static void ValidateAnimator(Animator animator)
+        {
+            if (animator == null)
+            {
+                throw new XFrameworkException("XAnimationDriver animator cannot be null.");
+            }
+        }
+
+        private void InitializeLoadedAsset(XAnimationCompiledAsset compiledAsset, Animator animator)
+        {
+            m_CompiledAsset = compiledAsset;
+            m_PendingPlaybackExits.Clear();
+            Animator = animator;
+            m_Context = new XAnimationContext(m_CompiledAsset.Parameters);
+            m_Player = new XAnimationPlayer(m_CompiledAsset, animator, m_Context);
+            m_Player.CueTriggered += OnCueTriggered;
+            m_Player.StateEntered += OnPlayerStateEntered;
+            m_Player.StateExited += OnPlayerStateExited;
+            m_IsPaused = false;
+            m_TimeScale = 1f;
+            RegisterForAutomaticUpdate();
+        }
+
         private void DisposePlayer()
         {
             if (m_Player == null)
@@ -217,10 +329,10 @@ namespace XFramework.Animation
                 return;
             }
 
+            m_Player.Dispose();
             m_Player.CueTriggered -= OnCueTriggered;
             m_Player.StateEntered -= OnPlayerStateEntered;
             m_Player.StateExited -= OnPlayerStateExited;
-            m_Player.Dispose();
             m_Player = null;
         }
 
@@ -236,6 +348,24 @@ namespace XFramework.Animation
 
         private void OnPlayerStateExited(XAnimationStateEvent stateEvent)
         {
+            if (stateEvent != null &&
+                stateEvent.playbackId > 0 &&
+                m_PendingPlaybackExits.TryGetValue(stateEvent.playbackId, out PendingPlaybackExit pending))
+            {
+                m_PendingPlaybackExits.Remove(stateEvent.playbackId);
+                XAnimationPlaybackExitResult result = new()
+                {
+                    WasStarted = true,
+                    PlaybackId = pending.PlaybackId,
+                    ChannelName = pending.ChannelName,
+                    RequestedStateKey = pending.RequestedStateKey,
+                    RequestedClipKey = pending.RequestedClipKey,
+                    IsTemporaryState = pending.IsTemporaryState,
+                    ExitReason = stateEvent.exitReason,
+                };
+                pending.Task.SetResult(result);
+            }
+
             OnStateExit?.Invoke(stateEvent);
         }
 
@@ -250,6 +380,118 @@ namespace XFramework.Animation
                 priority = options.priority,
                 interruptible = options.interruptible,
             };
+        }
+
+        private XAnimationPlaybackHandle CreatePlaybackHandle(
+            XAnimationPlaybackStartInfo startInfo,
+            string requestedStateKey,
+            string requestedClipKey)
+        {
+            requestedStateKey ??= string.Empty;
+            requestedClipKey ??= string.Empty;
+
+            if (!startInfo.Started)
+            {
+                XAnimationPlaybackExitResult result = new()
+                {
+                    WasStarted = false,
+                    PlaybackId = 0,
+                    ChannelName = startInfo.ChannelName,
+                    RequestedStateKey = requestedStateKey,
+                    RequestedClipKey = requestedClipKey,
+                    IsTemporaryState = startInfo.IsTemporaryState,
+                    ExitReason = null,
+                };
+                return new XAnimationPlaybackHandle(
+                    this,
+                    false,
+                    0,
+                    startInfo.ChannelName,
+                    requestedStateKey,
+                    requestedClipKey,
+                    startInfo.IsTemporaryState,
+                    CreateCompletedExitTask(result));
+            }
+
+            XAwaitableTask<XAnimationPlaybackExitResult> task = new();
+            PendingPlaybackExit pending = new(
+                startInfo.PlaybackId,
+                startInfo.ChannelName,
+                requestedStateKey,
+                requestedClipKey,
+                startInfo.IsTemporaryState,
+                task);
+            m_PendingPlaybackExits[startInfo.PlaybackId] = pending;
+            return new XAnimationPlaybackHandle(
+                this,
+                true,
+                startInfo.PlaybackId,
+                startInfo.ChannelName,
+                requestedStateKey,
+                requestedClipKey,
+                startInfo.IsTemporaryState,
+                task);
+        }
+
+        private static XAwaitableTask<XAnimationPlaybackExitResult> CreateCompletedExitTask(XAnimationPlaybackExitResult result)
+        {
+            XAwaitableTask<XAnimationPlaybackExitResult> task = new();
+            task.SetResult(result);
+            return task;
+        }
+
+        internal void TickFromScheduler(float deltaTime)
+        {
+            if (m_Player == null || m_IsPaused || m_IsStepping)
+            {
+                return;
+            }
+
+            UpdateInternal(deltaTime * m_TimeScale);
+        }
+
+        private void UpdateInternal(float deltaTime)
+        {
+            if (deltaTime <= 0f || m_Player == null)
+            {
+                return;
+            }
+
+            m_Player.Update(deltaTime);
+        }
+
+        private void RegisterForAutomaticUpdate()
+        {
+            if (m_IsRegisteredForAutomaticUpdate)
+            {
+                return;
+            }
+
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+            {
+                XAnimationEditorUpdateRunner.Register(this);
+                m_IsRegisteredForAutomaticUpdate = true;
+                return;
+            }
+#endif
+
+            XAnimationRuntimePlayerLoopRunner.Register(this);
+            m_IsRegisteredForAutomaticUpdate = true;
+        }
+
+        private void UnregisterFromAutomaticUpdate()
+        {
+            if (!m_IsRegisteredForAutomaticUpdate)
+            {
+                return;
+            }
+
+#if UNITY_EDITOR
+            XAnimationEditorUpdateRunner.Unregister(this);
+#endif
+            XAnimationRuntimePlayerLoopRunner.Unregister(this);
+            m_IsRegisteredForAutomaticUpdate = false;
         }
     }
 }

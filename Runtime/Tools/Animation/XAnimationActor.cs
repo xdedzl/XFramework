@@ -11,7 +11,7 @@ namespace XFramework.Animation
         [SerializeField] private Animator m_Animator;
         [SerializeField] private bool m_InitializeOnAwake = true;
         [SerializeField] private bool m_PlayOnStart = true;
-        [SerializeField] private string m_StartStateKey = "idle";
+        [SerializeField] private string m_StartStateKey = "";
         [SerializeField] private float m_TimeScale = 1f;
 
         private readonly XAnimationDriver m_Driver = new();
@@ -32,7 +32,14 @@ namespace XFramework.Animation
         public float TimeScale
         {
             get => m_TimeScale;
-            set => m_TimeScale = Mathf.Max(0f, value);
+            set
+            {
+                m_TimeScale = Mathf.Max(0f, value);
+                if (m_IsInitialized)
+                {
+                    m_Driver.SetTimeScale(m_TimeScale);
+                }
+            }
         }
 
         private void Awake()
@@ -56,16 +63,6 @@ namespace XFramework.Animation
             }
         }
 
-        private void Update()
-        {
-            if (!m_IsInitialized || m_IsPaused)
-            {
-                return;
-            }
-
-            m_Driver.Update(Time.deltaTime * m_TimeScale);
-        }
-
         private void OnDestroy()
         {
             DisposeDriver();
@@ -74,27 +71,13 @@ namespace XFramework.Animation
         public void SetAnimationAsset(TextAsset animationAsset, bool initializeNow = true)
         {
             m_AnimationAsset = animationAsset;
-            if (initializeNow)
-            {
-                Initialize();
-            }
-            else
-            {
-                DisposeDriver();
-            }
+            RefreshInitialization(initializeNow);
         }
 
         public void SetAnimator(Animator animator, bool initializeNow = true)
         {
             m_Animator = animator;
-            if (initializeNow)
-            {
-                Initialize();
-            }
-            else
-            {
-                DisposeDriver();
-            }
+            RefreshInitialization(initializeNow);
         }
 
         public void Initialize()
@@ -126,19 +109,21 @@ namespace XFramework.Animation
             m_Driver.CueTriggered += HandleCueTriggered;
             m_Driver.OnStateEnter += HandleStateEnter;
             m_Driver.OnStateExit += HandleStateExit;
+            m_Driver.SetPaused(m_IsPaused);
+            m_Driver.SetTimeScale(m_TimeScale);
             m_IsInitialized = true;
         }
 
-        public void PlayClip(string clipName, string channelName, XAnimationTransitionOptions transition = default)
+        public XAnimationPlaybackHandle PlayClip(string clipName, string channelName, XAnimationTransitionOptions transition = default)
         {
             EnsureInitialized();
-            m_Driver.PlayClip(clipName, channelName, transition);
+            return m_Driver.PlayClip(clipName, channelName, transition);
         }
 
-        public void PlayState(string stateName, XAnimationTransitionOptions transition = default)
+        public XAnimationPlaybackHandle PlayState(string stateName, XAnimationTransitionOptions transition = default)
         {
             EnsureInitialized();
-            m_Driver.PlayState(stateName, transition);
+            return m_Driver.PlayState(stateName, transition);
         }
 
         public void Play(string clipKey)
@@ -146,14 +131,14 @@ namespace XFramework.Animation
             throw new XFrameworkException("XAnimationActor.Play(string clipKey) has been removed. Use PlayClip(clipName, channelName, ...) instead.");
         }
 
-        public void Play(string clipKey, string channelName)
+        public XAnimationPlaybackHandle Play(string clipKey, string channelName)
         {
-            PlayClip(clipKey, channelName);
+            return PlayClip(clipKey, channelName);
         }
 
-        public void PlayState(string stateKey)
+        public XAnimationPlaybackHandle PlayState(string stateKey)
         {
-            PlayState(stateKey, default);
+            return PlayState(stateKey, default);
         }
 
         public void Stop(string channelName, float fadeOut = default)
@@ -171,16 +156,34 @@ namespace XFramework.Animation
         public void Pause()
         {
             m_IsPaused = true;
+            if (m_IsInitialized)
+            {
+                m_Driver.Pause();
+            }
         }
 
         public void Resume()
         {
             m_IsPaused = false;
+            if (m_IsInitialized)
+            {
+                m_Driver.Resume();
+            }
         }
 
         public void SetPaused(bool paused)
         {
             m_IsPaused = paused;
+            if (m_IsInitialized)
+            {
+                m_Driver.SetPaused(paused);
+            }
+        }
+
+        public void Step(float deltaTime)
+        {
+            EnsureInitialized();
+            m_Driver.Step(deltaTime);
         }
 
         public void SetParameter(string key, float value)
@@ -283,6 +286,17 @@ namespace XFramework.Animation
             {
                 Initialize();
             }
+        }
+
+        private void RefreshInitialization(bool initializeNow)
+        {
+            if (initializeNow)
+            {
+                Initialize();
+                return;
+            }
+
+            DisposeDriver();
         }
 
         private void DisposeDriver()

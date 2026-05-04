@@ -79,6 +79,8 @@ namespace XFramework.Editor
         public bool IsLoaded => m_Driver != null && m_Animator != null;
         public bool IsOverrideAsset => m_IsOverrideAsset;
         public int LogVersion => m_LogVersion;
+        public bool IsPaused => m_Driver != null && m_Driver.IsPaused;
+        public float TimeScale => m_Driver != null ? m_Driver.TimeScale : 1f;
 
         public void Load(GameObject prefabAsset, string assetPath)
         {
@@ -138,27 +140,6 @@ namespace XFramework.Editor
             SetRootMotionEnabled(false);
         }
 
-        public void Update(float deltaTime)
-        {
-            if (!IsLoaded)
-            {
-                return;
-            }
-
-            float clampedDeltaTime = Mathf.Clamp(deltaTime, 0f, 0.1f);
-            if (clampedDeltaTime <= 0f)
-            {
-                return;
-            }
-
-            Transform animatorTransform = m_Animator.transform;
-            Vector3 positionBeforeUpdate = animatorTransform.position;
-            Quaternion rotationBeforeUpdate = animatorTransform.rotation;
-
-            m_Driver.Update(clampedDeltaTime);
-            ApplyPreviewRootMotionFallback(animatorTransform, positionBeforeUpdate, rotationBeforeUpdate);
-        }
-
         public void Render(Vector2 size)
         {
             if (!IsLoaded)
@@ -175,6 +156,71 @@ namespace XFramework.Editor
             camera.targetTexture = m_RenderTexture;
             camera.Render();
             camera.targetTexture = null;
+        }
+
+        public void Pause()
+        {
+            if (!IsLoaded)
+            {
+                return;
+            }
+
+            m_Driver.Pause();
+        }
+
+        public void Resume()
+        {
+            if (!IsLoaded)
+            {
+                return;
+            }
+
+            m_Driver.Resume();
+        }
+
+        public void SetPaused(bool paused)
+        {
+            if (!IsLoaded)
+            {
+                return;
+            }
+
+            m_Driver.SetPaused(paused);
+        }
+
+        public void SetTimeScale(float timeScale)
+        {
+            if (!IsLoaded)
+            {
+                return;
+            }
+
+            m_Driver.SetTimeScale(timeScale);
+        }
+
+        public void Step(float deltaTime)
+        {
+            EnsureLoaded();
+            float clampedDeltaTime = Mathf.Clamp(deltaTime, 0f, 0.1f);
+            if (clampedDeltaTime <= 0f)
+            {
+                throw new XFrameworkException("XAnimation preview step deltaTime must be greater than 0.");
+            }
+
+            CaptureRootMotionSyncState(out Vector3 positionBeforeUpdate, out Quaternion rotationBeforeUpdate);
+            m_Driver.Step(clampedDeltaTime);
+            ApplyPreviewRootMotionFallback(positionBeforeUpdate, rotationBeforeUpdate);
+        }
+
+        public void SyncPreviewFrame()
+        {
+            if (!IsLoaded)
+            {
+                return;
+            }
+
+            CaptureRootMotionSyncState(out Vector3 positionBeforeUpdate, out Quaternion rotationBeforeUpdate);
+            ApplyPreviewRootMotionFallback(positionBeforeUpdate, rotationBeforeUpdate);
         }
 
         public void PlayClip(
@@ -415,18 +461,6 @@ namespace XFramework.Editor
             XAnimationChannelConfig channel = m_CompiledAsset.GetChannel(oldName).Config;
             channel.name = newName;
 
-            if (asset.graph?.states != null)
-            {
-                for (int i = 0; i < asset.graph.states.Length; i++)
-                {
-                    XAnimationGraphStateConfig state = asset.graph.states[i];
-                    if (state != null && string.Equals(state.channelName, oldName, StringComparison.Ordinal))
-                    {
-                        state.channelName = newName;
-                    }
-                }
-            }
-
             RenameStateChannelReferences(asset, oldName, newName);
 
             RebuildDriverAndSave();
@@ -512,8 +546,21 @@ namespace XFramework.Editor
             return m_RootMotionEnabled;
         }
 
-        private void ApplyPreviewRootMotionFallback(Transform animatorTransform, Vector3 positionBeforeUpdate, Quaternion rotationBeforeUpdate)
+        private void CaptureRootMotionSyncState(out Vector3 positionBeforeUpdate, out Quaternion rotationBeforeUpdate)
         {
+            Transform animatorTransform = m_Animator != null ? m_Animator.transform : null;
+            positionBeforeUpdate = animatorTransform != null ? animatorTransform.position : Vector3.zero;
+            rotationBeforeUpdate = animatorTransform != null ? animatorTransform.rotation : Quaternion.identity;
+        }
+
+        private void ApplyPreviewRootMotionFallback(Vector3 positionBeforeUpdate, Quaternion rotationBeforeUpdate)
+        {
+            Transform animatorTransform = m_Animator != null ? m_Animator.transform : null;
+            if (animatorTransform == null)
+            {
+                return;
+            }
+
             if (!m_RootMotionEnabled || !m_Animator.applyRootMotion)
             {
                 m_ManualRootMotionPlaybackId = 0;
@@ -892,18 +939,6 @@ namespace XFramework.Editor
                     if (cue != null && string.Equals(cue.clipKey, oldKey, StringComparison.Ordinal))
                     {
                         cue.clipKey = newKey;
-                    }
-                }
-            }
-
-            if (asset.graph?.states != null)
-            {
-                for (int i = 0; i < asset.graph.states.Length; i++)
-                {
-                    XAnimationGraphStateConfig state = asset.graph.states[i];
-                    if (state != null && string.Equals(state.clipKey, oldKey, StringComparison.Ordinal))
-                    {
-                        state.clipKey = newKey;
                     }
                 }
             }
@@ -1843,6 +1878,8 @@ namespace XFramework.Editor
                 m_Driver.CueTriggered += OnCueTriggered;
                 m_Driver.OnStateEnter += OnStateEnter;
                 m_Driver.OnStateExit += OnStateExit;
+                m_Driver.SetPaused(false);
+                m_Driver.SetTimeScale(1f);
                 m_Driver.SetRootMotionEnabled(m_RootMotionEnabled);
                 RestorePreviewParameters();
             }

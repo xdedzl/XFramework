@@ -43,7 +43,7 @@ namespace XFramework.Animation
         public XAnimationContext Context { get; }
         public bool IsDisposed { get; private set; }
 
-        public void PlayClip(string clipKey, string channelName, XAnimationTransitionOptions transition = default)
+        internal XAnimationPlaybackStartInfo PlayClip(string clipKey, string channelName, XAnimationTransitionOptions transition = default)
         {
             ThrowIfDisposed();
             if (!CompiledAsset.TryGetClipIndex(clipKey, out int clipIndex))
@@ -59,18 +59,18 @@ namespace XFramework.Animation
             }
 
             XAnimationCompiledSingleState temporaryState = CreateTemporaryClipState(clip, clipIndex, channel, channelIndex);
-            TryPlayCompiledState(temporaryState, channel, transition);
+            return TryPlayCompiledState(temporaryState, channel, transition);
         }
 
-        public void PlayState(string stateKey, XAnimationTransitionOptions transition = default)
+        internal XAnimationPlaybackStartInfo PlayState(string stateKey, XAnimationTransitionOptions transition = default)
         {
             ThrowIfDisposed();
             XAnimationCompiledState state = CompiledAsset.GetState(stateKey);
             XAnimationCompiledChannel channel = GetStateChannel(state);
-            TryPlayCompiledState(state, channel, transition);
+            return TryPlayCompiledState(state, channel, transition);
         }
 
-        private bool TryPlayCompiledState(
+        private XAnimationPlaybackStartInfo TryPlayCompiledState(
             XAnimationCompiledState state,
             XAnimationCompiledChannel channel,
             XAnimationTransitionOptions transition)
@@ -99,12 +99,18 @@ namespace XFramework.Animation
             if (!m_ChannelMap[channel.Name].TryPlay(
                 (playbackId, actualOptions) => CreateStatePlayback(playbackId, channel.Name, state, actualOptions),
                 options,
-                m_CueDispatcher))
+                m_CueDispatcher,
+                out XAnimationStatePlaybackInstance playback))
             {
-                return false;
+                string clipKey = state switch
+                {
+                    XAnimationCompiledSingleState singleState => ((XAnimationCompiledClip)CompiledAsset.Clips[singleState.ClipIndex]).Key,
+                    _ => string.Empty,
+                };
+                return XAnimationPlaybackStartInfo.CreateFailed(channel.Name, state.Key, clipKey, IsTemporaryClipState(state.Key));
             }
 
-            return true;
+            return XAnimationPlaybackStartInfo.CreateStarted(playback);
         }
 
         public void Stop(string channelName, float fadeOut = default)
@@ -508,7 +514,7 @@ namespace XFramework.Animation
                 XAnimationCompiledState nextState = CompiledAsset.GetState(autoTransition.NextStateKey);
                 float fadeIn = autoTransition.TransitionDuration > 0f ? autoTransition.TransitionDuration : nextState.Config.fadeIn;
                 float fadeOut = autoTransition.TransitionDuration > 0f ? autoTransition.TransitionDuration : nextState.Config.fadeOut;
-                bool played = TryPlayCompiledState(
+                XAnimationPlaybackStartInfo startInfo = TryPlayCompiledState(
                     nextState,
                     channel.CompiledChannel,
                     new XAnimationTransitionOptions
@@ -520,7 +526,7 @@ namespace XFramework.Animation
                         interruptible = true,
                     });
 
-                if (!played)
+                if (!startInfo.Started)
                 {
                     channel.Stop(state.Config.fadeOut, m_CueDispatcher);
                 }

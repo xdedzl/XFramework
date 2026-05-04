@@ -295,11 +295,11 @@ namespace XFramework.Animation
         private readonly AnimationMixerPlayable m_Mixer;
         private readonly AnimationClipPlayable[] m_Playables;
         private readonly float[] m_ClipLengths;
-        private readonly float[] m_TotalNormalizedTimes;
-        private readonly float[] m_PreviousTotalNormalizedTimes;
         private readonly float[] m_SampleWeights;
 
         private int m_PrimaryClipIndex;
+        private float m_TotalNormalizedTime;
+        private float m_PreviousTotalNormalizedTime;
 
         internal XAnimationBlend1DStatePlaybackInstance(
             PlayableGraph graph,
@@ -319,11 +319,11 @@ namespace XFramework.Animation
             m_Mixer = AnimationMixerPlayable.Create(graph, m_Clips.Length, true);
             m_Playables = new AnimationClipPlayable[m_Clips.Length];
             m_ClipLengths = new float[m_Clips.Length];
-            m_TotalNormalizedTimes = new float[m_Clips.Length];
-            m_PreviousTotalNormalizedTimes = new float[m_Clips.Length];
             m_SampleWeights = new float[m_Clips.Length];
 
             float normalizedTime = Mathf.Clamp01(options.NormalizedTime);
+            m_TotalNormalizedTime = normalizedTime;
+            m_PreviousTotalNormalizedTime = normalizedTime;
             for (int i = 0; i < m_Clips.Length; i++)
             {
                 XAnimationCompiledClip clip = m_Clips[i];
@@ -333,8 +333,6 @@ namespace XFramework.Animation
                 playable.SetTime(normalizedTime * clipLength);
                 m_Playables[i] = playable;
                 m_ClipLengths[i] = clipLength;
-                m_TotalNormalizedTimes[i] = normalizedTime;
-                m_PreviousTotalNormalizedTimes[i] = normalizedTime;
             }
         }
 
@@ -343,24 +341,25 @@ namespace XFramework.Animation
 
         protected override void PrepareStateFrame(float deltaTime, float channelTimeScale, XAnimationContext context)
         {
-            float parameterValue = 0f;
             string parameterName = m_State.Config.parameterName;
-            if (!context.TryGetFloat(parameterName, out parameterValue))
+            if (!context.TryGetFloat(parameterName, out var parameterValue))
             {
                 throw new XFrameworkException($"XAnimation parameter '{parameterName}' does not exist.");
             }
 
             ResolveWeights(parameterValue);
+            m_PreviousTotalNormalizedTime = m_TotalNormalizedTime;
+            float blendedClipLength = GetBlendedClipLength();
+            m_TotalNormalizedTime += deltaTime * Speed * channelTimeScale / blendedClipLength;
+
             for (int i = 0; i < m_Playables.Length; i++)
             {
-                m_PreviousTotalNormalizedTimes[i] = m_TotalNormalizedTimes[i];
-                m_Playables[i].SetSpeed(Speed * channelTimeScale);
-                m_TotalNormalizedTimes[i] += deltaTime * Speed * channelTimeScale / m_ClipLengths[i];
-
                 bool shouldConnect = m_SampleWeights[i] > 0.0001f;
                 EnsureSampleConnection(i, shouldConnect);
                 if (shouldConnect)
                 {
+                    m_Playables[i].SetSpeed(0d);
+                    m_Playables[i].SetTime(GetPlayableTime(i, m_TotalNormalizedTime));
                     m_Mixer.SetInputWeight(i, m_SampleWeights[i]);
                 }
             }
@@ -376,41 +375,14 @@ namespace XFramework.Animation
                     continue;
                 }
 
-                double playableTime = playable.GetTime();
-                if (IsLooping)
-                {
-                    if (playableTime >= m_ClipLengths[i])
-                    {
-                        playable.SetTime(playableTime % m_ClipLengths[i]);
-                    }
-                    else if (playableTime < 0d)
-                    {
-                        double wrappedTime = playableTime % m_ClipLengths[i];
-                        if (wrappedTime < 0d)
-                        {
-                            wrappedTime += m_ClipLengths[i];
-                        }
-
-                        playable.SetTime(wrappedTime);
-                    }
-                }
-                else if (playableTime > m_ClipLengths[i])
-                {
-                    playable.SetTime(m_ClipLengths[i]);
-                }
-                else if (playableTime < 0d)
-                {
-                    playable.SetTime(0d);
-                }
-
                 if (!SuppressCues && m_SampleWeights[i] > ActiveCueWeightThreshold)
                 {
-                    cueDispatcher?.Update(this, m_Clips[i].Key, m_PreviousTotalNormalizedTimes[i], m_TotalNormalizedTimes[i]);
+                    cueDispatcher?.Update(this, m_Clips[i].Key, m_PreviousTotalNormalizedTime, m_TotalNormalizedTime);
                     XAnimationClipEventInvoker.Dispatch(
                         m_Clips[i].Clip,
                         this,
-                        m_PreviousTotalNormalizedTimes[i],
-                        m_TotalNormalizedTimes[i],
+                        m_PreviousTotalNormalizedTime,
+                        m_TotalNormalizedTime,
                         CurrentWeight * m_SampleWeights[i],
                         cueEvent => cueDispatcher?.Raise(cueEvent));
                 }
@@ -427,8 +399,8 @@ namespace XFramework.Animation
                 clipKey = PrimaryClipKey,
                 blendClips = BuildBlendClipStates(),
                 playbackId = PlaybackId,
-                normalizedTime = GetNormalizedTime(m_PrimaryClipIndex),
-                totalNormalizedTime = m_TotalNormalizedTimes[m_PrimaryClipIndex],
+                normalizedTime = GetNormalizedTime(),
+                totalNormalizedTime = m_TotalNormalizedTime,
                 weight = CurrentWeight,
                 channelWeight = channelWeight,
                 speed = Speed * channelTimeScale,
@@ -460,12 +432,12 @@ namespace XFramework.Animation
 
         public override float GetNormalizedTime()
         {
-            return GetNormalizedTime(m_PrimaryClipIndex);
+            return IsLooping ? Mathf.Repeat(m_TotalNormalizedTime, 1f) : Mathf.Clamp01(m_TotalNormalizedTime);
         }
 
         public override float GetTotalNormalizedTime()
         {
-            return m_TotalNormalizedTimes[m_PrimaryClipIndex];
+            return m_TotalNormalizedTime;
         }
 
         public override float GetCueWeight(string clipKey)
@@ -569,17 +541,32 @@ namespace XFramework.Animation
                 {
                     clipKey = m_Clips[i].Key,
                     weight = m_SampleWeights[i],
-                    normalizedTime = GetNormalizedTime(i),
-                    totalNormalizedTime = m_TotalNormalizedTimes[i],
+                    normalizedTime = GetNormalizedTime(),
+                    totalNormalizedTime = m_TotalNormalizedTime,
                 };
             }
 
             return states;
         }
 
-        private float GetNormalizedTime(int sampleIndex)
+        private float GetBlendedClipLength()
         {
-            return IsLooping ? Mathf.Repeat(m_TotalNormalizedTimes[sampleIndex], 1f) : Mathf.Clamp01(m_TotalNormalizedTimes[sampleIndex]);
+            float blendedClipLength = 0f;
+            for (int i = 0; i < m_SampleWeights.Length; i++)
+            {
+                blendedClipLength += m_ClipLengths[i] * m_SampleWeights[i];
+            }
+
+            // Keep a single phase for all active samples while preserving the authored speed at either end.
+            return blendedClipLength > 0.0001f ? blendedClipLength : m_ClipLengths[Mathf.Clamp(m_PrimaryClipIndex, 0, m_ClipLengths.Length - 1)];
+        }
+
+        private double GetPlayableTime(int sampleIndex, float totalNormalizedTime)
+        {
+            float normalizedTime = IsLooping
+                ? Mathf.Repeat(totalNormalizedTime, 1f)
+                : Mathf.Clamp01(totalNormalizedTime);
+            return normalizedTime * m_ClipLengths[sampleIndex];
         }
     }
 
@@ -627,8 +614,13 @@ namespace XFramework.Animation
             return playback != null;
         }
 
-        internal bool TryPlay(Func<int, XAnimationPlaybackRuntimeOptions, XAnimationStatePlaybackInstance> playbackFactory, XAnimationPlaybackRuntimeOptions options, XAnimationCueDispatcher cueDispatcher)
+        internal bool TryPlay(
+            Func<int, XAnimationPlaybackRuntimeOptions, XAnimationStatePlaybackInstance> playbackFactory,
+            XAnimationPlaybackRuntimeOptions options,
+            XAnimationCueDispatcher cueDispatcher,
+            out XAnimationStatePlaybackInstance playback)
         {
+            playback = null;
             if (playbackFactory == null)
             {
                 throw new ArgumentNullException(nameof(playbackFactory));
@@ -675,7 +667,7 @@ namespace XFramework.Animation
                     options.DrivesRootMotion);
             }
 
-            XAnimationStatePlaybackInstance playback = playbackFactory(playbackId, options);
+            playback = playbackFactory(playbackId, options);
             cueDispatcher?.ResetForPlayback(playbackId);
             m_Current = playback;
             SetInputPlayable(0, playback.OutputPlayable, playback.CurrentWeight);

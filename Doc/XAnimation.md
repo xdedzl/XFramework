@@ -9,6 +9,7 @@
 - 核心源码目录：[`Runtime/Tools/Animation/`](../Runtime/Tools/Animation/)
 - README 入口：[`README.md`](../README.md)
 - 适合希望通过代码显式控制动画状态、混合层和事件点，而不是为简单角色维护复杂 Animator Controller 的场景。
+- `XAnimation` 的设计初衷就是不引入 Animator Controller 风格的状态机；业务状态切换由代码显式维护，资源层只提供播放描述和轻量自动流转能力。
 
 ### 1.1 适用场景
 
@@ -17,6 +18,68 @@
 - 需要 1D Blend，例如 `idle / walk / run` 随速度参数连续混合。
 - 需要按动画归一化时间触发脚步、攻击判定、音效等 `Cue` 事件。
 - 需要通过 Override Asset 复用同一套动作 key，只替换部分角色动画资源。
+
+### 1.2 架构总览
+
+下面这张图可以直接把 `XAnimation` 的核心分层和数据流看清楚：
+
+```mermaid
+flowchart LR
+    A[".xasset / Override Asset"] --> B["XAnimationAssetLoader"]
+    B --> C["XAnimationAssetValidator"]
+    C --> D["XAnimationCompiledAsset"]
+
+    D --> E["XAnimationDriver"]
+    E --> F["XAnimationContext<br/>参数容器"]
+    E --> G["XAnimationPlayer"]
+
+    G --> H["PlayableGraph<br/>Manual Evaluate"]
+    G --> I["Channel 0..N<br/>Base / Override / Additive"]
+    I --> J["Single / Blend1D 播放实例"]
+
+    F --> J
+    J --> K["AnimationLayerMixerPlayable"]
+    K --> L["Animator"]
+
+    J --> M["CueDispatcher"]
+    I --> N["Auto Transition"]
+    I --> O["RootMotionResolver"]
+
+    M --> P["CueTriggered 事件"]
+    O --> L
+```
+
+可以把它理解成 4 层：
+
+- 资源层：`.xasset` / Override Asset 只描述通道、片段、状态、参数、Cue 和自动切换规则。
+- 编译层：`XAnimationAssetLoader` 负责加载、合并 Override、校验配置，并生成 `XAnimationCompiledAsset`。
+- 驱动层：`XAnimationDriver` 负责对外暴露播放与参数接口，内部持有 `XAnimationContext` 和 `XAnimationPlayer`。
+- 播放层：`XAnimationPlayer` 维护 Unity `PlayableGraph`、多个 `Channel`、Cue 分发和 Root Motion 解析。
+
+### 1.3 一帧是怎么跑的
+
+```mermaid
+flowchart TD
+    A["业务层调用<br/>SetParameter / PlayState / PlayClip"] --> B["XAnimationDriver"]
+    B --> C["写入 Context 或发起播放请求"]
+    C --> D["Update(deltaTime)"]
+    D --> E["各 Channel PrepareFrame"]
+    E --> F["Blend1D 从 Context 读取参数"]
+    F --> G["RootMotionResolver 选择 Root Motion 来源"]
+    G --> H["PlayableGraph.Evaluate(deltaTime)"]
+    H --> I["各 Channel FinalizeFrame"]
+    I --> J["CueDispatcher 分发 Cue"]
+    J --> K["检查非循环 State 的 Auto Transition"]
+    K --> L["刷新 ChannelState / 对外事件 / Animator 输出"]
+```
+
+几个关键点：
+
+- `XAnimation` 的“图”只有 Unity `PlayableGraph`，它是播放图，不是状态机图。
+- `XAnimation` 的核心思路是“状态决策交给代码，动画播放交给资源描述”。
+- 状态切换入口只有两类：业务层显式 `PlayState / PlayClip`，或非循环 state 命中 `autoTransitions` 后自动回落/衔接。
+- `Blend1D` 不自己决定切换到哪个 state，它只负责当前 state 内部的样本混合。
+- `Cue` 和 Root Motion 都是在播放层按当前实际输出结果计算，而不是靠 Animator Controller 状态机回调。
 
 ---
 
@@ -112,13 +175,7 @@
       "eventKey": "footstep",
       "payload": "L"
     }
-  ],
-  "graph": {
-    "enabled": false,
-    "entryState": "idle",
-    "states": [],
-    "transitions": []
-  }
+  ]
 }
 ```
 
@@ -130,7 +187,6 @@
 - `autoTransitions`：状态自动切换配置。用于声明某个非循环 state 在播放到指定进度后，自动切到下一个 state，并可指定切换时长与目标状态起播时间。
 - `parameters`：状态运行时参数，支持 `Float`、`Int`、`Bool`、`Trigger`。`Blend1D` 每帧从 `XAnimationContext` 读取绑定的 Float 参数。
 - `cues`：动画事件点。`time` 是 `[0, 1]` 归一化时间；循环动画每轮都会按 `loopCount` 分发一次。
-- `graph`：状态图配置目前仅保留结构。运行时 `XAnimationDriver` 在 Phase 1 不支持状态图，使用时必须保持 `enabled = false`。
 
 Override Asset 用于复用 base 配置，只替换指定 clip：
 
@@ -148,7 +204,7 @@ Override Asset 用于复用 base 配置，只替换指定 clip：
 
 ### 3.1 Auto Transition 配置
 
-`autoTransitions` 用于描述“某个状态播放到一定进度后，自动切换到另一个状态”的规则，典型场景是 `attack -> idle`、`hit -> recover`、`open -> idle` 这类一次性动作回落。
+`autoTransitions` 用于描述“某个状态播放到一定进度后，自动切换到另一个状态”的轻量规则。它不是状态机条件系统，而是给那些业务上已经确定流向、只是不想每次都手写收尾切换的场景用的，例如 `jumpStart -> jumpLoop`、`attack -> idle`、`hit -> recover`、`open -> idle`。
 
 ```json
 {
@@ -171,6 +227,20 @@ Override Asset 用于复用 base 配置，只替换指定 clip：
 - `EnterTime`：目标状态从哪个 normalized time 开始播放，范围 `[0, 1]`。
 
 编辑器中的 `XAnimation Preview` 已提供对应的 Auto Transition 编辑区，可直接配置 `preState`、`nextState`、`ExitTime`、`TransitionDuration` 与 `EnterTime`，并通过时间轴可视化观察切换时机。
+
+适合交给 `autoTransitions` 的情况：
+
+- 某个非循环动作播到特定进度后，后续去向是固定的。
+- 这个流转不依赖复杂条件判断，只依赖“播到了哪里”。
+- 你希望资源层顺手描述这一跳，减少业务代码里重复写“播完接下一个 state”。
+
+不适合交给 `autoTransitions` 的情况：
+
+- 下一状态取决于输入、移动方向、战斗判定、技能阶段或其他运行时业务条件。
+- 同一个状态可能根据上下文跳向多个不同目标。
+- 你需要完整状态机、条件图或 Any State 一类的行为。
+
+这些情况应该继续由业务代码自行决定，并在合适时机显式调用 `PlayState`。
 
 ---
 
@@ -246,6 +316,24 @@ public sealed class HeroAnimationController : MonoBehaviour
 - `SetRootMotionEnabled(enabled)`：全局启停 Root Motion 输出。
 - `GetChannelState(channelName)`：查询当前播放 clip、归一化时间、权重、速度、优先级等调试信息。
 
+### 4.1 更省事的组件封装：XAnimationActor
+
+如果业务不想自己维护 `XAnimationDriver` 生命周期，可以直接挂 `XAnimationActor`：
+
+- `XAnimationActor` 会在 `Awake` / `Start` / `Update` 中帮你处理初始化、手动推进和可选的起始 state。
+- 它本质上只是 `XAnimationDriver` 的 `MonoBehaviour` 包装层，不会引入额外状态机语义。
+- 适合做角色预制体上的直接挂载；如果你需要更细粒度的接管，仍建议直接持有 `XAnimationDriver`。
+
+运行关系可以简单理解为：
+
+```text
+MonoBehaviour(Update)
+  -> XAnimationActor
+    -> XAnimationDriver
+      -> XAnimationPlayer
+        -> PlayableGraph / Animator
+```
+
 ---
 
 ## 5. 规则与注意事项
@@ -281,6 +369,15 @@ public sealed class HeroAnimationController : MonoBehaviour
 - 普通 `AnimationClip`：`ResourceManager.Instance.Load<AnimationClip>(clipPath)`。
 - FBX 子动画：`clipPath` 写为 `Assets/Path/Model.fbx|ClipName`，内部会调用 `LoadSubAsset<AnimationClip>`。
 - `AvatarMask`：`ResourceManager.Instance.Load<AvatarMask>(maskPath)`。
+
+### 5.4 系统边界
+
+为了避免把系统理解成 Animator Controller 的替代状态机，建议把 `XAnimation` 的边界记成下面这样：
+
+- 它负责“播放什么、怎么混、什么时候触发 Cue、什么时候自动回落”。
+- 它不负责“复杂状态决策图、条件分支图、Any State、子状态机”。
+- 复杂业务状态判断应该留在业务代码里，再由业务代码调用 `PlayState` 或写入参数驱动 `Blend1D`。
+- 如果一个动作只需要“播完自动回 idle / locomotion”或“固定衔接到下一个阶段”，优先用 `autoTransitions`，不要把业务状态判断塞进资源层。
 
 > [!IMPORTANT]
 > `XAnimationDriver` 创建的是手动更新的 PlayableGraph，必须每帧调用 `Update(deltaTime)`；对象销毁或换资源前必须调用 `Dispose()`，否则 PlayableGraph 不会释放。

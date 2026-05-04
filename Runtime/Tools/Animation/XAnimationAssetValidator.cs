@@ -18,7 +18,6 @@ namespace XFramework.Animation
             Dictionary<string, XAnimationStateConfig> stateMap = ValidateStates(asset.channels, asset.clips, asset.parameters, asset.states);
             ValidateAutoTransitions(asset.autoTransitions, stateMap);
             ValidateCues(asset.clips, asset.cues);
-            ValidateGraph(asset.graph);
         }
 
         private static void ValidateChannels(IReadOnlyList<XAnimationChannelConfig> channels)
@@ -408,67 +407,5 @@ namespace XFramework.Animation
             }
         }
 
-        private static void ValidateGraph(XAnimationStateGraphConfig graph)
-        {
-            if (graph == null || !graph.enabled)
-            {
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(graph.entryState))
-            {
-                throw new XFrameworkException("XAnimation graph is enabled but entryState is empty.");
-            }
-
-            HashSet<string> stateNames = new(StringComparer.Ordinal);
-            if (graph.states != null)
-            {
-                foreach (XAnimationGraphStateConfig state in graph.states)
-                {
-                    if (state == null)
-                    {
-                        throw new XFrameworkException("XAnimation graph state config is null.");
-                    }
-
-                    if (string.IsNullOrWhiteSpace(state.name))
-                    {
-                        throw new XFrameworkException("XAnimation graph state name cannot be empty.");
-                    }
-
-                    if (!stateNames.Add(state.name))
-                    {
-                        throw new XFrameworkException($"XAnimation graph state '{state.name}' is duplicated.");
-                    }
-                }
-            }
-
-            if (!stateNames.Contains(graph.entryState))
-            {
-                throw new XFrameworkException($"XAnimation graph entryState '{graph.entryState}' does not exist.");
-            }
-
-            if (graph.transitions == null)
-            {
-                return;
-            }
-
-            foreach (XAnimationTransitionConfig transition in graph.transitions)
-            {
-                if (transition == null)
-                {
-                    throw new XFrameworkException("XAnimation graph transition config is null.");
-                }
-
-                if (string.IsNullOrWhiteSpace(transition.fromState) || !stateNames.Contains(transition.fromState))
-                {
-                    throw new XFrameworkException($"XAnimation graph transition references unknown fromState '{transition?.fromState}'.");
-                }
-
-                if (string.IsNullOrWhiteSpace(transition.toState) || !stateNames.Contains(transition.toState))
-                {
-                    throw new XFrameworkException($"XAnimation graph transition references unknown toState '{transition?.toState}'.");
-                }
-            }
-        }
     }
 }

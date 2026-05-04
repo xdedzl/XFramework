@@ -112,31 +112,6 @@ namespace XFramework.Animation
     }
 
     [Serializable]
-    public class XAnimationGraphStateConfig
-    {
-        public string name;
-        public string clipKey;
-        public string channelName;
-    }
-
-    [Serializable]
-    public class XAnimationTransitionConfig
-    {
-        public string fromState;
-        public string toState;
-        public string parameter;
-    }
-
-    [Serializable]
-    public class XAnimationStateGraphConfig
-    {
-        public bool enabled;
-        public string entryState;
-        public XAnimationGraphStateConfig[] states = Array.Empty<XAnimationGraphStateConfig>();
-        public XAnimationTransitionConfig[] transitions = Array.Empty<XAnimationTransitionConfig>();
-    }
-
-    [Serializable]
     [XTextAssetAlias("xframework.animation.asset")]
     public class XAnimationAsset : XTextAsset
     {
@@ -149,7 +124,6 @@ namespace XFramework.Animation
         public XAnimationAutoTransitionConfig[] autoTransitions = Array.Empty<XAnimationAutoTransitionConfig>();
         public XAnimationParameterConfig[] parameters = Array.Empty<XAnimationParameterConfig>();
         public XAnimationCueConfig[] cues = Array.Empty<XAnimationCueConfig>();
-        public XAnimationStateGraphConfig graph = new XAnimationStateGraphConfig();
     }
 
     [Serializable]
