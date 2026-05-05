@@ -6,6 +6,7 @@ namespace XFramework.UI
 {
     public enum EditableLabelEditTrigger
     {
+        None,
         DoubleClick,
         ContextMenu
     }
@@ -134,6 +135,8 @@ namespace XFramework.UI
 
             switch (m_EditTrigger)
             {
+                case EditableLabelEditTrigger.None:
+                    break;
                 case EditableLabelEditTrigger.DoubleClick:
                     RegisterCallback<MouseDownEvent>(OnMouseDown);
                     break;

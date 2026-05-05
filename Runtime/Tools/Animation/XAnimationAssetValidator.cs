@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace XFramework.Animation
 {
@@ -258,6 +259,12 @@ namespace XFramework.Animation
                     case XAnimationStateType.Blend1D:
                         ValidateBlend1DState(state, clipMap, parameterMap);
                         break;
+                    case XAnimationStateType.Blend2DSimpleDirectional:
+                        ValidateBlend2DSimpleDirectionalState(state, clipMap, parameterMap);
+                        break;
+                    case XAnimationStateType.Blend2DFreeformDirectional:
+                        ValidateBlend2DFreeformDirectionalState(state, clipMap, parameterMap);
+                        break;
                     default:
                         throw new XFrameworkException($"XAnimation state '{state.key}' has unsupported stateType '{state.stateType}'.");
                 }
@@ -332,6 +339,156 @@ namespace XFramework.Animation
                 }
 
                 previousThreshold = sample.threshold;
+            }
+        }
+
+        private static void ValidateBlend2DSimpleDirectionalState(
+            XAnimationStateConfig state,
+            IReadOnlyDictionary<string, XAnimationClipConfig> clipMap,
+            IReadOnlyDictionary<string, XAnimationParameterConfig> parameterMap)
+        {
+            ValidateDirectionalBlendParameters(state, parameterMap, nameof(XAnimationStateType.Blend2DSimpleDirectional));
+
+            XAnimationBlend2DSimpleDirectionalSampleConfig[] samples =
+                state.directionalSamples ?? Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+            if (samples.Length < 2)
+            {
+                throw new XFrameworkException($"XAnimation Blend2DSimpleDirectional state '{state.key}' must contain at least two directional samples.");
+            }
+
+            HashSet<string> samplePositions = new(StringComparer.Ordinal);
+            bool hasDirectionalSample = false;
+            for (int i = 0; i < samples.Length; i++)
+            {
+                XAnimationBlend2DSimpleDirectionalSampleConfig sample = samples[i];
+                if (sample == null)
+                {
+                    throw new XFrameworkException($"XAnimation Blend2DSimpleDirectional state '{state.key}' sample at index {i} is null.");
+                }
+
+                if (string.IsNullOrWhiteSpace(sample.clipKey))
+                {
+                    throw new XFrameworkException($"XAnimation Blend2DSimpleDirectional state '{state.key}' sample at index {i} has an empty clipKey.");
+                }
+
+                if (!clipMap.ContainsKey(sample.clipKey))
+                {
+                    throw new XFrameworkException($"XAnimation Blend2DSimpleDirectional state '{state.key}' sample references unknown clip '{sample.clipKey}'.");
+                }
+
+                string positionKey = $"{sample.positionX:R},{sample.positionY:R}";
+                if (!samplePositions.Add(positionKey))
+                {
+                    throw new XFrameworkException($"XAnimation Blend2DSimpleDirectional state '{state.key}' contains duplicated sample position ({sample.positionX}, {sample.positionY}).");
+                }
+
+                if (!Mathf.Approximately(sample.positionX, 0f) || !Mathf.Approximately(sample.positionY, 0f))
+                {
+                    hasDirectionalSample = true;
+                }
+            }
+
+            if (!hasDirectionalSample)
+            {
+                throw new XFrameworkException($"XAnimation Blend2DSimpleDirectional state '{state.key}' must contain at least one non-zero directional sample.");
+            }
+        }
+
+        private static void ValidateBlend2DFreeformDirectionalState(
+            XAnimationStateConfig state,
+            IReadOnlyDictionary<string, XAnimationClipConfig> clipMap,
+            IReadOnlyDictionary<string, XAnimationParameterConfig> parameterMap)
+        {
+            ValidateDirectionalBlendParameters(state, parameterMap, nameof(XAnimationStateType.Blend2DFreeformDirectional));
+
+            XAnimationBlend2DSimpleDirectionalSampleConfig[] samples =
+                state.directionalSamples ?? Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+            if (samples.Length < 2)
+            {
+                throw new XFrameworkException($"XAnimation Blend2DFreeformDirectional state '{state.key}' must contain at least two directional samples.");
+            }
+
+            HashSet<string> samplePositions = new(StringComparer.Ordinal);
+            int idleSampleCount = 0;
+            bool hasDirectionalSample = false;
+            for (int i = 0; i < samples.Length; i++)
+            {
+                XAnimationBlend2DSimpleDirectionalSampleConfig sample = samples[i];
+                if (sample == null)
+                {
+                    throw new XFrameworkException($"XAnimation Blend2DFreeformDirectional state '{state.key}' sample at index {i} is null.");
+                }
+
+                if (string.IsNullOrWhiteSpace(sample.clipKey))
+                {
+                    throw new XFrameworkException($"XAnimation Blend2DFreeformDirectional state '{state.key}' sample at index {i} has an empty clipKey.");
+                }
+
+                if (!clipMap.ContainsKey(sample.clipKey))
+                {
+                    throw new XFrameworkException($"XAnimation Blend2DFreeformDirectional state '{state.key}' sample references unknown clip '{sample.clipKey}'.");
+                }
+
+                string positionKey = $"{sample.positionX:R},{sample.positionY:R}";
+                if (!samplePositions.Add(positionKey))
+                {
+                    throw new XFrameworkException($"XAnimation Blend2DFreeformDirectional state '{state.key}' contains duplicated sample position ({sample.positionX}, {sample.positionY}).");
+                }
+
+                if (Mathf.Approximately(sample.positionX, 0f) && Mathf.Approximately(sample.positionY, 0f))
+                {
+                    idleSampleCount++;
+                }
+                else
+                {
+                    hasDirectionalSample = true;
+                }
+            }
+
+            if (idleSampleCount != 1)
+            {
+                throw new XFrameworkException($"XAnimation Blend2DFreeformDirectional state '{state.key}' must contain exactly one idle sample at (0, 0).");
+            }
+
+            if (!hasDirectionalSample)
+            {
+                throw new XFrameworkException($"XAnimation Blend2DFreeformDirectional state '{state.key}' must contain at least one non-zero directional sample.");
+            }
+        }
+
+        private static void ValidateDirectionalBlendParameters(
+            XAnimationStateConfig state,
+            IReadOnlyDictionary<string, XAnimationParameterConfig> parameterMap,
+            string stateTypeName)
+        {
+            if (string.IsNullOrWhiteSpace(state.parameterXName))
+            {
+                throw new XFrameworkException($"XAnimation {stateTypeName} state '{state.key}' has an empty parameterXName.");
+            }
+
+            if (!parameterMap.TryGetValue(state.parameterXName, out XAnimationParameterConfig parameterX))
+            {
+                throw new XFrameworkException($"XAnimation {stateTypeName} state '{state.key}' references unknown parameter '{state.parameterXName}'.");
+            }
+
+            if (parameterX.type != XAnimationParameterType.Float)
+            {
+                throw new XFrameworkException($"XAnimation {stateTypeName} state '{state.key}' parameter '{state.parameterXName}' must be Float.");
+            }
+
+            if (string.IsNullOrWhiteSpace(state.parameterYName))
+            {
+                throw new XFrameworkException($"XAnimation {stateTypeName} state '{state.key}' has an empty parameterYName.");
+            }
+
+            if (!parameterMap.TryGetValue(state.parameterYName, out XAnimationParameterConfig parameterY))
+            {
+                throw new XFrameworkException($"XAnimation {stateTypeName} state '{state.key}' references unknown parameter '{state.parameterYName}'.");
+            }
+
+            if (parameterY.type != XAnimationParameterType.Float)
+            {
+                throw new XFrameworkException($"XAnimation {stateTypeName} state '{state.key}' parameter '{state.parameterYName}' must be Float.");
             }
         }
 

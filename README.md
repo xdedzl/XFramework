@@ -576,7 +576,7 @@ IReadOnlyList<Transform> spawnPoints = UObjectFinder.FindList<Transform>("NpcSpa
 - 核心源码目录：[`Runtime/Tools/Animation/`](./Runtime/Tools/Animation/)
 - 完整专题文档：[`Doc/XAnimation.md`](./Doc/XAnimation.md)
 
-适合用于代码显式控制动画状态、多通道混合、1D Blend、Cue 事件分发以及 Override Asset 复用。详细的资源结构、运行时示例、播放接口、打断规则和 Root Motion 约定，请直接阅读专题文档。
+适合用于代码显式控制动画状态、多通道混合、1D Blend、2D Directional Blend、Cue 事件分发以及 Override Asset 复用。2D Blend 支持 `Blend2DSimpleDirectional` 与 `Blend2DFreeformDirectional`，后者可表达同方向 walk/run 这类方向 + 半径混合。详细的资源结构、运行时示例、播放接口、打断规则和 Root Motion 约定，请直接阅读专题文档。
 
 ---
 

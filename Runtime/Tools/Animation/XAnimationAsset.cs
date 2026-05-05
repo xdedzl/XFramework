@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using Newtonsoft.Json;
 using UnityEngine;
 using XFramework.Resource;
@@ -32,6 +33,8 @@ namespace XFramework.Animation
     {
         Single,
         Blend1D,
+        Blend2DSimpleDirectional,
+        Blend2DFreeformDirectional,
     }
 
     [Serializable]
@@ -54,6 +57,44 @@ namespace XFramework.Animation
         public string key;
         [AssetPath(typeof(AnimationClip))]
         public string clipPath;
+        public XAnimationRootMotionTrackConfig rootMotionTrack;
+    }
+
+    [Serializable]
+    public sealed class XAnimationCurveKeyframe
+    {
+        public float time;
+        public float value;
+        public float inTangent;
+        public float outTangent;
+        public float inWeight;
+        public float outWeight;
+        public WeightedMode weightedMode;
+    }
+
+    [Serializable]
+    public sealed class XAnimationRootMotionTrackConfig
+    {
+        public float clipLength;
+        public Vector3 loopDeltaPosition;
+        public XAnimationCurveKeyframe[] positionX = Array.Empty<XAnimationCurveKeyframe>();
+        public XAnimationCurveKeyframe[] positionY = Array.Empty<XAnimationCurveKeyframe>();
+        public XAnimationCurveKeyframe[] positionZ = Array.Empty<XAnimationCurveKeyframe>();
+        public XAnimationCurveKeyframe[] rotationX = Array.Empty<XAnimationCurveKeyframe>();
+        public XAnimationCurveKeyframe[] rotationY = Array.Empty<XAnimationCurveKeyframe>();
+        public XAnimationCurveKeyframe[] rotationZ = Array.Empty<XAnimationCurveKeyframe>();
+        public XAnimationCurveKeyframe[] rotationW = Array.Empty<XAnimationCurveKeyframe>();
+
+        public bool HasPosition =>
+            (positionX?.Length ?? 0) > 0 ||
+            (positionY?.Length ?? 0) > 0 ||
+            (positionZ?.Length ?? 0) > 0;
+
+        public bool HasRotation =>
+            (rotationX?.Length ?? 0) > 0 ||
+            (rotationY?.Length ?? 0) > 0 ||
+            (rotationZ?.Length ?? 0) > 0 ||
+            (rotationW?.Length ?? 0) > 0;
     }
 
     [Serializable]
@@ -88,7 +129,10 @@ namespace XFramework.Animation
         public bool loop = true;
         public XAnimationClipRootMotionMode rootMotionMode = XAnimationClipRootMotionMode.Inherit;
         public string parameterName;
+        public string parameterXName;
+        public string parameterYName;
         public XAnimationBlend1DSampleConfig[] samples = Array.Empty<XAnimationBlend1DSampleConfig>();
+        public XAnimationBlend2DSimpleDirectionalSampleConfig[] directionalSamples = Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
     }
 
     [Serializable]
@@ -109,6 +153,14 @@ namespace XFramework.Animation
     {
         public string clipKey;
         public float threshold;
+    }
+
+    [Serializable]
+    public class XAnimationBlend2DSimpleDirectionalSampleConfig
+    {
+        public string clipKey;
+        public float positionX;
+        public float positionY;
     }
 
     [Serializable]
@@ -162,17 +214,600 @@ namespace XFramework.Animation
 
     public sealed class XAnimationCompiledClip
     {
-        public XAnimationCompiledClip(XAnimationClipConfig config, AnimationClip clip, AnimationClip playbackClip = null)
+        public XAnimationCompiledClip(
+            XAnimationClipConfig config,
+            AnimationClip clip,
+            AnimationClip playbackClip = null,
+            XAnimationRootMotionTrack rootMotionTrack = null)
         {
             Config = config ?? throw new ArgumentNullException(nameof(config));
             Clip = clip ? clip : throw new ArgumentNullException(nameof(clip));
             PlaybackClip = playbackClip ? playbackClip : Clip;
+            RootMotionTrack = rootMotionTrack;
         }
 
         public XAnimationClipConfig Config { get; }
         public AnimationClip Clip { get; }
         public AnimationClip PlaybackClip { get; }
+        public XAnimationRootMotionTrack RootMotionTrack { get; }
         public string Key => Config.key;
+    }
+
+    public sealed class XAnimationRootMotionTrack
+    {
+        private readonly float m_ClipLength;
+        private readonly AnimationCurve m_PositionX;
+        private readonly AnimationCurve m_PositionY;
+        private readonly AnimationCurve m_PositionZ;
+        private readonly AnimationCurve m_RotationX;
+        private readonly AnimationCurve m_RotationY;
+        private readonly AnimationCurve m_RotationZ;
+        private readonly AnimationCurve m_RotationW;
+
+        private XAnimationRootMotionTrack(
+            float clipLength,
+            Vector3 loopDeltaPosition,
+            AnimationCurve positionX,
+            AnimationCurve positionY,
+            AnimationCurve positionZ,
+            AnimationCurve rotationX,
+            AnimationCurve rotationY,
+            AnimationCurve rotationZ,
+            AnimationCurve rotationW)
+        {
+            m_ClipLength = Mathf.Max(clipLength, 0.0001f);
+            LoopDeltaPosition = loopDeltaPosition;
+            m_PositionX = positionX;
+            m_PositionY = positionY;
+            m_PositionZ = positionZ;
+            m_RotationX = rotationX;
+            m_RotationY = rotationY;
+            m_RotationZ = rotationZ;
+            m_RotationW = rotationW;
+        }
+
+        public bool HasPosition => m_PositionX != null || m_PositionY != null || m_PositionZ != null;
+        public bool HasRotation => m_RotationX != null || m_RotationY != null || m_RotationZ != null || m_RotationW != null;
+        public Vector3 LoopDeltaPosition { get; }
+
+        public static XAnimationRootMotionTrack Create(XAnimationRootMotionTrackConfig config)
+        {
+            if (config == null || (!config.HasPosition && !config.HasRotation))
+            {
+                return null;
+            }
+
+            return new XAnimationRootMotionTrack(
+                config.clipLength,
+                config.loopDeltaPosition,
+                BuildCurve(config.positionX),
+                BuildCurve(config.positionY),
+                BuildCurve(config.positionZ),
+                BuildCurve(config.rotationX),
+                BuildCurve(config.rotationY),
+                BuildCurve(config.rotationZ),
+                BuildCurve(config.rotationW));
+        }
+
+        public Vector3 EvaluateAccumulatedPosition(float totalNormalizedTime, bool isLooping)
+        {
+            if (!HasPosition)
+            {
+                return Vector3.zero;
+            }
+
+            if (!isLooping)
+            {
+                return EvaluatePosition(Mathf.Clamp01(totalNormalizedTime));
+            }
+
+            int loopCount = Mathf.FloorToInt(totalNormalizedTime);
+            float normalizedTime = Mathf.Repeat(totalNormalizedTime, 1f);
+            return LoopDeltaPosition * loopCount + EvaluatePosition(normalizedTime);
+        }
+
+        public Quaternion EvaluateRotation(float totalNormalizedTime, bool isLooping)
+        {
+            if (!HasRotation)
+            {
+                return Quaternion.identity;
+            }
+
+            float normalizedTime = isLooping
+                ? Mathf.Repeat(totalNormalizedTime, 1f)
+                : Mathf.Clamp01(totalNormalizedTime);
+            float time = normalizedTime * m_ClipLength;
+            Quaternion rotation = new(
+                m_RotationX != null ? m_RotationX.Evaluate(time) : 0f,
+                m_RotationY != null ? m_RotationY.Evaluate(time) : 0f,
+                m_RotationZ != null ? m_RotationZ.Evaluate(time) : 0f,
+                m_RotationW != null ? m_RotationW.Evaluate(time) : 1f);
+            return Normalize(rotation);
+        }
+
+        private Vector3 EvaluatePosition(float normalizedTime)
+        {
+            float time = Mathf.Clamp01(normalizedTime) * m_ClipLength;
+            return new Vector3(
+                m_PositionX != null ? m_PositionX.Evaluate(time) : 0f,
+                m_PositionY != null ? m_PositionY.Evaluate(time) : 0f,
+                m_PositionZ != null ? m_PositionZ.Evaluate(time) : 0f);
+        }
+
+        private static AnimationCurve BuildCurve(XAnimationCurveKeyframe[] source)
+        {
+            if (source == null || source.Length == 0)
+            {
+                return null;
+            }
+
+            Keyframe[] keys = new Keyframe[source.Length];
+            for (int i = 0; i < source.Length; i++)
+            {
+                XAnimationCurveKeyframe keyframe = source[i];
+                Keyframe runtimeKeyframe = new(
+                    keyframe.time,
+                    keyframe.value,
+                    keyframe.inTangent,
+                    keyframe.outTangent,
+                    keyframe.inWeight,
+                    keyframe.outWeight)
+                {
+                    weightedMode = keyframe.weightedMode,
+                };
+                keys[i] = runtimeKeyframe;
+            }
+
+            return new AnimationCurve(keys);
+        }
+
+        private static Quaternion Normalize(Quaternion rotation)
+        {
+            float magnitude = Mathf.Sqrt(
+                rotation.x * rotation.x +
+                rotation.y * rotation.y +
+                rotation.z * rotation.z +
+                rotation.w * rotation.w);
+
+            if (magnitude <= 0.0001f)
+            {
+                return Quaternion.identity;
+            }
+
+            return new Quaternion(
+                rotation.x / magnitude,
+                rotation.y / magnitude,
+                rotation.z / magnitude,
+                rotation.w / magnitude);
+        }
+    }
+
+    internal sealed class XAnimationRootMotionEvaluator
+    {
+        private const float ActiveSampleWeightThreshold = 0.0001f;
+
+        private bool m_HasPreviousSourceSample;
+        private string m_PreviousSourceChannelName = string.Empty;
+        private int m_PreviousSourcePlaybackId;
+        private float m_PreviousSourceTotalNormalizedTime;
+
+        public void Reset()
+        {
+            m_HasPreviousSourceSample = false;
+            m_PreviousSourceChannelName = string.Empty;
+            m_PreviousSourcePlaybackId = 0;
+            m_PreviousSourceTotalNormalizedTime = 0f;
+        }
+
+        public bool TryEvaluate(
+            XAnimationCompiledAsset compiledAsset,
+            XAnimationChannel sourceChannel,
+            out Vector3 deltaPosition,
+            out Quaternion deltaRotation)
+        {
+            deltaPosition = Vector3.zero;
+            deltaRotation = Quaternion.identity;
+
+            if (compiledAsset == null || sourceChannel == null)
+            {
+                Reset();
+                return false;
+            }
+
+            XAnimationChannelState state = sourceChannel.GetState();
+            if (state == null || state.playbackId <= 0)
+            {
+                Reset();
+                return false;
+            }
+
+            bool playbackChanged = !m_HasPreviousSourceSample ||
+                m_PreviousSourcePlaybackId != state.playbackId ||
+                !string.Equals(m_PreviousSourceChannelName, state.channelName, StringComparison.Ordinal);
+
+            float previousTotalNormalizedTime = m_PreviousSourceTotalNormalizedTime;
+            m_HasPreviousSourceSample = true;
+            m_PreviousSourceChannelName = state.channelName ?? string.Empty;
+            m_PreviousSourcePlaybackId = state.playbackId;
+            m_PreviousSourceTotalNormalizedTime = state.totalNormalizedTime;
+
+            if (playbackChanged)
+            {
+                return true;
+            }
+
+            if (!TryEvaluateStateTransform(compiledAsset, state, previousTotalNormalizedTime, out Vector3 previousPosition, out Quaternion previousRotation, out bool hasPosition, out bool hasRotation) ||
+                !TryEvaluateStateTransform(compiledAsset, state, state.totalNormalizedTime, out Vector3 currentPosition, out Quaternion currentRotation, out _, out _))
+            {
+                return false;
+            }
+
+            if (hasPosition)
+            {
+                deltaPosition = currentPosition - previousPosition;
+            }
+
+            if (hasRotation)
+            {
+                deltaRotation = currentRotation * Quaternion.Inverse(previousRotation);
+            }
+
+            return true;
+        }
+
+        private static bool TryEvaluateStateTransform(
+            XAnimationCompiledAsset compiledAsset,
+            XAnimationChannelState state,
+            float totalNormalizedTime,
+            out Vector3 position,
+            out Quaternion rotation,
+            out bool hasPosition,
+            out bool hasRotation)
+        {
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
+            hasPosition = false;
+            hasRotation = false;
+
+            if (compiledAsset == null || state == null)
+            {
+                return false;
+            }
+
+            if (state.stateType == XAnimationStateType.Single)
+            {
+                return TryEvaluateClipTransform(
+                    compiledAsset,
+                    state.clipKey,
+                    totalNormalizedTime,
+                    state.isLooping,
+                    out position,
+                    out rotation,
+                    out hasPosition,
+                    out hasRotation);
+            }
+
+            XAnimationBlendClipState[] blendClips = state.blendClips;
+            if (blendClips == null || blendClips.Length == 0)
+            {
+                return false;
+            }
+
+            Vector4 blendedRotation = Vector4.zero;
+            Quaternion referenceRotation = Quaternion.identity;
+            bool hasReferenceRotation = false;
+            bool hasAnySample = false;
+
+            for (int i = 0; i < blendClips.Length; i++)
+            {
+                XAnimationBlendClipState blendClip = blendClips[i];
+                if (blendClip == null || blendClip.weight <= ActiveSampleWeightThreshold)
+                {
+                    continue;
+                }
+
+                if (!TryEvaluateClipTransform(
+                        compiledAsset,
+                        blendClip.clipKey,
+                        totalNormalizedTime,
+                        state.isLooping,
+                        out Vector3 clipPosition,
+                        out Quaternion clipRotation,
+                        out bool clipHasPosition,
+                        out bool clipHasRotation))
+                {
+                    return false;
+                }
+
+                hasAnySample = true;
+                if (clipHasPosition)
+                {
+                    position += clipPosition * blendClip.weight;
+                    hasPosition = true;
+                }
+
+                if (clipHasRotation)
+                {
+                    AccumulateRotation(ref blendedRotation, ref referenceRotation, ref hasReferenceRotation, clipRotation, blendClip.weight);
+                    hasRotation = true;
+                }
+            }
+
+            if (!hasAnySample)
+            {
+                return false;
+            }
+
+            if (hasRotation)
+            {
+                rotation = Normalize(new Quaternion(blendedRotation.x, blendedRotation.y, blendedRotation.z, blendedRotation.w));
+            }
+
+            return hasPosition || hasRotation;
+        }
+
+        private static bool TryEvaluateClipTransform(
+            XAnimationCompiledAsset compiledAsset,
+            string clipKey,
+            float totalNormalizedTime,
+            bool isLooping,
+            out Vector3 position,
+            out Quaternion rotation,
+            out bool hasPosition,
+            out bool hasRotation)
+        {
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
+            hasPosition = false;
+            hasRotation = false;
+
+            if (compiledAsset == null ||
+                string.IsNullOrWhiteSpace(clipKey) ||
+                !compiledAsset.TryGetClipIndex(clipKey, out int clipIndex))
+            {
+                return false;
+            }
+
+            XAnimationCompiledClip clip = (XAnimationCompiledClip)compiledAsset.Clips[clipIndex];
+            XAnimationRootMotionTrack track = clip.RootMotionTrack;
+            if (track == null || (!track.HasPosition && !track.HasRotation))
+            {
+                return false;
+            }
+
+            hasPosition = track.HasPosition;
+            hasRotation = track.HasRotation;
+            if (hasPosition)
+            {
+                position = track.EvaluateAccumulatedPosition(totalNormalizedTime, isLooping);
+            }
+
+            if (hasRotation)
+            {
+                rotation = track.EvaluateRotation(totalNormalizedTime, isLooping);
+            }
+
+            return true;
+        }
+
+        private static void AccumulateRotation(
+            ref Vector4 accumulator,
+            ref Quaternion referenceRotation,
+            ref bool hasReferenceRotation,
+            Quaternion rotation,
+            float weight)
+        {
+            if (!hasReferenceRotation)
+            {
+                referenceRotation = rotation;
+                hasReferenceRotation = true;
+            }
+            else if (Quaternion.Dot(referenceRotation, rotation) < 0f)
+            {
+                rotation = new Quaternion(-rotation.x, -rotation.y, -rotation.z, -rotation.w);
+            }
+
+            accumulator.x += rotation.x * weight;
+            accumulator.y += rotation.y * weight;
+            accumulator.z += rotation.z * weight;
+            accumulator.w += rotation.w * weight;
+        }
+
+        private static Quaternion Normalize(Quaternion rotation)
+        {
+            float magnitude = Mathf.Sqrt(
+                rotation.x * rotation.x +
+                rotation.y * rotation.y +
+                rotation.z * rotation.z +
+                rotation.w * rotation.w);
+
+            if (magnitude <= 0.0001f)
+            {
+                return Quaternion.identity;
+            }
+
+            return new Quaternion(
+                rotation.x / magnitude,
+                rotation.y / magnitude,
+                rotation.z / magnitude,
+                rotation.w / magnitude);
+        }
+    }
+
+    internal static class XAnimationRootMotionTrackBuilder
+    {
+#if UNITY_EDITOR
+        private static readonly Type s_AnimationUtilityType = Type.GetType("UnityEditor.AnimationUtility, UnityEditor");
+#endif
+
+        public static XAnimationRootMotionTrackConfig BuildConfig(AnimationClip clip)
+        {
+#if UNITY_EDITOR
+            if (clip == null || s_AnimationUtilityType == null)
+            {
+                return null;
+            }
+
+            MethodInfo getCurveBindingsMethod = s_AnimationUtilityType.GetMethod(
+                "GetCurveBindings",
+                BindingFlags.Public | BindingFlags.Static,
+                null,
+                new[] { typeof(AnimationClip) },
+                null);
+            if (getCurveBindingsMethod == null)
+            {
+                return null;
+            }
+
+            Array bindings = getCurveBindingsMethod.Invoke(null, new object[] { clip }) as Array;
+            if (bindings == null)
+            {
+                return null;
+            }
+
+            Type bindingType = bindings.GetType().GetElementType();
+            MethodInfo getEditorCurveMethod = s_AnimationUtilityType.GetMethod(
+                "GetEditorCurve",
+                BindingFlags.Public | BindingFlags.Static,
+                null,
+                new[] { typeof(AnimationClip), bindingType },
+                null);
+            if (getEditorCurveMethod == null)
+            {
+                return null;
+            }
+
+            AnimationCurve rootTX = null;
+            AnimationCurve rootTY = null;
+            AnimationCurve rootTZ = null;
+            AnimationCurve rootQX = null;
+            AnimationCurve rootQY = null;
+            AnimationCurve rootQZ = null;
+            AnimationCurve rootQW = null;
+
+            for (int i = 0; i < bindings.Length; i++)
+            {
+                object binding = bindings.GetValue(i);
+                if (!TryGetBindingPropertyName(binding, out string propertyName))
+                {
+                    continue;
+                }
+
+                AnimationCurve curve = getEditorCurveMethod.Invoke(null, new[] { clip, binding }) as AnimationCurve;
+                switch (propertyName)
+                {
+                    case "RootT.x":
+                        rootTX = curve;
+                        break;
+                    case "RootT.y":
+                        rootTY = curve;
+                        break;
+                    case "RootT.z":
+                        rootTZ = curve;
+                        break;
+                    case "RootQ.x":
+                        rootQX = curve;
+                        break;
+                    case "RootQ.y":
+                        rootQY = curve;
+                        break;
+                    case "RootQ.z":
+                        rootQZ = curve;
+                        break;
+                    case "RootQ.w":
+                        rootQW = curve;
+                        break;
+                }
+            }
+
+            bool hasPosition = rootTX != null || rootTY != null || rootTZ != null;
+            bool hasRotation = rootQX != null || rootQY != null || rootQZ != null || rootQW != null;
+            if (!hasPosition && !hasRotation)
+            {
+                return null;
+            }
+
+            float clipLength = Mathf.Max(clip.length, 0.0001f);
+            return new XAnimationRootMotionTrackConfig
+            {
+                clipLength = clipLength,
+                loopDeltaPosition = EvaluatePosition(rootTX, rootTY, rootTZ, clipLength) - EvaluatePosition(rootTX, rootTY, rootTZ, 0f),
+                positionX = ExportCurve(rootTX),
+                positionY = ExportCurve(rootTY),
+                positionZ = ExportCurve(rootTZ),
+                rotationX = ExportCurve(rootQX),
+                rotationY = ExportCurve(rootQY),
+                rotationZ = ExportCurve(rootQZ),
+                rotationW = ExportCurve(rootQW),
+            };
+#else
+            _ = clip;
+            return null;
+#endif
+        }
+
+#if UNITY_EDITOR
+        private static bool TryGetBindingPropertyName(object binding, out string propertyName)
+        {
+            propertyName = string.Empty;
+            if (binding == null)
+            {
+                return false;
+            }
+
+            Type bindingType = binding.GetType();
+            FieldInfo propertyNameField = bindingType.GetField("propertyName");
+            if (propertyNameField != null)
+            {
+                propertyName = propertyNameField.GetValue(binding) as string;
+                return !string.IsNullOrWhiteSpace(propertyName);
+            }
+
+            PropertyInfo propertyNameProperty = bindingType.GetProperty("propertyName", BindingFlags.Public | BindingFlags.Instance);
+            if (propertyNameProperty == null)
+            {
+                return false;
+            }
+
+            propertyName = propertyNameProperty.GetValue(binding) as string;
+            return !string.IsNullOrWhiteSpace(propertyName);
+        }
+
+        private static XAnimationCurveKeyframe[] ExportCurve(AnimationCurve curve)
+        {
+            if (curve == null || curve.keys == null || curve.keys.Length == 0)
+            {
+                return Array.Empty<XAnimationCurveKeyframe>();
+            }
+
+            Keyframe[] source = curve.keys;
+            XAnimationCurveKeyframe[] output = new XAnimationCurveKeyframe[source.Length];
+            for (int i = 0; i < source.Length; i++)
+            {
+                Keyframe keyframe = source[i];
+                output[i] = new XAnimationCurveKeyframe
+                {
+                    time = keyframe.time,
+                    value = keyframe.value,
+                    inTangent = keyframe.inTangent,
+                    outTangent = keyframe.outTangent,
+                    inWeight = keyframe.inWeight,
+                    outWeight = keyframe.outWeight,
+                    weightedMode = keyframe.weightedMode,
+                };
+            }
+
+            return output;
+        }
+
+        private static Vector3 EvaluatePosition(AnimationCurve x, AnimationCurve y, AnimationCurve z, float time)
+        {
+            return new Vector3(
+                x != null ? x.Evaluate(time) : 0f,
+                y != null ? y.Evaluate(time) : 0f,
+                z != null ? z.Evaluate(time) : 0f);
+        }
+#endif
     }
 
     public sealed class XAnimationCompiledParameter
@@ -270,6 +905,59 @@ namespace XFramework.Animation
 
         public int ParameterIndex { get; }
         public IReadOnlyList<XAnimationCompiledBlend1DSample> Samples { get; }
+    }
+
+    public sealed class XAnimationCompiledBlend2DSimpleDirectionalSample
+    {
+        public XAnimationCompiledBlend2DSimpleDirectionalSample(XAnimationBlend2DSimpleDirectionalSampleConfig config, int clipIndex)
+        {
+            Config = config ?? throw new ArgumentNullException(nameof(config));
+            ClipIndex = clipIndex;
+        }
+
+        public XAnimationBlend2DSimpleDirectionalSampleConfig Config { get; }
+        public int ClipIndex { get; }
+        public Vector2 Position => new(Config.positionX, Config.positionY);
+    }
+
+    public sealed class XAnimationCompiledBlend2DSimpleDirectionalState : XAnimationCompiledState
+    {
+        public XAnimationCompiledBlend2DSimpleDirectionalState(
+            XAnimationStateConfig config,
+            int defaultChannelIndex,
+            int parameterXIndex,
+            int parameterYIndex,
+            XAnimationCompiledBlend2DSimpleDirectionalSample[] samples)
+            : base(config, defaultChannelIndex)
+        {
+            ParameterXIndex = parameterXIndex;
+            ParameterYIndex = parameterYIndex;
+            Samples = samples ?? Array.Empty<XAnimationCompiledBlend2DSimpleDirectionalSample>();
+        }
+
+        public int ParameterXIndex { get; }
+        public int ParameterYIndex { get; }
+        public IReadOnlyList<XAnimationCompiledBlend2DSimpleDirectionalSample> Samples { get; }
+    }
+
+    public sealed class XAnimationCompiledBlend2DFreeformDirectionalState : XAnimationCompiledState
+    {
+        public XAnimationCompiledBlend2DFreeformDirectionalState(
+            XAnimationStateConfig config,
+            int defaultChannelIndex,
+            int parameterXIndex,
+            int parameterYIndex,
+            XAnimationCompiledBlend2DSimpleDirectionalSample[] samples)
+            : base(config, defaultChannelIndex)
+        {
+            ParameterXIndex = parameterXIndex;
+            ParameterYIndex = parameterYIndex;
+            Samples = samples ?? Array.Empty<XAnimationCompiledBlend2DSimpleDirectionalSample>();
+        }
+
+        public int ParameterXIndex { get; }
+        public int ParameterYIndex { get; }
+        public IReadOnlyList<XAnimationCompiledBlend2DSimpleDirectionalSample> Samples { get; }
     }
 
     public sealed class XAnimationCompiledAsset
@@ -441,6 +1129,46 @@ namespace XFramework.Animation
                     duration = maxClipLength / speed;
                     return true;
                 }
+                case XAnimationCompiledBlend2DSimpleDirectionalState directionalState:
+                {
+                    float maxClipLength = 0f;
+                    IReadOnlyList<XAnimationCompiledBlend2DSimpleDirectionalSample> samples = directionalState.Samples;
+                    for (int i = 0; i < samples.Count; i++)
+                    {
+                        XAnimationCompiledBlend2DSimpleDirectionalSample sample = samples[i];
+                        XAnimationCompiledClip clip = (XAnimationCompiledClip)Clips[sample.ClipIndex];
+                        maxClipLength = Mathf.Max(maxClipLength, clip.Clip.length);
+                    }
+
+                    if (maxClipLength <= 0f)
+                    {
+                        duration = 0f;
+                        return false;
+                    }
+
+                    duration = maxClipLength / speed;
+                    return true;
+                }
+                case XAnimationCompiledBlend2DFreeformDirectionalState directionalState:
+                {
+                    float maxClipLength = 0f;
+                    IReadOnlyList<XAnimationCompiledBlend2DSimpleDirectionalSample> samples = directionalState.Samples;
+                    for (int i = 0; i < samples.Count; i++)
+                    {
+                        XAnimationCompiledBlend2DSimpleDirectionalSample sample = samples[i];
+                        XAnimationCompiledClip clip = (XAnimationCompiledClip)Clips[sample.ClipIndex];
+                        maxClipLength = Mathf.Max(maxClipLength, clip.Clip.length);
+                    }
+
+                    if (maxClipLength <= 0f)
+                    {
+                        duration = 0f;
+                        return false;
+                    }
+
+                    duration = maxClipLength / speed;
+                    return true;
+                }
                 default:
                     duration = 0f;
                     return false;
@@ -495,6 +1223,8 @@ namespace XFramework.Animation
         public float channelWeight;
         public float speed;
         public float timeScale;
+        public float blendParameterX;
+        public float blendParameterY;
         public bool isLooping;
         public bool isFading;
         public int priority;
@@ -528,6 +1258,8 @@ namespace XFramework.Animation
         public float weight;
         public float normalizedTime;
         public float totalNormalizedTime;
+        public float positionX;
+        public float positionY;
     }
 
     public sealed class XAnimationCueEvent

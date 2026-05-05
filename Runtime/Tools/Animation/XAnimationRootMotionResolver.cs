@@ -63,7 +63,7 @@ namespace XFramework.Animation
                 return;
             }
 
-            animator.applyRootMotion = Enabled && !string.IsNullOrEmpty(SourceChannelName);
+            animator.applyRootMotion = false;
         }
     }
 }

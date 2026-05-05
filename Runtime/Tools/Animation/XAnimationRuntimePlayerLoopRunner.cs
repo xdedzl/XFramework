@@ -97,7 +97,13 @@ namespace XFramework.Animation
                     }
                 }
 
-                children.Add(new PlayerLoopSystem
+                int insertIndex = children.FindIndex(system => system.type == typeof(PreLateUpdate.ScriptRunBehaviourLateUpdate));
+                if (insertIndex < 0)
+                {
+                    insertIndex = children.Count;
+                }
+
+                children.Insert(insertIndex, new PlayerLoopSystem
                 {
                     type = typeof(XAnimationRuntimePlayerLoopRunner),
                     updateDelegate = Tick,

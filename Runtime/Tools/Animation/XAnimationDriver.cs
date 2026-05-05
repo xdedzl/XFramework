@@ -229,6 +229,12 @@ namespace XFramework.Animation
             return m_Player.GetClipDuration(clipKey);
         }
 
+        public bool TryGetRootMotionDelta(out Vector3 deltaPosition, out Quaternion deltaRotation)
+        {
+            EnsureInitialized();
+            return m_Player.TryGetRootMotionDelta(out deltaPosition, out deltaRotation);
+        }
+
         internal void Update(float deltaTime)
         {
             EnsureInitialized();

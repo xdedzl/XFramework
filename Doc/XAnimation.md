@@ -16,6 +16,7 @@
 - 需要用代码显式播放动画状态，不想为简单角色维护复杂 Animator Controller。
 - 需要 Base / Override / Additive 多通道混合，并可选 `AvatarMask`。
 - 需要 1D Blend，例如 `idle / walk / run` 随速度参数连续混合。
+- 需要 2D Directional Blend，例如 8 向移动、8 向持枪平移、带 `idle` 中心点的方向过渡。
 - 需要按动画归一化时间触发脚步、攻击判定、音效等 `Cue` 事件。
 - 需要通过 Override Asset 复用同一套动作 key，只替换部分角色动画资源。
 
@@ -35,7 +36,7 @@ flowchart LR
 
     G --> H["PlayableGraph<br/>Manual Evaluate"]
     G --> I["Channel 0..N<br/>Base / Override / Additive"]
-    I --> J["Single / Blend1D 播放实例"]
+    I --> J["Single / Blend1D / 2D Directional Blend 播放实例"]
 
     F --> J
     J --> K["AnimationLayerMixerPlayable"]
@@ -64,7 +65,7 @@ flowchart TD
     B --> C["写入 Context 或发起播放请求"]
     C --> D["Update(deltaTime)"]
     D --> E["各 Channel PrepareFrame"]
-    E --> F["Blend1D 从 Context 读取参数"]
+    E --> F["Blend State 从 Context 读取参数"]
     F --> G["RootMotionResolver 选择 Root Motion 来源"]
     G --> H["PlayableGraph.Evaluate(deltaTime)"]
     H --> I["各 Channel FinalizeFrame"]
@@ -78,7 +79,7 @@ flowchart TD
 - `XAnimation` 的“图”只有 Unity `PlayableGraph`，它是播放图，不是状态机图。
 - `XAnimation` 的核心思路是“状态决策交给代码，动画播放交给资源描述”。
 - 状态切换入口只有两类：业务层显式 `PlayState / PlayClip`，或非循环 state 命中 `autoTransitions` 后自动回落/衔接。
-- `Blend1D` 不自己决定切换到哪个 state，它只负责当前 state 内部的样本混合。
+- `Blend1D` / 2D Directional Blend 不自己决定切换到哪个 state，它们只负责当前 state 内部的样本混合。
 - `Cue` 和 Root Motion 都是在播放层按当前实际输出结果计算，而不是靠 Animator Controller 状态机回调。
 
 ---
@@ -150,6 +151,47 @@ flowchart TD
         { "clipKey": "walk", "threshold": 1.0 },
         { "clipKey": "run", "threshold": 3.0 }
       ]
+    },
+    {
+      "key": "locomotion8dir",
+      "stateType": "Blend2DSimpleDirectional",
+      "channelName": "base",
+      "parameterXName": "moveX",
+      "parameterYName": "moveY",
+      "fadeIn": 0.15,
+      "fadeOut": 0.15,
+      "speed": 1.0,
+      "loop": true,
+      "rootMotionMode": "Inherit",
+      "directionalSamples": [
+        { "clipKey": "idle", "positionX": 0.0, "positionY": 0.0 },
+        { "clipKey": "move_n", "positionX": 0.0, "positionY": 1.0 },
+        { "clipKey": "move_ne", "positionX": 0.707, "positionY": 0.707 },
+        { "clipKey": "move_e", "positionX": 1.0, "positionY": 0.0 },
+        { "clipKey": "move_se", "positionX": 0.707, "positionY": -0.707 },
+        { "clipKey": "move_s", "positionX": 0.0, "positionY": -1.0 },
+        { "clipKey": "move_sw", "positionX": -0.707, "positionY": -0.707 },
+        { "clipKey": "move_w", "positionX": -1.0, "positionY": 0.0 },
+        { "clipKey": "move_nw", "positionX": -0.707, "positionY": 0.707 }
+      ]
+    },
+    {
+      "key": "locomotionFreeform",
+      "stateType": "Blend2DFreeformDirectional",
+      "channelName": "base",
+      "parameterXName": "moveX",
+      "parameterYName": "moveY",
+      "fadeIn": 0.15,
+      "fadeOut": 0.15,
+      "speed": 1.0,
+      "loop": true,
+      "rootMotionMode": "Inherit",
+      "directionalSamples": [
+        { "clipKey": "idle", "positionX": 0.0, "positionY": 0.0 },
+        { "clipKey": "walk_n", "positionX": 0.0, "positionY": 1.0 },
+        { "clipKey": "run_n", "positionX": 0.0, "positionY": 2.0 },
+        { "clipKey": "walk_e", "positionX": 1.0, "positionY": 0.0 }
+      ]
     }
   ],
   "autoTransitions": [
@@ -164,6 +206,16 @@ flowchart TD
   "parameters": [
     {
       "name": "moveSpeed",
+      "type": "Float",
+      "defaultValue": 0.0
+    },
+    {
+      "name": "moveX",
+      "type": "Float",
+      "defaultValue": 0.0
+    },
+    {
+      "name": "moveY",
       "type": "Float",
       "defaultValue": 0.0
     }
@@ -183,9 +235,9 @@ flowchart TD
 
 - `channels`：动画混合通道。`layerType` 支持 `Base`、`Override`、`Additive`；`maskPath` 可绑定 `AvatarMask`；`canDriveRootMotion` 表示该通道是否允许驱动 Root Motion。
 - `clips`：动画片段索引，是 state 引用的叶子资源，只描述 `key` 与 `clipPath`。`clipPath` 支持普通资源路径，也支持 `FBX路径|子动画名`。
-- `states`：业务播放单位。`Single` 引用一个 `clipKey`；`Blend1D` 绑定一个 Float 参数和若干采样点，运行时只混合相邻两个采样 clip；channel、fade、loop、speed、Root Motion 等播放语义都属于 state。
+- `states`：业务播放单位。`Single` 引用一个 `clipKey`；`Blend1D` 绑定一个 Float 参数和若干采样点，运行时只混合相邻两个采样 clip；`Blend2DSimpleDirectional` / `Blend2DFreeformDirectional` 绑定两个 Float 参数和一组二维采样点，前者按方向相似度混合邻近方向，后者支持同方向不同半径样本，例如 walk/run forward；channel、fade、loop、speed、Root Motion 等播放语义都属于 state。
 - `autoTransitions`：状态自动切换配置。用于声明某个非循环 state 在播放到指定进度后，自动切到下一个 state，并可指定切换时长与目标状态起播时间。
-- `parameters`：状态运行时参数，支持 `Float`、`Int`、`Bool`、`Trigger`。`Blend1D` 每帧从 `XAnimationContext` 读取绑定的 Float 参数。
+- `parameters`：状态运行时参数，支持 `Float`、`Int`、`Bool`、`Trigger`。`Blend1D` 每帧从 `XAnimationContext` 读取一个 Float 参数；2D Directional Blend 每帧读取 `parameterXName + parameterYName` 两个 Float 参数。
 - `cues`：动画事件点。`time` 是 `[0, 1]` 归一化时间；循环动画每轮都会按 `loopCount` 分发一次。
 
 Override Asset 用于复用 base 配置，只替换指定 clip：
@@ -202,7 +254,30 @@ Override Asset 用于复用 base 配置，只替换指定 clip：
 }
 ```
 
-### 3.1 Auto Transition 配置
+### 3.1 Blend1D 与 2D Directional Blend 的区别
+
+- `Blend1D` 适合单轴连续量，例如速度、蓄力值、命中强度。
+- `Blend2DSimpleDirectional` 适合方向空间，例如 8 向移动、8 向瞄准、带 idle 中心点的平面输入；同一方向只建议配置一个样本。
+- `Blend2DFreeformDirectional` 适合“方向 + 半径”空间，例如同方向的 walk/run forward；它要求恰好一个 `(0,0)` idle 样本，并允许同方向多个非零样本。
+- `Blend1D` 使用 `parameterName + samples`。
+- `Blend2DSimpleDirectional` / `Blend2DFreeformDirectional` 都使用 `parameterXName + parameterYName + directionalSamples`。
+- `Blend2DSimpleDirectional` 第一版不强制必须凑满 8 向，但推荐按 `Idle + N/NE/E/SE/S/SW/W/NW` 作者化，便于移动状态统一复用。
+
+### 3.2 8 向移动推荐坐标
+
+| 语义 | 坐标 |
+| --- | --- |
+| `Idle` | `(0, 0)` |
+| `N` | `(0, 1)` |
+| `NE` | `(0.707, 0.707)` |
+| `E` | `(1, 0)` |
+| `SE` | `(0.707, -0.707)` |
+| `S` | `(0, -1)` |
+| `SW` | `(-0.707, -0.707)` |
+| `W` | `(-1, 0)` |
+| `NW` | `(-0.707, 0.707)` |
+
+### 3.3 Auto Transition 配置
 
 `autoTransitions` 用于描述“某个状态播放到一定进度后，自动切换到另一个状态”的轻量规则。它不是状态机条件系统，而是给那些业务上已经确定流向、只是不想每次都手写收尾切换的场景用的，例如 `jumpStart -> jumpLoop`、`attack -> idle`、`hit -> recover`、`open -> idle`。
 
@@ -309,11 +384,12 @@ public sealed class HeroAnimationController : MonoBehaviour
 
 - `PlayState(string stateKey, XAnimationTransitionOptions transition = default)`：按 state key 播放，始终使用 state 自己配置的 channel，推荐业务层统一使用。
 - `PlayClip(string clipKey, string channelName, XAnimationTransitionOptions transition = default)`：底层/调试接口，按 clip key 直接播放；必须显式提供 `channelName`。
-- `SetParameter(key, float/int/bool)` / `SetTrigger(key)`：写入运行时参数，`Blend1D` 默认从 Float 参数读取混合值。
+- `SetParameter(key, float/int/bool)` / `SetTrigger(key)`：写入运行时参数，`Blend1D` 默认从 Float 参数读取混合值，2D Directional Blend 默认从两个 Float 参数读取二维输入。
 - `Stop(channelName, fadeOut)` / `StopAll(fadeOut)`：停止指定通道或全部通道。
 - `SetChannelWeight(channelName, weight)`：调整通道混合权重。
 - `SetChannelTimeScale(channelName, timeScale)`：调整通道时间缩放，最小值会被限制为 0。
-- `SetRootMotionEnabled(enabled)`：全局启停 Root Motion 输出。
+- `SetRootMotionEnabled(enabled)`：全局启停 Root Motion 输出；`XAnimation` runtime 会保持 `Animator.applyRootMotion = false`，业务层应改为消费 `TryGetRootMotionDelta(...)`。
+- `TryGetRootMotionDelta(out Vector3 deltaPosition, out Quaternion deltaRotation)`：读取 `XAnimationPlayer` 在本帧缓存好的 Root Motion 增量；循环 clip 会按累计位移语义处理跨 loop 边界的连续性。
 - `GetChannelState(channelName)`：查询当前播放 clip、归一化时间、权重、速度、优先级等调试信息。
 
 ### 4.1 更省事的组件封装：XAnimationActor
@@ -341,7 +417,7 @@ MonoBehaviour(Update)
 ### 5.1 打断与 Root Motion 规则
 
 - 同一 channel 内播放新 state 时，会把当前 state 作为 previous 输入淡出，新 state 作为 current 输入淡入。
-- `Blend1D` 的子 clip 混合只负责状态内部权重，不负责跨状态自动过渡。
+- `Blend1D` / 2D Directional Blend 的子 clip 混合只负责状态内部权重，不负责跨状态自动过渡。
 - 当 channel 的 `allowInterrupt = false`，或当前播放请求设置 `interruptible = false` 时，新请求不能打断当前播放。
 - 新请求只有在 `priority >= 当前播放 priority` 时才能打断。
 - Root Motion 默认由 `channel.canDriveRootMotion` 决定；state 可用 `rootMotionMode` 设置 `ForceOn` / `ForceOff` 覆盖。
@@ -376,7 +452,7 @@ MonoBehaviour(Update)
 
 - 它负责“播放什么、怎么混、什么时候触发 Cue、什么时候自动回落”。
 - 它不负责“复杂状态决策图、条件分支图、Any State、子状态机”。
-- 复杂业务状态判断应该留在业务代码里，再由业务代码调用 `PlayState` 或写入参数驱动 `Blend1D`。
+- 复杂业务状态判断应该留在业务代码里，再由业务代码调用 `PlayState` 或写入参数驱动 `Blend1D` / 2D Directional Blend。
 - 如果一个动作只需要“播完自动回 idle / locomotion”或“固定衔接到下一个阶段”，优先用 `autoTransitions`，不要把业务状态判断塞进资源层。
 
 > [!IMPORTANT]

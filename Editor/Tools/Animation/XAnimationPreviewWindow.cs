@@ -1563,16 +1563,37 @@ namespace XFramework.Editor
             header.style.marginBottom = 0;
             header.style.paddingBottom = 0;
 
+            bool hasVisibleTitle = !string.IsNullOrWhiteSpace(titleText);
+            Label toggleLabel = new();
+            toggleLabel.style.color = TextNormal;
+            toggleLabel.style.fontSize = BodyFontSize;
+            toggleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            toggleLabel.style.flexShrink = 0;
+            toggleLabel.style.width = 16;
+            toggleLabel.style.minWidth = 16;
+            toggleLabel.style.maxWidth = 16;
+            toggleLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
+            toggleLabel.style.marginRight = hasVisibleTitle ? 2 : 4;
+
             Label label = new();
             label.style.color = TextNormal;
             label.style.fontSize = BodyFontSize;
             label.style.unityFontStyleAndWeight = FontStyle.Bold;
             label.style.flexGrow = 1;
-            header.Add(label);
+            if (hasVisibleTitle)
+            {
+                header.Add(toggleLabel);
+                header.Add(label);
+            }
+            else
+            {
+                header.Add(toggleLabel);
+            }
             if (titleAction != null)
             {
                 titleAction.style.flexShrink = 0;
-                titleAction.style.marginLeft = 6;
+                titleAction.style.flexGrow = hasVisibleTitle ? 0 : 1;
+                titleAction.style.marginLeft = hasVisibleTitle ? 6 : 0;
                 header.Add(titleAction);
             }
 
@@ -1608,9 +1629,9 @@ namespace XFramework.Editor
             {
                 bool toggleable = canToggle?.Invoke() ?? true;
                 bool isExpanded = toggleable && expanded;
-                label.text = string.IsNullOrWhiteSpace(titleText)
-                    ? (isExpanded ? "▾" : "▸")
-                    : (isExpanded ? $"▾ {titleText}" : $"▸ {titleText}");
+                toggleLabel.text = isExpanded ? "▾" : "▸";
+                label.text = hasVisibleTitle ? titleText : string.Empty;
+                toggleLabel.style.color = toggleable ? TextNormal : TextMuted;
                 label.style.color = toggleable ? TextNormal : TextMuted;
                 content.style.display = isExpanded ? DisplayStyle.Flex : DisplayStyle.None;
                 header.style.marginBottom = isExpanded ? 3 : 0;
@@ -1628,6 +1649,7 @@ namespace XFramework.Editor
                 ? $"点击展开/收起 {titleText}。"
                 : headerTooltip;
             header.tooltip = resolvedHeaderTooltip;
+            toggleLabel.tooltip = resolvedHeaderTooltip;
             label.tooltip = resolvedHeaderTooltip;
             root.tooltip = resolvedHeaderTooltip;
             header.RegisterCallback<MouseDownEvent>(evt =>
@@ -2811,7 +2833,7 @@ namespace XFramework.Editor
             DropdownField typeField = new(
                 typeNames,
                 Mathf.Max(0, typeNames.IndexOf(config.type.ToString())));
-            typeField.tooltip = "参数类型。Blend1D 只能绑定 Float 参数。";
+            typeField.tooltip = "参数类型。Blend1D 和 2D directional blend 只能绑定 Float 参数。";
             typeField.style.width = 88;
             typeField.style.marginLeft = 4;
             typeField.RegisterValueChangedCallback(evt => ChangeParameterType(parameterName, evt.newValue, evt.previousValue, typeField));
@@ -3050,52 +3072,56 @@ namespace XFramework.Editor
             string stateKey = state.Key;
             EditableLabel label = new(stateKey);
             ConfigureEditableNameLabel(label, 78f);
-            label.tooltip = "单击展开/收起 state 配置；右键 Rename 编辑名称。";
-            label.SetEditable(true, EditableLabelEditTrigger.ContextMenu);
+            label.tooltip = "单击展开/收起 state 配置；右键可 Rename，也可批量修改这个 state 用到的动画。";
+            label.SetEditable(true, EditableLabelEditTrigger.None);
             label.EditStarted += BeginNameEdit;
             label.EditEnded += EndNameEdit;
             label.ValueCommitted += (_, newValue) => RenameState(stateKey, newValue, label);
             m_StateLabelMap[stateKey] = label;
             label.style.position = Position.Relative;
+            RegisterStateLabelContextMenu(label, state);
             row.Add(label);
 
-            Label infoLabel = new(BuildStateInfoText(state));
-            infoLabel.style.flexGrow = 1;
-            infoLabel.style.flexShrink = 1;
-            infoLabel.style.whiteSpace = WhiteSpace.Normal;
-            infoLabel.style.color = TextMuted;
-            infoLabel.style.fontSize = BodyFontSize;
-            infoLabel.style.position = Position.Relative;
-            string focusClipKey = GetStatePrimaryClipKey(state);
-            bool canFocusClip = !string.IsNullOrWhiteSpace(focusClipKey);
-            infoLabel.tooltip = canFocusClip
-                ? $"{infoLabel.text}\n点击定位并高亮 clip {focusClipKey}。"
-                : infoLabel.text;
-            infoLabel.style.unityFontStyleAndWeight = canFocusClip ? FontStyle.Bold : FontStyle.Normal;
-            row.Add(infoLabel);
-
-            if (canFocusClip)
+            List<string> stateTypeNames = new(Enum.GetNames(typeof(XAnimationStateType)));
+            DropdownField stateTypeField = new(
+                string.Empty,
+                stateTypeNames,
+                Mathf.Max(0, stateTypeNames.IndexOf(state.Config.stateType.ToString())));
+            stateTypeField.style.width = 200;
+            stateTypeField.style.flexShrink = 0;
+            stateTypeField.style.marginLeft = 6;
+            stateTypeField.style.position = Position.Relative;
+            stateTypeField.tooltip = "State 类型。";
+            stateTypeField.RegisterValueChangedCallback(evt =>
             {
-                infoLabel.RegisterCallback<MouseDownEvent>(evt =>
+                if (!Enum.TryParse(evt.newValue, out XAnimationStateType stateType))
                 {
-                    if (evt.button != 0)
-                    {
-                        return;
-                    }
+                    return;
+                }
 
-                    FocusClipInInspector(focusClipKey);
-                    evt.StopPropagation();
-                });
+                ChangeStateType(state.Key, stateType, evt.previousValue, stateTypeField);
+            });
+            row.Add(stateTypeField);
 
-                infoLabel.RegisterCallback<MouseEnterEvent>(_ =>
-                {
-                    infoLabel.style.color = TextNormal;
-                });
+            DropdownField channelField = CreateChannelDropdown(string.Empty, state.Config.channelName);
+            channelField.style.flexGrow = 1;
+            channelField.style.flexShrink = 1;
+            channelField.style.marginLeft = 6;
+            channelField.style.position = Position.Relative;
+            channelField.tooltip = "State 默认播放 channel。";
+            channelField.RegisterValueChangedCallback(evt => ChangeStateChannel(state.Key, evt.newValue, channelField, evt.previousValue));
+            row.Add(channelField);
 
-                infoLabel.RegisterCallback<MouseLeaveEvent>(_ =>
-                {
-                    infoLabel.style.color = TextMuted;
-                });
+            if (state.Config.stateType == XAnimationStateType.Single)
+            {
+                DropdownField clipField = CreateClipKeyDropdown(string.Empty, state.Config.clipKey);
+                clipField.style.width = 220;
+                clipField.style.flexShrink = 0;
+                clipField.style.marginLeft = 6;
+                clipField.style.position = Position.Relative;
+                clipField.tooltip = "Single state 播放的 clipKey。";
+                clipField.RegisterValueChangedCallback(evt => ChangeStateClipKey(state.Key, evt.newValue, clipField, evt.previousValue));
+                row.Add(clipField);
             }
 
             VisualElement editor = CreateStateEditor(state);
@@ -3106,7 +3132,7 @@ namespace XFramework.Editor
             {
                 text = "▶"
             };
-            playButton.tooltip = "播放或停止这个 state。Blend1D 会读取绑定参数实时混合。";
+            playButton.tooltip = "播放或停止这个 state。Blend1D 和 2D directional blend 会读取绑定参数实时混合。";
             ApplyClipButtonStyle(playButton, false);
             playButton.style.flexShrink = 0;
             playButton.style.marginLeft = 4;
@@ -3134,35 +3160,14 @@ namespace XFramework.Editor
             return wrapper;
         }
 
-        private static string BuildStateInfoText(XAnimationCompiledState state)
-        {
-            string channelName = state.Config.channelName;
-            return state switch
-            {
-                XAnimationCompiledSingleState singleState => $"{state.StateType} | channel={channelName} | clip={state.Config.clipKey}",
-                XAnimationCompiledBlend1DState blendState => $"{state.StateType} | channel={channelName} | param={state.Config.parameterName} | {BuildBlendSampleSummary(blendState)}",
-                _ => $"{state.StateType} | channel={channelName}",
-            };
-        }
-
-        private static string BuildBlendSampleSummary(XAnimationCompiledBlend1DState state)
-        {
-            List<string> parts = new();
-            for (int i = 0; i < state.Samples.Count; i++)
-            {
-                XAnimationCompiledBlend1DSample sample = state.Samples[i];
-                parts.Add($"{sample.Config.clipKey}@{sample.Threshold:0.###}");
-            }
-
-            return string.Join(", ", parts);
-        }
-
         private static string GetStatePrimaryClipKey(XAnimationCompiledState state)
         {
             return state switch
             {
                 XAnimationCompiledSingleState => state.Config.clipKey,
                 XAnimationCompiledBlend1DState blendState when blendState.Samples.Count > 0 => blendState.Samples[0].Config.clipKey,
+                XAnimationCompiledBlend2DSimpleDirectionalState directionalState when directionalState.Samples.Count > 0 => directionalState.Samples[0].Config.clipKey,
+                XAnimationCompiledBlend2DFreeformDirectionalState directionalState when directionalState.Samples.Count > 0 => directionalState.Samples[0].Config.clipKey,
                 _ => null,
             };
         }
@@ -3200,6 +3205,81 @@ namespace XFramework.Editor
             RefreshClipPlayingStates();
             RefreshChannelStates();
             SetStatus($"正在播放 state {state.Key}。");
+        }
+
+        private void PreviewBlendSample(string stateKey, float threshold)
+        {
+            if (m_Session == null || !m_Session.IsLoaded || string.IsNullOrWhiteSpace(stateKey))
+            {
+                return;
+            }
+
+            XAnimationCompiledState state = m_Session.CompiledAsset.GetState(stateKey);
+            if (state is not XAnimationCompiledBlend1DState blendState)
+            {
+                return;
+            }
+
+            string parameterName = blendState.Config.parameterName;
+            if (!string.IsNullOrWhiteSpace(parameterName))
+            {
+                m_Session.SetPreviewParameter(parameterName, threshold);
+            }
+
+            PlayStateForSamplePreview(blendState, $"正在预览 {stateKey} sample，{parameterName} = {threshold:0.###}。");
+        }
+
+        private void PreviewDirectionalBlendSample(string stateKey, float positionX, float positionY)
+        {
+            if (m_Session == null || !m_Session.IsLoaded || string.IsNullOrWhiteSpace(stateKey))
+            {
+                return;
+            }
+
+            XAnimationCompiledState state = m_Session.CompiledAsset.GetState(stateKey);
+            if (!TryGetDirectionalBlendSamples(state, out _))
+            {
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(state.Config.parameterXName))
+            {
+                m_Session.SetPreviewParameter(state.Config.parameterXName, positionX);
+            }
+
+            if (!string.IsNullOrWhiteSpace(state.Config.parameterYName))
+            {
+                m_Session.SetPreviewParameter(state.Config.parameterYName, positionY);
+            }
+
+            PlayStateForSamplePreview(
+                state,
+                $"正在预览 {stateKey} sample，({state.Config.parameterXName}, {state.Config.parameterYName}) = ({positionX:0.###}, {positionY:0.###})。");
+        }
+
+        private void PlayStateForSamplePreview(XAnimationCompiledState state, string statusMessage)
+        {
+            if (m_Session == null || !m_Session.IsLoaded || state == null)
+            {
+                return;
+            }
+
+            m_IsPaused = false;
+            m_Session.SetPaused(false);
+            SetPauseButtonState(true, false);
+            SetStepForwardButtonEnabled(true);
+            m_Session.SetTimeScale(GetPlaybackSpeed());
+            m_Session.PlayState(state.Key, BuildPreviewTransitionOptions());
+            if (!string.IsNullOrEmpty(state.Config.channelName))
+            {
+                m_Session.SetChannelTimeScale(state.Config.channelName, GetPlaybackSpeed());
+            }
+
+            RebuildParameterList();
+            RefreshStatePlayingStates();
+            RefreshClipPlayingStates();
+            RefreshChannelStates();
+            SetStatus(statusMessage);
         }
 
         private VisualElement CreateCueRow(int cueIndex, XAnimationCueConfig cue, bool editable)
@@ -3861,7 +3941,7 @@ namespace XFramework.Editor
 
         private void DeleteParameter(string parameterName)
         {
-            if (!EditorUtility.DisplayDialog("删除 Parameter", $"确定删除 Parameter '{parameterName}'？\n\n引用它的 Blend1D state 会清空 parameter。", "删除", "取消"))
+            if (!EditorUtility.DisplayDialog("删除 Parameter", $"确定删除 Parameter '{parameterName}'？\n\n引用它的 Blend1D / 2D directional blend state 会清空对应 parameter。", "删除", "取消"))
             {
                 return;
             }
@@ -4390,6 +4470,32 @@ namespace XFramework.Editor
             }
         }
 
+        private void ChangeStateDirectionalBlendParameters(
+            string stateKey,
+            string parameterXName,
+            string parameterYName,
+            DropdownField parameterXField,
+            DropdownField parameterYField,
+            string previousXValue,
+            string previousYValue)
+        {
+            try
+            {
+                m_Session.SetStateDirectionalBlendParameters(stateKey, parameterXName, parameterYName);
+                RebuildStateList();
+                RefreshStatePlayingStates();
+                RefreshChannelStates();
+                SetStatus($"{stateKey} parameters = ({parameterXName}, {parameterYName})。");
+            }
+            catch (Exception ex)
+            {
+                parameterXField.SetValueWithoutNotify(previousXValue);
+                parameterYField.SetValueWithoutNotify(previousYValue);
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
         private void ChangeStateRootMotionMode(string stateKey, XAnimationClipRootMotionMode mode, string previousValue, DropdownField field)
         {
             try
@@ -4424,6 +4530,23 @@ namespace XFramework.Editor
             }
         }
 
+        private void AddDirectionalBlendSample(string stateKey)
+        {
+            try
+            {
+                m_Session.AddDirectionalBlendSample(stateKey);
+                RebuildStateList();
+                RefreshStatePlayingStates();
+                RefreshChannelStates();
+                SetStatus($"{stateKey} 已新增 2D directional blend sample。");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
         private void DeleteBlendSample(string stateKey, int sampleIndex)
         {
             try
@@ -4433,6 +4556,23 @@ namespace XFramework.Editor
                 RefreshStatePlayingStates();
                 RefreshChannelStates();
                 SetStatus($"{stateKey} 已删除 Blend1D sample #{sampleIndex}。");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void DeleteDirectionalBlendSample(string stateKey, int sampleIndex)
+        {
+            try
+            {
+                m_Session.DeleteDirectionalBlendSample(stateKey, sampleIndex);
+                RebuildStateList();
+                RefreshStatePlayingStates();
+                RefreshChannelStates();
+                SetStatus($"{stateKey} 已删除 2D directional blend sample #{sampleIndex}。");
             }
             catch (Exception ex)
             {
@@ -4472,6 +4612,55 @@ namespace XFramework.Editor
             catch (Exception ex)
             {
                 field.SetValueWithoutNotify(previousValue);
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void ChangeDirectionalBlendSampleClipKey(string stateKey, int sampleIndex, string clipKey, DropdownField field, string previousValue)
+        {
+            try
+            {
+                m_Session.SetDirectionalBlendSampleClipKey(stateKey, sampleIndex, clipKey);
+                RebuildStateList();
+                RefreshStatePlayingStates();
+                RefreshChannelStates();
+                SetStatus($"{stateKey} directional sample #{sampleIndex} clip = {clipKey}。");
+            }
+            catch (Exception ex)
+            {
+                field.SetValueWithoutNotify(previousValue);
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void ChangeDirectionalBlendSamplePosition(
+            string stateKey,
+            int sampleIndex,
+            float positionX,
+            float positionY,
+            FloatField field,
+            float previousXValue,
+            float previousYValue,
+            bool isX)
+        {
+            try
+            {
+                XAnimationStateConfig stateConfig = m_Session.CompiledAsset.GetState(stateKey).Config;
+                XAnimationBlend2DSimpleDirectionalSampleConfig sample =
+                    stateConfig.directionalSamples[sampleIndex];
+                float newX = isX ? positionX : sample.positionX;
+                float newY = isX ? sample.positionY : positionY;
+                m_Session.SetDirectionalBlendSamplePosition(stateKey, sampleIndex, newX, newY);
+                RebuildStateList();
+                RefreshStatePlayingStates();
+                RefreshChannelStates();
+                SetStatus($"{stateKey} directional sample #{sampleIndex} position = ({newX:0.###}, {newY:0.###})。");
+            }
+            catch (Exception ex)
+            {
+                field.SetValueWithoutNotify(isX ? previousXValue : previousYValue);
                 SetStatus(ex.Message, true);
                 Debug.LogException(ex);
             }
@@ -4699,7 +4888,7 @@ namespace XFramework.Editor
                 "stateType",
                 stateTypeNames,
                 Mathf.Max(0, stateTypeNames.IndexOf(config.stateType.ToString())));
-            stateTypeField.tooltip = "State 类型。Single 播放一个 clip；Blend1D 根据 float 参数混合采样点。";
+            stateTypeField.tooltip = "State 类型。Single 播放一个 clip；Blend1D 根据 float 参数混合采样点；2D directional blend 根据二维方向参数混合采样点。";
             stateTypeField.RegisterValueChangedCallback(evt =>
             {
                 if (!Enum.TryParse(evt.newValue, out XAnimationStateType stateType))
@@ -4730,6 +4919,34 @@ namespace XFramework.Editor
                 parameterField.RegisterValueChangedCallback(evt => ChangeStateBlendParameter(state.Key, evt.newValue, parameterField, evt.previousValue));
                 editor.Add(parameterField);
                 editor.Add(CreateBlendSampleEditor(state.Key, config));
+            }
+            else if (IsDirectionalBlendStateType(config.stateType))
+            {
+                DropdownField parameterXField = CreateFloatParameterDropdown("parameterX", config.parameterXName);
+                parameterXField.tooltip = $"{config.stateType} 的 X 方向 Float 参数。";
+                DropdownField parameterYField = CreateFloatParameterDropdown("parameterY", config.parameterYName);
+                parameterYField.tooltip = $"{config.stateType} 的 Y 方向 Float 参数。";
+                parameterXField.RegisterValueChangedCallback(evt =>
+                    ChangeStateDirectionalBlendParameters(
+                        state.Key,
+                        evt.newValue,
+                        parameterYField.value,
+                        parameterXField,
+                        parameterYField,
+                        evt.previousValue,
+                        parameterYField.value));
+                parameterYField.RegisterValueChangedCallback(evt =>
+                    ChangeStateDirectionalBlendParameters(
+                        state.Key,
+                        parameterXField.value,
+                        evt.newValue,
+                        parameterXField,
+                        parameterYField,
+                        parameterXField.value,
+                        evt.previousValue));
+                editor.Add(parameterXField);
+                editor.Add(parameterYField);
+                editor.Add(CreateDirectionalBlendSampleEditor(state.Key, config));
             }
 
             Toggle loopField = new("loop") { value = config.loop };
@@ -5430,13 +5647,18 @@ namespace XFramework.Editor
             row.style.marginTop = 4;
 
             label = new(labelText);
-            label.style.width = 88;
-            label.style.minWidth = 88;
-            label.style.maxWidth = 88;
+            label.style.width = 56;
+            label.style.minWidth = 56;
+            label.style.maxWidth = 56;
             label.style.flexShrink = 0;
+            label.style.marginRight = 6;
             label.style.color = TextMuted;
             label.style.fontSize = 10;
             label.style.unityTextAlign = TextAnchor.MiddleLeft;
+            label.style.whiteSpace = WhiteSpace.NoWrap;
+            label.style.overflow = Overflow.Hidden;
+            label.style.textOverflow = TextOverflow.Ellipsis;
+            label.tooltip = labelText;
             row.Add(label);
 
             track = new VisualElement();
@@ -5649,6 +5871,8 @@ namespace XFramework.Editor
             title.style.color = TextNormal;
             title.style.fontSize = BodyFontSize;
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.tooltip = "右键批量修改这个 Blend1D state 用到的所有动画。";
+            RegisterBatchEditStateClipsContextMenu(title, stateKey);
             header.Add(title);
 
             bool editable = m_Session != null && !m_Session.IsOverrideAsset;
@@ -5680,6 +5904,194 @@ namespace XFramework.Editor
             return box;
         }
 
+        private VisualElement CreateDirectionalBlendSampleEditor(string stateKey, XAnimationStateConfig config)
+        {
+            VisualElement box = CreateSubBox();
+            box.style.marginTop = 5;
+
+            VisualElement header = new VisualElement();
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.alignItems = Align.Center;
+            header.style.marginBottom = 3;
+
+            Label title = new("Directional Samples");
+            title.style.flexGrow = 1;
+            title.style.color = TextNormal;
+            title.style.fontSize = BodyFontSize;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.tooltip = "右键批量修改这个 directional state 用到的所有动画。";
+            RegisterBatchEditStateClipsContextMenu(title, stateKey);
+            header.Add(title);
+
+            bool editable = m_Session != null && !m_Session.IsOverrideAsset;
+            Button addButton = new(() => AddDirectionalBlendSample(stateKey))
+            {
+                text = "+"
+            };
+            addButton.tooltip = editable ? $"为这个 {config.stateType} state 新增采样点。" : "Override 资源不能新增采样点。";
+            addButton.SetEnabled(editable);
+            ApplyClipIconButtonStyle(addButton, AccentColor);
+            header.Add(addButton);
+            box.Add(header);
+
+            XAnimationBlend2DSimpleDirectionalSampleConfig[] samples =
+                config.directionalSamples ?? Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+            for (int i = 0; i < samples.Length; i++)
+            {
+                box.Add(CreateDirectionalBlendSampleRow(stateKey, i, samples[i], editable));
+            }
+
+            if (samples.Length == 0)
+            {
+                Label emptyLabel = new("No samples");
+                emptyLabel.style.color = TextMuted;
+                emptyLabel.style.fontSize = BodyFontSize;
+                emptyLabel.style.marginLeft = 4;
+                box.Add(emptyLabel);
+            }
+
+            return box;
+        }
+
+        private void RegisterBatchEditStateClipsContextMenu(VisualElement target, string stateKey)
+        {
+            if (target == null || string.IsNullOrWhiteSpace(stateKey))
+            {
+                return;
+            }
+
+            target.AddManipulator(new ContextualMenuManipulator(evt =>
+            {
+                evt.menu.AppendAction(
+                    "Batch Edit State Clips",
+                    _ => OpenBatchClipSettingsForState(stateKey),
+                    _ => CollectAnimationClipsForState(stateKey).Count > 0
+                        ? DropdownMenuAction.Status.Normal
+                        : DropdownMenuAction.Status.Disabled);
+            }));
+        }
+
+        private void RegisterStateLabelContextMenu(EditableLabel label, XAnimationCompiledState state)
+        {
+            if (label == null || state == null)
+            {
+                return;
+            }
+
+            label.AddManipulator(new ContextualMenuManipulator(evt =>
+            {
+                evt.menu.AppendAction(
+                    "Rename",
+                    _ => label.BeginEdit(),
+                    _ => label.IsEditing ? DropdownMenuAction.Status.Disabled : DropdownMenuAction.Status.Normal);
+
+                evt.menu.AppendSeparator();
+
+                evt.menu.AppendAction(
+                    "Batch Edit State Clips",
+                    _ => OpenBatchClipSettingsForState(state.Key),
+                    _ => CollectAnimationClipsForState(state.Key).Count > 0
+                        ? DropdownMenuAction.Status.Normal
+                        : DropdownMenuAction.Status.Disabled);
+            }));
+        }
+
+        private void OpenBatchClipSettingsForState(string stateKey)
+        {
+            List<AnimationClip> clips = CollectAnimationClipsForState(stateKey);
+            if (clips.Count == 0)
+            {
+                SetStatus($"state {stateKey} 没有可用于批量设置的动画。", true);
+                return;
+            }
+
+            XAnimationClipBatchSettingsWindow.ShowWindowWithClips(clips);
+        }
+
+        private List<AnimationClip> CollectAnimationClipsForState(string stateKey)
+        {
+            List<AnimationClip> clips = new List<AnimationClip>();
+            if (m_Session == null || !m_Session.IsLoaded || string.IsNullOrWhiteSpace(stateKey))
+            {
+                return clips;
+            }
+
+            XAnimationAsset asset = m_Session?.CompiledAsset?.Asset;
+            if (asset?.clips == null || asset.clips.Length == 0)
+            {
+                return clips;
+            }
+
+            XAnimationCompiledState state = m_Session.CompiledAsset.GetState(stateKey);
+            if (state == null)
+            {
+                return clips;
+            }
+
+            Dictionary<string, XAnimationClipConfig> clipConfigByKey = new Dictionary<string, XAnimationClipConfig>(StringComparer.Ordinal);
+            for (int i = 0; i < asset.clips.Length; i++)
+            {
+                XAnimationClipConfig clipConfig = asset.clips[i];
+                if (clipConfig == null || string.IsNullOrWhiteSpace(clipConfig.key))
+                {
+                    continue;
+                }
+
+                clipConfigByKey[clipConfig.key] = clipConfig;
+            }
+
+            HashSet<string> addedClipPaths = new HashSet<string>(StringComparer.Ordinal);
+
+            void TryAddClipByKey(string clipKey)
+            {
+                if (string.IsNullOrWhiteSpace(clipKey) || !clipConfigByKey.TryGetValue(clipKey, out XAnimationClipConfig clipConfig))
+                {
+                    return;
+                }
+
+                AnimationClip clip = XAnimationEditorAssetResolver.ResolveAnimationClip(clipConfig.clipPath);
+                if (clip == null)
+                {
+                    return;
+                }
+
+                string resolvedClipPath = XAnimationEditorAssetResolver.BuildClipPath(clip);
+                if (!addedClipPaths.Add(resolvedClipPath))
+                {
+                    return;
+                }
+
+                clips.Add(clip);
+            }
+
+            switch (state)
+            {
+                case XAnimationCompiledSingleState singleState:
+                    TryAddClipByKey(singleState.Config.clipKey);
+                    break;
+                case XAnimationCompiledBlend1DState blend1DState:
+                    for (int i = 0; i < blend1DState.Samples.Count; i++)
+                    {
+                        TryAddClipByKey(blend1DState.Samples[i].Config.clipKey);
+                    }
+                    break;
+                case XAnimationCompiledBlend2DSimpleDirectionalState directionalState:
+                    for (int i = 0; i < directionalState.Samples.Count; i++)
+                    {
+                        TryAddClipByKey(directionalState.Samples[i].Config.clipKey);
+                    }
+                    break;
+                case XAnimationCompiledBlend2DFreeformDirectionalState freeformDirectionalState:
+                    for (int i = 0; i < freeformDirectionalState.Samples.Count; i++)
+                    {
+                        TryAddClipByKey(freeformDirectionalState.Samples[i].Config.clipKey);
+                    }
+                    break;
+            }
+
+            return clips;
+        }
+
         private VisualElement CreateParameterPreviewEditor(XAnimationCompiledParameter parameter)
         {
             if (parameter == null)
@@ -5692,7 +6104,8 @@ namespace XFramework.Editor
                 case XAnimationParameterType.Float:
                 {
                     float previewValue = GetPreviewFloatParameterValue(parameter);
-                    if (TryGetBlend1DPreviewRange(parameter.Name, out float min, out float max))
+                    if (TryGetBlend1DPreviewRange(parameter.Name, out float min, out float max) ||
+                        TryGetDirectionalPreviewRange(parameter.Name, out min, out max))
                     {
                         return CreateFloatPreviewParameterRow(parameter.Name, previewValue, min, max, useSlider: true);
                     }
@@ -5705,6 +6118,30 @@ namespace XFramework.Editor
                     return CreateIntPreviewParameterRow(parameter.Name, GetPreviewIntParameterValue(parameter));
                 default:
                     return null;
+            }
+        }
+
+        private static bool IsDirectionalBlendStateType(XAnimationStateType stateType)
+        {
+            return stateType == XAnimationStateType.Blend2DSimpleDirectional ||
+                   stateType == XAnimationStateType.Blend2DFreeformDirectional;
+        }
+
+        private static bool TryGetDirectionalBlendSamples(
+            XAnimationCompiledState state,
+            out IReadOnlyList<XAnimationCompiledBlend2DSimpleDirectionalSample> samples)
+        {
+            switch (state)
+            {
+                case XAnimationCompiledBlend2DSimpleDirectionalState simpleState:
+                    samples = simpleState.Samples;
+                    return true;
+                case XAnimationCompiledBlend2DFreeformDirectionalState freeformState:
+                    samples = freeformState.Samples;
+                    return true;
+                default:
+                    samples = null;
+                    return false;
             }
         }
 
@@ -5748,6 +6185,67 @@ namespace XFramework.Editor
                 {
                     min = Mathf.Min(min, stateMin);
                     max = Mathf.Max(max, stateMax);
+                }
+            }
+
+            if (!found)
+            {
+                return false;
+            }
+
+            if (Mathf.Approximately(min, max))
+            {
+                max = min + 1f;
+            }
+
+            return true;
+        }
+
+        private bool TryGetDirectionalPreviewRange(string parameterName, out float min, out float max)
+        {
+            min = 0f;
+            max = 0f;
+            if (m_Session == null || !m_Session.IsLoaded || string.IsNullOrWhiteSpace(parameterName))
+            {
+                return false;
+            }
+
+            bool found = false;
+            IReadOnlyList<XAnimationCompiledState> states = m_Session.CompiledAsset.States;
+            for (int i = 0; i < states.Count; i++)
+            {
+                XAnimationCompiledState state = states[i];
+                if (!TryGetDirectionalBlendSamples(state, out IReadOnlyList<XAnimationCompiledBlend2DSimpleDirectionalSample> samples))
+                {
+                    continue;
+                }
+
+                bool matchesX = string.Equals(state.Config.parameterXName, parameterName, StringComparison.Ordinal);
+                bool matchesY = string.Equals(state.Config.parameterYName, parameterName, StringComparison.Ordinal);
+                if (!matchesX && !matchesY)
+                {
+                    continue;
+                }
+
+                if (samples.Count == 0)
+                {
+                    continue;
+                }
+
+                for (int sampleIndex = 0; sampleIndex < samples.Count; sampleIndex++)
+                {
+                    float sampleValue = matchesX ? samples[sampleIndex].Config.positionX : samples[sampleIndex].Config.positionY;
+                    if (!found)
+                    {
+                        min = sampleValue;
+                        max = sampleValue;
+                        found = true;
+                    }
+                    else
+                    {
+                        min = Mathf.Min(min, sampleValue);
+                        max = Mathf.Max(max, sampleValue);
+                    }
                 }
             }
 
@@ -6106,7 +6604,7 @@ namespace XFramework.Editor
             indexLabel.style.position = Position.Relative;
             row.Add(indexLabel);
 
-            DropdownField clipField = CreateClipKeyDropdown("clip", sampleClipKey);
+            DropdownField clipField = CreateClipKeyDropdown(string.Empty, sampleClipKey);
             clipField.SetEnabled(editable);
             clipField.style.flexGrow = 1;
             clipField.style.position = Position.Relative;
@@ -6137,7 +6635,137 @@ namespace XFramework.Editor
             thresholdField.RegisterValueChangedCallback(evt => ChangeBlendSampleThreshold(stateKey, sampleIndex, evt.newValue, thresholdField, evt.previousValue));
             row.Add(thresholdField);
 
+            Button previewButton = new(() => PreviewBlendSample(stateKey, thresholdField.value))
+            {
+                text = "▶"
+            };
+            previewButton.tooltip = "预览这个 Blend1D 采样点，并把绑定参数设置到当前 threshold。";
+            ApplyClipButtonStyle(previewButton, false);
+            previewButton.style.marginLeft = 4;
+            previewButton.style.position = Position.Relative;
+            row.Add(previewButton);
+
             Button deleteButton = new(() => DeleteBlendSample(stateKey, sampleIndex))
+            {
+                text = "⌫"
+            };
+            deleteButton.tooltip = editable ? "删除这个采样点。" : "Override 资源不能删除采样点。";
+            deleteButton.SetEnabled(editable);
+            ApplyTrashButtonIcon(deleteButton);
+            ApplyClipIconButtonStyle(deleteButton);
+            deleteButton.style.marginLeft = 4;
+            deleteButton.style.position = Position.Relative;
+            row.Add(deleteButton);
+
+            return row;
+        }
+
+        private VisualElement CreateDirectionalBlendSampleRow(
+            string stateKey,
+            int sampleIndex,
+            XAnimationBlend2DSimpleDirectionalSampleConfig sample,
+            bool editable)
+        {
+            VisualElement row = CreateSubBox();
+            string sampleClipKey = sample?.clipKey ?? string.Empty;
+            string rowKey = BuildBlendSampleRuntimeKey(stateKey, sampleIndex);
+            VisualElement weightFill = CreateProgressFill(BlendWeightFillBg);
+            row.Add(weightFill);
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginBottom = 3;
+            row.style.position = Position.Relative;
+            row.style.overflow = Overflow.Hidden;
+            m_BlendSampleRowMap[rowKey] = new RowVisualState
+            {
+                BaseColor = new Color(0.14f, 0.14f, 0.15f, 1f),
+                ProgressFill = weightFill,
+            };
+
+            Label indexLabel = new($"#{sampleIndex}");
+            indexLabel.style.width = 28;
+            indexLabel.style.flexShrink = 0;
+            indexLabel.style.color = TextMuted;
+            indexLabel.style.fontSize = BodyFontSize;
+            indexLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            indexLabel.style.position = Position.Relative;
+            row.Add(indexLabel);
+
+            DropdownField clipField = CreateClipKeyDropdown(string.Empty, sampleClipKey);
+            clipField.SetEnabled(editable);
+            clipField.style.flexGrow = 1;
+            clipField.style.position = Position.Relative;
+            clipField.RegisterValueChangedCallback(evt =>
+                ChangeDirectionalBlendSampleClipKey(stateKey, sampleIndex, evt.newValue, clipField, evt.previousValue));
+            row.Add(clipField);
+
+            Label xLabel = new("x");
+            xLabel.style.marginLeft = 6;
+            xLabel.style.marginRight = 4;
+            xLabel.style.flexShrink = 0;
+            xLabel.style.color = TextMuted;
+            xLabel.style.fontSize = 10;
+            xLabel.style.position = Position.Relative;
+            row.Add(xLabel);
+
+            FloatField xField = new() { value = sample?.positionX ?? 0f };
+            xField.SetEnabled(editable);
+            ConfigureCompactNumberField(xField);
+            xField.style.width = 60;
+            xField.style.minWidth = 60;
+            xField.style.maxWidth = 60;
+            xField.style.position = Position.Relative;
+            xField.RegisterValueChangedCallback(evt =>
+                ChangeDirectionalBlendSamplePosition(
+                    stateKey,
+                    sampleIndex,
+                    evt.newValue,
+                    sample?.positionY ?? 0f,
+                    xField,
+                    evt.previousValue,
+                    sample?.positionY ?? 0f,
+                    true));
+            row.Add(xField);
+
+            Label yLabel = new("y");
+            yLabel.style.marginLeft = 6;
+            yLabel.style.marginRight = 4;
+            yLabel.style.flexShrink = 0;
+            yLabel.style.color = TextMuted;
+            yLabel.style.fontSize = 10;
+            yLabel.style.position = Position.Relative;
+            row.Add(yLabel);
+
+            FloatField yField = new() { value = sample?.positionY ?? 0f };
+            yField.SetEnabled(editable);
+            ConfigureCompactNumberField(yField);
+            yField.style.width = 60;
+            yField.style.minWidth = 60;
+            yField.style.maxWidth = 60;
+            yField.style.position = Position.Relative;
+            yField.RegisterValueChangedCallback(evt =>
+                ChangeDirectionalBlendSamplePosition(
+                    stateKey,
+                    sampleIndex,
+                    sample?.positionX ?? 0f,
+                    evt.newValue,
+                    yField,
+                    sample?.positionX ?? 0f,
+                    evt.previousValue,
+                    false));
+            row.Add(yField);
+
+            Button previewButton = new(() => PreviewDirectionalBlendSample(stateKey, xField.value, yField.value))
+            {
+                text = "▶"
+            };
+            previewButton.tooltip = "预览这个二维采样点，并把绑定参数设置到当前 (x, y)。";
+            ApplyClipButtonStyle(previewButton, false);
+            previewButton.style.marginLeft = 4;
+            previewButton.style.position = Position.Relative;
+            row.Add(previewButton);
+
+            Button deleteButton = new(() => DeleteDirectionalBlendSample(stateKey, sampleIndex))
             {
                 text = "⌫"
             };
@@ -6912,14 +7540,31 @@ namespace XFramework.Editor
                 return false;
             }
 
-            if (m_Session.CompiledAsset.GetState(stateKey) is not XAnimationCompiledBlend1DState blendState)
+            XAnimationCompiledState compiledState = m_Session.CompiledAsset.GetState(stateKey);
+            if (compiledState is XAnimationCompiledBlend1DState blendState)
+            {
+                for (int i = 0; i < blendState.Samples.Count; i++)
+                {
+                    if (!string.Equals(blendState.Samples[i].Config.clipKey, clipKey, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    rowKey = BuildBlendSampleRuntimeKey(stateKey, i);
+                    return true;
+                }
+
+                return false;
+            }
+
+            if (!TryGetDirectionalBlendSamples(compiledState, out IReadOnlyList<XAnimationCompiledBlend2DSimpleDirectionalSample> samples))
             {
                 return false;
             }
 
-            for (int i = 0; i < blendState.Samples.Count; i++)
+            for (int i = 0; i < samples.Count; i++)
             {
-                if (!string.Equals(blendState.Samples[i].Config.clipKey, clipKey, StringComparison.Ordinal))
+                if (!string.Equals(samples[i].Config.clipKey, clipKey, StringComparison.Ordinal))
                 {
                     continue;
                 }
@@ -7416,19 +8061,38 @@ namespace XFramework.Editor
 
         private static string BuildBlendStateDebugText(XAnimationChannelState state)
         {
-            if (state.blendClips == null || state.blendClips.Length == 0)
+            bool hasBlendClips = state.blendClips != null && state.blendClips.Length > 0;
+            bool isDirectionalState = IsDirectionalBlendStateType(state.stateType);
+            if (!hasBlendClips && !isDirectionalState)
             {
                 return string.Empty;
             }
 
             List<string> parts = new();
-            for (int i = 0; i < state.blendClips.Length; i++)
+            if (isDirectionalState)
             {
-                XAnimationBlendClipState clipState = state.blendClips[i];
-                parts.Add($"{clipState.clipKey}:{clipState.weight:0.000}");
+                parts.Add($"BlendInput: ({state.blendParameterX:0.###}, {state.blendParameterY:0.###})");
             }
 
-            return $"\nBlend: {string.Join(", ", parts)}";
+            if (hasBlendClips)
+            {
+                List<string> clipParts = new(state.blendClips.Length);
+                for (int i = 0; i < state.blendClips.Length; i++)
+                {
+                    XAnimationBlendClipState clipState = state.blendClips[i];
+                    bool hasDirectionalPosition =
+                        !Mathf.Approximately(clipState.positionX, 0f) ||
+                        !Mathf.Approximately(clipState.positionY, 0f);
+                    string clipText = hasDirectionalPosition
+                        ? $"{clipState.clipKey}@({clipState.positionX:0.###},{clipState.positionY:0.###}):{clipState.weight:0.000}"
+                        : $"{clipState.clipKey}:{clipState.weight:0.000}";
+                    clipParts.Add(clipText);
+                }
+
+                parts.Add($"Blend: {string.Join(", ", clipParts)}");
+            }
+
+            return $"\n{string.Join("\n", parts)}";
         }
 
         private void RefreshCueLogView(bool force = false)

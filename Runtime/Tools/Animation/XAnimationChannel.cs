@@ -570,6 +570,1057 @@ namespace XFramework.Animation
         }
     }
 
+    public sealed class XAnimationBlend2DSimpleDirectionalStatePlaybackInstance : XAnimationStatePlaybackInstance
+    {
+        private const float ActiveCueWeightThreshold = 0.0001f;
+        private const float DirectionEpsilon = 0.0001f;
+        private const float IdleBlendRadius = 1f;
+
+        private readonly PlayableGraph m_Graph;
+        private readonly XAnimationCompiledBlend2DSimpleDirectionalState m_State;
+        private readonly XAnimationCompiledClip[] m_Clips;
+        private readonly AnimationMixerPlayable m_Mixer;
+        private readonly AnimationClipPlayable[] m_Playables;
+        private readonly float[] m_ClipLengths;
+        private readonly float[] m_SampleWeights;
+        private readonly Vector2[] m_SamplePositions;
+        private readonly int m_IdleSampleIndex = -1;
+
+        private int m_PrimaryClipIndex;
+        private float m_TotalNormalizedTime;
+        private float m_PreviousTotalNormalizedTime;
+        private float m_BlendParameterX;
+        private float m_BlendParameterY;
+
+        internal XAnimationBlend2DSimpleDirectionalStatePlaybackInstance(
+            PlayableGraph graph,
+            int playbackId,
+            string channelName,
+            Animator animator,
+            XAnimationCompiledBlend2DSimpleDirectionalState state,
+            XAnimationCompiledClip[] clips,
+            bool isTemporaryState,
+            XAnimationPlaybackRuntimeOptions options)
+            : base(playbackId, channelName, state?.Key, XAnimationStateType.Blend2DSimpleDirectional, isTemporaryState, options)
+        {
+            _ = animator ? animator : throw new ArgumentNullException(nameof(animator));
+            m_Graph = graph;
+            m_State = state ?? throw new ArgumentNullException(nameof(state));
+            m_Clips = clips ?? throw new ArgumentNullException(nameof(clips));
+            m_Mixer = AnimationMixerPlayable.Create(graph, m_Clips.Length, true);
+            m_Playables = new AnimationClipPlayable[m_Clips.Length];
+            m_ClipLengths = new float[m_Clips.Length];
+            m_SampleWeights = new float[m_Clips.Length];
+            m_SamplePositions = new Vector2[m_Clips.Length];
+
+            float normalizedTime = Mathf.Clamp01(options.NormalizedTime);
+            m_TotalNormalizedTime = normalizedTime;
+            m_PreviousTotalNormalizedTime = normalizedTime;
+            for (int i = 0; i < m_Clips.Length; i++)
+            {
+                XAnimationCompiledClip clip = m_Clips[i];
+                AnimationClipPlayable playable = AnimationClipPlayable.Create(graph, clip.PlaybackClip);
+                playable.SetApplyFootIK(false);
+                float clipLength = Mathf.Max(clip.PlaybackClip.length, 0.0001f);
+                playable.SetTime(normalizedTime * clipLength);
+                m_Playables[i] = playable;
+                m_ClipLengths[i] = clipLength;
+                m_SamplePositions[i] = m_State.Samples[i].Position;
+                if (Mathf.Approximately(m_SamplePositions[i].x, 0f) && Mathf.Approximately(m_SamplePositions[i].y, 0f))
+                {
+                    m_IdleSampleIndex = i;
+                }
+            }
+        }
+
+        public override string PrimaryClipKey => m_Clips[m_PrimaryClipIndex].Key;
+        public override Playable OutputPlayable => m_Mixer;
+
+        protected override void PrepareStateFrame(float deltaTime, float channelTimeScale, XAnimationContext context)
+        {
+            string parameterXName = m_State.Config.parameterXName;
+            string parameterYName = m_State.Config.parameterYName;
+            if (!context.TryGetFloat(parameterXName, out float parameterXValue))
+            {
+                throw new XFrameworkException($"XAnimation parameter '{parameterXName}' does not exist.");
+            }
+
+            if (!context.TryGetFloat(parameterYName, out float parameterYValue))
+            {
+                throw new XFrameworkException($"XAnimation parameter '{parameterYName}' does not exist.");
+            }
+
+            m_BlendParameterX = parameterXValue;
+            m_BlendParameterY = parameterYValue;
+            ResolveWeights(new Vector2(parameterXValue, parameterYValue));
+            m_PreviousTotalNormalizedTime = m_TotalNormalizedTime;
+            float blendedClipLength = GetBlendedClipLength();
+            m_TotalNormalizedTime += deltaTime * Speed * channelTimeScale / blendedClipLength;
+
+            for (int i = 0; i < m_Playables.Length; i++)
+            {
+                bool shouldConnect = m_SampleWeights[i] > ActiveCueWeightThreshold;
+                EnsureSampleConnection(i, shouldConnect);
+                if (shouldConnect)
+                {
+                    m_Playables[i].SetSpeed(0d);
+                    m_Playables[i].SetTime(GetPlayableTime(i, m_TotalNormalizedTime));
+                    m_Mixer.SetInputWeight(i, m_SampleWeights[i]);
+                }
+            }
+        }
+
+        public override void FinalizeFrame(XAnimationCueDispatcher cueDispatcher)
+        {
+            for (int i = 0; i < m_Playables.Length; i++)
+            {
+                AnimationClipPlayable playable = m_Playables[i];
+                if (!playable.IsValid())
+                {
+                    continue;
+                }
+
+                if (!SuppressCues && m_SampleWeights[i] > ActiveCueWeightThreshold)
+                {
+                    cueDispatcher?.Update(this, m_Clips[i].Key, m_PreviousTotalNormalizedTime, m_TotalNormalizedTime);
+                    XAnimationClipEventInvoker.Dispatch(
+                        m_Clips[i].Clip,
+                        this,
+                        m_PreviousTotalNormalizedTime,
+                        m_TotalNormalizedTime,
+                        CurrentWeight * m_SampleWeights[i],
+                        cueEvent => cueDispatcher?.Raise(cueEvent));
+                }
+            }
+        }
+
+        public override XAnimationChannelState BuildState(float channelWeight, float channelTimeScale)
+        {
+            return new XAnimationChannelState
+            {
+                channelName = ChannelName,
+                stateKey = StateKey,
+                stateType = StateType,
+                clipKey = PrimaryClipKey,
+                blendClips = BuildBlendClipStates(),
+                playbackId = PlaybackId,
+                normalizedTime = GetNormalizedTime(),
+                totalNormalizedTime = m_TotalNormalizedTime,
+                weight = CurrentWeight,
+                channelWeight = channelWeight,
+                speed = Speed * channelTimeScale,
+                timeScale = channelTimeScale,
+                blendParameterX = m_BlendParameterX,
+                blendParameterY = m_BlendParameterY,
+                isLooping = IsLooping,
+                isFading = IsFading,
+                priority = Priority,
+                interruptible = Interruptible,
+                isTemporaryState = IsTemporaryState,
+            };
+        }
+
+        public override void Dispose(XAnimationCueDispatcher cueDispatcher)
+        {
+            cueDispatcher?.RemovePlayback(PlaybackId);
+            for (int i = 0; i < m_Playables.Length; i++)
+            {
+                if (m_Playables[i].IsValid())
+                {
+                    m_Playables[i].Destroy();
+                }
+            }
+
+            if (m_Mixer.IsValid())
+            {
+                m_Mixer.Destroy();
+            }
+        }
+
+        public override float GetNormalizedTime()
+        {
+            return IsLooping ? Mathf.Repeat(m_TotalNormalizedTime, 1f) : Mathf.Clamp01(m_TotalNormalizedTime);
+        }
+
+        public override float GetTotalNormalizedTime()
+        {
+            return m_TotalNormalizedTime;
+        }
+
+        public override float GetCueWeight(string clipKey)
+        {
+            if (string.IsNullOrWhiteSpace(clipKey))
+            {
+                return 0f;
+            }
+
+            for (int i = 0; i < m_Clips.Length; i++)
+            {
+                if (string.Equals(m_Clips[i].Key, clipKey, StringComparison.Ordinal))
+                {
+                    return CurrentWeight * m_SampleWeights[i];
+                }
+            }
+
+            return 0f;
+        }
+
+        private void ResolveWeights(Vector2 input)
+        {
+            Array.Clear(m_SampleWeights, 0, m_SampleWeights.Length);
+
+            float magnitude = input.magnitude;
+            if (magnitude <= DirectionEpsilon)
+            {
+                if (m_IdleSampleIndex >= 0)
+                {
+                    m_SampleWeights[m_IdleSampleIndex] = 1f;
+                    m_PrimaryClipIndex = m_IdleSampleIndex;
+                    return;
+                }
+
+                int closestIndex = FindClosestSampleIndex(input);
+                m_SampleWeights[closestIndex] = 1f;
+                m_PrimaryClipIndex = closestIndex;
+                return;
+            }
+
+            Vector2 direction = input / magnitude;
+            if (!TryResolveDirectionalSampleWeights(
+                    direction,
+                    out int firstIndex,
+                    out float firstWeight,
+                    out int secondIndex,
+                    out float secondWeight))
+            {
+                int closestIndex = FindClosestSampleIndex(input);
+                m_SampleWeights[closestIndex] = 1f;
+                m_PrimaryClipIndex = closestIndex;
+                return;
+            }
+
+            float idleWeight = 0f;
+            if (m_IdleSampleIndex >= 0)
+            {
+                idleWeight = Mathf.Clamp01(1f - magnitude / IdleBlendRadius);
+            }
+
+            float directionalWeight = 1f - idleWeight;
+            m_SampleWeights[firstIndex] = directionalWeight * firstWeight;
+            if (secondIndex >= 0 && secondWeight > 0f)
+            {
+                m_SampleWeights[secondIndex] = directionalWeight * secondWeight;
+            }
+
+            if (m_IdleSampleIndex >= 0 && idleWeight > 0f)
+            {
+                m_SampleWeights[m_IdleSampleIndex] = idleWeight;
+            }
+
+            m_PrimaryClipIndex = firstIndex;
+            for (int i = 0; i < m_SampleWeights.Length; i++)
+            {
+                if (m_SampleWeights[i] > m_SampleWeights[m_PrimaryClipIndex])
+                {
+                    m_PrimaryClipIndex = i;
+                }
+            }
+        }
+
+        private bool TryResolveDirectionalSampleWeights(
+            Vector2 direction,
+            out int firstIndex,
+            out float firstWeight,
+            out int secondIndex,
+            out float secondWeight)
+        {
+            firstIndex = -1;
+            firstWeight = 0f;
+            secondIndex = -1;
+            secondWeight = 0f;
+
+            int directionalSampleCount = 0;
+            int onlyDirectionalSampleIndex = -1;
+            int closestDirectionalSampleIndex = -1;
+            float closestDot = float.NegativeInfinity;
+            int clockwiseIndex = -1;
+            int counterClockwiseIndex = -1;
+            float clockwiseDistance = float.PositiveInfinity;
+            float counterClockwiseDistance = float.PositiveInfinity;
+            float inputAngle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
+            float zeroSampleSqrMagnitude = DirectionEpsilon * DirectionEpsilon;
+
+            for (int i = 0; i < m_SamplePositions.Length; i++)
+            {
+                Vector2 samplePosition = m_SamplePositions[i];
+                if (samplePosition.sqrMagnitude <= zeroSampleSqrMagnitude)
+                {
+                    continue;
+                }
+
+                directionalSampleCount++;
+                onlyDirectionalSampleIndex = i;
+
+                Vector2 sampleDirection = samplePosition.normalized;
+                float dot = Vector2.Dot(direction, sampleDirection);
+                if (dot > closestDot)
+                {
+                    closestDot = dot;
+                    closestDirectionalSampleIndex = i;
+                }
+
+                if (dot >= 1f - DirectionEpsilon)
+                {
+                    firstIndex = i;
+                    firstWeight = 1f;
+                    return true;
+                }
+
+                float sampleAngle = Mathf.Atan2(sampleDirection.y, sampleDirection.x) * Mathf.Rad2Deg;
+                float signedDistance = Mathf.DeltaAngle(inputAngle, sampleAngle);
+                if (signedDistance < 0f)
+                {
+                    float distance = -signedDistance;
+                    if (distance < clockwiseDistance)
+                    {
+                        clockwiseDistance = distance;
+                        clockwiseIndex = i;
+                    }
+                }
+                else if (signedDistance > 0f && signedDistance < counterClockwiseDistance)
+                {
+                    counterClockwiseDistance = signedDistance;
+                    counterClockwiseIndex = i;
+                }
+            }
+
+            if (directionalSampleCount <= 0)
+            {
+                return false;
+            }
+
+            if (directionalSampleCount == 1)
+            {
+                firstIndex = onlyDirectionalSampleIndex;
+                firstWeight = 1f;
+                return true;
+            }
+
+            if (clockwiseIndex < 0 || counterClockwiseIndex < 0)
+            {
+                firstIndex = closestDirectionalSampleIndex;
+                firstWeight = 1f;
+                return firstIndex >= 0;
+            }
+
+            float totalDistance = clockwiseDistance + counterClockwiseDistance;
+            if (totalDistance <= DirectionEpsilon)
+            {
+                firstIndex = closestDirectionalSampleIndex;
+                firstWeight = 1f;
+                return firstIndex >= 0;
+            }
+
+            firstIndex = clockwiseIndex;
+            firstWeight = counterClockwiseDistance / totalDistance;
+            secondIndex = counterClockwiseIndex;
+            secondWeight = clockwiseDistance / totalDistance;
+            return true;
+        }
+
+        private int FindClosestSampleIndex(Vector2 input)
+        {
+            int closestIndex = 0;
+            float closestDistance = float.PositiveInfinity;
+            for (int i = 0; i < m_SamplePositions.Length; i++)
+            {
+                float distance = (m_SamplePositions[i] - input).sqrMagnitude;
+                if (distance < closestDistance)
+                {
+                    closestDistance = distance;
+                    closestIndex = i;
+                }
+            }
+
+            return closestIndex;
+        }
+
+        private void EnsureSampleConnection(int inputIndex, bool connected)
+        {
+            bool isConnected = m_Mixer.GetInput(inputIndex).IsValid();
+            if (connected)
+            {
+                if (!isConnected)
+                {
+                    m_Graph.Connect(m_Playables[inputIndex], 0, m_Mixer, inputIndex);
+                }
+
+                return;
+            }
+
+            if (isConnected)
+            {
+                m_Graph.Disconnect(m_Mixer, inputIndex);
+            }
+
+            m_Mixer.SetInputWeight(inputIndex, 0f);
+        }
+
+        private XAnimationBlendClipState[] BuildBlendClipStates()
+        {
+            int activeCount = 0;
+            for (int i = 0; i < m_SampleWeights.Length; i++)
+            {
+                if (m_SampleWeights[i] > ActiveCueWeightThreshold)
+                {
+                    activeCount++;
+                }
+            }
+
+            XAnimationBlendClipState[] states = new XAnimationBlendClipState[activeCount];
+            int stateIndex = 0;
+            for (int i = 0; i < m_SampleWeights.Length; i++)
+            {
+                if (m_SampleWeights[i] <= ActiveCueWeightThreshold)
+                {
+                    continue;
+                }
+
+                states[stateIndex++] = new XAnimationBlendClipState
+                {
+                    clipKey = m_Clips[i].Key,
+                    weight = m_SampleWeights[i],
+                    normalizedTime = GetNormalizedTime(),
+                    totalNormalizedTime = m_TotalNormalizedTime,
+                    positionX = m_SamplePositions[i].x,
+                    positionY = m_SamplePositions[i].y,
+                };
+            }
+
+            return states;
+        }
+
+        private float GetBlendedClipLength()
+        {
+            float blendedClipLength = 0f;
+            for (int i = 0; i < m_SampleWeights.Length; i++)
+            {
+                blendedClipLength += m_ClipLengths[i] * m_SampleWeights[i];
+            }
+
+            return blendedClipLength > 0.0001f ? blendedClipLength : m_ClipLengths[Mathf.Clamp(m_PrimaryClipIndex, 0, m_ClipLengths.Length - 1)];
+        }
+
+        private double GetPlayableTime(int sampleIndex, float totalNormalizedTime)
+        {
+            float normalizedTime = IsLooping
+                ? Mathf.Repeat(totalNormalizedTime, 1f)
+                : Mathf.Clamp01(totalNormalizedTime);
+            return normalizedTime * m_ClipLengths[sampleIndex];
+        }
+    }
+
+    public sealed class XAnimationBlend2DFreeformDirectionalStatePlaybackInstance : XAnimationStatePlaybackInstance
+    {
+        private const float ActiveCueWeightThreshold = 0.0001f;
+        private const float DirectionEpsilon = 0.0001f;
+
+        private readonly PlayableGraph m_Graph;
+        private readonly XAnimationCompiledBlend2DFreeformDirectionalState m_State;
+        private readonly XAnimationCompiledClip[] m_Clips;
+        private readonly AnimationMixerPlayable m_Mixer;
+        private readonly AnimationClipPlayable[] m_Playables;
+        private readonly float[] m_ClipLengths;
+        private readonly float[] m_SampleWeights;
+        private readonly Vector2[] m_SamplePositions;
+        private readonly FreeformDirectionalGroup[] m_DirectionalGroups;
+        private readonly int m_IdleSampleIndex = -1;
+
+        private int m_PrimaryClipIndex;
+        private float m_TotalNormalizedTime;
+        private float m_PreviousTotalNormalizedTime;
+        private float m_BlendParameterX;
+        private float m_BlendParameterY;
+
+        internal XAnimationBlend2DFreeformDirectionalStatePlaybackInstance(
+            PlayableGraph graph,
+            int playbackId,
+            string channelName,
+            Animator animator,
+            XAnimationCompiledBlend2DFreeformDirectionalState state,
+            XAnimationCompiledClip[] clips,
+            bool isTemporaryState,
+            XAnimationPlaybackRuntimeOptions options)
+            : base(playbackId, channelName, state?.Key, XAnimationStateType.Blend2DFreeformDirectional, isTemporaryState, options)
+        {
+            _ = animator ? animator : throw new ArgumentNullException(nameof(animator));
+            m_Graph = graph;
+            m_State = state ?? throw new ArgumentNullException(nameof(state));
+            m_Clips = clips ?? throw new ArgumentNullException(nameof(clips));
+            m_Mixer = AnimationMixerPlayable.Create(graph, m_Clips.Length, true);
+            m_Playables = new AnimationClipPlayable[m_Clips.Length];
+            m_ClipLengths = new float[m_Clips.Length];
+            m_SampleWeights = new float[m_Clips.Length];
+            m_SamplePositions = new Vector2[m_Clips.Length];
+
+            float normalizedTime = Mathf.Clamp01(options.NormalizedTime);
+            m_TotalNormalizedTime = normalizedTime;
+            m_PreviousTotalNormalizedTime = normalizedTime;
+            for (int i = 0; i < m_Clips.Length; i++)
+            {
+                XAnimationCompiledClip clip = m_Clips[i];
+                AnimationClipPlayable playable = AnimationClipPlayable.Create(graph, clip.PlaybackClip);
+                playable.SetApplyFootIK(false);
+                float clipLength = Mathf.Max(clip.PlaybackClip.length, 0.0001f);
+                playable.SetTime(normalizedTime * clipLength);
+                m_Playables[i] = playable;
+                m_ClipLengths[i] = clipLength;
+                m_SamplePositions[i] = m_State.Samples[i].Position;
+                if (Mathf.Approximately(m_SamplePositions[i].x, 0f) && Mathf.Approximately(m_SamplePositions[i].y, 0f))
+                {
+                    m_IdleSampleIndex = i;
+                }
+            }
+
+            m_PrimaryClipIndex = m_IdleSampleIndex >= 0 ? m_IdleSampleIndex : 0;
+            m_DirectionalGroups = BuildDirectionalGroups();
+        }
+
+        public override string PrimaryClipKey => m_Clips[m_PrimaryClipIndex].Key;
+        public override Playable OutputPlayable => m_Mixer;
+
+        protected override void PrepareStateFrame(float deltaTime, float channelTimeScale, XAnimationContext context)
+        {
+            string parameterXName = m_State.Config.parameterXName;
+            string parameterYName = m_State.Config.parameterYName;
+            if (!context.TryGetFloat(parameterXName, out float parameterXValue))
+            {
+                throw new XFrameworkException($"XAnimation parameter '{parameterXName}' does not exist.");
+            }
+
+            if (!context.TryGetFloat(parameterYName, out float parameterYValue))
+            {
+                throw new XFrameworkException($"XAnimation parameter '{parameterYName}' does not exist.");
+            }
+
+            m_BlendParameterX = parameterXValue;
+            m_BlendParameterY = parameterYValue;
+            ResolveWeights(new Vector2(parameterXValue, parameterYValue));
+            m_PreviousTotalNormalizedTime = m_TotalNormalizedTime;
+            float blendedClipLength = GetBlendedClipLength();
+            m_TotalNormalizedTime += deltaTime * Speed * channelTimeScale / blendedClipLength;
+
+            for (int i = 0; i < m_Playables.Length; i++)
+            {
+                bool shouldConnect = m_SampleWeights[i] > ActiveCueWeightThreshold;
+                EnsureSampleConnection(i, shouldConnect);
+                if (shouldConnect)
+                {
+                    m_Playables[i].SetSpeed(0d);
+                    m_Playables[i].SetTime(GetPlayableTime(i, m_TotalNormalizedTime));
+                    m_Mixer.SetInputWeight(i, m_SampleWeights[i]);
+                }
+            }
+        }
+
+        public override void FinalizeFrame(XAnimationCueDispatcher cueDispatcher)
+        {
+            for (int i = 0; i < m_Playables.Length; i++)
+            {
+                AnimationClipPlayable playable = m_Playables[i];
+                if (!playable.IsValid())
+                {
+                    continue;
+                }
+
+                if (!SuppressCues && m_SampleWeights[i] > ActiveCueWeightThreshold)
+                {
+                    cueDispatcher?.Update(this, m_Clips[i].Key, m_PreviousTotalNormalizedTime, m_TotalNormalizedTime);
+                    XAnimationClipEventInvoker.Dispatch(
+                        m_Clips[i].Clip,
+                        this,
+                        m_PreviousTotalNormalizedTime,
+                        m_TotalNormalizedTime,
+                        CurrentWeight * m_SampleWeights[i],
+                        cueEvent => cueDispatcher?.Raise(cueEvent));
+                }
+            }
+        }
+
+        public override XAnimationChannelState BuildState(float channelWeight, float channelTimeScale)
+        {
+            return new XAnimationChannelState
+            {
+                channelName = ChannelName,
+                stateKey = StateKey,
+                stateType = StateType,
+                clipKey = PrimaryClipKey,
+                blendClips = BuildBlendClipStates(),
+                playbackId = PlaybackId,
+                normalizedTime = GetNormalizedTime(),
+                totalNormalizedTime = m_TotalNormalizedTime,
+                weight = CurrentWeight,
+                channelWeight = channelWeight,
+                speed = Speed * channelTimeScale,
+                timeScale = channelTimeScale,
+                blendParameterX = m_BlendParameterX,
+                blendParameterY = m_BlendParameterY,
+                isLooping = IsLooping,
+                isFading = IsFading,
+                priority = Priority,
+                interruptible = Interruptible,
+                isTemporaryState = IsTemporaryState,
+            };
+        }
+
+        public override void Dispose(XAnimationCueDispatcher cueDispatcher)
+        {
+            cueDispatcher?.RemovePlayback(PlaybackId);
+            for (int i = 0; i < m_Playables.Length; i++)
+            {
+                if (m_Playables[i].IsValid())
+                {
+                    m_Playables[i].Destroy();
+                }
+            }
+
+            if (m_Mixer.IsValid())
+            {
+                m_Mixer.Destroy();
+            }
+        }
+
+        public override float GetNormalizedTime()
+        {
+            return IsLooping ? Mathf.Repeat(m_TotalNormalizedTime, 1f) : Mathf.Clamp01(m_TotalNormalizedTime);
+        }
+
+        public override float GetTotalNormalizedTime()
+        {
+            return m_TotalNormalizedTime;
+        }
+
+        public override float GetCueWeight(string clipKey)
+        {
+            if (string.IsNullOrWhiteSpace(clipKey))
+            {
+                return 0f;
+            }
+
+            for (int i = 0; i < m_Clips.Length; i++)
+            {
+                if (string.Equals(m_Clips[i].Key, clipKey, StringComparison.Ordinal))
+                {
+                    return CurrentWeight * m_SampleWeights[i];
+                }
+            }
+
+            return 0f;
+        }
+
+        private void ResolveWeights(Vector2 input)
+        {
+            Array.Clear(m_SampleWeights, 0, m_SampleWeights.Length);
+
+            float magnitude = input.magnitude;
+            if (magnitude <= DirectionEpsilon)
+            {
+                int idleIndex = m_IdleSampleIndex >= 0 ? m_IdleSampleIndex : FindClosestSampleIndex(input);
+                m_SampleWeights[idleIndex] = 1f;
+                m_PrimaryClipIndex = idleIndex;
+                return;
+            }
+
+            if (m_DirectionalGroups.Length == 0)
+            {
+                int closestIndex = FindClosestSampleIndex(input);
+                m_SampleWeights[closestIndex] = 1f;
+                m_PrimaryClipIndex = closestIndex;
+                return;
+            }
+
+            Vector2 direction = input / magnitude;
+            if (!TryResolveDirectionalGroupWeights(
+                    direction,
+                    out int firstGroupIndex,
+                    out float firstGroupWeight,
+                    out int secondGroupIndex,
+                    out float secondGroupWeight))
+            {
+                int closestGroupIndex = FindClosestDirectionalGroupIndex(direction);
+                ApplyGroupRadialWeights(m_DirectionalGroups[closestGroupIndex], magnitude, 1f);
+                NormalizeWeights(input);
+                return;
+            }
+
+            ApplyGroupRadialWeights(m_DirectionalGroups[firstGroupIndex], magnitude, firstGroupWeight);
+            if (secondGroupIndex >= 0 && secondGroupWeight > 0f)
+            {
+                ApplyGroupRadialWeights(m_DirectionalGroups[secondGroupIndex], magnitude, secondGroupWeight);
+            }
+
+            NormalizeWeights(input);
+        }
+
+        private bool TryResolveDirectionalGroupWeights(
+            Vector2 direction,
+            out int firstGroupIndex,
+            out float firstGroupWeight,
+            out int secondGroupIndex,
+            out float secondGroupWeight)
+        {
+            firstGroupIndex = -1;
+            firstGroupWeight = 0f;
+            secondGroupIndex = -1;
+            secondGroupWeight = 0f;
+
+            if (m_DirectionalGroups.Length <= 0)
+            {
+                return false;
+            }
+
+            if (m_DirectionalGroups.Length == 1)
+            {
+                firstGroupIndex = 0;
+                firstGroupWeight = 1f;
+                return true;
+            }
+
+            int closestGroupIndex = -1;
+            float closestDot = float.NegativeInfinity;
+            int clockwiseIndex = -1;
+            int counterClockwiseIndex = -1;
+            float clockwiseDistance = float.PositiveInfinity;
+            float counterClockwiseDistance = float.PositiveInfinity;
+            float inputAngle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
+
+            for (int i = 0; i < m_DirectionalGroups.Length; i++)
+            {
+                FreeformDirectionalGroup group = m_DirectionalGroups[i];
+                float dot = Vector2.Dot(direction, group.Direction);
+                if (dot > closestDot)
+                {
+                    closestDot = dot;
+                    closestGroupIndex = i;
+                }
+
+                if (dot >= 1f - DirectionEpsilon)
+                {
+                    firstGroupIndex = i;
+                    firstGroupWeight = 1f;
+                    return true;
+                }
+
+                float signedDistance = Mathf.DeltaAngle(inputAngle, group.Angle);
+                if (signedDistance < 0f)
+                {
+                    float distance = -signedDistance;
+                    if (distance < clockwiseDistance)
+                    {
+                        clockwiseDistance = distance;
+                        clockwiseIndex = i;
+                    }
+                }
+                else if (signedDistance > 0f && signedDistance < counterClockwiseDistance)
+                {
+                    counterClockwiseDistance = signedDistance;
+                    counterClockwiseIndex = i;
+                }
+            }
+
+            if (clockwiseIndex < 0 || counterClockwiseIndex < 0)
+            {
+                firstGroupIndex = closestGroupIndex;
+                firstGroupWeight = 1f;
+                return firstGroupIndex >= 0;
+            }
+
+            float totalDistance = clockwiseDistance + counterClockwiseDistance;
+            if (totalDistance <= DirectionEpsilon)
+            {
+                firstGroupIndex = closestGroupIndex;
+                firstGroupWeight = 1f;
+                return firstGroupIndex >= 0;
+            }
+
+            firstGroupIndex = clockwiseIndex;
+            firstGroupWeight = counterClockwiseDistance / totalDistance;
+            secondGroupIndex = counterClockwiseIndex;
+            secondGroupWeight = clockwiseDistance / totalDistance;
+            return true;
+        }
+
+        private void ApplyGroupRadialWeights(FreeformDirectionalGroup group, float magnitude, float groupWeight)
+        {
+            if (group == null || groupWeight <= 0f || group.SampleIndices.Length == 0)
+            {
+                return;
+            }
+
+            if (magnitude <= DirectionEpsilon)
+            {
+                AddIdleWeight(groupWeight);
+                return;
+            }
+
+            int firstIndex = group.SampleIndices[0];
+            float firstRadius = group.Radii[0];
+            if (firstRadius <= DirectionEpsilon)
+            {
+                m_SampleWeights[firstIndex] += groupWeight;
+                return;
+            }
+
+            if (magnitude <= firstRadius)
+            {
+                float sampleWeight = Mathf.Clamp01(magnitude / firstRadius);
+                AddIdleWeight(groupWeight * (1f - sampleWeight));
+                m_SampleWeights[firstIndex] += groupWeight * sampleWeight;
+                return;
+            }
+
+            for (int i = 1; i < group.SampleIndices.Length; i++)
+            {
+                float previousRadius = group.Radii[i - 1];
+                float nextRadius = group.Radii[i];
+                if (magnitude > nextRadius)
+                {
+                    continue;
+                }
+
+                float span = nextRadius - previousRadius;
+                if (span <= DirectionEpsilon)
+                {
+                    m_SampleWeights[group.SampleIndices[i]] += groupWeight;
+                    return;
+                }
+
+                float nextWeight = Mathf.Clamp01((magnitude - previousRadius) / span);
+                m_SampleWeights[group.SampleIndices[i - 1]] += groupWeight * (1f - nextWeight);
+                m_SampleWeights[group.SampleIndices[i]] += groupWeight * nextWeight;
+                return;
+            }
+
+            m_SampleWeights[group.SampleIndices[^1]] += groupWeight;
+        }
+
+        private void AddIdleWeight(float weight)
+        {
+            if (m_IdleSampleIndex >= 0 && weight > 0f)
+            {
+                m_SampleWeights[m_IdleSampleIndex] += weight;
+            }
+        }
+
+        private void NormalizeWeights(Vector2 input)
+        {
+            float totalWeight = 0f;
+            for (int i = 0; i < m_SampleWeights.Length; i++)
+            {
+                totalWeight += m_SampleWeights[i];
+            }
+
+            if (totalWeight <= DirectionEpsilon)
+            {
+                int closestIndex = FindClosestSampleIndex(input);
+                m_SampleWeights[closestIndex] = 1f;
+                m_PrimaryClipIndex = closestIndex;
+                return;
+            }
+
+            m_PrimaryClipIndex = 0;
+            for (int i = 0; i < m_SampleWeights.Length; i++)
+            {
+                m_SampleWeights[i] /= totalWeight;
+                if (m_SampleWeights[i] > m_SampleWeights[m_PrimaryClipIndex])
+                {
+                    m_PrimaryClipIndex = i;
+                }
+            }
+        }
+
+        private int FindClosestDirectionalGroupIndex(Vector2 direction)
+        {
+            int closestIndex = 0;
+            float closestDot = float.NegativeInfinity;
+            for (int i = 0; i < m_DirectionalGroups.Length; i++)
+            {
+                float dot = Vector2.Dot(direction, m_DirectionalGroups[i].Direction);
+                if (dot > closestDot)
+                {
+                    closestDot = dot;
+                    closestIndex = i;
+                }
+            }
+
+            return closestIndex;
+        }
+
+        private int FindClosestSampleIndex(Vector2 input)
+        {
+            int closestIndex = 0;
+            float closestDistance = float.PositiveInfinity;
+            for (int i = 0; i < m_SamplePositions.Length; i++)
+            {
+                float distance = (m_SamplePositions[i] - input).sqrMagnitude;
+                if (distance < closestDistance)
+                {
+                    closestDistance = distance;
+                    closestIndex = i;
+                }
+            }
+
+            return closestIndex;
+        }
+
+        private FreeformDirectionalGroup[] BuildDirectionalGroups()
+        {
+            float zeroSampleSqrMagnitude = DirectionEpsilon * DirectionEpsilon;
+            List<Vector2> directions = new();
+            List<List<int>> groupSampleIndices = new();
+            for (int i = 0; i < m_SamplePositions.Length; i++)
+            {
+                Vector2 samplePosition = m_SamplePositions[i];
+                if (samplePosition.sqrMagnitude <= zeroSampleSqrMagnitude)
+                {
+                    continue;
+                }
+
+                Vector2 sampleDirection = samplePosition.normalized;
+                int groupIndex = -1;
+                for (int directionIndex = 0; directionIndex < directions.Count; directionIndex++)
+                {
+                    if (Vector2.Dot(sampleDirection, directions[directionIndex]) >= 1f - DirectionEpsilon)
+                    {
+                        groupIndex = directionIndex;
+                        break;
+                    }
+                }
+
+                if (groupIndex < 0)
+                {
+                    groupIndex = directions.Count;
+                    directions.Add(sampleDirection);
+                    groupSampleIndices.Add(new List<int>());
+                }
+
+                groupSampleIndices[groupIndex].Add(i);
+            }
+
+            FreeformDirectionalGroup[] groups = new FreeformDirectionalGroup[groupSampleIndices.Count];
+            for (int i = 0; i < groupSampleIndices.Count; i++)
+            {
+                List<int> indices = groupSampleIndices[i];
+                indices.Sort((left, right) => m_SamplePositions[left].magnitude.CompareTo(m_SamplePositions[right].magnitude));
+                int[] sampleIndices = indices.ToArray();
+                float[] radii = new float[sampleIndices.Length];
+                for (int sampleIndex = 0; sampleIndex < sampleIndices.Length; sampleIndex++)
+                {
+                    radii[sampleIndex] = m_SamplePositions[sampleIndices[sampleIndex]].magnitude;
+                }
+
+                Vector2 direction = directions[i];
+                groups[i] = new FreeformDirectionalGroup(
+                    direction,
+                    Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg,
+                    sampleIndices,
+                    radii);
+            }
+
+            return groups;
+        }
+
+        private void EnsureSampleConnection(int inputIndex, bool connected)
+        {
+            bool isConnected = m_Mixer.GetInput(inputIndex).IsValid();
+            if (connected)
+            {
+                if (!isConnected)
+                {
+                    m_Graph.Connect(m_Playables[inputIndex], 0, m_Mixer, inputIndex);
+                }
+
+                return;
+            }
+
+            if (isConnected)
+            {
+                m_Graph.Disconnect(m_Mixer, inputIndex);
+            }
+
+            m_Mixer.SetInputWeight(inputIndex, 0f);
+        }
+
+        private XAnimationBlendClipState[] BuildBlendClipStates()
+        {
+            int activeCount = 0;
+            for (int i = 0; i < m_SampleWeights.Length; i++)
+            {
+                if (m_SampleWeights[i] > ActiveCueWeightThreshold)
+                {
+                    activeCount++;
+                }
+            }
+
+            XAnimationBlendClipState[] states = new XAnimationBlendClipState[activeCount];
+            int stateIndex = 0;
+            for (int i = 0; i < m_SampleWeights.Length; i++)
+            {
+                if (m_SampleWeights[i] <= ActiveCueWeightThreshold)
+                {
+                    continue;
+                }
+
+                states[stateIndex++] = new XAnimationBlendClipState
+                {
+                    clipKey = m_Clips[i].Key,
+                    weight = m_SampleWeights[i],
+                    normalizedTime = GetNormalizedTime(),
+                    totalNormalizedTime = m_TotalNormalizedTime,
+                    positionX = m_SamplePositions[i].x,
+                    positionY = m_SamplePositions[i].y,
+                };
+            }
+
+            return states;
+        }
+
+        private float GetBlendedClipLength()
+        {
+            float blendedClipLength = 0f;
+            for (int i = 0; i < m_SampleWeights.Length; i++)
+            {
+                blendedClipLength += m_ClipLengths[i] * m_SampleWeights[i];
+            }
+
+            return blendedClipLength > 0.0001f ? blendedClipLength : m_ClipLengths[Mathf.Clamp(m_PrimaryClipIndex, 0, m_ClipLengths.Length - 1)];
+        }
+
+        private double GetPlayableTime(int sampleIndex, float totalNormalizedTime)
+        {
+            float normalizedTime = IsLooping
+                ? Mathf.Repeat(totalNormalizedTime, 1f)
+                : Mathf.Clamp01(totalNormalizedTime);
+            return normalizedTime * m_ClipLengths[sampleIndex];
+        }
+
+        private sealed class FreeformDirectionalGroup
+        {
+            public FreeformDirectionalGroup(Vector2 direction, float angle, int[] sampleIndices, float[] radii)
+            {
+                Direction = direction;
+                Angle = angle;
+                SampleIndices = sampleIndices ?? Array.Empty<int>();
+                Radii = radii ?? Array.Empty<float>();
+            }
+
+            public Vector2 Direction { get; }
+            public float Angle { get; }
+            public int[] SampleIndices { get; }
+            public float[] Radii { get; }
+        }
+    }
+
     public sealed class XAnimationChannel
     {
         private readonly PlayableGraph m_Graph;

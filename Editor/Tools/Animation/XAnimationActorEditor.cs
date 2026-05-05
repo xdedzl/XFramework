@@ -865,7 +865,6 @@ namespace XFramework.Editor
                 visualState.Hovered = false;
                 ApplyStateRowVisualState(state.key);
             });
-
             VisualElement row = CreateRowContent();
             container.Add(row);
 
@@ -877,12 +876,18 @@ namespace XFramework.Editor
             nameLabel.style.position = Position.Relative;
             row.Add(nameLabel);
 
-            Label infoLabel = new(BuildStateInfoText(state));
-            infoLabel.style.flexGrow = 1;
-            infoLabel.style.color = TextMuted;
-            infoLabel.style.fontSize = BodyFontSize;
-            infoLabel.style.position = Position.Relative;
-            row.Add(infoLabel);
+            DropdownField stateTypeField = CreateStateTypeField(state);
+            stateTypeField.style.width = 200;
+            stateTypeField.style.flexShrink = 0;
+            stateTypeField.style.marginLeft = 6;
+            stateTypeField.style.position = Position.Relative;
+            row.Add(stateTypeField);
+
+            DropdownField channelField = CreateStateChannelField(state);
+            channelField.style.flexGrow = 1;
+            channelField.style.marginLeft = 6;
+            channelField.style.position = Position.Relative;
+            row.Add(channelField);
 
             Button playButton = new(() => ToggleStatePlayback(state))
             {
@@ -897,6 +902,114 @@ namespace XFramework.Editor
             m_StateRowMap[state.key] = container;
             m_StateButtonMap[state.key] = playButton;
             return container;
+        }
+
+        private DropdownField CreateStateTypeField(XAnimationStateConfig state)
+        {
+            string[] typeNames = Enum.GetNames(typeof(XAnimationStateType));
+            List<string> choices = new(typeNames);
+            string currentValue = state?.stateType.ToString() ?? XAnimationStateType.Single.ToString();
+            DropdownField field = new(string.Empty, choices, Mathf.Max(0, choices.IndexOf(currentValue)));
+            field.tooltip = "stateType";
+            field.RegisterValueChangedCallback(evt =>
+            {
+                if (state == null || string.Equals(evt.newValue, evt.previousValue, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                if (!Enum.TryParse(evt.newValue, out XAnimationStateType stateType))
+                {
+                    field.SetValueWithoutNotify(evt.previousValue);
+                    return;
+                }
+
+                ChangeStateType(state, stateType, evt.previousValue, field);
+            });
+            return field;
+        }
+
+        private DropdownField CreateStateChannelField(XAnimationStateConfig state)
+        {
+            List<ChannelNameOption> options = GetChannelOptions();
+            List<string> choices = new(options.Count);
+            for (int i = 0; i < options.Count; i++)
+            {
+                choices.Add(options[i].DisplayName);
+            }
+
+            string currentValue = FindChannelDisplayName(options, state?.channelName) ?? FindFirstChannelName(options) ?? string.Empty;
+            DropdownField field = new(string.Empty, choices, Mathf.Max(0, choices.IndexOf(currentValue)));
+            field.tooltip = "channelName";
+            field.RegisterValueChangedCallback(evt =>
+            {
+                if (state == null || string.Equals(evt.newValue, evt.previousValue, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                ChangeStateChannel(state, NormalizeChannelOptionValue(evt.newValue), field, evt.previousValue);
+            });
+            return field;
+        }
+
+        private void ChangeStateType(XAnimationStateConfig state, XAnimationStateType stateType, string previousValue, DropdownField field)
+        {
+            if (state == null)
+            {
+                return;
+            }
+
+            XAnimationStateType previousStateType = state.stateType;
+            try
+            {
+                ApplyStateType(state, stateType);
+                SaveCurrentAnimationAsset();
+                SetStatus($"{state.key} stateType = {stateType}。");
+                InvalidateAnimationAssetCache();
+                RebuildStateList();
+                RefreshRuntimeViews();
+            }
+            catch (Exception ex)
+            {
+                state.stateType = previousStateType;
+                field.SetValueWithoutNotify(previousValue);
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void ChangeStateChannel(XAnimationStateConfig state, string channelName, DropdownField field, string previousValue)
+        {
+            if (state == null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(channelName))
+            {
+                field.SetValueWithoutNotify(previousValue);
+                SetStatus("channelName 不能为空。", true);
+                return;
+            }
+
+            string previousChannelName = state.channelName;
+            try
+            {
+                state.channelName = channelName;
+                SaveCurrentAnimationAsset();
+                SetStatus($"{state.key} channel = {channelName}。");
+                InvalidateAnimationAssetCache();
+                RebuildStateList();
+                RefreshRuntimeViews();
+            }
+            catch (Exception ex)
+            {
+                state.channelName = previousChannelName;
+                field.SetValueWithoutNotify(previousValue);
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
         }
 
         private void ToggleStatePlayback(XAnimationStateConfig state)
@@ -1566,6 +1679,230 @@ namespace XFramework.Editor
             return assetProperty?.objectReferenceValue as TextAsset;
         }
 
+        private void SaveCurrentAnimationAsset()
+        {
+            XAnimationAsset asset = LoadCurrentAnimationAsset();
+            if (asset == null)
+            {
+                throw new XFrameworkException("当前没有选中的 XAnimationAsset。");
+            }
+
+            asset.SaveAsset();
+        }
+
+        private void ApplyStateType(XAnimationStateConfig state, XAnimationStateType stateType)
+        {
+            if (state == null)
+            {
+                throw new XFrameworkException("State 配置不能为空。");
+            }
+
+            if (state.stateType == stateType)
+            {
+                return;
+            }
+
+            state.stateType = stateType;
+            if (stateType == XAnimationStateType.Single)
+            {
+                state.clipKey = string.IsNullOrWhiteSpace(state.clipKey)
+                    ? FindTemplateClipKey()
+                    : state.clipKey;
+                state.parameterName = string.Empty;
+                state.parameterXName = string.Empty;
+                state.parameterYName = string.Empty;
+                state.samples = Array.Empty<XAnimationBlend1DSampleConfig>();
+                state.directionalSamples = Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+            }
+            else if (stateType == XAnimationStateType.Blend1D)
+            {
+                state.clipKey = string.Empty;
+                state.parameterName = EnsureFloatParameter();
+                state.parameterXName = string.Empty;
+                state.parameterYName = string.Empty;
+                state.samples = CreateDefaultBlendSamples();
+                state.directionalSamples = Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+            }
+            else if (IsDirectionalBlendStateType(stateType))
+            {
+                state.clipKey = string.Empty;
+                state.parameterName = string.Empty;
+                state.parameterXName = EnsureFloatParameter("blendX");
+                state.parameterYName = EnsureFloatParameter("blendY");
+                state.samples = Array.Empty<XAnimationBlend1DSampleConfig>();
+                state.directionalSamples = CreateDefaultDirectionalBlendSamples();
+            }
+            else
+            {
+                throw new XFrameworkException($"XAnimation stateType '{stateType}' is not supported.");
+            }
+        }
+
+        private string FindTemplateClipKey()
+        {
+            XAnimationClipConfig[] clips = LoadCurrentAnimationAsset()?.clips ?? Array.Empty<XAnimationClipConfig>();
+            for (int i = 0; i < clips.Length; i++)
+            {
+                XAnimationClipConfig clip = clips[i];
+                if (clip != null && !string.IsNullOrWhiteSpace(clip.key))
+                {
+                    return clip.key;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private string EnsureFloatParameter(string prefix = "blend")
+        {
+            XAnimationAsset asset = LoadCurrentAnimationAsset();
+            XAnimationParameterConfig[] parameters = asset?.parameters ?? Array.Empty<XAnimationParameterConfig>();
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                XAnimationParameterConfig parameter = parameters[i];
+                if (parameter != null && parameter.type == XAnimationParameterType.Float && !string.IsNullOrWhiteSpace(parameter.name))
+                {
+                    if (string.IsNullOrWhiteSpace(prefix) || parameter.name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return parameter.name;
+                    }
+                }
+            }
+
+            string parameterName = CreateUniqueParameterName(prefix);
+            List<XAnimationParameterConfig> orderedParameters = new(parameters)
+            {
+                new()
+                {
+                    name = parameterName,
+                    type = XAnimationParameterType.Float,
+                    defaultValue = 0f,
+                }
+            };
+            if (asset != null)
+            {
+                asset.parameters = orderedParameters.ToArray();
+            }
+
+            return parameterName;
+        }
+
+        private string CreateUniqueParameterName(string prefix)
+        {
+            return CreateUniqueName(prefix, name =>
+            {
+                XAnimationParameterConfig[] parameters = LoadCurrentAnimationAsset()?.parameters ?? Array.Empty<XAnimationParameterConfig>();
+                for (int i = 0; i < parameters.Length; i++)
+                {
+                    XAnimationParameterConfig parameter = parameters[i];
+                    if (parameter != null && string.Equals(parameter.name, name, StringComparison.Ordinal))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            });
+        }
+
+        private static string CreateUniqueName(string prefix, Func<string, bool> exists)
+        {
+            string safePrefix = string.IsNullOrWhiteSpace(prefix) ? "New" : prefix.Trim();
+            if (!exists(safePrefix))
+            {
+                return safePrefix;
+            }
+
+            for (int i = 1; i < 1000; i++)
+            {
+                string candidate = $"{safePrefix}{i}";
+                if (!exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            throw new XFrameworkException($"Unable to create unique name with prefix '{safePrefix}'.");
+        }
+
+        private XAnimationBlend1DSampleConfig[] CreateDefaultBlendSamples()
+        {
+            XAnimationClipConfig[] clips = LoadCurrentAnimationAsset()?.clips ?? Array.Empty<XAnimationClipConfig>();
+            List<string> clipKeys = new(2);
+            for (int i = 0; i < clips.Length && clipKeys.Count < 2; i++)
+            {
+                XAnimationClipConfig clip = clips[i];
+                if (clip != null && !string.IsNullOrWhiteSpace(clip.key) && !clipKeys.Contains(clip.key))
+                {
+                    clipKeys.Add(clip.key);
+                }
+            }
+
+            if (clipKeys.Count < 2)
+            {
+                throw new XFrameworkException("Cannot create Blend1D state because at least two clips are required.");
+            }
+
+            return new[]
+            {
+                new XAnimationBlend1DSampleConfig
+                {
+                    clipKey = clipKeys[0],
+                    threshold = 0f,
+                },
+                new XAnimationBlend1DSampleConfig
+                {
+                    clipKey = clipKeys[1],
+                    threshold = 1f,
+                }
+            };
+        }
+
+        private XAnimationBlend2DSimpleDirectionalSampleConfig[] CreateDefaultDirectionalBlendSamples()
+        {
+            XAnimationClipConfig[] clips = LoadCurrentAnimationAsset()?.clips ?? Array.Empty<XAnimationClipConfig>();
+            if (clips.Length < 2)
+            {
+                throw new XFrameworkException("Cannot create Blend2DSimpleDirectional state because at least two clips are required.");
+            }
+
+            string idleClipKey = FindTemplateClipKey();
+            string directionalClipKey = idleClipKey;
+            for (int i = 0; i < clips.Length; i++)
+            {
+                XAnimationClipConfig clip = clips[i];
+                if (clip == null || string.IsNullOrWhiteSpace(clip.key) || string.Equals(clip.key, idleClipKey, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                directionalClipKey = clip.key;
+                break;
+            }
+
+            return new[]
+            {
+                new XAnimationBlend2DSimpleDirectionalSampleConfig
+                {
+                    clipKey = idleClipKey,
+                    positionX = 0f,
+                    positionY = 0f,
+                },
+                new XAnimationBlend2DSimpleDirectionalSampleConfig
+                {
+                    clipKey = directionalClipKey,
+                    positionX = 0f,
+                    positionY = 1f,
+                }
+            };
+        }
+
+        private static bool IsDirectionalBlendStateType(XAnimationStateType stateType)
+        {
+            return stateType == XAnimationStateType.Blend2DSimpleDirectional ||
+                   stateType == XAnimationStateType.Blend2DFreeformDirectional;
+        }
+
         private AnimationClip GetClipObject(XAnimationClipConfig clip)
         {
             if (clip == null || string.IsNullOrWhiteSpace(clip.key))
@@ -1653,44 +1990,6 @@ namespace XFramework.Editor
                 double d => (int)Math.Round(d),
                 _ => 0,
             };
-        }
-
-        private static string BuildStateInfoText(XAnimationStateConfig state)
-        {
-            if (state == null)
-            {
-                return string.Empty;
-            }
-
-            return state.stateType switch
-            {
-                XAnimationStateType.Blend1D => BuildBlend1DStateInfoText(state),
-                _ => $"Single | {state.clipKey}",
-            };
-        }
-
-        private static string BuildBlend1DStateInfoText(XAnimationStateConfig state)
-        {
-            string parameterText = string.IsNullOrWhiteSpace(state.parameterName) ? "<No Parameter>" : state.parameterName;
-            if (state.samples == null || state.samples.Length == 0)
-            {
-                return $"Blend1D | {parameterText} | No samples";
-            }
-
-            List<string> sampleTexts = new(state.samples.Length);
-            for (int i = 0; i < state.samples.Length; i++)
-            {
-                XAnimationBlend1DSampleConfig sample = state.samples[i];
-                if (sample == null)
-                {
-                    continue;
-                }
-
-                string clipKey = string.IsNullOrWhiteSpace(sample.clipKey) ? "<Missing Clip>" : sample.clipKey;
-                sampleTexts.Add($"{sample.threshold:0.###}:{clipKey}");
-            }
-
-            return $"Blend1D | {parameterText} | {string.Join(" / ", sampleTexts)}";
         }
 
         private void SetStatus(string message, bool isError = false)

@@ -264,6 +264,12 @@ namespace XFramework.Animation
             return m_Driver.GetClipDuration(clipKey);
         }
 
+        public bool TryGetRootMotionDelta(out Vector3 deltaPosition, out Quaternion deltaRotation)
+        {
+            EnsureInitialized();
+            return m_Driver.TryGetRootMotionDelta(out deltaPosition, out deltaRotation);
+        }
+
         public void Dispose()
         {
             DisposeDriver();

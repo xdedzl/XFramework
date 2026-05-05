@@ -12,14 +12,19 @@ namespace XFramework.Animation
         private readonly Dictionary<string, XAnimationChannel> m_ChannelMap = new(StringComparer.Ordinal);
         private readonly XAnimationCueDispatcher m_CueDispatcher = new();
         private readonly XAnimationRootMotionResolver m_RootMotionResolver = new();
+        private readonly XAnimationRootMotionEvaluator m_RootMotionEvaluator = new();
         private const string TemporaryClipStateKeyPrefix = "__xanimation_temp_clip_state:";
 
         private PlayableGraph m_Graph;
         private AnimationLayerMixerPlayable m_LayerMixer;
         private AnimationPlayableOutput m_Output;
         private RuntimeAnimatorController m_OriginalController;
+        private bool m_OriginalApplyRootMotion;
         private int m_NextPlaybackId = 1;
         private int m_NextTemporaryStateId = 1;
+        private bool m_HasRootMotionDelta;
+        private Vector3 m_RootMotionDeltaPosition;
+        private Quaternion m_RootMotionDeltaRotation = Quaternion.identity;
 
         public XAnimationPlayer(XAnimationCompiledAsset compiledAsset, Animator animator, XAnimationContext context)
         {
@@ -146,6 +151,12 @@ namespace XFramework.Animation
         {
             ThrowIfDisposed();
             m_RootMotionResolver.SetEnabled(enabled);
+            if (!enabled)
+            {
+                m_RootMotionEvaluator.Reset();
+                ClearRootMotionDelta();
+            }
+
             m_RootMotionResolver.ApplyToAnimator(Animator);
         }
 
@@ -213,6 +224,14 @@ namespace XFramework.Animation
             return CompiledAsset.GetClipDuration(clipKey);
         }
 
+        public bool TryGetRootMotionDelta(out Vector3 deltaPosition, out Quaternion deltaRotation)
+        {
+            ThrowIfDisposed();
+            deltaPosition = m_RootMotionDeltaPosition;
+            deltaRotation = m_RootMotionDeltaRotation;
+            return m_HasRootMotionDelta;
+        }
+
         public void Update(float deltaTime)
         {
             ThrowIfDisposed();
@@ -228,7 +247,8 @@ namespace XFramework.Animation
                 m_LayerMixer.SetInputWeight(i, channel.HasActivePlayback ? channel.ChannelWeight : 0f);
             }
 
-            m_RootMotionResolver.ResolveSource(m_Channels);
+            XAnimationChannel rootMotionSource = m_RootMotionResolver.ResolveSource(m_Channels);
+            CacheRootMotionDelta(rootMotionSource);
             m_RootMotionResolver.ApplyToAnimator(Animator);
 
             m_Graph.Evaluate(deltaTime);
@@ -302,13 +322,16 @@ namespace XFramework.Animation
             }
 
             m_Graph.Play();
+            Animator.applyRootMotion = false;
             m_RootMotionResolver.ApplyToAnimator(Animator);
         }
 
         private void DisableAnimatorController()
         {
             m_OriginalController = Animator.runtimeAnimatorController;
+            m_OriginalApplyRootMotion = Animator.applyRootMotion;
             Animator.runtimeAnimatorController = null;
+            Animator.applyRootMotion = false;
         }
 
         private void RestoreAnimatorController()
@@ -319,6 +342,46 @@ namespace XFramework.Animation
             }
 
             Animator.runtimeAnimatorController = m_OriginalController;
+            Animator.applyRootMotion = m_OriginalApplyRootMotion;
+        }
+
+        private void CacheRootMotionDelta(XAnimationChannel rootMotionSource)
+        {
+            if (!m_RootMotionResolver.Enabled)
+            {
+                m_RootMotionEvaluator.Reset();
+                ClearRootMotionDelta();
+                return;
+            }
+
+            m_HasRootMotionDelta = m_RootMotionEvaluator.TryEvaluate(
+                CompiledAsset,
+                rootMotionSource,
+                out m_RootMotionDeltaPosition,
+                out m_RootMotionDeltaRotation);
+            if (!m_HasRootMotionDelta)
+            {
+                m_RootMotionDeltaPosition = Vector3.zero;
+                m_RootMotionDeltaRotation = Quaternion.identity;
+                return;
+            }
+
+            Transform rootMotionTransform = Animator != null ? Animator.transform : null;
+            if (rootMotionTransform == null)
+            {
+                return;
+            }
+
+            Quaternion rootMotionSpaceRotation = rootMotionTransform.rotation;
+            m_RootMotionDeltaPosition = rootMotionTransform.TransformDirection(m_RootMotionDeltaPosition);
+            m_RootMotionDeltaRotation = rootMotionSpaceRotation * m_RootMotionDeltaRotation * Quaternion.Inverse(rootMotionSpaceRotation);
+        }
+
+        private void ClearRootMotionDelta()
+        {
+            m_HasRootMotionDelta = false;
+            m_RootMotionDeltaPosition = Vector3.zero;
+            m_RootMotionDeltaRotation = Quaternion.identity;
         }
 
         private XAnimationCompiledChannel ResolveClipChannel(XAnimationCompiledClip clip, string channelName)
@@ -371,7 +434,10 @@ namespace XFramework.Animation
                 loop = clip.PlaybackClip.isLooping,
                 rootMotionMode = XAnimationClipRootMotionMode.Inherit,
                 parameterName = string.Empty,
+                parameterXName = string.Empty,
+                parameterYName = string.Empty,
                 samples = Array.Empty<XAnimationBlend1DSampleConfig>(),
+                directionalSamples = Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>(),
             };
 
             return new XAnimationCompiledSingleState(config, channelIndex, clipIndex);
@@ -411,6 +477,18 @@ namespace XFramework.Animation
                     blendState,
                     isTemporaryState,
                     options),
+                XAnimationCompiledBlend2DSimpleDirectionalState directionalState => CreateBlend2DSimpleDirectionalPlayback(
+                    playbackId,
+                    channelName,
+                    directionalState,
+                    isTemporaryState,
+                    options),
+                XAnimationCompiledBlend2DFreeformDirectionalState freeformState => CreateBlend2DFreeformDirectionalPlayback(
+                    playbackId,
+                    channelName,
+                    freeformState,
+                    isTemporaryState,
+                    options),
                 _ => throw new XFrameworkException($"XAnimation state '{state.Key}' has unsupported stateType '{state.StateType}'."),
             };
         }
@@ -443,6 +521,54 @@ namespace XFramework.Animation
             }
 
             return new XAnimationBlend1DStatePlaybackInstance(m_Graph, playbackId, channelName, Animator, state, clips, isTemporaryState, options);
+        }
+
+        private XAnimationBlend2DSimpleDirectionalStatePlaybackInstance CreateBlend2DSimpleDirectionalPlayback(
+            int playbackId,
+            string channelName,
+            XAnimationCompiledBlend2DSimpleDirectionalState state,
+            bool isTemporaryState,
+            XAnimationPlaybackRuntimeOptions options)
+        {
+            XAnimationCompiledClip[] clips = new XAnimationCompiledClip[state.Samples.Count];
+            for (int i = 0; i < state.Samples.Count; i++)
+            {
+                clips[i] = (XAnimationCompiledClip)CompiledAsset.Clips[state.Samples[i].ClipIndex];
+            }
+
+            return new XAnimationBlend2DSimpleDirectionalStatePlaybackInstance(
+                m_Graph,
+                playbackId,
+                channelName,
+                Animator,
+                state,
+                clips,
+                isTemporaryState,
+                options);
+        }
+
+        private XAnimationBlend2DFreeformDirectionalStatePlaybackInstance CreateBlend2DFreeformDirectionalPlayback(
+            int playbackId,
+            string channelName,
+            XAnimationCompiledBlend2DFreeformDirectionalState state,
+            bool isTemporaryState,
+            XAnimationPlaybackRuntimeOptions options)
+        {
+            XAnimationCompiledClip[] clips = new XAnimationCompiledClip[state.Samples.Count];
+            for (int i = 0; i < state.Samples.Count; i++)
+            {
+                clips[i] = (XAnimationCompiledClip)CompiledAsset.Clips[state.Samples[i].ClipIndex];
+            }
+
+            return new XAnimationBlend2DFreeformDirectionalStatePlaybackInstance(
+                m_Graph,
+                playbackId,
+                channelName,
+                Animator,
+                state,
+                clips,
+                isTemporaryState,
+                options);
         }
 
         private XAnimationChannel GetChannel(string channelName)

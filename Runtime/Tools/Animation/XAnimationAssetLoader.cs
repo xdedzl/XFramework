@@ -111,8 +111,15 @@ namespace XFramework.Animation
                     throw new XFrameworkException(message);
                 }
 
+#if UNITY_EDITOR
+                clipConfig.rootMotionTrack = XAnimationRootMotionTrackBuilder.BuildConfig(clip);
+#endif
                 AnimationClip playbackClip = CreatePlaybackClip(clip);
-                compiledClips[i] = new XAnimationCompiledClip(clipConfig, clip, playbackClip);
+                compiledClips[i] = new XAnimationCompiledClip(
+                    clipConfig,
+                    clip,
+                    playbackClip,
+                    XAnimationRootMotionTrack.Create(clipConfig.rootMotionTrack));
                 clipIndexByKey[clipConfig.key] = i;
             }
 
@@ -138,6 +145,16 @@ namespace XFramework.Animation
                         defaultChannelIndex,
                         clipIndexByKey[stateConfig.clipKey]),
                     XAnimationStateType.Blend1D => CompileBlend1DState(
+                        stateConfig,
+                        defaultChannelIndex,
+                        clipIndexByKey,
+                        parameterIndexByName),
+                    XAnimationStateType.Blend2DSimpleDirectional => CompileBlend2DSimpleDirectionalState(
+                        stateConfig,
+                        defaultChannelIndex,
+                        clipIndexByKey,
+                        parameterIndexByName),
+                    XAnimationStateType.Blend2DFreeformDirectional => CompileBlend2DFreeformDirectionalState(
                         stateConfig,
                         defaultChannelIndex,
                         clipIndexByKey,
@@ -207,6 +224,56 @@ namespace XFramework.Animation
                 stateConfig,
                 defaultChannelIndex,
                 parameterIndexByName[stateConfig.parameterName],
+                compiledSamples);
+        }
+
+        private static XAnimationCompiledBlend2DSimpleDirectionalState CompileBlend2DSimpleDirectionalState(
+            XAnimationStateConfig stateConfig,
+            int defaultChannelIndex,
+            IReadOnlyDictionary<string, int> clipIndexByKey,
+            IReadOnlyDictionary<string, int> parameterIndexByName)
+        {
+            XAnimationBlend2DSimpleDirectionalSampleConfig[] samples =
+                stateConfig.directionalSamples ?? Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+            XAnimationCompiledBlend2DSimpleDirectionalSample[] compiledSamples =
+                new XAnimationCompiledBlend2DSimpleDirectionalSample[samples.Length];
+            for (int i = 0; i < samples.Length; i++)
+            {
+                compiledSamples[i] = new XAnimationCompiledBlend2DSimpleDirectionalSample(
+                    samples[i],
+                    clipIndexByKey[samples[i].clipKey]);
+            }
+
+            return new XAnimationCompiledBlend2DSimpleDirectionalState(
+                stateConfig,
+                defaultChannelIndex,
+                parameterIndexByName[stateConfig.parameterXName],
+                parameterIndexByName[stateConfig.parameterYName],
+                compiledSamples);
+        }
+
+        private static XAnimationCompiledBlend2DFreeformDirectionalState CompileBlend2DFreeformDirectionalState(
+            XAnimationStateConfig stateConfig,
+            int defaultChannelIndex,
+            IReadOnlyDictionary<string, int> clipIndexByKey,
+            IReadOnlyDictionary<string, int> parameterIndexByName)
+        {
+            XAnimationBlend2DSimpleDirectionalSampleConfig[] samples =
+                stateConfig.directionalSamples ?? Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+            XAnimationCompiledBlend2DSimpleDirectionalSample[] compiledSamples =
+                new XAnimationCompiledBlend2DSimpleDirectionalSample[samples.Length];
+            for (int i = 0; i < samples.Length; i++)
+            {
+                compiledSamples[i] = new XAnimationCompiledBlend2DSimpleDirectionalSample(
+                    samples[i],
+                    clipIndexByKey[samples[i].clipKey]);
+            }
+
+            return new XAnimationCompiledBlend2DFreeformDirectionalState(
+                stateConfig,
+                defaultChannelIndex,
+                parameterIndexByName[stateConfig.parameterXName],
+                parameterIndexByName[stateConfig.parameterYName],
                 compiledSamples);
         }
 
