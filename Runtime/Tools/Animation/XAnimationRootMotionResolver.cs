@@ -8,6 +8,8 @@ namespace XFramework.Animation
         public bool Enabled { get; private set; } = true;
         public string SourceChannelName { get; private set; }
         public int SourcePlaybackId { get; private set; }
+        public bool HasSource => !string.IsNullOrEmpty(SourceChannelName) && SourcePlaybackId > 0;
+        public bool ShouldApplyNativeRootMotion => Enabled && HasSource;
 
         public void SetEnabled(bool enabled)
         {
@@ -63,7 +65,7 @@ namespace XFramework.Animation
                 return;
             }
 
-            animator.applyRootMotion = false;
+            animator.applyRootMotion = ShouldApplyNativeRootMotion;
         }
     }
 }

@@ -21,6 +21,7 @@ namespace XFramework.Animation
         public event Action<XAnimationCueEvent> CueTriggered;
         public event Action<XAnimationStateEvent> OnStateEnter;
         public event Action<XAnimationStateEvent> OnStateExit;
+        public event Action<Animator, Vector3, Quaternion> FrameEvaluated;
 
         public Animator Animator { get; private set; }
         public XAnimationAsset Asset => m_CompiledAsset?.Asset;
@@ -229,10 +230,9 @@ namespace XFramework.Animation
             return m_Player.GetClipDuration(clipKey);
         }
 
-        public bool TryGetRootMotionDelta(out Vector3 deltaPosition, out Quaternion deltaRotation)
+        public bool ShouldApplyNativeRootMotion()
         {
-            EnsureInitialized();
-            return m_Player.TryGetRootMotionDelta(out deltaPosition, out deltaRotation);
+            return m_Player != null && m_Player.ShouldApplyNativeRootMotion();
         }
 
         internal void Update(float deltaTime)
@@ -463,7 +463,11 @@ namespace XFramework.Animation
                 return;
             }
 
+            Transform animatorTransform = Animator != null ? Animator.transform : null;
+            Vector3 previousPosition = animatorTransform != null ? animatorTransform.position : Vector3.zero;
+            Quaternion previousRotation = animatorTransform != null ? animatorTransform.rotation : Quaternion.identity;
             m_Player.Update(deltaTime);
+            FrameEvaluated?.Invoke(Animator, previousPosition, previousRotation);
         }
 
         private void RegisterForAutomaticUpdate()

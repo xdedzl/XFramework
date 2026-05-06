@@ -388,17 +388,18 @@ public sealed class HeroAnimationController : MonoBehaviour
 - `Stop(channelName, fadeOut)` / `StopAll(fadeOut)`：停止指定通道或全部通道。
 - `SetChannelWeight(channelName, weight)`：调整通道混合权重。
 - `SetChannelTimeScale(channelName, timeScale)`：调整通道时间缩放，最小值会被限制为 0。
-- `SetRootMotionEnabled(enabled)`：全局启停 Root Motion 输出；`XAnimation` runtime 会保持 `Animator.applyRootMotion = false`，业务层应改为消费 `TryGetRootMotionDelta(...)`。
-- `TryGetRootMotionDelta(out Vector3 deltaPosition, out Quaternion deltaRotation)`：读取 `XAnimationPlayer` 在本帧缓存好的 Root Motion 增量；循环 clip 会按累计位移语义处理跨 loop 边界的连续性。
+- `SetRootMotionEnabled(enabled)`：全局启停 Root Motion 输出；运行时和 `XAnimation Preview` 都直接切换 Unity 原生 `Animator.applyRootMotion`。
+- `RootMotionMoved`：保留为兼容事件，但不再是可靠的 Root Motion 主链路；真正的位移/旋转应用统一由 Unity 原生 `OnAnimatorMove()` 驱动。
 - `GetChannelState(channelName)`：查询当前播放 clip、归一化时间、权重、速度、优先级等调试信息。
 
 ### 4.1 更省事的组件封装：XAnimationActor
 
 如果业务不想自己维护 `XAnimationDriver` 生命周期，可以直接挂 `XAnimationActor`：
 
-- `XAnimationActor` 会在 `Awake` / `Start` / `Update` 中帮你处理初始化、手动推进和可选的起始 state。
+- `XAnimationActor` 会在 `Awake` / `Start` / `Update` 中帮你处理初始化、手动推进和可选的起始 state，并在运行时通过挂到 `Animator` 上的桥接组件接收 Unity 原生 `OnAnimatorMove()`。
 - 它本质上只是 `XAnimationDriver` 的 `MonoBehaviour` 包装层，不会引入额外状态机语义。
 - 适合做角色预制体上的直接挂载；如果你需要更细粒度的接管，仍建议直接持有 `XAnimationDriver`。
+- 如果业务需要自己消费原生 Root Motion，可订阅 `XAnimationActor.NativeRootMotionApplied`，在回调中自行把 `Animator.deltaPosition / deltaRotation` 应用到 `CharacterController`、`NavMeshAgent` 或其他运动系统。
 
 运行关系可以简单理解为：
 

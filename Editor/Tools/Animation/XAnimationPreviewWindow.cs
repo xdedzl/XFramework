@@ -117,6 +117,7 @@ namespace XFramework.Editor
         [SerializeField] private bool m_AutoTransitionSectionExpanded = true;
         [SerializeField] private bool m_ClipsSectionExpanded = true;
         [SerializeField] private bool m_ChannelsSectionExpanded = true;
+        [SerializeField] private bool m_PreviewRootMotionEnabled = true;
         [SerializeField] private DebugToolbarGroup m_SelectedDebugToolbarGroup;
 
         private TextAsset m_PendingAsset;
@@ -137,6 +138,7 @@ namespace XFramework.Editor
         private Toggle m_ApplyTransitionRequestToggle;
 
         private Toggle m_PlayInterruptibleToggle;
+        private Toggle m_RootMotionToggle;
         private Toggle m_GridToggle;
         private DropdownField m_PlayTargetChannelField;
         private Button m_PauseButton;
@@ -673,6 +675,12 @@ namespace XFramework.Editor
             m_PlayTargetChannelField.tooltip = "clip 调试播放使用的 channelName。state 播放始终使用 state 自己配置的 channel。";
             m_PlayTargetChannelField.style.flexGrow = 1;
             m_PlayTargetChannelField.style.minWidth = 0;
+            AttachDropdownInspectorButton(
+                m_PlayTargetChannelField,
+                () => m_PlayTargetChannelField?.value ?? m_PlayTargetChannelName,
+                () => HasChannel(m_PlayTargetChannelField?.value ?? m_PlayTargetChannelName),
+                () => FocusChannelInInspector(m_PlayTargetChannelField?.value ?? m_PlayTargetChannelName),
+                "定位到 Channels 面板里当前 channel 对应的条目。");
             m_PlayTargetChannelField.RegisterValueChangedCallback(evt =>
             {
                 m_PlayTargetChannelName = evt.newValue ?? string.Empty;
@@ -681,6 +689,21 @@ namespace XFramework.Editor
             VisualElement channelFieldRow = CreatePlaybackFieldContainer("channelName", m_PlayTargetChannelField, PlaybackLabelWidth);
             channelFieldRow.tooltip = "用于 clip 调试播放的目标 channel。";
             playbackFields.Add(channelFieldRow);
+
+            m_RootMotionToggle = new Toggle { value = m_PreviewRootMotionEnabled };
+            m_RootMotionToggle.tooltip = "控制当前预览 session 是否应用 Root Motion。关闭后会将预览实例复位到初始位置。";
+            m_RootMotionToggle.RegisterValueChangedCallback(evt =>
+            {
+                m_PreviewRootMotionEnabled = evt.newValue;
+                if (m_Session != null && m_Session.IsLoaded)
+                {
+                    m_Session.SetRootMotionEnabled(evt.newValue);
+                    RenderPreview();
+                }
+            });
+            VisualElement rootMotionToggleRow = CreatePlaybackToggleRow("rootMotion", m_RootMotionToggle, PlaybackLabelWidth);
+            rootMotionToggleRow.tooltip = "仅影响当前预览窗口的 Root Motion 应用，不修改资源配置。";
+            playbackFields.Add(rootMotionToggleRow);
 
             playbackCard.Content.Add(playbackFields);
 
@@ -2328,9 +2351,11 @@ namespace XFramework.Editor
                 m_WasPreviewVisible = IsPreviewTabVisible();
                 m_Session.SetPaused(!m_WasPreviewVisible);
                 m_Session.SetTimeScale(1f);
+                m_Session.SetRootMotionEnabled(m_PreviewRootMotionEnabled);
                 MarkEventUiDirty();
                 SetPauseButtonState(false, false);
                 SetStepForwardButtonEnabled(true);
+                m_RootMotionToggle?.SetValueWithoutNotify(m_PreviewRootMotionEnabled);
                 m_GridToggle.SetValueWithoutNotify(true);
                 RebuildParameterList();
                 RebuildStateList();
@@ -3109,6 +3134,12 @@ namespace XFramework.Editor
             channelField.style.marginLeft = 6;
             channelField.style.position = Position.Relative;
             channelField.tooltip = "State 默认播放 channel。";
+            AttachDropdownInspectorButton(
+                channelField,
+                () => channelField?.value ?? state.Config.channelName,
+                () => HasChannel(channelField?.value ?? state.Config.channelName),
+                () => FocusChannelInInspector(channelField?.value ?? state.Config.channelName),
+                "定位到 Channels 面板里当前 channel 对应的条目。");
             channelField.RegisterValueChangedCallback(evt => ChangeStateChannel(state.Key, evt.newValue, channelField, evt.previousValue));
             row.Add(channelField);
 
@@ -3121,6 +3152,7 @@ namespace XFramework.Editor
                 clipField.style.position = Position.Relative;
                 clipField.tooltip = "Single state 播放的 clipKey。";
                 clipField.RegisterValueChangedCallback(evt => ChangeStateClipKey(state.Key, evt.newValue, clipField, evt.previousValue));
+                AttachClipKeyPingButton(clipField, state.Config.clipKey, enabled: true);
                 row.Add(clipField);
             }
 
@@ -4902,6 +4934,12 @@ namespace XFramework.Editor
 
             DropdownField channelField = CreateChannelDropdown("channel", config.channelName);
             channelField.tooltip = "State 默认播放 channel。";
+            AttachDropdownInspectorButton(
+                channelField,
+                () => channelField?.value ?? config.channelName,
+                () => HasChannel(channelField?.value ?? config.channelName),
+                () => FocusChannelInInspector(channelField?.value ?? config.channelName),
+                "定位到 Channels 面板里当前 channel 对应的条目。");
             channelField.RegisterValueChangedCallback(evt => ChangeStateChannel(state.Key, evt.newValue, channelField, evt.previousValue));
             editor.Add(channelField);
 
@@ -4910,6 +4948,7 @@ namespace XFramework.Editor
                 DropdownField clipField = CreateClipKeyDropdown("clipKey", config.clipKey);
                 clipField.tooltip = "Single state 播放的 clip。";
                 clipField.RegisterValueChangedCallback(evt => ChangeStateClipKey(state.Key, evt.newValue, clipField, evt.previousValue));
+                AttachClipKeyPingButton(clipField, config.clipKey, enabled: true);
                 editor.Add(clipField);
             }
             else if (config.stateType == XAnimationStateType.Blend1D)
@@ -5068,6 +5107,12 @@ namespace XFramework.Editor
             ConfigureAutoTransitionHeaderDropdown(preStateField, 150f);
             preStateField.tooltip = "当前 Auto Transition 的源状态。";
             preStateField.SetEnabled(editable);
+            AttachDropdownInspectorButton(
+                preStateField,
+                () => preStateField?.value ?? preStateKey,
+                () => HasState(preStateField?.value ?? preStateKey),
+                () => FocusStateInInspector(preStateField?.value ?? preStateKey),
+                "定位到 States 面板里当前 state 对应的条目。");
 
             Label arrowLabel = new("->");
             arrowLabel.style.marginLeft = 4;
@@ -5080,6 +5125,12 @@ namespace XFramework.Editor
             ConfigureAutoTransitionHeaderDropdown(nextStateField, 150f);
             nextStateField.tooltip = "非循环 state 播放完成后自动切到的目标 state。None 表示关闭自动切换。";
             nextStateField.SetEnabled(!loopEnabled && editable);
+            AttachDropdownInspectorButton(
+                nextStateField,
+                () => NormalizeOptionalStateDropdownValue(nextStateField?.value ?? nextStateKey),
+                () => HasState(NormalizeOptionalStateDropdownValue(nextStateField?.value ?? nextStateKey)),
+                () => FocusStateInInspector(NormalizeOptionalStateDropdownValue(nextStateField?.value ?? nextStateKey)),
+                "定位到 States 面板里当前 state 对应的条目。");
 
             Button deleteButton = new(() => DeleteAutoTransition(preStateKey))
             {
@@ -6609,6 +6660,7 @@ namespace XFramework.Editor
             clipField.style.flexGrow = 1;
             clipField.style.position = Position.Relative;
             clipField.RegisterValueChangedCallback(evt => ChangeBlendSampleClipKey(stateKey, sampleIndex, evt.newValue, clipField, evt.previousValue));
+            AttachClipKeyPingButton(clipField, sampleClipKey, editable);
             row.Add(clipField);
 
             Label thresholdLabel = new("threshold");
@@ -6697,6 +6749,7 @@ namespace XFramework.Editor
             clipField.style.position = Position.Relative;
             clipField.RegisterValueChangedCallback(evt =>
                 ChangeDirectionalBlendSampleClipKey(stateKey, sampleIndex, evt.newValue, clipField, evt.previousValue));
+            AttachClipKeyPingButton(clipField, sampleClipKey, editable);
             row.Add(clipField);
 
             Label xLabel = new("x");
@@ -6857,7 +6910,229 @@ namespace XFramework.Editor
             }
 
             EnsureDropdownChoice(choices, currentValue);
-            return new DropdownField(label, choices, Mathf.Max(0, choices.IndexOf(currentValue ?? string.Empty)));
+            DropdownField dropdown = new(label, choices, Mathf.Max(0, choices.IndexOf(currentValue ?? string.Empty)));
+            ApplyUniformClipKeyDropdownWidth(dropdown, choices);
+            return dropdown;
+        }
+
+        private void ApplyUniformClipKeyDropdownWidth(DropdownField dropdown, IReadOnlyList<string> choices)
+        {
+            if (dropdown == null)
+            {
+                return;
+            }
+
+            float minWidth = CalculateClipKeyDropdownWidth(choices);
+            dropdown.style.width = StyleKeyword.Auto;
+            dropdown.style.minWidth = minWidth;
+            dropdown.style.maxWidth = StyleKeyword.None;
+            dropdown.style.flexShrink = 0;
+        }
+
+        private static float CalculateClipKeyDropdownWidth(IReadOnlyList<string> choices)
+        {
+            float maxTextWidth = 0f;
+            GUIStyle popupStyle = EditorStyles.popup;
+            for (int i = 0; i < choices.Count; i++)
+            {
+                string choice = choices[i] ?? string.Empty;
+                float choiceWidth = popupStyle.CalcSize(new GUIContent(choice)).x;
+                if (choiceWidth > maxTextWidth)
+                {
+                    maxTextWidth = choiceWidth;
+                }
+            }
+
+            const float buttonWidth = (ClipIconButtonSize * 2f) + 16f;
+            const float arrowAndPaddingWidth = 42f;
+            const float minWidth = 180f;
+            const float maxWidth = 360f;
+            return Mathf.Clamp(maxTextWidth + buttonWidth + arrowAndPaddingWidth, minWidth, maxWidth);
+        }
+
+        private void AttachClipKeyPingButton(DropdownField clipField, string clipKey, bool enabled)
+        {
+            if (clipField == null)
+            {
+                return;
+            }
+
+            Button clipItemButton = CreateEmbeddedDropdownButton(
+                "↗",
+                "定位到 Clips 面板里当前 clipKey 对应的条目。",
+                enabled && HasClipAsset(clipField?.value ?? clipKey),
+                () => FocusClipInInspector(clipField?.value ?? clipKey),
+                marginLeft: 4,
+                marginRight: 2);
+
+            Button pingButton = CreateEmbeddedDropdownButton(
+                "◎",
+                "定位当前 clipKey 对应的 AnimationClip 资源。",
+                enabled && HasClipAsset(clipField?.value ?? clipKey),
+                () => PingClipAsset(clipField?.value ?? clipKey),
+                marginLeft: 2,
+                marginRight: 4);
+
+            clipField.RegisterValueChangedCallback(evt =>
+            {
+                bool canLocate = enabled && HasClipAsset(evt.newValue);
+                clipItemButton.SetEnabled(canLocate);
+                pingButton.SetEnabled(canLocate);
+            });
+
+            void TryAttach()
+            {
+                if (clipItemButton.parent != null || pingButton.parent != null)
+                {
+                    return;
+                }
+
+                VisualElement input = clipField.Q<VisualElement>(className: "unity-base-field__input");
+                if (input == null)
+                {
+                    return;
+                }
+
+                VisualElement arrow = input.Q<VisualElement>(className: "unity-base-popup-field__arrow");
+                if (arrow == null)
+                {
+                    return;
+                }
+
+                int arrowIndex = input.IndexOf(arrow);
+                input.Insert(Mathf.Max(0, arrowIndex), clipItemButton);
+                input.Insert(Mathf.Max(0, arrowIndex), pingButton);
+            }
+
+            TryAttach();
+            clipField.RegisterCallback<AttachToPanelEvent>(_ => TryAttach());
+        }
+
+        private void AttachDropdownInspectorButton(
+            DropdownField dropdown,
+            Func<string> currentValueGetter,
+            Func<bool> canLocate,
+            Action onLocate,
+            string tooltip)
+        {
+            if (dropdown == null)
+            {
+                return;
+            }
+
+            Button locateButton = CreateEmbeddedDropdownButton(
+                "↗",
+                tooltip,
+                canLocate(),
+                onLocate,
+                marginLeft: 4,
+                marginRight: 4);
+
+            dropdown.RegisterValueChangedCallback(_ =>
+            {
+                locateButton.SetEnabled(canLocate());
+            });
+
+            AttachDropdownButtons(dropdown, locateButton);
+        }
+
+        private static Button CreateEmbeddedDropdownButton(
+            string text,
+            string tooltip,
+            bool enabled,
+            Action onClick,
+            int marginLeft,
+            int marginRight)
+        {
+            Button button = new(onClick)
+            {
+                text = text
+            };
+            button.tooltip = tooltip;
+            button.SetEnabled(enabled);
+            ApplyClipIconButtonStyle(button);
+            button.style.marginLeft = marginLeft;
+            button.style.marginRight = marginRight;
+            button.style.flexShrink = 0;
+            return button;
+        }
+
+        private static void AttachDropdownButtons(DropdownField dropdown, params Button[] buttons)
+        {
+            if (dropdown == null || buttons == null || buttons.Length == 0)
+            {
+                return;
+            }
+
+            void TryAttach()
+            {
+                VisualElement input = dropdown.Q<VisualElement>(className: "unity-base-field__input");
+                if (input == null)
+                {
+                    return;
+                }
+
+                VisualElement arrow = input.Q<VisualElement>(className: "unity-base-popup-field__arrow");
+                if (arrow == null)
+                {
+                    return;
+                }
+
+                for (int i = 0; i < buttons.Length; i++)
+                {
+                    Button button = buttons[i];
+                    if (button == null || button.parent != null)
+                    {
+                        continue;
+                    }
+
+                    int arrowIndex = input.IndexOf(arrow);
+                    input.Insert(Mathf.Max(0, arrowIndex), button);
+                }
+            }
+
+            TryAttach();
+            dropdown.RegisterCallback<AttachToPanelEvent>(_ => TryAttach());
+        }
+
+        private bool HasClipAsset(string clipKey)
+        {
+            return TryGetClipAsset(clipKey, out _);
+        }
+
+        private void PingClipAsset(string clipKey)
+        {
+            if (!TryGetClipAsset(clipKey, out AnimationClip clip))
+            {
+                SetStatus(string.IsNullOrWhiteSpace(clipKey)
+                    ? "当前没有可定位的 clipKey。"
+                    : $"没有找到 clipKey '{clipKey}' 对应的 AnimationClip 资源。", true);
+                return;
+            }
+
+            Selection.activeObject = clip;
+            EditorGUIUtility.PingObject(clip);
+            SetStatus($"已定位动画资源: {clip.name}。");
+        }
+
+        private bool TryGetClipAsset(string clipKey, out AnimationClip clip)
+        {
+            clip = null;
+            if (m_Session == null || !m_Session.IsLoaded || string.IsNullOrWhiteSpace(clipKey))
+            {
+                return false;
+            }
+
+            try
+            {
+                clip = m_Session.CompiledAsset.GetClip(clipKey).Clip;
+            }
+            catch (Exception)
+            {
+                clip = null;
+            }
+
+            return clip != null;
         }
 
         private DropdownField CreateStateKeyDropdown(string label, string currentValue, string excludeStateKey = null, bool includeNone = false)
@@ -6931,6 +7206,14 @@ namespace XFramework.Editor
                    m_Session.IsLoaded &&
                    !string.IsNullOrWhiteSpace(stateKey) &&
                    m_Session.CompiledAsset.TryGetStateIndex(stateKey, out _);
+        }
+
+        private bool HasChannel(string channelName)
+        {
+            return m_Session != null &&
+                   m_Session.IsLoaded &&
+                   !string.IsNullOrWhiteSpace(channelName) &&
+                   m_Session.CompiledAsset.TryGetChannelIndex(channelName, out _);
         }
 
         private DropdownField CreateFloatParameterDropdown(string label, string currentValue)

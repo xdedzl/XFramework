@@ -33,7 +33,6 @@ namespace XFramework.Editor
 
         private readonly XAnimationAssetLoader m_AssetLoader = new(new XAnimationEditorAssetResolver());
         private readonly List<PreviewLogEntry> m_CueLogs = new();
-        private readonly Dictionary<AnimationClip, PreviewRootMotionFallbackEvaluator> m_RootMotionFallbackEvaluatorByClip = new();
         private readonly Dictionary<string, float> m_PreviewFloatParameters = new(StringComparer.Ordinal);
         private readonly Dictionary<string, int> m_PreviewIntParameters = new(StringComparer.Ordinal);
         private readonly Dictionary<string, bool> m_PreviewBoolParameters = new(StringComparer.Ordinal);
@@ -62,9 +61,7 @@ namespace XFramework.Editor
         private float m_CameraPitch = 18f;
         private Vector3 m_CameraPosition;
         private bool m_CameraInitialized;
-        private bool m_RootMotionEnabled;
-        private int m_ManualRootMotionPlaybackId;
-        private float m_ManualRootMotionNormalizedTime;
+        private bool m_RootMotionEnabled = true;
 
         private bool m_GridVisible = true;
         private GameObject m_GridPlane;
@@ -136,8 +133,9 @@ namespace XFramework.Editor
             m_Driver.CueTriggered += OnCueTriggered;
             m_Driver.OnStateEnter += OnStateEnter;
             m_Driver.OnStateExit += OnStateExit;
+            m_Driver.FrameEvaluated += OnPreviewFrameEvaluated;
             RestorePreviewParameters();
-            SetRootMotionEnabled(false);
+            SetRootMotionEnabled(m_RootMotionEnabled);
         }
 
         public void Render(Vector2 size)
@@ -207,9 +205,7 @@ namespace XFramework.Editor
                 throw new XFrameworkException("XAnimation preview step deltaTime must be greater than 0.");
             }
 
-            CaptureRootMotionSyncState(out Vector3 positionBeforeUpdate, out Quaternion rotationBeforeUpdate);
             m_Driver.Step(clampedDeltaTime);
-            ApplyPreviewRootMotionFallback(positionBeforeUpdate, rotationBeforeUpdate);
         }
 
         public void SyncPreviewFrame()
@@ -218,9 +214,6 @@ namespace XFramework.Editor
             {
                 return;
             }
-
-            CaptureRootMotionSyncState(out Vector3 positionBeforeUpdate, out Quaternion rotationBeforeUpdate);
-            ApplyPreviewRootMotionFallback(positionBeforeUpdate, rotationBeforeUpdate);
         }
 
         public void PlayClip(
@@ -546,175 +539,6 @@ namespace XFramework.Editor
             return m_RootMotionEnabled;
         }
 
-        private void CaptureRootMotionSyncState(out Vector3 positionBeforeUpdate, out Quaternion rotationBeforeUpdate)
-        {
-            Transform animatorTransform = m_Animator != null ? m_Animator.transform : null;
-            positionBeforeUpdate = animatorTransform != null ? animatorTransform.position : Vector3.zero;
-            rotationBeforeUpdate = animatorTransform != null ? animatorTransform.rotation : Quaternion.identity;
-        }
-
-        private void ApplyPreviewRootMotionFallback(Vector3 positionBeforeUpdate, Quaternion rotationBeforeUpdate)
-        {
-            Transform animatorTransform = m_Animator != null ? m_Animator.transform : null;
-            if (animatorTransform == null)
-            {
-                return;
-            }
-
-            if (!m_RootMotionEnabled || !m_Animator.applyRootMotion)
-            {
-                m_ManualRootMotionPlaybackId = 0;
-                return;
-            }
-
-            bool positionApplied = (animatorTransform.position - positionBeforeUpdate).sqrMagnitude > 0.0000001f;
-            bool rotationApplied = Quaternion.Angle(animatorTransform.rotation, rotationBeforeUpdate) > 0.001f;
-            if (positionApplied || rotationApplied)
-            {
-                m_ManualRootMotionPlaybackId = 0;
-                return;
-            }
-
-            if (TryEvaluateManualRootMotionDelta(out Vector3 deltaPosition, out Quaternion deltaRotation))
-            {
-                animatorTransform.SetPositionAndRotation(
-                    positionBeforeUpdate + deltaPosition,
-                    rotationBeforeUpdate * deltaRotation);
-                return;
-            }
-
-            animatorTransform.SetPositionAndRotation(
-                positionBeforeUpdate + m_Animator.deltaPosition,
-                rotationBeforeUpdate * m_Animator.deltaRotation);
-        }
-
-        private bool TryEvaluateManualRootMotionDelta(out Vector3 deltaPosition, out Quaternion deltaRotation)
-        {
-            deltaPosition = Vector3.zero;
-            deltaRotation = Quaternion.identity;
-
-            if (!TryGetRootMotionSourceState(out XAnimationCompiledClip compiledClip, out XAnimationChannelState state))
-            {
-                m_ManualRootMotionPlaybackId = 0;
-                return false;
-            }
-
-            PreviewRootMotionFallbackEvaluator evaluator = GetRootMotionFallbackEvaluator(compiledClip.Clip);
-            if (!evaluator.HasPosition && !evaluator.HasRotation)
-            {
-                return false;
-            }
-
-            float currentNormalizedTime = state.totalNormalizedTime;
-            if (m_ManualRootMotionPlaybackId != state.playbackId)
-            {
-                m_ManualRootMotionPlaybackId = state.playbackId;
-                m_ManualRootMotionNormalizedTime = currentNormalizedTime;
-                return false;
-            }
-
-            float previousNormalizedTime = m_ManualRootMotionNormalizedTime;
-            Vector3 previousPosition = evaluator.EvaluateAccumulatedPosition(previousNormalizedTime, state.isLooping);
-            Vector3 currentPosition = evaluator.EvaluateAccumulatedPosition(currentNormalizedTime, state.isLooping);
-
-            m_ManualRootMotionNormalizedTime = currentNormalizedTime;
-            deltaPosition = currentPosition - previousPosition;
-            if (state.isLooping)
-            {
-                Quaternion previousRotation = evaluator.EvaluateRotation(previousNormalizedTime, true);
-                Quaternion currentRotation = evaluator.EvaluateRotation(currentNormalizedTime, true);
-                deltaRotation = currentRotation * Quaternion.Inverse(previousRotation);
-            }
-
-            return true;
-        }
-
-        private bool TryGetRootMotionSourceState(out XAnimationCompiledClip compiledClip, out XAnimationChannelState state)
-        {
-            compiledClip = null;
-            state = null;
-
-            if (m_CompiledAsset == null)
-            {
-                return false;
-            }
-
-            XAnimationChannelState fallbackState = null;
-            XAnimationCompiledClip fallbackClip = null;
-            IReadOnlyList<XAnimationCompiledChannel> channels = m_CompiledAsset.Channels;
-            for (int i = 0; i < channels.Count; i++)
-            {
-                XAnimationCompiledChannel channel = (XAnimationCompiledChannel)channels[i];
-                XAnimationChannelState channelState = m_Driver.GetChannelState(channel.Name);
-                if (channelState == null || channelState.weight <= 0.0001f)
-                {
-                    continue;
-                }
-
-                XAnimationCompiledClip channelClip = m_CompiledAsset.GetClip(channelState.clipKey);
-                bool drivesRootMotion = ResolvePreviewRootMotion(channel, channelState);
-
-                if (!channel.Config.canDriveRootMotion || !drivesRootMotion)
-                {
-                    continue;
-                }
-
-                PreviewRootMotionFallbackEvaluator evaluator = GetRootMotionFallbackEvaluator(channelClip.Clip);
-                if (!evaluator.HasPosition && !evaluator.HasRotation)
-                {
-                    continue;
-                }
-
-                if (channel.Config.layerType == XAnimationChannelLayerType.Base)
-                {
-                    compiledClip = channelClip;
-                    state = channelState;
-                    return true;
-                }
-
-                fallbackState ??= channelState;
-                fallbackClip ??= channelClip;
-            }
-
-            if (fallbackState == null)
-            {
-                return false;
-            }
-
-            compiledClip = fallbackClip;
-            state = fallbackState;
-            return true;
-        }
-
-        private bool ResolvePreviewRootMotion(XAnimationCompiledChannel channel, XAnimationChannelState channelState)
-        {
-            if (!string.IsNullOrWhiteSpace(channelState.stateKey) &&
-                m_CompiledAsset.TryGetStateIndex(channelState.stateKey, out int stateIndex))
-            {
-                XAnimationCompiledState state = m_CompiledAsset.States[stateIndex];
-                return state.Config.rootMotionMode switch
-                {
-                    XAnimationClipRootMotionMode.ForceOn => true,
-                    XAnimationClipRootMotionMode.ForceOff => false,
-                    _ => channel.Config.canDriveRootMotion,
-                };
-            }
-
-            return channel.Config.canDriveRootMotion;
-        }
-
-        private PreviewRootMotionFallbackEvaluator GetRootMotionFallbackEvaluator(AnimationClip clip)
-        {
-            if (m_RootMotionFallbackEvaluatorByClip.TryGetValue(clip, out PreviewRootMotionFallbackEvaluator evaluator))
-            {
-                return evaluator;
-            }
-
-            evaluator = PreviewRootMotionFallbackEvaluator.Create(clip);
-            m_RootMotionFallbackEvaluatorByClip[clip] = evaluator;
-            return evaluator;
-        }
-
         public void SetGridVisible(bool visible)
         {
             m_GridVisible = visible;
@@ -741,7 +565,6 @@ namespace XFramework.Editor
             }
 
             m_Instance.transform.SetPositionAndRotation(m_InitialPosition, m_InitialRotation);
-            ResetManualRootMotionPreviewState();
             CacheInitialBounds();
             UpdateGridTransform();
         }
@@ -2213,12 +2036,14 @@ namespace XFramework.Editor
                 m_Driver.CueTriggered -= OnCueTriggered;
                 m_Driver.OnStateEnter -= OnStateEnter;
                 m_Driver.OnStateExit -= OnStateExit;
+                m_Driver.FrameEvaluated -= OnPreviewFrameEvaluated;
                 m_Driver.Dispose();
                 m_Driver = new XAnimationDriver();
                 m_Driver.Initialize(m_CompiledAsset, m_Animator);
                 m_Driver.CueTriggered += OnCueTriggered;
                 m_Driver.OnStateEnter += OnStateEnter;
                 m_Driver.OnStateExit += OnStateExit;
+                m_Driver.FrameEvaluated += OnPreviewFrameEvaluated;
                 m_Driver.SetPaused(false);
                 m_Driver.SetTimeScale(1f);
                 m_Driver.SetRootMotionEnabled(m_RootMotionEnabled);
@@ -2483,6 +2308,7 @@ namespace XFramework.Editor
                 m_Driver.CueTriggered -= OnCueTriggered;
                 m_Driver.OnStateEnter -= OnStateEnter;
                 m_Driver.OnStateExit -= OnStateExit;
+                m_Driver.FrameEvaluated -= OnPreviewFrameEvaluated;
                 m_Driver.Dispose();
                 m_Driver = null;
             }
@@ -2518,15 +2344,7 @@ namespace XFramework.Editor
             m_OverrideAsset = null;
             m_CueLogs.Clear();
             m_OriginalClipPathByKey.Clear();
-            m_RootMotionFallbackEvaluatorByClip.Clear();
             m_RenderTextureSize = Vector2Int.zero;
-            ResetManualRootMotionPreviewState();
-        }
-
-        private void ResetManualRootMotionPreviewState()
-        {
-            m_ManualRootMotionPlaybackId = 0;
-            m_ManualRootMotionNormalizedTime = 0f;
         }
 
         private void CacheOriginalClipPaths(string assetPath)
@@ -2963,6 +2781,34 @@ namespace XFramework.Editor
             AppendLog($"Exit [{stateEvent.channelName}] {stateEvent.stateKey}{FormatTemporaryStateSuffix(stateEvent.isTemporaryState)} ({reason})");
         }
 
+        private void OnPreviewFrameEvaluated(Animator animator, Vector3 previousPosition, Quaternion previousRotation)
+        {
+            if (!m_RootMotionEnabled ||
+                animator == null ||
+                m_Animator == null ||
+                !ReferenceEquals(animator, m_Animator) ||
+                m_Driver == null ||
+                !m_Driver.ShouldApplyNativeRootMotion())
+            {
+                return;
+            }
+
+            Transform animatorTransform = m_Animator.transform;
+            if (animatorTransform == null)
+            {
+                return;
+            }
+
+            if (animatorTransform.position != previousPosition || animatorTransform.rotation != previousRotation)
+            {
+                return;
+            }
+
+            animatorTransform.SetPositionAndRotation(
+                animatorTransform.position + animator.deltaPosition,
+                animator.deltaRotation * animatorTransform.rotation);
+        }
+
         private void AppendLog(string message)
         {
             if (string.IsNullOrWhiteSpace(message))
@@ -3102,118 +2948,6 @@ namespace XFramework.Editor
             asset.autoTransitions = remaining.ToArray();
         }
 
-        private sealed class PreviewRootMotionFallbackEvaluator
-        {
-            private readonly AnimationClip m_Clip;
-            private AnimationCurve m_RootTX;
-            private AnimationCurve m_RootTY;
-            private AnimationCurve m_RootTZ;
-            private AnimationCurve m_RootQX;
-            private AnimationCurve m_RootQY;
-            private AnimationCurve m_RootQZ;
-            private AnimationCurve m_RootQW;
-
-            public bool HasPosition => m_RootTX != null || m_RootTY != null || m_RootTZ != null;
-            public bool HasRotation => m_RootQX != null || m_RootQY != null || m_RootQZ != null || m_RootQW != null;
-
-            private PreviewRootMotionFallbackEvaluator(AnimationClip clip)
-            {
-                m_Clip = clip;
-            }
-
-            public static PreviewRootMotionFallbackEvaluator Create(AnimationClip clip)
-            {
-                PreviewRootMotionFallbackEvaluator evaluator = new(clip);
-                EditorCurveBinding[] bindings = AnimationUtility.GetCurveBindings(clip);
-                for (int i = 0; i < bindings.Length; i++)
-                {
-                    EditorCurveBinding binding = bindings[i];
-                    AnimationCurve curve = AnimationUtility.GetEditorCurve(clip, binding);
-                    switch (binding.propertyName)
-                    {
-                        case "RootT.x":
-                            evaluator.m_RootTX = curve;
-                            break;
-                        case "RootT.y":
-                            evaluator.m_RootTY = curve;
-                            break;
-                        case "RootT.z":
-                            evaluator.m_RootTZ = curve;
-                            break;
-                        case "RootQ.x":
-                            evaluator.m_RootQX = curve;
-                            break;
-                        case "RootQ.y":
-                            evaluator.m_RootQY = curve;
-                            break;
-                        case "RootQ.z":
-                            evaluator.m_RootQZ = curve;
-                            break;
-                        case "RootQ.w":
-                            evaluator.m_RootQW = curve;
-                            break;
-                    }
-                }
-
-                return evaluator;
-            }
-
-            public Vector3 EvaluateAccumulatedPosition(float totalNormalizedTime, bool isLooping)
-            {
-                if (!isLooping)
-                {
-                    return EvaluatePosition(Mathf.Clamp01(totalNormalizedTime));
-                }
-
-                int loopCount = Mathf.FloorToInt(totalNormalizedTime);
-                float normalizedTime = Mathf.Repeat(totalNormalizedTime, 1f);
-                Vector3 loopDelta = EvaluatePosition(1f) - EvaluatePosition(0f);
-                return loopDelta * loopCount + EvaluatePosition(normalizedTime);
-            }
-
-            public Vector3 EvaluatePosition(float normalizedTime)
-            {
-                float time = Mathf.Clamp01(normalizedTime) * Mathf.Max(m_Clip.length, 0.0001f);
-                return new Vector3(
-                    m_RootTX != null ? m_RootTX.Evaluate(time) : 0f,
-                    m_RootTY != null ? m_RootTY.Evaluate(time) : 0f,
-                    m_RootTZ != null ? m_RootTZ.Evaluate(time) : 0f);
-            }
-
-            public Quaternion EvaluateRotation(float totalNormalizedTime, bool isLooping)
-            {
-                float normalizedTime = isLooping ? Mathf.Repeat(totalNormalizedTime, 1f) : Mathf.Clamp01(totalNormalizedTime);
-                float time = normalizedTime * Mathf.Max(m_Clip.length, 0.0001f);
-                Quaternion rotation = new(
-                    m_RootQX != null ? m_RootQX.Evaluate(time) : 0f,
-                    m_RootQY != null ? m_RootQY.Evaluate(time) : 0f,
-                    m_RootQZ != null ? m_RootQZ.Evaluate(time) : 0f,
-                    m_RootQW != null ? m_RootQW.Evaluate(time) : 1f);
-
-                return Normalize(rotation);
-            }
-
-            private static Quaternion Normalize(Quaternion rotation)
-            {
-                float magnitude = Mathf.Sqrt(
-                    rotation.x * rotation.x +
-                    rotation.y * rotation.y +
-                    rotation.z * rotation.z +
-                    rotation.w * rotation.w);
-
-                if (magnitude <= 0.0001f)
-                {
-                    return Quaternion.identity;
-                }
-
-                return new Quaternion(
-                    rotation.x / magnitude,
-                    rotation.y / magnitude,
-                    rotation.z / magnitude,
-                    rotation.w / magnitude);
-            }
-        }
     }
-
 }
 #endif

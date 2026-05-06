@@ -197,28 +197,11 @@ namespace XFramework.Animation
             }
 
             double playableTime = m_Playable.GetTime();
-            if (IsLooping)
-            {
-                if (playableTime >= m_ClipLength)
-                {
-                    m_Playable.SetTime(playableTime % m_ClipLength);
-                }
-                else if (playableTime < 0d)
-                {
-                    double wrappedTime = playableTime % m_ClipLength;
-                    if (wrappedTime < 0d)
-                    {
-                        wrappedTime += m_ClipLength;
-                    }
-
-                    m_Playable.SetTime(wrappedTime);
-                }
-            }
-            else if (playableTime > m_ClipLength)
+            if (!IsLooping && playableTime > m_ClipLength)
             {
                 m_Playable.SetTime(m_ClipLength);
             }
-            else if (playableTime < 0d)
+            else if (!IsLooping && playableTime < 0d)
             {
                 m_Playable.SetTime(0d);
             }
@@ -563,10 +546,12 @@ namespace XFramework.Animation
 
         private double GetPlayableTime(int sampleIndex, float totalNormalizedTime)
         {
-            float normalizedTime = IsLooping
-                ? Mathf.Repeat(totalNormalizedTime, 1f)
-                : Mathf.Clamp01(totalNormalizedTime);
-            return normalizedTime * m_ClipLengths[sampleIndex];
+            if (IsLooping)
+            {
+                return totalNormalizedTime * m_ClipLengths[sampleIndex];
+            }
+
+            return Mathf.Clamp01(totalNormalizedTime) * m_ClipLengths[sampleIndex];
         }
     }
 
@@ -1013,10 +998,12 @@ namespace XFramework.Animation
 
         private double GetPlayableTime(int sampleIndex, float totalNormalizedTime)
         {
-            float normalizedTime = IsLooping
-                ? Mathf.Repeat(totalNormalizedTime, 1f)
-                : Mathf.Clamp01(totalNormalizedTime);
-            return normalizedTime * m_ClipLengths[sampleIndex];
+            if (IsLooping)
+            {
+                return totalNormalizedTime * m_ClipLengths[sampleIndex];
+            }
+
+            return Mathf.Clamp01(totalNormalizedTime) * m_ClipLengths[sampleIndex];
         }
     }
 
@@ -1598,10 +1585,12 @@ namespace XFramework.Animation
 
         private double GetPlayableTime(int sampleIndex, float totalNormalizedTime)
         {
-            float normalizedTime = IsLooping
-                ? Mathf.Repeat(totalNormalizedTime, 1f)
-                : Mathf.Clamp01(totalNormalizedTime);
-            return normalizedTime * m_ClipLengths[sampleIndex];
+            if (IsLooping)
+            {
+                return totalNormalizedTime * m_ClipLengths[sampleIndex];
+            }
+
+            return Mathf.Clamp01(totalNormalizedTime) * m_ClipLengths[sampleIndex];
         }
 
         private sealed class FreeformDirectionalGroup

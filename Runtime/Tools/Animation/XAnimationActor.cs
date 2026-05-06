@@ -17,10 +17,13 @@ namespace XFramework.Animation
         private readonly XAnimationDriver m_Driver = new();
         private bool m_IsInitialized;
         private bool m_IsPaused;
+        private XAnimationRootMotionBridge m_RootMotionBridge;
 
         public event Action<XAnimationCueEvent> CueTriggered;
+        public event Action<XAnimationRootMotionEvent> RootMotionMoved;
         public event Action<XAnimationStateEvent> OnStateEnter;
         public event Action<XAnimationStateEvent> OnStateExit;
+        public event Action<Animator, Vector3, Quaternion> NativeRootMotionApplied;
 
         public TextAsset AnimationAsset => m_AnimationAsset;
         public Animator Animator => m_Animator;
@@ -111,6 +114,7 @@ namespace XFramework.Animation
             m_Driver.OnStateExit += HandleStateExit;
             m_Driver.SetPaused(m_IsPaused);
             m_Driver.SetTimeScale(m_TimeScale);
+            BindRootMotionBridge();
             m_IsInitialized = true;
         }
 
@@ -264,12 +268,6 @@ namespace XFramework.Animation
             return m_Driver.GetClipDuration(clipKey);
         }
 
-        public bool TryGetRootMotionDelta(out Vector3 deltaPosition, out Quaternion deltaRotation)
-        {
-            EnsureInitialized();
-            return m_Driver.TryGetRootMotionDelta(out deltaPosition, out deltaRotation);
-        }
-
         public void Dispose()
         {
             DisposeDriver();
@@ -312,6 +310,7 @@ namespace XFramework.Animation
                 return;
             }
 
+            UnbindRootMotionBridge();
             m_Driver.CueTriggered -= HandleCueTriggered;
             m_Driver.OnStateEnter -= HandleStateEnter;
             m_Driver.OnStateExit -= HandleStateExit;
@@ -324,6 +323,36 @@ namespace XFramework.Animation
             CueTriggered?.Invoke(cueEvent);
         }
 
+        internal void HandleNativeRootMotion(Animator animator)
+        {
+            if (!m_IsInitialized ||
+                animator == null ||
+                !ReferenceEquals(animator, m_Animator) ||
+                !m_Driver.ShouldApplyNativeRootMotion())
+            {
+                return;
+            }
+
+            Vector3 deltaPosition = animator.deltaPosition;
+            Quaternion deltaRotation = animator.deltaRotation;
+
+            NativeRootMotionApplied?.Invoke(animator, deltaPosition, deltaRotation);
+
+            if (NativeRootMotionApplied == null)
+            {
+                ApplyRootMotionToTransform(deltaPosition, deltaRotation);
+            }
+
+            RootMotionMoved?.Invoke(new XAnimationRootMotionEvent
+            {
+                channelName = string.Empty,
+                playbackId = 0,
+                stateKey = string.Empty,
+                deltaPosition = deltaPosition,
+                deltaRotation = deltaRotation,
+            });
+        }
+
         private void HandleStateEnter(XAnimationStateEvent stateEvent)
         {
             OnStateEnter?.Invoke(stateEvent);
@@ -332,6 +361,74 @@ namespace XFramework.Animation
         private void HandleStateExit(XAnimationStateEvent stateEvent)
         {
             OnStateExit?.Invoke(stateEvent);
+        }
+
+        private void ApplyRootMotionToTransform(Vector3 deltaPosition, Quaternion deltaRotation)
+        {
+            Transform target = transform;
+            target.position += deltaPosition;
+            target.rotation = deltaRotation * target.rotation;
+        }
+
+        private void BindRootMotionBridge()
+        {
+            if (m_Animator == null)
+            {
+                return;
+            }
+
+            m_RootMotionBridge = m_Animator.GetComponent<XAnimationRootMotionBridge>();
+            if (m_RootMotionBridge == null)
+            {
+                m_RootMotionBridge = m_Animator.gameObject.AddComponent<XAnimationRootMotionBridge>();
+            }
+
+            m_RootMotionBridge.Bind(this, m_Animator);
+        }
+
+        private void UnbindRootMotionBridge()
+        {
+            if (m_RootMotionBridge == null)
+            {
+                return;
+            }
+
+            m_RootMotionBridge.Unbind(this);
+            m_RootMotionBridge = null;
+        }
+    }
+
+    [DisallowMultipleComponent]
+    internal sealed class XAnimationRootMotionBridge : MonoBehaviour
+    {
+        private XAnimationActor m_Actor;
+        private Animator m_Animator;
+
+        internal void Bind(XAnimationActor actor, Animator animator)
+        {
+            m_Actor = actor;
+            m_Animator = animator;
+        }
+
+        internal void Unbind(XAnimationActor actor)
+        {
+            if (m_Actor != actor)
+            {
+                return;
+            }
+
+            m_Actor = null;
+            m_Animator = null;
+        }
+
+        private void OnAnimatorMove()
+        {
+            if (m_Actor == null || m_Animator == null)
+            {
+                return;
+            }
+
+            m_Actor.HandleNativeRootMotion(m_Animator);
         }
     }
 }

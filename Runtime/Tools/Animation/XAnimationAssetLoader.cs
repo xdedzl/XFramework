@@ -111,15 +111,11 @@ namespace XFramework.Animation
                     throw new XFrameworkException(message);
                 }
 
-#if UNITY_EDITOR
-                clipConfig.rootMotionTrack = XAnimationRootMotionTrackBuilder.BuildConfig(clip);
-#endif
                 AnimationClip playbackClip = CreatePlaybackClip(clip);
                 compiledClips[i] = new XAnimationCompiledClip(
                     clipConfig,
                     clip,
-                    playbackClip,
-                    XAnimationRootMotionTrack.Create(clipConfig.rootMotionTrack));
+                    playbackClip);
                 clipIndexByKey[clipConfig.key] = i;
             }
 

@@ -11,8 +11,7 @@ namespace XFramework.Animation
         private readonly List<XAnimationChannel> m_Channels = new();
         private readonly Dictionary<string, XAnimationChannel> m_ChannelMap = new(StringComparer.Ordinal);
         private readonly XAnimationCueDispatcher m_CueDispatcher = new();
-        private readonly XAnimationRootMotionResolver m_RootMotionResolver = new();
-        private readonly XAnimationRootMotionEvaluator m_RootMotionEvaluator = new();
+        private readonly XAnimationRootMotionResolver m_RootMotionResolver;
         private const string TemporaryClipStateKeyPrefix = "__xanimation_temp_clip_state:";
 
         private PlayableGraph m_Graph;
@@ -22,15 +21,16 @@ namespace XFramework.Animation
         private bool m_OriginalApplyRootMotion;
         private int m_NextPlaybackId = 1;
         private int m_NextTemporaryStateId = 1;
-        private bool m_HasRootMotionDelta;
-        private Vector3 m_RootMotionDeltaPosition;
-        private Quaternion m_RootMotionDeltaRotation = Quaternion.identity;
 
-        public XAnimationPlayer(XAnimationCompiledAsset compiledAsset, Animator animator, XAnimationContext context)
+        public XAnimationPlayer(
+            XAnimationCompiledAsset compiledAsset,
+            Animator animator,
+            XAnimationContext context)
         {
             CompiledAsset = compiledAsset ?? throw new ArgumentNullException(nameof(compiledAsset));
             Animator = animator ? animator : throw new ArgumentNullException(nameof(animator));
             Context = context ?? throw new ArgumentNullException(nameof(context));
+            m_RootMotionResolver = new XAnimationRootMotionResolver();
             BuildGraph();
         }
 
@@ -151,13 +151,13 @@ namespace XFramework.Animation
         {
             ThrowIfDisposed();
             m_RootMotionResolver.SetEnabled(enabled);
-            if (!enabled)
-            {
-                m_RootMotionEvaluator.Reset();
-                ClearRootMotionDelta();
-            }
-
             m_RootMotionResolver.ApplyToAnimator(Animator);
+        }
+
+        internal bool ShouldApplyNativeRootMotion()
+        {
+            ThrowIfDisposed();
+            return m_RootMotionResolver.ShouldApplyNativeRootMotion;
         }
 
         public XAnimationChannelState GetChannelState(string channelName)
@@ -224,14 +224,6 @@ namespace XFramework.Animation
             return CompiledAsset.GetClipDuration(clipKey);
         }
 
-        public bool TryGetRootMotionDelta(out Vector3 deltaPosition, out Quaternion deltaRotation)
-        {
-            ThrowIfDisposed();
-            deltaPosition = m_RootMotionDeltaPosition;
-            deltaRotation = m_RootMotionDeltaRotation;
-            return m_HasRootMotionDelta;
-        }
-
         public void Update(float deltaTime)
         {
             ThrowIfDisposed();
@@ -247,8 +239,7 @@ namespace XFramework.Animation
                 m_LayerMixer.SetInputWeight(i, channel.HasActivePlayback ? channel.ChannelWeight : 0f);
             }
 
-            XAnimationChannel rootMotionSource = m_RootMotionResolver.ResolveSource(m_Channels);
-            CacheRootMotionDelta(rootMotionSource);
+            m_RootMotionResolver.ResolveSource(m_Channels);
             m_RootMotionResolver.ApplyToAnimator(Animator);
 
             m_Graph.Evaluate(deltaTime);
@@ -343,45 +334,6 @@ namespace XFramework.Animation
 
             Animator.runtimeAnimatorController = m_OriginalController;
             Animator.applyRootMotion = m_OriginalApplyRootMotion;
-        }
-
-        private void CacheRootMotionDelta(XAnimationChannel rootMotionSource)
-        {
-            if (!m_RootMotionResolver.Enabled)
-            {
-                m_RootMotionEvaluator.Reset();
-                ClearRootMotionDelta();
-                return;
-            }
-
-            m_HasRootMotionDelta = m_RootMotionEvaluator.TryEvaluate(
-                CompiledAsset,
-                rootMotionSource,
-                out m_RootMotionDeltaPosition,
-                out m_RootMotionDeltaRotation);
-            if (!m_HasRootMotionDelta)
-            {
-                m_RootMotionDeltaPosition = Vector3.zero;
-                m_RootMotionDeltaRotation = Quaternion.identity;
-                return;
-            }
-
-            Transform rootMotionTransform = Animator != null ? Animator.transform : null;
-            if (rootMotionTransform == null)
-            {
-                return;
-            }
-
-            Quaternion rootMotionSpaceRotation = rootMotionTransform.rotation;
-            m_RootMotionDeltaPosition = rootMotionTransform.TransformDirection(m_RootMotionDeltaPosition);
-            m_RootMotionDeltaRotation = rootMotionSpaceRotation * m_RootMotionDeltaRotation * Quaternion.Inverse(rootMotionSpaceRotation);
-        }
-
-        private void ClearRootMotionDelta()
-        {
-            m_HasRootMotionDelta = false;
-            m_RootMotionDeltaPosition = Vector3.zero;
-            m_RootMotionDeltaRotation = Quaternion.identity;
         }
 
         private XAnimationCompiledChannel ResolveClipChannel(XAnimationCompiledClip clip, string channelName)
