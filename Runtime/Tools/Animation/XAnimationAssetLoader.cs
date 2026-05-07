@@ -77,6 +77,7 @@ namespace XFramework.Animation
         public XAnimationCompiledAsset Compile(XAnimationAsset asset)
         {
             NormalizeAutoTransitionValues(asset);
+            NormalizeDefaultTransitionValues(asset);
             m_Validator.Validate(asset);
 
             XAnimationCompiledChannel[] compiledChannels = new XAnimationCompiledChannel[asset.channels.Length];
@@ -170,6 +171,22 @@ namespace XFramework.Animation
                 autoTransitionIndexByPreStateKey[autoTransitionConfig.preStateKey] = i;
             }
 
+            XAnimationDefaultTransitionConfig[] defaultTransitionConfigs = asset.defaultTransitions ?? Array.Empty<XAnimationDefaultTransitionConfig>();
+            XAnimationCompiledDefaultTransition[] compiledDefaultTransitions = new XAnimationCompiledDefaultTransition[defaultTransitionConfigs.Length];
+            Dictionary<string, int> defaultTransitionIndexByPairKey = new(StringComparer.Ordinal);
+            for (int i = 0; i < defaultTransitionConfigs.Length; i++)
+            {
+                XAnimationDefaultTransitionConfig defaultTransitionConfig = defaultTransitionConfigs[i];
+                compiledDefaultTransitions[i] = new XAnimationCompiledDefaultTransition(defaultTransitionConfig);
+                XAnimationTransitionPairConfig[] pairs = defaultTransitionConfig.pairs ?? Array.Empty<XAnimationTransitionPairConfig>();
+                for (int pairIndex = 0; pairIndex < pairs.Length; pairIndex++)
+                {
+                    XAnimationTransitionPairConfig pair = pairs[pairIndex];
+                    string pairKey = XAnimationCompiledAsset.BuildTransitionPairKey(pair.preStateKey, pair.nextStateKey);
+                    defaultTransitionIndexByPairKey[pairKey] = i;
+                }
+            }
+
             Dictionary<string, List<XAnimationCompiledCue>> cuesByClipKey = new(StringComparer.Ordinal);
             for (int i = 0; i < asset.cues.Length; i++)
             {
@@ -194,13 +211,15 @@ namespace XFramework.Animation
                 compiledClips,
                 compiledStates,
                 compiledAutoTransitions,
+                compiledDefaultTransitions,
                 compiledParameters,
                 cuesByClipKey,
                 channelIndexByName,
                 clipIndexByKey,
                 parameterIndexByName,
                 stateIndexByKey,
-                autoTransitionIndexByPreStateKey);
+                autoTransitionIndexByPreStateKey,
+                defaultTransitionIndexByPairKey);
         }
 
         private static XAnimationCompiledBlend1DState CompileBlend1DState(
@@ -424,6 +443,41 @@ namespace XFramework.Animation
                     ? string.Empty
                     : transition.nextStateKey.Trim();
                 transition.transitionDuration = Mathf.Max(0f, transition.transitionDuration);
+            }
+        }
+
+        private static void NormalizeDefaultTransitionValues(XAnimationAsset asset)
+        {
+            if (asset == null)
+            {
+                return;
+            }
+
+            asset.defaultTransitions ??= Array.Empty<XAnimationDefaultTransitionConfig>();
+            for (int i = 0; i < asset.defaultTransitions.Length; i++)
+            {
+                XAnimationDefaultTransitionConfig transition = asset.defaultTransitions[i];
+                if (transition == null)
+                {
+                    continue;
+                }
+
+                transition.editorName = transition.editorName?.Trim() ?? string.Empty;
+                transition.pairs ??= Array.Empty<XAnimationTransitionPairConfig>();
+                transition.fadeIn = Mathf.Max(0f, transition.fadeIn);
+                transition.fadeOut = Mathf.Max(0f, transition.fadeOut);
+                transition.enterTime = Mathf.Clamp01(transition.enterTime);
+                for (int pairIndex = 0; pairIndex < transition.pairs.Length; pairIndex++)
+                {
+                    XAnimationTransitionPairConfig pair = transition.pairs[pairIndex];
+                    if (pair == null)
+                    {
+                        continue;
+                    }
+
+                    pair.preStateKey = pair.preStateKey?.Trim();
+                    pair.nextStateKey = pair.nextStateKey?.Trim();
+                }
             }
         }
 

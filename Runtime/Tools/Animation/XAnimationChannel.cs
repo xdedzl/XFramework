@@ -117,7 +117,7 @@ namespace XFramework.Animation
             UpdateFade(deltaTime);
         }
 
-        public abstract void FinalizeFrame(XAnimationCueDispatcher cueDispatcher);
+        public abstract void FinalizeFrame(XAnimationCueDispatcher cueDispatcher, float channelWeight);
         public abstract XAnimationChannelState BuildState(float channelWeight, float channelTimeScale);
         public abstract void Dispose(XAnimationCueDispatcher cueDispatcher);
         public abstract float GetNormalizedTime();
@@ -189,7 +189,7 @@ namespace XFramework.Animation
             m_TotalNormalizedTime += deltaTime * Speed * channelTimeScale / m_ClipLength;
         }
 
-        public override void FinalizeFrame(XAnimationCueDispatcher cueDispatcher)
+        public override void FinalizeFrame(XAnimationCueDispatcher cueDispatcher, float channelWeight)
         {
             if (!m_Playable.IsValid())
             {
@@ -208,13 +208,14 @@ namespace XFramework.Animation
 
             if (!SuppressCues)
             {
-                cueDispatcher?.Update(this, m_Clip.Key, m_PreviousTotalNormalizedTime, m_TotalNormalizedTime);
+                float effectiveWeight = CurrentWeight * channelWeight;
+                cueDispatcher?.Update(this, m_Clip.Key, m_PreviousTotalNormalizedTime, m_TotalNormalizedTime, effectiveWeight);
                 XAnimationClipEventInvoker.Dispatch(
                     m_Clip.Clip,
                     this,
                     m_PreviousTotalNormalizedTime,
                     m_TotalNormalizedTime,
-                    CurrentWeight,
+                    effectiveWeight,
                     cueEvent => cueDispatcher?.Raise(cueEvent));
             }
         }
@@ -348,7 +349,7 @@ namespace XFramework.Animation
             }
         }
 
-        public override void FinalizeFrame(XAnimationCueDispatcher cueDispatcher)
+        public override void FinalizeFrame(XAnimationCueDispatcher cueDispatcher, float channelWeight)
         {
             for (int i = 0; i < m_Playables.Length; i++)
             {
@@ -360,13 +361,19 @@ namespace XFramework.Animation
 
                 if (!SuppressCues && m_SampleWeights[i] > ActiveCueWeightThreshold)
                 {
-                    cueDispatcher?.Update(this, m_Clips[i].Key, m_PreviousTotalNormalizedTime, m_TotalNormalizedTime);
+                    float effectiveWeight = CurrentWeight * channelWeight * m_SampleWeights[i];
+                    cueDispatcher?.Update(
+                        this,
+                        m_Clips[i].Key,
+                        m_PreviousTotalNormalizedTime,
+                        m_TotalNormalizedTime,
+                        effectiveWeight);
                     XAnimationClipEventInvoker.Dispatch(
                         m_Clips[i].Clip,
                         this,
                         m_PreviousTotalNormalizedTime,
                         m_TotalNormalizedTime,
-                        CurrentWeight * m_SampleWeights[i],
+                        effectiveWeight,
                         cueEvent => cueDispatcher?.Raise(cueEvent));
                 }
             }
@@ -655,7 +662,7 @@ namespace XFramework.Animation
             }
         }
 
-        public override void FinalizeFrame(XAnimationCueDispatcher cueDispatcher)
+        public override void FinalizeFrame(XAnimationCueDispatcher cueDispatcher, float channelWeight)
         {
             for (int i = 0; i < m_Playables.Length; i++)
             {
@@ -667,13 +674,19 @@ namespace XFramework.Animation
 
                 if (!SuppressCues && m_SampleWeights[i] > ActiveCueWeightThreshold)
                 {
-                    cueDispatcher?.Update(this, m_Clips[i].Key, m_PreviousTotalNormalizedTime, m_TotalNormalizedTime);
+                    float effectiveWeight = CurrentWeight * channelWeight * m_SampleWeights[i];
+                    cueDispatcher?.Update(
+                        this,
+                        m_Clips[i].Key,
+                        m_PreviousTotalNormalizedTime,
+                        m_TotalNormalizedTime,
+                        effectiveWeight);
                     XAnimationClipEventInvoker.Dispatch(
                         m_Clips[i].Clip,
                         this,
                         m_PreviousTotalNormalizedTime,
                         m_TotalNormalizedTime,
-                        CurrentWeight * m_SampleWeights[i],
+                        effectiveWeight,
                         cueEvent => cueDispatcher?.Raise(cueEvent));
                 }
             }
@@ -1110,7 +1123,7 @@ namespace XFramework.Animation
             }
         }
 
-        public override void FinalizeFrame(XAnimationCueDispatcher cueDispatcher)
+        public override void FinalizeFrame(XAnimationCueDispatcher cueDispatcher, float channelWeight)
         {
             for (int i = 0; i < m_Playables.Length; i++)
             {
@@ -1122,13 +1135,19 @@ namespace XFramework.Animation
 
                 if (!SuppressCues && m_SampleWeights[i] > ActiveCueWeightThreshold)
                 {
-                    cueDispatcher?.Update(this, m_Clips[i].Key, m_PreviousTotalNormalizedTime, m_TotalNormalizedTime);
+                    float effectiveWeight = CurrentWeight * channelWeight * m_SampleWeights[i];
+                    cueDispatcher?.Update(
+                        this,
+                        m_Clips[i].Key,
+                        m_PreviousTotalNormalizedTime,
+                        m_TotalNormalizedTime,
+                        effectiveWeight);
                     XAnimationClipEventInvoker.Dispatch(
                         m_Clips[i].Clip,
                         this,
                         m_PreviousTotalNormalizedTime,
                         m_TotalNormalizedTime,
-                        CurrentWeight * m_SampleWeights[i],
+                        effectiveWeight,
                         cueEvent => cueDispatcher?.Raise(cueEvent));
                 }
             }
@@ -1768,12 +1787,12 @@ namespace XFramework.Animation
         {
             if (m_Current != null)
             {
-                m_Current.FinalizeFrame(cueDispatcher);
+                m_Current.FinalizeFrame(cueDispatcher, m_ChannelWeight);
             }
 
             if (m_Previous != null)
             {
-                m_Previous.FinalizeFrame(cueDispatcher);
+                m_Previous.FinalizeFrame(cueDispatcher, m_ChannelWeight);
                 if (m_Previous.HasFinishedFadeOut())
                 {
                     DestroyPlayback(ref m_Previous, cueDispatcher);

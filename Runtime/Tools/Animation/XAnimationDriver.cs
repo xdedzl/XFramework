@@ -377,7 +377,11 @@ namespace XFramework.Animation
 
         private static XAnimationTransitionOptions NormalizeTransitionOptions(XAnimationTransitionOptions options)
         {
-            options ??= new XAnimationTransitionOptions();
+            if (options == null)
+            {
+                return null;
+            }
+
             return new XAnimationTransitionOptions
             {
                 fadeIn = Mathf.Max(0f, options.fadeIn),

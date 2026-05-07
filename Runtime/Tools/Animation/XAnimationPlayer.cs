@@ -80,7 +80,7 @@ namespace XFramework.Animation
             XAnimationCompiledChannel channel,
             XAnimationTransitionOptions transition)
         {
-            transition ??= new XAnimationTransitionOptions();
+            transition = ResolveTransitionOptions(state, channel, transition);
 
             float fadeIn = transition.fadeIn > 0f ? transition.fadeIn : state.Config.fadeIn;
             float fadeOut = transition.fadeOut > 0f ? transition.fadeOut : state.Config.fadeOut;
@@ -116,6 +116,29 @@ namespace XFramework.Animation
             }
 
             return XAnimationPlaybackStartInfo.CreateStarted(playback);
+        }
+
+        private XAnimationTransitionOptions ResolveTransitionOptions(
+            XAnimationCompiledState state,
+            XAnimationCompiledChannel channel,
+            XAnimationTransitionOptions transition)
+        {
+            if (transition != null)
+            {
+                return transition;
+            }
+
+            if (!IsTemporaryClipState(state.Key) &&
+                m_ChannelMap.TryGetValue(channel.Name, out XAnimationChannel runtimeChannel) &&
+                runtimeChannel.TryGetCurrentPlayback(out XAnimationStatePlaybackInstance currentPlayback) &&
+                currentPlayback != null &&
+                !currentPlayback.IsTemporaryState &&
+                CompiledAsset.TryGetDefaultTransition(currentPlayback.StateKey, state.Key, out XAnimationCompiledDefaultTransition defaultTransition))
+            {
+                return defaultTransition.CreateTransitionOptions();
+            }
+
+            return new XAnimationTransitionOptions();
         }
 
         public void Stop(string channelName, float fadeOut = default)

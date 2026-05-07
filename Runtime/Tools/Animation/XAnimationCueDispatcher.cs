@@ -49,7 +49,8 @@ namespace XFramework.Animation
             XAnimationStatePlaybackInstance instance,
             string clipKey,
             float previousTotalNormalizedTime,
-            float currentTotalNormalizedTime)
+            float currentTotalNormalizedTime,
+            float effectiveWeight)
         {
             if (instance == null || instance.SuppressCues)
             {
@@ -108,6 +109,7 @@ namespace XFramework.Animation
                         channelName = instance.ChannelName,
                         eventKey = cueConfig.eventKey,
                         payload = cueConfig.payload,
+                        weight = effectiveWeight,
                         normalizedTime = cueConfig.time,
                         loopCount = loopIndex,
                     });

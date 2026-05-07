@@ -18,6 +18,7 @@ namespace XFramework.Animation
             ValidateParameters(asset.parameters);
             Dictionary<string, XAnimationStateConfig> stateMap = ValidateStates(asset.channels, asset.clips, asset.parameters, asset.states);
             ValidateAutoTransitions(asset.autoTransitions, stateMap);
+            ValidateDefaultTransitions(asset.defaultTransitions, stateMap);
             ValidateCues(asset.clips, asset.cues);
         }
 
@@ -562,6 +563,89 @@ namespace XFramework.Animation
                     throw new XFrameworkException($"XAnimation auto transition '{transition.preStateKey}' references unknown nextStateKey '{transition.nextStateKey}'.");
                 }
             }
+        }
+
+        private static void ValidateDefaultTransitions(
+            IReadOnlyList<XAnimationDefaultTransitionConfig> defaultTransitions,
+            IReadOnlyDictionary<string, XAnimationStateConfig> stateMap)
+        {
+            if (defaultTransitions == null)
+            {
+                return;
+            }
+
+            HashSet<string> pairKeys = new(StringComparer.Ordinal);
+            for (int transitionIndex = 0; transitionIndex < defaultTransitions.Count; transitionIndex++)
+            {
+                XAnimationDefaultTransitionConfig transition = defaultTransitions[transitionIndex];
+                if (transition == null)
+                {
+                    throw new XFrameworkException("XAnimation default transition config is null.");
+                }
+
+                if (transition.fadeIn < 0f || transition.fadeOut < 0f)
+                {
+                    throw new XFrameworkException($"XAnimation default transition '{GetDefaultTransitionName(transition, transitionIndex)}' has negative fade settings.");
+                }
+
+                if (transition.enterTime < 0f || transition.enterTime > 1f)
+                {
+                    throw new XFrameworkException($"XAnimation default transition '{GetDefaultTransitionName(transition, transitionIndex)}' EnterTime must be within [0, 1].");
+                }
+
+                XAnimationTransitionPairConfig[] pairs = transition.pairs ?? Array.Empty<XAnimationTransitionPairConfig>();
+                if (pairs.Length == 0)
+                {
+                    throw new XFrameworkException($"XAnimation default transition '{GetDefaultTransitionName(transition, transitionIndex)}' must contain at least one pair.");
+                }
+
+                for (int pairIndex = 0; pairIndex < pairs.Length; pairIndex++)
+                {
+                    XAnimationTransitionPairConfig pair = pairs[pairIndex];
+                    if (pair == null)
+                    {
+                        throw new XFrameworkException($"XAnimation default transition '{GetDefaultTransitionName(transition, transitionIndex)}' pair at index {pairIndex} is null.");
+                    }
+
+                    if (string.IsNullOrWhiteSpace(pair.preStateKey))
+                    {
+                        throw new XFrameworkException($"XAnimation default transition '{GetDefaultTransitionName(transition, transitionIndex)}' preStateKey cannot be empty.");
+                    }
+
+                    if (string.IsNullOrWhiteSpace(pair.nextStateKey))
+                    {
+                        throw new XFrameworkException($"XAnimation default transition '{GetDefaultTransitionName(transition, transitionIndex)}' nextStateKey cannot be empty.");
+                    }
+
+                    if (string.Equals(pair.preStateKey, pair.nextStateKey, StringComparison.Ordinal))
+                    {
+                        throw new XFrameworkException($"XAnimation default transition '{GetDefaultTransitionName(transition, transitionIndex)}' cannot transition state '{pair.preStateKey}' to itself.");
+                    }
+
+                    if (!stateMap.ContainsKey(pair.preStateKey))
+                    {
+                        throw new XFrameworkException($"XAnimation default transition '{GetDefaultTransitionName(transition, transitionIndex)}' references unknown preStateKey '{pair.preStateKey}'.");
+                    }
+
+                    if (!stateMap.ContainsKey(pair.nextStateKey))
+                    {
+                        throw new XFrameworkException($"XAnimation default transition '{GetDefaultTransitionName(transition, transitionIndex)}' references unknown nextStateKey '{pair.nextStateKey}'.");
+                    }
+
+                    string pairKey = XAnimationCompiledAsset.BuildTransitionPairKey(pair.preStateKey, pair.nextStateKey);
+                    if (!pairKeys.Add(pairKey))
+                    {
+                        throw new XFrameworkException($"XAnimation default transition pair '{pair.preStateKey}' -> '{pair.nextStateKey}' is duplicated.");
+                    }
+                }
+            }
+        }
+
+        private static string GetDefaultTransitionName(XAnimationDefaultTransitionConfig transition, int index)
+        {
+            return string.IsNullOrWhiteSpace(transition.editorName)
+                ? $"#{index}"
+                : transition.editorName;
         }
 
     }

@@ -110,6 +110,25 @@ namespace XFramework.Animation
     }
 
     [Serializable]
+    public class XAnimationTransitionPairConfig
+    {
+        public string preStateKey;
+        public string nextStateKey;
+    }
+
+    [Serializable]
+    public class XAnimationDefaultTransitionConfig
+    {
+        public string editorName;
+        public XAnimationTransitionPairConfig[] pairs = Array.Empty<XAnimationTransitionPairConfig>();
+        public float fadeIn;
+        public float fadeOut;
+        public float enterTime;
+        public int priority;
+        public bool interruptible = true;
+    }
+
+    [Serializable]
     public class XAnimationBlend1DSampleConfig
     {
         public string clipKey;
@@ -135,6 +154,7 @@ namespace XFramework.Animation
         public XAnimationClipConfig[] clips = Array.Empty<XAnimationClipConfig>();
         public XAnimationStateConfig[] states = Array.Empty<XAnimationStateConfig>();
         public XAnimationAutoTransitionConfig[] autoTransitions = Array.Empty<XAnimationAutoTransitionConfig>();
+        public XAnimationDefaultTransitionConfig[] defaultTransitions = Array.Empty<XAnimationDefaultTransitionConfig>();
         public XAnimationParameterConfig[] parameters = Array.Empty<XAnimationParameterConfig>();
         public XAnimationCueConfig[] cues = Array.Empty<XAnimationCueConfig>();
     }
@@ -231,6 +251,30 @@ namespace XFramework.Animation
         public float TransitionDuration => Config.transitionDuration;
         public float EnterTime => Config.enterTime;
         public bool HasNextState => !string.IsNullOrWhiteSpace(Config.nextStateKey);
+    }
+
+    public sealed class XAnimationCompiledDefaultTransition
+    {
+        public XAnimationCompiledDefaultTransition(XAnimationDefaultTransitionConfig config)
+        {
+            Config = config ?? throw new ArgumentNullException(nameof(config));
+        }
+
+        public XAnimationDefaultTransitionConfig Config { get; }
+        public string EditorName => Config.editorName;
+        public IReadOnlyList<XAnimationTransitionPairConfig> Pairs => Config.pairs ?? Array.Empty<XAnimationTransitionPairConfig>();
+
+        public XAnimationTransitionOptions CreateTransitionOptions()
+        {
+            return new XAnimationTransitionOptions
+            {
+                fadeIn = Config.fadeIn,
+                fadeOut = Config.fadeOut,
+                enterTime = Config.enterTime,
+                priority = Config.priority,
+                interruptible = Config.interruptible,
+            };
+        }
     }
 
     public abstract class XAnimationCompiledState
@@ -348,6 +392,7 @@ namespace XFramework.Animation
         private readonly Dictionary<string, int> m_ParameterIndexByName;
         private readonly Dictionary<string, int> m_StateIndexByKey;
         private readonly Dictionary<string, int> m_AutoTransitionIndexByPreStateKey;
+        private readonly Dictionary<string, int> m_DefaultTransitionIndexByPairKey;
 
         public XAnimationCompiledAsset(
             XAnimationAsset asset,
@@ -355,19 +400,22 @@ namespace XFramework.Animation
             XAnimationCompiledClip[] clips,
             XAnimationCompiledState[] states,
             XAnimationCompiledAutoTransition[] autoTransitions,
+            XAnimationCompiledDefaultTransition[] defaultTransitions,
             XAnimationCompiledParameter[] parameters,
             Dictionary<string, List<XAnimationCompiledCue>> cuesByClipKey,
             Dictionary<string, int> channelIndexByName,
             Dictionary<string, int> clipIndexByKey,
             Dictionary<string, int> parameterIndexByName,
             Dictionary<string, int> stateIndexByKey,
-            Dictionary<string, int> autoTransitionIndexByPreStateKey)
+            Dictionary<string, int> autoTransitionIndexByPreStateKey,
+            Dictionary<string, int> defaultTransitionIndexByPairKey)
         {
             Asset = asset ?? throw new ArgumentNullException(nameof(asset));
             Channels = channels ?? Array.Empty<XAnimationCompiledChannel>();
             Clips = clips ?? Array.Empty<XAnimationCompiledClip>();
             States = states ?? Array.Empty<XAnimationCompiledState>();
             AutoTransitions = autoTransitions ?? Array.Empty<XAnimationCompiledAutoTransition>();
+            DefaultTransitions = defaultTransitions ?? Array.Empty<XAnimationCompiledDefaultTransition>();
             Parameters = parameters ?? Array.Empty<XAnimationCompiledParameter>();
             CuesByClipKey = cuesByClipKey ?? new Dictionary<string, List<XAnimationCompiledCue>>(StringComparer.Ordinal);
             m_ChannelIndexByName = channelIndexByName ?? new Dictionary<string, int>(StringComparer.Ordinal);
@@ -375,6 +423,7 @@ namespace XFramework.Animation
             m_ParameterIndexByName = parameterIndexByName ?? new Dictionary<string, int>(StringComparer.Ordinal);
             m_StateIndexByKey = stateIndexByKey ?? new Dictionary<string, int>(StringComparer.Ordinal);
             m_AutoTransitionIndexByPreStateKey = autoTransitionIndexByPreStateKey ?? new Dictionary<string, int>(StringComparer.Ordinal);
+            m_DefaultTransitionIndexByPairKey = defaultTransitionIndexByPairKey ?? new Dictionary<string, int>(StringComparer.Ordinal);
         }
 
         public XAnimationAsset Asset { get; }
@@ -382,6 +431,7 @@ namespace XFramework.Animation
         public IReadOnlyList<XAnimationCompiledClip> Clips { get; }
         public IReadOnlyList<XAnimationCompiledState> States { get; }
         public IReadOnlyList<XAnimationCompiledAutoTransition> AutoTransitions { get; }
+        public IReadOnlyList<XAnimationCompiledDefaultTransition> DefaultTransitions { get; }
         public IReadOnlyList<XAnimationCompiledParameter> Parameters { get; }
         public IReadOnlyDictionary<string, List<XAnimationCompiledCue>> CuesByClipKey { get; }
 
@@ -415,6 +465,23 @@ namespace XFramework.Animation
             }
 
             transition = AutoTransitions[transitionIndex];
+            return true;
+        }
+
+        public bool TryGetDefaultTransition(
+            string preStateKey,
+            string nextStateKey,
+            out XAnimationCompiledDefaultTransition transition)
+        {
+            if (string.IsNullOrWhiteSpace(preStateKey) ||
+                string.IsNullOrWhiteSpace(nextStateKey) ||
+                !m_DefaultTransitionIndexByPairKey.TryGetValue(BuildTransitionPairKey(preStateKey, nextStateKey), out int transitionIndex))
+            {
+                transition = null;
+                return false;
+            }
+
+            transition = DefaultTransitions[transitionIndex];
             return true;
         }
 
@@ -466,6 +533,11 @@ namespace XFramework.Animation
             }
 
             return transition;
+        }
+
+        public static string BuildTransitionPairKey(string preStateKey, string nextStateKey)
+        {
+            return $"{preStateKey}\u001F{nextStateKey}";
         }
 
         public float GetStateDuration(string stateKey)

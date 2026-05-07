@@ -115,6 +115,7 @@ namespace XFramework.Editor
         [SerializeField] private bool m_ParametersSectionExpanded = true;
         [SerializeField] private bool m_StatesSectionExpanded = true;
         [SerializeField] private bool m_AutoTransitionSectionExpanded = true;
+        [SerializeField] private bool m_DefaultTransitionsSectionExpanded = true;
         [SerializeField] private bool m_ClipsSectionExpanded = true;
         [SerializeField] private bool m_ChannelsSectionExpanded = true;
         [SerializeField] private bool m_PreviewRootMotionEnabled = true;
@@ -148,6 +149,7 @@ namespace XFramework.Editor
         private Button m_AddChannelButton;
         private Button m_AddParameterButton;
         private Button m_AddAutoTransitionButton;
+        private Button m_AddDefaultTransitionButton;
         private Button m_MainGroupButton;
         private Button m_ChannelsGroupButton;
         private Button m_ParametersGroupButton;
@@ -158,6 +160,7 @@ namespace XFramework.Editor
         private VisualElement m_MainParameterPreviewView;
         private VisualElement m_StateListView;
         private VisualElement m_AutoTransitionEditorView;
+        private VisualElement m_DefaultTransitionsEditorView;
         private VisualElement m_ClipListView;
         private ScrollView m_InspectorScrollView;
         private VisualElement m_InspectorOverlayLayer;
@@ -166,6 +169,7 @@ namespace XFramework.Editor
         private VisualElement m_ParametersGroupContainer;
         private readonly HashSet<string> m_ExpandedStateKeys = new(StringComparer.Ordinal);
         private readonly HashSet<string> m_CollapsedAutoTransitionKeys = new(StringComparer.Ordinal);
+        private readonly HashSet<int> m_CollapsedDefaultTransitionIndices = new();
         private readonly Dictionary<string, EditableLabel> m_StateLabelMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, VisualElement> m_StateRowMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, RowVisualState> m_StateVisualStateMap = new(StringComparer.Ordinal);
@@ -182,6 +186,7 @@ namespace XFramework.Editor
         private readonly Dictionary<string, EditableLabel> m_ChannelLabelMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, VisualElement> m_ChannelRowMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, VisualElement> m_AutoTransitionRowMap = new(StringComparer.Ordinal);
+        private readonly Dictionary<int, VisualElement> m_DefaultTransitionRowMap = new();
         private readonly Dictionary<string, VisualElement> m_CueRowMap = new(StringComparer.Ordinal);
         private readonly Dictionary<VisualElement, VisualElement> m_FlashOverlayMap = new();
         private readonly Dictionary<VisualElement, int> m_FlashOverlayVersionMap = new();
@@ -208,6 +213,7 @@ namespace XFramework.Editor
         private string m_PendingChannelRenameKey;
         private string m_PlayTargetChannelName;
         private string m_SelectedAutoTransitionStateKey;
+        private int m_SelectedDefaultTransitionIndex = -1;
         private float m_PlayFadeInOverride;
         private float m_PlayFadeOutOverride;
 
@@ -231,6 +237,7 @@ namespace XFramework.Editor
         private FoldoutCard m_ClipsCard;
         private FoldoutCard m_ParametersCard;
         private FoldoutCard m_AutoTransitionCard;
+        private FoldoutCard m_DefaultTransitionsCard;
         private FoldoutCard m_ChannelsCard;
 
         private class RowVisualState
@@ -271,7 +278,7 @@ namespace XFramework.Editor
                 ClipKey = clipKey ?? string.Empty;
                 ChannelName = channelName ?? string.Empty;
                 Speed = speed;
-                Transition = transition ?? new XAnimationTransitionOptions();
+                Transition = transition;
             }
 
             public string StateKey { get; }
@@ -876,6 +883,19 @@ namespace XFramework.Editor
             m_AutoTransitionCard.Content.Add(m_AutoTransitionEditorView);
             m_MainGroupContainer.Add(m_AutoTransitionCard.Root);
 
+            m_AddDefaultTransitionButton = CreateStyledButton("+", AddDefaultTransition, AccentColor);
+            m_AddDefaultTransitionButton.tooltip = "新增一个 Default Transition 分组。";
+            SetDefaultTransitionButtonsEnabled(false);
+            VisualElement defaultTransitionActions = new VisualElement();
+            defaultTransitionActions.style.flexDirection = FlexDirection.Row;
+            defaultTransitionActions.style.alignItems = Align.Center;
+            defaultTransitionActions.Add(m_AddDefaultTransitionButton);
+
+            m_DefaultTransitionsCard = CreateFoldoutCard("Default Transitions", m_DefaultTransitionsSectionExpanded, value => m_DefaultTransitionsSectionExpanded = value, defaultTransitionActions);
+            m_DefaultTransitionsEditorView = new VisualElement();
+            m_DefaultTransitionsCard.Content.Add(m_DefaultTransitionsEditorView);
+            m_MainGroupContainer.Add(m_DefaultTransitionsCard.Root);
+
             // ── Card: Clips ──
             m_AddClipButton = CreateStyledButton("+", AddClip, AccentColor);
             m_AddClipButton.tooltip = "新增一个全局 clip 资源叶子。";
@@ -1284,6 +1304,29 @@ namespace XFramework.Editor
                     detail,
                     $"{preStateKey} {transition.Config.nextStateKey} transition auto exit enter duration",
                     () => FocusAutoTransitionInInspector(preStateKey));
+            }
+
+            IReadOnlyList<XAnimationCompiledDefaultTransition> defaultTransitions = m_Session.CompiledAsset.DefaultTransitions;
+            for (int i = 0; i < defaultTransitions.Count; i++)
+            {
+                XAnimationCompiledDefaultTransition transition = defaultTransitions[i];
+                if (transition == null)
+                {
+                    continue;
+                }
+
+                string title = string.IsNullOrWhiteSpace(transition.EditorName)
+                    ? $"Default Transition {i + 1}"
+                    : transition.EditorName;
+                string pairs = FormatDefaultTransitionPairSummary(transition.Config);
+                string detail = $"{pairs} | fadeIn={transition.Config.fadeIn:0.###} | fadeOut={transition.Config.fadeOut:0.###}";
+                int transitionIndex = i;
+                AddSearchEntry(
+                    SearchEntryType.Transition,
+                    title,
+                    detail,
+                    $"{title} {pairs} transition default fade enter priority interruptible",
+                    () => FocusDefaultTransitionInInspector(transitionIndex));
             }
 
             IReadOnlyList<XAnimationCompiledParameter> parameters = m_Session.CompiledAsset.Parameters;
@@ -2360,6 +2403,7 @@ namespace XFramework.Editor
                 RebuildParameterList();
                 RebuildStateList();
                 RebuildClipList();
+                RebuildDefaultTransitionsEditor();
                 RebuildChannelControls();
                 RefreshPlayTargetChannelChoices();
                 RefreshStatePlayingStates();
@@ -2388,6 +2432,7 @@ namespace XFramework.Editor
 
             PendingPlaybackRequest request = m_PendingPlaybackRequest.Value;
             m_PendingPlaybackRequest = null;
+            bool hasExplicitTransition = request.Transition != null;
 
             try
             {
@@ -2402,7 +2447,7 @@ namespace XFramework.Editor
                     SetPauseButtonState(true, false);
                     SetStepForwardButtonEnabled(true);
                     m_Session.SetTimeScale(GetPlaybackSpeed());
-                    m_Session.PlayState(request.StateKey, CloneTransitionOptions(request.Transition));
+                    m_Session.PlayState(request.StateKey, hasExplicitTransition ? CloneTransitionOptions(request.Transition) : null);
                     string stateChannel = FindStateChannelName(request.StateKey);
                     if (!string.IsNullOrWhiteSpace(stateChannel))
                     {
@@ -2433,7 +2478,7 @@ namespace XFramework.Editor
                     SetPauseButtonState(true, false);
                     SetStepForwardButtonEnabled(true);
                     m_Session.SetTimeScale(GetPlaybackSpeed());
-                    m_Session.PlayClip(request.ClipKey, request.ChannelName, CloneTransitionOptions(request.Transition));
+                    m_Session.PlayClip(request.ClipKey, request.ChannelName, hasExplicitTransition ? CloneTransitionOptions(request.Transition) : null);
                     m_Session.SetChannelTimeScale(request.ChannelName, GetPlaybackSpeed());
                     RefreshClipPlayingStates();
                     RefreshStatePlayingStates();
@@ -2660,6 +2705,7 @@ namespace XFramework.Editor
 
             TryBeginPendingRename();
             RebuildAutoTransitionEditor();
+            RebuildDefaultTransitionsEditor();
             RefreshSearchIndex();
         }
 
@@ -2771,6 +2817,55 @@ namespace XFramework.Editor
                 emptyLabel.style.fontSize = BodyFontSize;
                 emptyLabel.style.marginLeft = 4;
                 m_AutoTransitionEditorView.Add(emptyLabel);
+            }
+
+            RefreshSearchIndex();
+        }
+
+        private void RebuildDefaultTransitionsEditor()
+        {
+            if (m_DefaultTransitionsEditorView == null)
+            {
+                return;
+            }
+
+            m_DefaultTransitionsEditorView.Clear();
+            m_DefaultTransitionRowMap.Clear();
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                SetDefaultTransitionButtonsEnabled(false);
+                RefreshSearchIndex();
+                return;
+            }
+
+            bool hasEnoughStates = m_Session.CompiledAsset.States.Count >= 2;
+            SetDefaultTransitionButtonsEnabled(!m_Session.IsOverrideAsset && hasEnoughStates);
+
+            IReadOnlyList<XAnimationCompiledDefaultTransition> defaultTransitions = m_Session.CompiledAsset.DefaultTransitions;
+            if (defaultTransitions.Count == 0)
+            {
+                m_SelectedDefaultTransitionIndex = -1;
+                Label emptyLabel = new(hasEnoughStates ? "No default transitions" : "Default transitions require at least two states");
+                emptyLabel.style.color = TextMuted;
+                emptyLabel.style.fontSize = BodyFontSize;
+                emptyLabel.style.marginLeft = 4;
+                m_DefaultTransitionsEditorView.Add(emptyLabel);
+                RefreshSearchIndex();
+                return;
+            }
+
+            if (m_SelectedDefaultTransitionIndex < 0 || m_SelectedDefaultTransitionIndex >= defaultTransitions.Count)
+            {
+                m_SelectedDefaultTransitionIndex = 0;
+            }
+
+            for (int i = 0; i < defaultTransitions.Count; i++)
+            {
+                XAnimationCompiledDefaultTransition transition = defaultTransitions[i];
+                if (transition != null)
+                {
+                    m_DefaultTransitionsEditorView.Add(CreateDefaultTransitionEditor(i, transition.Config));
+                }
             }
 
             RefreshSearchIndex();
@@ -4110,6 +4205,177 @@ namespace XFramework.Editor
             }
         }
 
+        private void AddDefaultTransition()
+        {
+            try
+            {
+                int transitionIndex = m_Session.AddDefaultTransition();
+                m_SelectedDefaultTransitionIndex = transitionIndex;
+                m_CollapsedDefaultTransitionIndices.Remove(transitionIndex);
+                RebuildDefaultTransitionsEditor();
+                RefreshChannelStates();
+                SetStatus($"已新增 Default Transition {transitionIndex + 1}。");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void DeleteDefaultTransition(int transitionIndex)
+        {
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                return;
+            }
+
+            if (!EditorUtility.DisplayDialog("删除 Default Transition", $"确定删除 Default Transition #{transitionIndex + 1}？", "删除", "取消"))
+            {
+                return;
+            }
+
+            try
+            {
+                m_Session.DeleteDefaultTransition(transitionIndex);
+                m_SelectedDefaultTransitionIndex = Mathf.Clamp(transitionIndex - 1, -1, (m_Session.CompiledAsset.DefaultTransitions.Count) - 1);
+                NormalizeCollapsedDefaultTransitionIndicesAfterDelete(transitionIndex);
+                RebuildDefaultTransitionsEditor();
+                RefreshChannelStates();
+                SetStatus($"已删除 Default Transition {transitionIndex + 1}。");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void AddDefaultTransitionPair(int transitionIndex)
+        {
+            try
+            {
+                m_Session.AddDefaultTransitionPair(transitionIndex);
+                m_SelectedDefaultTransitionIndex = transitionIndex;
+                RebuildDefaultTransitionsEditor();
+                RefreshChannelStates();
+                SetStatus($"已新增 Default Transition pair。");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void DeleteDefaultTransitionPair(int transitionIndex, int pairIndex)
+        {
+            try
+            {
+                m_Session.DeleteDefaultTransitionPair(transitionIndex, pairIndex);
+                m_SelectedDefaultTransitionIndex = transitionIndex;
+                RebuildDefaultTransitionsEditor();
+                RefreshChannelStates();
+                SetStatus($"已删除 Default Transition pair。");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void ChangeDefaultTransitionPair(
+            int transitionIndex,
+            int pairIndex,
+            string preStateKey,
+            string nextStateKey,
+            DropdownField changedField,
+            string previousValue)
+        {
+            try
+            {
+                m_Session.SetDefaultTransitionPair(transitionIndex, pairIndex, preStateKey, nextStateKey, save: false);
+                ScheduleAssetSave();
+                RebuildDefaultTransitionsEditor();
+                RefreshChannelStates();
+                SetStatus($"Default Transition pair = {preStateKey} -> {nextStateKey}。");
+            }
+            catch (Exception ex)
+            {
+                changedField?.SetValueWithoutNotify(previousValue);
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private void RenameDefaultTransition(int transitionIndex, string oldName, string newName, EditableLabel label)
+        {
+            try
+            {
+                m_Session.SetDefaultTransitionName(transitionIndex, newName, save: false);
+                ScheduleAssetSave();
+                SetStatus($"Default Transition {transitionIndex + 1} name = {newName}。");
+                RefreshSearchIndex();
+            }
+            catch (Exception ex)
+            {
+                label.text = oldName;
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+            }
+        }
+
+        private bool PlayDefaultTransitionPairPre(string preStateKey, string nextStateKey)
+        {
+            if (m_Session == null || !m_Session.IsLoaded ||
+                string.IsNullOrWhiteSpace(preStateKey) || string.IsNullOrWhiteSpace(nextStateKey))
+            {
+                return false;
+            }
+
+            XAnimationCompiledAsset compiled = m_Session.CompiledAsset;
+            if (!compiled.TryGetStateIndex(preStateKey, out _) || !compiled.TryGetStateIndex(nextStateKey, out _))
+            {
+                SetStatus($"无法预览：state 不存在。", true);
+                return false;
+            }
+
+            m_IsPaused = false;
+            m_Session.SetPaused(false);
+            SetPauseButtonState(true, false);
+            SetStepForwardButtonEnabled(true);
+            m_Session.SetTimeScale(GetPlaybackSpeed());
+
+            m_Session.PlayState(preStateKey);
+            string preChannel = FindStateChannelName(preStateKey);
+            if (!string.IsNullOrWhiteSpace(preChannel))
+            {
+                m_Session.SetChannelTimeScale(preChannel, GetPlaybackSpeed());
+            }
+
+            RefreshStatePlayingStates();
+            RefreshClipPlayingStates();
+            RefreshChannelStates();
+            SetStatus($"正在播放 {preStateKey}，点击 ⏭ 切换到 {nextStateKey}。");
+            return true;
+        }
+
+        private void PlayDefaultTransitionPairNext(string preStateKey, string nextStateKey)
+        {
+            if (m_Session == null || !m_Session.IsLoaded ||
+                string.IsNullOrWhiteSpace(nextStateKey))
+            {
+                return;
+            }
+
+            m_Session.PlayState(nextStateKey);
+            RefreshStatePlayingStates();
+            RefreshClipPlayingStates();
+            RefreshChannelStates();
+            SetStatus($"Default Transition 切换: {preStateKey} -> {nextStateKey}。");
+        }
+
         private void DeleteAutoTransition(string preStateKey)
         {
             if (string.IsNullOrWhiteSpace(preStateKey) ||
@@ -4160,8 +4426,10 @@ namespace XFramework.Editor
                 }
 
                 m_CollapsedAutoTransitionKeys.Remove(stateKey);
+                m_SelectedDefaultTransitionIndex = -1;
                 m_ExpandedStateKeys.Remove(stateKey);
                 RebuildStateList();
+                RebuildDefaultTransitionsEditor();
                 RefreshStatePlayingStates();
                 RefreshChannelStates();
                 SetStatus($"已删除 State {stateKey}。");
@@ -4418,6 +4686,7 @@ namespace XFramework.Editor
                     m_ExpandedStateKeys.Add(newKey.Trim());
                 }
                 RebuildStateList();
+                RebuildDefaultTransitionsEditor();
                 RefreshStatePlayingStates();
                 RefreshChannelStates();
             }
@@ -4908,6 +5177,295 @@ namespace XFramework.Editor
             image.style.alignSelf = Align.Center;
             image.style.flexShrink = 0;
             btn.Add(image);
+        }
+
+        private VisualElement CreateDefaultTransitionEditor(int transitionIndex, XAnimationDefaultTransitionConfig config)
+        {
+            bool editable = m_Session != null && !m_Session.IsOverrideAsset;
+            bool expanded = IsDefaultTransitionExpanded(transitionIndex);
+            VisualElement wrapper = new();
+            wrapper.style.marginBottom = 4;
+            wrapper.style.backgroundColor = ListGroupBg;
+            wrapper.style.borderTopWidth = 1;
+            wrapper.style.borderBottomWidth = 1;
+            wrapper.style.borderLeftWidth = 1;
+            wrapper.style.borderRightWidth = 1;
+            wrapper.style.borderTopColor = SectionDivider;
+            wrapper.style.borderBottomColor = SectionDivider;
+            wrapper.style.borderLeftColor = SectionDivider;
+            wrapper.style.borderRightColor = SectionDivider;
+            wrapper.style.borderTopLeftRadius = 3;
+            wrapper.style.borderTopRightRadius = 3;
+            wrapper.style.borderBottomLeftRadius = 3;
+            wrapper.style.borderBottomRightRadius = 3;
+
+            VisualElement header = new();
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.alignItems = Align.Center;
+            header.style.paddingLeft = 4;
+            header.style.paddingRight = 4;
+            header.style.paddingTop = 3;
+            header.style.paddingBottom = 3;
+            header.style.backgroundColor = ListHeaderBg;
+
+            Label foldLabel = new(expanded ? "▾" : "▸");
+            foldLabel.style.width = 16;
+            foldLabel.style.color = TextMuted;
+            header.Add(foldLabel);
+
+            string displayName = string.IsNullOrWhiteSpace(config.editorName)
+                ? $"Default Transition {transitionIndex + 1}"
+                : config.editorName;
+            EditableLabel nameLabel = new(displayName);
+            ConfigureEditableNameLabel(nameLabel, 150f);
+            nameLabel.SetEditable(editable, EditableLabelEditTrigger.DoubleClick);
+            nameLabel.EditStarted += BeginNameEdit;
+            nameLabel.EditEnded += EndNameEdit;
+            nameLabel.ValueCommitted += (oldName, newName) => RenameDefaultTransition(transitionIndex, oldName, newName, nameLabel);
+            nameLabel.tooltip = editable ? "双击重命名这个编辑器分组。" : "Override 资源不能重命名 Default Transition。";
+            header.Add(nameLabel);
+
+            Label summaryLabel = new($"{FormatDefaultTransitionPairSummary(config)} | {config.pairs?.Length ?? 0} pairs");
+            summaryLabel.style.flexGrow = 1;
+            summaryLabel.style.color = TextMuted;
+            summaryLabel.style.fontSize = BodyFontSize;
+            summaryLabel.style.overflow = Overflow.Hidden;
+            summaryLabel.style.textOverflow = TextOverflow.Ellipsis;
+            header.Add(summaryLabel);
+
+            Button deleteButton = new(() => DeleteDefaultTransition(transitionIndex));
+            ApplyTrashButtonIcon(deleteButton);
+            ApplyClipIconButtonStyle(deleteButton, DangerColor);
+            deleteButton.tooltip = editable ? "删除这个 Default Transition 分组。" : "Override 资源不能删除 Default Transition。";
+            deleteButton.SetEnabled(editable);
+            header.Add(deleteButton);
+
+            VisualElement content = new();
+            content.style.display = expanded ? DisplayStyle.Flex : DisplayStyle.None;
+            content.style.paddingLeft = 6;
+            content.style.paddingRight = 6;
+            content.style.paddingBottom = 6;
+
+            header.RegisterCallback<MouseDownEvent>(evt =>
+            {
+                if (evt.button != 0 ||
+                    (evt.target is VisualElement target &&
+                     (ReferenceEquals(target, deleteButton) || deleteButton.Contains(target) || ReferenceEquals(target, nameLabel) || nameLabel.Contains(target))))
+                {
+                    return;
+                }
+
+                bool newExpanded = content.style.display == DisplayStyle.None;
+                content.style.display = newExpanded ? DisplayStyle.Flex : DisplayStyle.None;
+                foldLabel.text = newExpanded ? "▾" : "▸";
+                SetDefaultTransitionExpanded(transitionIndex, newExpanded);
+                evt.StopPropagation();
+            });
+
+            content.Add(CreateDefaultTransitionOptionsEditor(transitionIndex, config, editable));
+            content.Add(CreateDefaultTransitionPairsEditor(transitionIndex, config, editable));
+            wrapper.Add(header);
+            wrapper.Add(content);
+            m_DefaultTransitionRowMap[transitionIndex] = wrapper;
+            return wrapper;
+        }
+
+        private VisualElement CreateDefaultTransitionOptionsEditor(int transitionIndex, XAnimationDefaultTransitionConfig config, bool editable)
+        {
+            VisualElement container = new();
+            container.style.marginTop = 6;
+            container.style.paddingBottom = 5;
+            container.style.borderBottomWidth = 1;
+            container.style.borderBottomColor = SectionDivider;
+
+            VisualElement row1 = CreateDefaultTransitionOptionRow();
+            FloatField fadeInField = CreateDefaultTransitionFloatField("fadeIn", config.fadeIn, editable);
+            FloatField fadeOutField = CreateDefaultTransitionFloatField("fadeOut", config.fadeOut, editable);
+            FloatField enterTimeField = CreateDefaultTransitionFloatField("enterTime", config.enterTime, editable);
+            row1.Add(fadeInField);
+            row1.Add(fadeOutField);
+            row1.Add(enterTimeField);
+            container.Add(row1);
+
+            VisualElement row2 = CreateDefaultTransitionOptionRow();
+            IntegerField priorityField = new("priority") { value = config.priority };
+            ConfigureDefaultTransitionField(priorityField, editable);
+            Toggle interruptibleToggle = new("interruptible") { value = config.interruptible };
+            interruptibleToggle.SetEnabled(editable);
+            interruptibleToggle.style.marginLeft = 8;
+            interruptibleToggle.style.flexGrow = 1;
+            row2.Add(priorityField);
+            row2.Add(interruptibleToggle);
+            container.Add(row2);
+
+            void ApplyOptions()
+            {
+                if (m_Session == null || !m_Session.IsLoaded)
+                {
+                    return;
+                }
+
+                m_Session.SetDefaultTransitionOptions(
+                    transitionIndex,
+                    fadeInField.value,
+                    fadeOutField.value,
+                    enterTimeField.value,
+                    priorityField.value,
+                    interruptibleToggle.value,
+                    save: false);
+                ScheduleAssetSave();
+                RefreshChannelStates();
+                SetStatus($"Default Transition {transitionIndex + 1} 参数已更新。");
+            }
+
+            fadeInField.RegisterValueChangedCallback(evt =>
+            {
+                float value = Mathf.Max(0f, evt.newValue);
+                if (!Mathf.Approximately(value, evt.newValue))
+                {
+                    fadeInField.SetValueWithoutNotify(value);
+                }
+
+                ApplyOptions();
+            });
+            fadeOutField.RegisterValueChangedCallback(evt =>
+            {
+                float value = Mathf.Max(0f, evt.newValue);
+                if (!Mathf.Approximately(value, evt.newValue))
+                {
+                    fadeOutField.SetValueWithoutNotify(value);
+                }
+
+                ApplyOptions();
+            });
+            enterTimeField.RegisterValueChangedCallback(evt =>
+            {
+                float value = Mathf.Clamp01(evt.newValue);
+                if (!Mathf.Approximately(value, evt.newValue))
+                {
+                    enterTimeField.SetValueWithoutNotify(value);
+                }
+
+                ApplyOptions();
+            });
+            priorityField.RegisterValueChangedCallback(_ => ApplyOptions());
+            interruptibleToggle.RegisterValueChangedCallback(_ => ApplyOptions());
+            return container;
+        }
+
+        private VisualElement CreateDefaultTransitionPairsEditor(int transitionIndex, XAnimationDefaultTransitionConfig config, bool editable)
+        {
+            VisualElement container = new();
+            container.style.marginTop = 5;
+
+            VisualElement titleRow = new();
+            titleRow.style.flexDirection = FlexDirection.Row;
+            titleRow.style.alignItems = Align.Center;
+            Label title = new("Pairs");
+            title.style.flexGrow = 1;
+            title.style.color = TextMuted;
+            title.style.fontSize = BodyFontSize;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            titleRow.Add(title);
+
+            Button addPairButton = CreateStyledButton("+ Pair", () => AddDefaultTransitionPair(transitionIndex), AccentColor);
+            addPairButton.tooltip = editable ? "新增一组 preState / nextState。" : "Override 资源不能新增 pair。";
+            addPairButton.SetEnabled(editable);
+            titleRow.Add(addPairButton);
+            container.Add(titleRow);
+
+            XAnimationTransitionPairConfig[] pairs = config.pairs ?? Array.Empty<XAnimationTransitionPairConfig>();
+            for (int pairIndex = 0; pairIndex < pairs.Length; pairIndex++)
+            {
+                container.Add(CreateDefaultTransitionPairRow(transitionIndex, pairIndex, pairs[pairIndex], editable, pairs.Length));
+            }
+
+            return container;
+        }
+
+        private VisualElement CreateDefaultTransitionPairRow(
+            int transitionIndex,
+            int pairIndex,
+            XAnimationTransitionPairConfig pair,
+            bool editable,
+            int pairCount)
+        {
+            pair ??= new XAnimationTransitionPairConfig();
+            VisualElement row = new();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginTop = 4;
+
+            DropdownField preStateField = CreateStateKeyDropdown(string.Empty, pair.preStateKey);
+            DropdownField nextStateField = CreateStateKeyDropdown(string.Empty, pair.nextStateKey, pair.preStateKey);
+            ConfigureAutoTransitionHeaderDropdown(preStateField, 118);
+            ConfigureAutoTransitionHeaderDropdown(nextStateField, 118);
+            preStateField.SetEnabled(editable);
+            nextStateField.SetEnabled(editable);
+            row.Add(preStateField);
+
+            Label arrow = new("->");
+            arrow.style.width = 22;
+            arrow.style.color = TextMuted;
+            arrow.style.unityTextAlign = TextAnchor.MiddleCenter;
+            row.Add(arrow);
+            row.Add(nextStateField);
+
+            bool pairIsWaitingSwitch = false;
+            Button playButton = new() { text = "▶" };
+            playButton.tooltip = "播放 preState，进入待切换状态。";
+            ApplyClipIconButtonStyle(playButton);
+            playButton.style.marginLeft = 2;
+            playButton.SetEnabled(m_Session != null && m_Session.IsLoaded);
+            playButton.clicked += () =>
+            {
+                if (m_Session == null || !m_Session.IsLoaded)
+                {
+                    return;
+                }
+
+                if (!pairIsWaitingSwitch)
+                {
+                    if (PlayDefaultTransitionPairPre(preStateField.value, nextStateField.value))
+                    {
+                        pairIsWaitingSwitch = true;
+                        playButton.text = "⏭";
+                        playButton.tooltip = "切换到 nextState（使用 Default Transition 参数）。";
+                        ApplyClipIconButtonStyle(playButton, AccentColor);
+                    }
+                }
+                else
+                {
+                    PlayDefaultTransitionPairNext(preStateField.value, nextStateField.value);
+                    pairIsWaitingSwitch = false;
+                    playButton.text = "▶";
+                    playButton.tooltip = "播放 preState，进入待切换状态。";
+                    ApplyClipIconButtonStyle(playButton);
+                }
+            };
+            row.Add(playButton);
+
+            Button deleteButton = new(() => DeleteDefaultTransitionPair(transitionIndex, pairIndex));
+            ApplyTrashButtonIcon(deleteButton);
+            ApplyClipIconButtonStyle(deleteButton, DangerColor);
+            deleteButton.tooltip = editable && pairCount > 1 ? "删除这组 pair。" : "Default Transition 至少保留一组 pair。";
+            deleteButton.SetEnabled(editable && pairCount > 1);
+            row.Add(deleteButton);
+
+            preStateField.RegisterValueChangedCallback(evt =>
+            {
+                string previousValue = evt.previousValue;
+                string nextStateKey = nextStateField.value;
+                if (string.Equals(evt.newValue, nextStateKey, StringComparison.Ordinal))
+                {
+                    nextStateKey = GetFallbackNextState(evt.newValue);
+                }
+
+                ChangeDefaultTransitionPair(transitionIndex, pairIndex, evt.newValue, nextStateKey, preStateField, previousValue);
+            });
+            nextStateField.RegisterValueChangedCallback(evt =>
+                ChangeDefaultTransitionPair(transitionIndex, pairIndex, preStateField.value, evt.newValue, nextStateField, evt.previousValue));
+            return row;
         }
 
         private VisualElement CreateStateEditor(XAnimationCompiledState state)
@@ -5677,6 +6235,57 @@ namespace XFramework.Editor
             m_CollapsedAutoTransitionKeys.Remove(preStateKey);
         }
 
+        private bool IsDefaultTransitionExpanded(int transitionIndex)
+        {
+            return !m_CollapsedDefaultTransitionIndices.Contains(transitionIndex);
+        }
+
+        private void SetDefaultTransitionExpanded(int transitionIndex, bool expanded)
+        {
+            if (expanded)
+            {
+                m_CollapsedDefaultTransitionIndices.Remove(transitionIndex);
+                return;
+            }
+
+            m_CollapsedDefaultTransitionIndices.Add(transitionIndex);
+        }
+
+        private void NormalizeCollapsedDefaultTransitionIndicesAfterDelete(int deletedIndex)
+        {
+            HashSet<int> normalized = new();
+            foreach (int index in m_CollapsedDefaultTransitionIndices)
+            {
+                if (index == deletedIndex)
+                {
+                    continue;
+                }
+
+                normalized.Add(index > deletedIndex ? index - 1 : index);
+            }
+
+            m_CollapsedDefaultTransitionIndices.Clear();
+            foreach (int index in normalized)
+            {
+                m_CollapsedDefaultTransitionIndices.Add(index);
+            }
+        }
+
+        private static string FormatDefaultTransitionPairSummary(XAnimationDefaultTransitionConfig config)
+        {
+            XAnimationTransitionPairConfig[] pairs = config?.pairs ?? Array.Empty<XAnimationTransitionPairConfig>();
+            if (pairs.Length == 0)
+            {
+                return "0 pairs";
+            }
+
+            XAnimationTransitionPairConfig firstPair = pairs[0];
+            string first = firstPair == null
+                ? "invalid"
+                : $"{firstPair.preStateKey} -> {firstPair.nextStateKey}";
+            return pairs.Length == 1 ? first : $"{first} +{pairs.Length - 1}";
+        }
+
         private static void ConfigureAutoTransitionHeaderDropdown(DropdownField field, float minWidth)
         {
             if (field.labelElement != null)
@@ -5751,6 +6360,38 @@ namespace XFramework.Editor
             return row;
         }
 
+        private static VisualElement CreateDefaultTransitionOptionRow()
+        {
+            VisualElement row = new();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginTop = 4;
+            return row;
+        }
+
+        private static FloatField CreateDefaultTransitionFloatField(string label, float value, bool editable)
+        {
+            FloatField field = new(label) { value = value };
+            ConfigureDefaultTransitionField(field, editable);
+            return field;
+        }
+
+        private static void ConfigureDefaultTransitionField(BaseField<float> field, bool editable)
+        {
+            field.style.flexGrow = 1;
+            field.style.marginLeft = 4;
+            field.style.marginRight = 4;
+            field.SetEnabled(editable);
+        }
+
+        private static void ConfigureDefaultTransitionField(IntegerField field, bool editable)
+        {
+            field.style.flexGrow = 1;
+            field.style.marginLeft = 4;
+            field.style.marginRight = 4;
+            field.SetEnabled(editable);
+        }
+
         private static float GetAutoTransitionDurationSliderMax(float duration)
         {
             return Mathf.Max(1f, Mathf.Ceil(Mathf.Max(0f, duration) * 10f) / 10f);
@@ -5759,6 +6400,26 @@ namespace XFramework.Editor
         private static string GetAutoTransitionTimelineStateLabel(string stateKey)
         {
             return string.IsNullOrWhiteSpace(stateKey) ? "None" : stateKey;
+        }
+
+        private string GetFallbackNextState(string preStateKey)
+        {
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                return string.Empty;
+            }
+
+            IReadOnlyList<XAnimationCompiledState> states = m_Session.CompiledAsset.States;
+            for (int i = 0; i < states.Count; i++)
+            {
+                string stateKey = states[i].Key;
+                if (!string.Equals(stateKey, preStateKey, StringComparison.Ordinal))
+                {
+                    return stateKey;
+                }
+            }
+
+            return string.Empty;
         }
 
         private static VisualElement CreateAutoTransitionTimelineFill(Color color, float opacity)
@@ -6880,21 +7541,19 @@ namespace XFramework.Editor
 
         private XAnimationTransitionOptions BuildPreviewTransitionOptions()
         {
-            XAnimationTransitionOptions transition = new()
+            if (!m_ApplyTransitionRequestOverrides)
             {
-                interruptible = true,
-            };
-
-            if (m_ApplyTransitionRequestOverrides)
-            {
-                transition.fadeIn = Mathf.Max(0f, m_PlayFadeInOverride);
-                transition.fadeOut = Mathf.Max(0f, m_PlayFadeOutOverride);
-                transition.priority = m_PlayPriorityOverride;
-                transition.interruptible = m_PlayInterruptibleOverride;
-                transition.enterTime = Mathf.Clamp01(m_PlayEnterTimeOverride);
+                return null;
             }
 
-            return transition;
+            return new XAnimationTransitionOptions
+            {
+                fadeIn = Mathf.Max(0f, m_PlayFadeInOverride),
+                fadeOut = Mathf.Max(0f, m_PlayFadeOutOverride),
+                priority = m_PlayPriorityOverride,
+                interruptible = m_PlayInterruptibleOverride,
+                enterTime = Mathf.Clamp01(m_PlayEnterTimeOverride),
+            };
         }
 
         private DropdownField CreateClipKeyDropdown(string label, string currentValue)
@@ -7532,6 +8191,20 @@ namespace XFramework.Editor
                     : addEnabled
                         ? "新增一个 Auto Transition。"
                         : "所有可用的非循环 state 都已经配置了 Auto Transition。";
+            }
+        }
+
+        private void SetDefaultTransitionButtonsEnabled(bool addEnabled)
+        {
+            if (m_AddDefaultTransitionButton != null)
+            {
+                m_AddDefaultTransitionButton.SetEnabled(addEnabled);
+                m_AddDefaultTransitionButton.style.opacity = addEnabled ? 1f : 0.45f;
+                m_AddDefaultTransitionButton.tooltip = m_Session != null && m_Session.IsOverrideAsset
+                    ? "Override 资源不能新增 Default Transition。"
+                    : addEnabled
+                        ? "新增一个 Default Transition 分组。"
+                        : "Default Transition 至少需要两个 state。";
             }
         }
 
@@ -8557,6 +9230,26 @@ namespace XFramework.Editor
             }
         }
 
+        private void FocusDefaultTransitionInInspector(int transitionIndex)
+        {
+            if (transitionIndex < 0)
+            {
+                return;
+            }
+
+            SetDebugToolbarGroup(DebugToolbarGroup.Main);
+            m_DefaultTransitionsSectionExpanded = true;
+            m_DefaultTransitionsCard?.SetExpanded?.Invoke(true);
+            m_SelectedDefaultTransitionIndex = transitionIndex;
+            SetDefaultTransitionExpanded(transitionIndex, true);
+            RebuildDefaultTransitionsEditor();
+            if (m_DefaultTransitionRowMap.TryGetValue(transitionIndex, out VisualElement row))
+            {
+                ScheduleInspectorScrollIntoView(row);
+                FlashElement(row);
+            }
+        }
+
         private void FocusParameterInInspector(string parameterName)
         {
             if (string.IsNullOrWhiteSpace(parameterName))
@@ -8722,6 +9415,9 @@ namespace XFramework.Editor
             m_CueLogContainer?.Clear();
             m_LogLabels.Clear();
             m_ChannelStateLabels.Clear();
+            m_DefaultTransitionsEditorView?.Clear();
+            m_DefaultTransitionRowMap.Clear();
+            m_CollapsedDefaultTransitionIndices.Clear();
             m_PendingClipRenameKey = null;
             m_PendingChannelRenameKey = null;
             if (m_PreviewImage != null)
@@ -8739,6 +9435,7 @@ namespace XFramework.Editor
             SetAddClipButtonEnabled(false);
             SetAddChannelButtonEnabled(false);
             SetAutoTransitionButtonsEnabled(false);
+            SetDefaultTransitionButtonsEnabled(false);
         }
 
         private void DisposeSession()
@@ -8908,7 +9605,11 @@ namespace XFramework.Editor
 
         private static XAnimationTransitionOptions CloneTransitionOptions(XAnimationTransitionOptions options)
         {
-            options ??= new XAnimationTransitionOptions();
+            if (options == null)
+            {
+                return null;
+            }
+
             return new XAnimationTransitionOptions
             {
                 fadeIn = options.fadeIn,
