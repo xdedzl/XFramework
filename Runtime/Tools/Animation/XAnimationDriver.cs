@@ -153,6 +153,12 @@ namespace XFramework.Animation
             m_Player.SetChannelTimeScale(channelName, timeScale);
         }
 
+        public bool SeekChannel(string channelName, float normalizedTime)
+        {
+            EnsureInitialized();
+            return m_Player.SeekChannel(channelName, normalizedTime);
+        }
+
         public void SetRootMotionEnabled(bool enabled)
         {
             EnsureInitialized();

@@ -123,6 +123,7 @@ namespace XFramework.Animation
         public abstract float GetNormalizedTime();
         public abstract float GetTotalNormalizedTime();
         public abstract float GetCueWeight(string clipKey);
+        public abstract void SeekNormalizedTime(float normalizedTime);
 
         public bool HasFinishedFadeOut()
         {
@@ -265,6 +266,26 @@ namespace XFramework.Animation
         public override float GetCueWeight(string clipKey)
         {
             return CurrentWeight;
+        }
+
+        public override void SeekNormalizedTime(float normalizedTime)
+        {
+            m_TotalNormalizedTime = Mathf.Clamp01(normalizedTime);
+            m_PreviousTotalNormalizedTime = m_TotalNormalizedTime;
+            if (m_Playable.IsValid())
+            {
+                m_Playable.SetTime(GetPlayableTime(m_TotalNormalizedTime));
+            }
+        }
+
+        private double GetPlayableTime(float totalNormalizedTime)
+        {
+            if (IsLooping)
+            {
+                return totalNormalizedTime * m_ClipLength;
+            }
+
+            return Mathf.Clamp01(totalNormalizedTime) * m_ClipLength;
         }
     }
 
@@ -446,6 +467,19 @@ namespace XFramework.Animation
             }
 
             return 0f;
+        }
+
+        public override void SeekNormalizedTime(float normalizedTime)
+        {
+            m_TotalNormalizedTime = Mathf.Clamp01(normalizedTime);
+            m_PreviousTotalNormalizedTime = m_TotalNormalizedTime;
+            for (int i = 0; i < m_Playables.Length; i++)
+            {
+                if (m_Playables[i].IsValid())
+                {
+                    m_Playables[i].SetTime(GetPlayableTime(i, m_TotalNormalizedTime));
+                }
+            }
         }
 
         private void ResolveWeights(float parameterValue)
@@ -761,6 +795,19 @@ namespace XFramework.Animation
             }
 
             return 0f;
+        }
+
+        public override void SeekNormalizedTime(float normalizedTime)
+        {
+            m_TotalNormalizedTime = Mathf.Clamp01(normalizedTime);
+            m_PreviousTotalNormalizedTime = m_TotalNormalizedTime;
+            for (int i = 0; i < m_Playables.Length; i++)
+            {
+                if (m_Playables[i].IsValid())
+                {
+                    m_Playables[i].SetTime(GetPlayableTime(i, m_TotalNormalizedTime));
+                }
+            }
         }
 
         private void ResolveWeights(Vector2 input)
@@ -1222,6 +1269,19 @@ namespace XFramework.Animation
             }
 
             return 0f;
+        }
+
+        public override void SeekNormalizedTime(float normalizedTime)
+        {
+            m_TotalNormalizedTime = Mathf.Clamp01(normalizedTime);
+            m_PreviousTotalNormalizedTime = m_TotalNormalizedTime;
+            for (int i = 0; i < m_Playables.Length; i++)
+            {
+                if (m_Playables[i].IsValid())
+                {
+                    m_Playables[i].SetTime(GetPlayableTime(i, m_TotalNormalizedTime));
+                }
+            }
         }
 
         private void ResolveWeights(Vector2 input)
@@ -1808,6 +1868,18 @@ namespace XFramework.Animation
         public void SetChannelTimeScale(float timeScale)
         {
             m_TimeScale = Mathf.Max(0f, timeScale);
+        }
+
+        public bool SeekCurrent(float normalizedTime)
+        {
+            if (m_Current == null)
+            {
+                return false;
+            }
+
+            m_Current.SeekNormalizedTime(normalizedTime);
+            Mixer.SetInputWeight(0, m_Current.CurrentWeight);
+            return true;
         }
 
         public XAnimationChannelState GetState()

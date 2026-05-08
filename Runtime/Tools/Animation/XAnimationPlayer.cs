@@ -170,6 +170,12 @@ namespace XFramework.Animation
             GetChannel(channelName).SetChannelTimeScale(timeScale);
         }
 
+        public bool SeekChannel(string channelName, float normalizedTime)
+        {
+            ThrowIfDisposed();
+            return GetChannel(channelName).SeekCurrent(Mathf.Clamp01(normalizedTime));
+        }
+
         public void SetRootMotionEnabled(bool enabled)
         {
             ThrowIfDisposed();

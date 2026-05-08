@@ -265,6 +265,12 @@ namespace XFramework.Editor
             m_Driver.SetChannelTimeScale(channelName, timeScale);
         }
 
+        public bool SeekChannel(string channelName, float normalizedTime)
+        {
+            EnsureLoaded();
+            return m_Driver.SeekChannel(channelName, normalizedTime);
+        }
+
         public void SetPreviewParameter(string key, float value)
         {
             EnsureLoaded();
