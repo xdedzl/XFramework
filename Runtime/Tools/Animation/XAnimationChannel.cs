@@ -17,7 +17,8 @@ namespace XFramework.Animation
             bool isLooping,
             int priority,
             bool interruptible,
-            bool drivesRootMotion)
+            bool drivesRootMotion,
+            XAnimationTransitionRequestSource requestSource)
         {
             FadeIn = fadeIn;
             FadeOut = fadeOut;
@@ -28,6 +29,7 @@ namespace XFramework.Animation
             Priority = priority;
             Interruptible = interruptible;
             DrivesRootMotion = drivesRootMotion;
+            RequestSource = requestSource;
         }
 
         public float FadeIn { get; }
@@ -39,11 +41,13 @@ namespace XFramework.Animation
         public int Priority { get; }
         public bool Interruptible { get; }
         public bool DrivesRootMotion { get; }
+        public XAnimationTransitionRequestSource RequestSource { get; }
     }
 
     public abstract class XAnimationStatePlaybackInstance
     {
         private float m_FadeElapsed;
+        private bool m_HasExitEventBeenRaised;
 
         protected XAnimationStatePlaybackInstance(
             int playbackId,
@@ -65,6 +69,7 @@ namespace XFramework.Animation
             Priority = options.Priority;
             Interruptible = options.Interruptible;
             DrivesRootMotion = options.DrivesRootMotion;
+            RequestSource = options.RequestSource;
             FadeFrom = CurrentWeight;
             FadeTo = TargetWeight;
             FadeDuration = Mathf.Max(0f, options.FadeIn);
@@ -86,7 +91,9 @@ namespace XFramework.Animation
         public int Priority { get; }
         public bool Interruptible { get; }
         public bool DrivesRootMotion { get; }
+        public XAnimationTransitionRequestSource RequestSource { get; }
         public bool SuppressCues { get; set; }
+        public bool HasExitEventBeenRaised => m_HasExitEventBeenRaised;
         public bool HasCompletedExitOrTransition { get; private set; }
 
         private float FadeFrom { get; set; }
@@ -109,6 +116,17 @@ namespace XFramework.Animation
         public void MarkCompletedExitOrTransition()
         {
             HasCompletedExitOrTransition = true;
+        }
+
+        public bool TryMarkExitEventRaised()
+        {
+            if (m_HasExitEventBeenRaised)
+            {
+                return false;
+            }
+
+            m_HasExitEventBeenRaised = true;
+            return true;
         }
 
         public void PrepareFrame(float deltaTime, float channelTimeScale, XAnimationContext context)
@@ -1700,6 +1718,11 @@ namespace XFramework.Animation
         private XAnimationStatePlaybackInstance m_Previous;
         private float m_ChannelWeight;
         private float m_TimeScale = 1f;
+        private XAnimationTransitionRejectReason m_LastRejectReason;
+        private string m_LastRejectedStateKey = string.Empty;
+        private string m_LastRejectedClipKey = string.Empty;
+        private int m_LastRejectedPriority;
+        private XAnimationTransitionRequestSource m_LastRejectedSource;
 
         public XAnimationChannel(
             PlayableGraph graph,
@@ -1735,20 +1758,32 @@ namespace XFramework.Animation
 
         internal bool TryPlay(
             Func<int, XAnimationPlaybackRuntimeOptions, XAnimationStatePlaybackInstance> playbackFactory,
-            XAnimationPlaybackRuntimeOptions options,
+            XAnimationTransitionRequest request,
             XAnimationCueDispatcher cueDispatcher,
-            out XAnimationStatePlaybackInstance playback)
+            out XAnimationStatePlaybackInstance playback,
+            out XAnimationTransitionRejectReason rejectReason)
         {
             playback = null;
+            rejectReason = XAnimationTransitionRejectReason.None;
             if (playbackFactory == null)
             {
                 throw new ArgumentNullException(nameof(playbackFactory));
             }
 
-            if (!CanInterrupt(options.Priority))
+            if (request == null)
             {
+                throw new ArgumentNullException(nameof(request));
+            }
+
+            XAnimationTransitionRejectReason interruptRejectReason = CanInterrupt(request.Priority);
+            if (interruptRejectReason != XAnimationTransitionRejectReason.None)
+            {
+                rejectReason = interruptRejectReason;
+                RecordRejectedRequest(request, rejectReason);
                 return false;
             }
+
+            ClearRejectedRequest();
 
             if (m_Previous != null)
             {
@@ -1758,33 +1793,19 @@ namespace XFramework.Animation
             bool hasPlaybackToFadeOut = m_Current != null;
             if (hasPlaybackToFadeOut)
             {
-                m_Current.SuppressCues = true;
-                cueDispatcher?.RemovePlayback(m_Current.PlaybackId);
-                if (!m_Current.HasCompletedExitOrTransition)
+                if (!m_Current.HasExitEventBeenRaised)
                 {
                     NotifyStateExit(m_Current, XAnimationStateExitReason.Interrupted);
                 }
 
-                m_Current.BeginFade(0f, Mathf.Max(0f, options.FadeOut));
+                m_Current.BeginFade(0f, request.FadeOut);
                 SetInputPlayable(1, m_Current.OutputPlayable, m_Current.CurrentWeight);
                 m_Previous = m_Current;
                 m_Current = null;
             }
 
             int playbackId = m_NextPlaybackIdProvider();
-            if (!hasPlaybackToFadeOut)
-            {
-                options = new XAnimationPlaybackRuntimeOptions(
-                    0f,
-                    options.FadeOut,
-                    options.Weight,
-                    options.NormalizedTime,
-                    options.Speed,
-                    options.IsLooping,
-                    options.Priority,
-                    options.Interruptible,
-                    options.DrivesRootMotion);
-            }
+            XAnimationPlaybackRuntimeOptions options = request.CreateRuntimeOptions(skipFadeIn: !hasPlaybackToFadeOut);
 
             playback = playbackFactory(playbackId, options);
             cueDispatcher?.ResetForPlayback(playbackId);
@@ -1807,8 +1828,9 @@ namespace XFramework.Animation
             }
 
             m_Current.SuppressCues = true;
+            ClearRejectedRequest();
             cueDispatcher?.RemovePlayback(m_Current.PlaybackId);
-            if (!m_Current.HasCompletedExitOrTransition)
+            if (!m_Current.HasExitEventBeenRaised)
             {
                 NotifyStateExit(m_Current, XAnimationStateExitReason.Stopped);
             }
@@ -1888,6 +1910,16 @@ namespace XFramework.Animation
             if (state != null && !string.IsNullOrWhiteSpace(state.stateKey))
             {
                 state.nextStateKey = string.Empty;
+                state.isTransitioning = m_Previous != null;
+                state.previousStateKey = m_Previous?.StateKey ?? string.Empty;
+                state.previousPlaybackId = m_Previous?.PlaybackId ?? 0;
+                state.transitionSource = m_Current.RequestSource;
+                state.transitionTargetStateKey = m_Previous != null ? state.stateKey : string.Empty;
+                state.lastRejectReason = m_LastRejectReason;
+                state.lastRejectedStateKey = m_LastRejectedStateKey;
+                state.lastRejectedClipKey = m_LastRejectedClipKey;
+                state.lastRejectedPriority = m_LastRejectedPriority;
+                state.lastRejectedSource = m_LastRejectedSource;
             }
 
             return state;
@@ -1896,12 +1928,12 @@ namespace XFramework.Animation
         public bool TryMarkCompletedExit(out XAnimationStatePlaybackInstance playback)
         {
             playback = m_Current;
-            if (playback == null || playback.HasCompletedExitOrTransition)
+            if (playback == null || !playback.TryMarkExitEventRaised())
             {
                 return false;
             }
 
-            NotifyStateExit(playback, XAnimationStateExitReason.Completed);
+            m_OnStateExit?.Invoke(playback, XAnimationStateExitReason.Completed);
             return true;
         }
 
@@ -1915,7 +1947,7 @@ namespace XFramework.Animation
 
         public void Dispose(XAnimationCueDispatcher cueDispatcher)
         {
-            if (m_Current != null)
+            if (m_Current != null && !m_Current.HasExitEventBeenRaised)
             {
                 NotifyStateExit(m_Current, XAnimationStateExitReason.Disposed);
             }
@@ -1928,19 +1960,26 @@ namespace XFramework.Animation
             }
         }
 
-        private bool CanInterrupt(int requestPriority)
+        private XAnimationTransitionRejectReason CanInterrupt(int requestPriority)
         {
             if (m_Current == null)
             {
-                return true;
+                return XAnimationTransitionRejectReason.None;
             }
 
-            if (!CompiledChannel.Config.allowInterrupt || !m_Current.Interruptible)
+            if (!CompiledChannel.Config.allowInterrupt)
             {
-                return false;
+                return XAnimationTransitionRejectReason.ChannelDisallowInterrupt;
             }
 
-            return requestPriority >= m_Current.Priority;
+            if (!m_Current.Interruptible)
+            {
+                return XAnimationTransitionRejectReason.CurrentUninterruptible;
+            }
+
+            return requestPriority >= m_Current.Priority
+                ? XAnimationTransitionRejectReason.None
+                : XAnimationTransitionRejectReason.LowerPriority;
         }
 
         private void SetInputPlayable(int inputIndex, Playable playable, float weight)
@@ -1998,6 +2037,24 @@ namespace XFramework.Animation
         {
             playback?.MarkCompletedExitOrTransition();
             m_OnStateExit?.Invoke(playback, reason);
+        }
+
+        private void RecordRejectedRequest(XAnimationTransitionRequest request, XAnimationTransitionRejectReason rejectReason)
+        {
+            m_LastRejectReason = rejectReason;
+            m_LastRejectedStateKey = request.TargetStateKey ?? string.Empty;
+            m_LastRejectedClipKey = request.TargetClipKey ?? string.Empty;
+            m_LastRejectedPriority = request.Priority;
+            m_LastRejectedSource = request.Source;
+        }
+
+        private void ClearRejectedRequest()
+        {
+            m_LastRejectReason = XAnimationTransitionRejectReason.None;
+            m_LastRejectedStateKey = string.Empty;
+            m_LastRejectedClipKey = string.Empty;
+            m_LastRejectedPriority = 0;
+            m_LastRejectedSource = XAnimationTransitionRequestSource.ExplicitPlay;
         }
     }
 }

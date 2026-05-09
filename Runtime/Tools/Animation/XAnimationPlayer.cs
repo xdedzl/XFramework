@@ -64,7 +64,12 @@ namespace XFramework.Animation
             }
 
             XAnimationCompiledSingleState temporaryState = CreateTemporaryClipState(clip, clipIndex, channel, channelIndex);
-            return TryPlayCompiledState(temporaryState, channel, transition);
+            XAnimationTransitionRequest request = BuildTransitionRequest(
+                temporaryState,
+                channel,
+                transition,
+                XAnimationTransitionRequestSource.ExplicitPlay);
+            return TryPlayCompiledState(temporaryState, channel, request);
         }
 
         internal XAnimationPlaybackStartInfo PlayState(string stateKey, XAnimationTransitionOptions transition = default)
@@ -72,50 +77,72 @@ namespace XFramework.Animation
             ThrowIfDisposed();
             XAnimationCompiledState state = CompiledAsset.GetState(stateKey);
             XAnimationCompiledChannel channel = GetStateChannel(state);
-            return TryPlayCompiledState(state, channel, transition);
+            XAnimationTransitionRequest request = BuildTransitionRequest(
+                state,
+                channel,
+                transition,
+                transition != null ? XAnimationTransitionRequestSource.ExplicitPlay : ResolveRequestSource(state, channel));
+            return TryPlayCompiledState(state, channel, request);
         }
 
         private XAnimationPlaybackStartInfo TryPlayCompiledState(
             XAnimationCompiledState state,
             XAnimationCompiledChannel channel,
-            XAnimationTransitionOptions transition)
+            XAnimationTransitionRequest request)
         {
-            transition = ResolveTransitionOptions(state, channel, transition);
-
-            float fadeIn = transition.fadeIn > 0f ? transition.fadeIn : state.Config.fadeIn;
-            float fadeOut = transition.fadeOut > 0f ? transition.fadeOut : state.Config.fadeOut;
-            float normalizedTime = Mathf.Clamp01(transition.enterTime);
-            float speed = Mathf.Approximately(state.Config.speed, 0f) ? 1f : state.Config.speed;
-            bool interruptible = transition.interruptible;
-            bool drivesRootMotion = ResolveRootMotion(state, channel);
-            bool isLooping = state.Config.loop;
-
-            XAnimationPlaybackRuntimeOptions options = new(
-                fadeIn,
-                fadeOut,
-                1f,
-                normalizedTime,
-                speed,
-                isLooping,
-                transition.priority,
-                interruptible,
-                drivesRootMotion);
+            if (request == null)
+            {
+                throw new ArgumentNullException(nameof(request));
+            }
 
             if (!m_ChannelMap[channel.Name].TryPlay(
                 (playbackId, actualOptions) => CreateStatePlayback(playbackId, channel.Name, state, actualOptions),
-                options,
+                request,
                 m_CueDispatcher,
-                out XAnimationStatePlaybackInstance playback))
+                out XAnimationStatePlaybackInstance playback,
+                out XAnimationTransitionRejectReason rejectReason))
             {
                 string clipKey = state switch
                 {
                     XAnimationCompiledSingleState singleState => ((XAnimationCompiledClip)CompiledAsset.Clips[singleState.ClipIndex]).Key,
                     _ => string.Empty,
                 };
-                return XAnimationPlaybackStartInfo.CreateFailed(channel.Name, state.Key, clipKey, IsTemporaryClipState(state.Key));
+                return XAnimationPlaybackStartInfo.CreateFailed(channel.Name, state.Key, clipKey, IsTemporaryClipState(state.Key), rejectReason);
             }
 
             return XAnimationPlaybackStartInfo.CreateStarted(playback);
+        }
+
+        private XAnimationTransitionRequest BuildTransitionRequest(
+            XAnimationCompiledState state,
+            XAnimationCompiledChannel channel,
+            XAnimationTransitionOptions transition,
+            XAnimationTransitionRequestSource explicitSource)
+        {
+            XAnimationTransitionOptions resolvedTransition = ResolveTransitionOptions(state, channel, transition);
+            float fadeIn = resolvedTransition.fadeIn > 0f ? resolvedTransition.fadeIn : state.Config.fadeIn;
+            float fadeOut = resolvedTransition.fadeOut > 0f ? resolvedTransition.fadeOut : state.Config.fadeOut;
+            float speed = Mathf.Approximately(state.Config.speed, 0f) ? 1f : state.Config.speed;
+            bool drivesRootMotion = ResolveRootMotion(state, channel);
+            bool isLooping = state.Config.loop;
+            string clipKey = state is XAnimationCompiledSingleState singleState
+                ? ((XAnimationCompiledClip)CompiledAsset.Clips[singleState.ClipIndex]).Key
+                : string.Empty;
+            XAnimationTransitionRequestSource source = transition != null ? explicitSource : ResolveRequestSource(state, channel);
+
+            return new XAnimationTransitionRequest(
+                channel.Name,
+                state.Key,
+                clipKey,
+                source,
+                fadeIn,
+                fadeOut,
+                resolvedTransition.enterTime,
+                speed,
+                isLooping,
+                resolvedTransition.priority,
+                resolvedTransition.interruptible,
+                drivesRootMotion);
         }
 
         private XAnimationTransitionOptions ResolveTransitionOptions(
@@ -139,6 +166,27 @@ namespace XFramework.Animation
             }
 
             return new XAnimationTransitionOptions();
+        }
+
+        private XAnimationTransitionRequestSource ResolveRequestSource(
+            XAnimationCompiledState state,
+            XAnimationCompiledChannel channel)
+        {
+            if (IsTemporaryClipState(state.Key))
+            {
+                return XAnimationTransitionRequestSource.ExplicitPlay;
+            }
+
+            if (m_ChannelMap.TryGetValue(channel.Name, out XAnimationChannel runtimeChannel) &&
+                runtimeChannel.TryGetCurrentPlayback(out XAnimationStatePlaybackInstance currentPlayback) &&
+                currentPlayback != null &&
+                !currentPlayback.IsTemporaryState &&
+                CompiledAsset.TryGetDefaultTransition(currentPlayback.StateKey, state.Key, out _))
+            {
+                return XAnimationTransitionRequestSource.DefaultTransition;
+            }
+
+            return XAnimationTransitionRequestSource.ExplicitPlay;
         }
 
         public void Stop(string channelName, float fadeOut = default)
@@ -203,6 +251,11 @@ namespace XFramework.Animation
             if (CompiledAsset.TryGetAutoTransition(state.stateKey, out XAnimationCompiledAutoTransition transition))
             {
                 state.nextStateKey = transition.NextStateKey ?? string.Empty;
+            }
+
+            if (!string.IsNullOrWhiteSpace(state.transitionTargetStateKey))
+            {
+                state.nextStateKey = state.transitionTargetStateKey;
             }
 
             return state;
@@ -613,29 +666,29 @@ namespace XFramework.Animation
                     continue;
                 }
 
-                if (!channel.TryMarkCompletedExit(out _))
-                {
-                    continue;
-                }
-
                 XAnimationCompiledState nextState = CompiledAsset.GetState(autoTransition.NextStateKey);
                 float fadeIn = autoTransition.TransitionDuration > 0f ? autoTransition.TransitionDuration : nextState.Config.fadeIn;
                 float fadeOut = autoTransition.TransitionDuration > 0f ? autoTransition.TransitionDuration : nextState.Config.fadeOut;
-                XAnimationPlaybackStartInfo startInfo = TryPlayCompiledState(
-                    nextState,
-                    channel.CompiledChannel,
-                    new XAnimationTransitionOptions
-                    {
-                        fadeIn = fadeIn,
-                        fadeOut = fadeOut,
-                        enterTime = autoTransition.EnterTime,
-                        priority = playback.Priority,
-                        interruptible = true,
-                    });
+                XAnimationTransitionRequest request = new(
+                    channel.Name,
+                    nextState.Key,
+                    nextState is XAnimationCompiledSingleState singleState
+                        ? ((XAnimationCompiledClip)CompiledAsset.Clips[singleState.ClipIndex]).Key
+                        : string.Empty,
+                    XAnimationTransitionRequestSource.AutoTransition,
+                    fadeIn,
+                    fadeOut,
+                    autoTransition.EnterTime,
+                    Mathf.Approximately(nextState.Config.speed, 0f) ? 1f : nextState.Config.speed,
+                    nextState.Config.loop,
+                    playback.Priority,
+                    true,
+                    ResolveRootMotion(nextState, channel.CompiledChannel));
 
-                if (!startInfo.Started)
+                XAnimationPlaybackStartInfo startInfo = TryPlayCompiledState(nextState, channel.CompiledChannel, request);
+                if (startInfo.Started)
                 {
-                    channel.Stop(state.Config.fadeOut, m_CueDispatcher);
+                    channel.TryMarkCompletedExit(out _);
                 }
             }
         }

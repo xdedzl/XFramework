@@ -10395,9 +10395,15 @@ namespace XFramework.Editor
             string stateKey = string.IsNullOrWhiteSpace(state.stateKey) ? state.clipKey : state.stateKey;
             string blend = BuildBlendStateDebugText(state);
             string next = string.IsNullOrWhiteSpace(state.nextStateKey) ? string.Empty : $" | Next: {state.nextStateKey}";
+            string transition = state.isTransitioning
+                ? $" | Transition: {state.previousStateKey} -> {state.transitionTargetStateKey} ({state.transitionSource})"
+                : string.Empty;
+            string reject = state.lastRejectReason == XAnimationTransitionRejectReason.None
+                ? string.Empty
+                : $"\nLast Reject: {state.lastRejectReason} | Target: {state.lastRejectedStateKey} | Clip: {state.lastRejectedClipKey} | Priority: {state.lastRejectedPriority} | Source: {state.lastRejectedSource}";
             return $"State: {stateKey} ({state.stateType}) | Clip: {state.clipKey} | PlayId: {state.playbackId} | {loop} | {fade} | {interrupt}\n"
                 + $"Time: {state.normalizedTime:0.000} / Total: {state.totalNormalizedTime:0.000} | Channel Weight: {state.channelWeight:0.000} | State Weight: {state.weight:0.000}\n"
-                + $"TimeScale: {state.timeScale:0.000} | Effective Speed: {state.speed:0.000} | Priority: {state.priority}{next}{blend}";
+                + $"TimeScale: {state.timeScale:0.000} | Effective Speed: {state.speed:0.000} | Priority: {state.priority}{next}{transition}{blend}{reject}";
         }
 
         private static string BuildBlendStateDebugText(XAnimationChannelState state)

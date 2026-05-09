@@ -277,6 +277,21 @@ namespace XFramework.Animation
         }
     }
 
+    public enum XAnimationTransitionRequestSource
+    {
+        ExplicitPlay,
+        DefaultTransition,
+        AutoTransition,
+    }
+
+    public enum XAnimationTransitionRejectReason
+    {
+        None = 0,
+        ChannelDisallowInterrupt = 1,
+        CurrentUninterruptible = 2,
+        LowerPriority = 3,
+    }
+
     public abstract class XAnimationCompiledState
     {
         protected XAnimationCompiledState(XAnimationStateConfig config, int defaultChannelIndex)
@@ -662,6 +677,65 @@ namespace XFramework.Animation
         public bool interruptible = true;
     }
 
+    internal sealed class XAnimationTransitionRequest
+    {
+        public XAnimationTransitionRequest(
+            string channelName,
+            string targetStateKey,
+            string targetClipKey,
+            XAnimationTransitionRequestSource source,
+            float fadeIn,
+            float fadeOut,
+            float enterTime,
+            float speed,
+            bool isLooping,
+            int priority,
+            bool interruptible,
+            bool drivesRootMotion)
+        {
+            ChannelName = channelName ?? string.Empty;
+            TargetStateKey = targetStateKey ?? string.Empty;
+            TargetClipKey = targetClipKey ?? string.Empty;
+            Source = source;
+            FadeIn = Mathf.Max(0f, fadeIn);
+            FadeOut = Mathf.Max(0f, fadeOut);
+            EnterTime = Mathf.Clamp01(enterTime);
+            Speed = speed;
+            IsLooping = isLooping;
+            Priority = priority;
+            Interruptible = interruptible;
+            DrivesRootMotion = drivesRootMotion;
+        }
+
+        public string ChannelName { get; }
+        public string TargetStateKey { get; }
+        public string TargetClipKey { get; }
+        public XAnimationTransitionRequestSource Source { get; }
+        public float FadeIn { get; }
+        public float FadeOut { get; }
+        public float EnterTime { get; }
+        public float Speed { get; }
+        public bool IsLooping { get; }
+        public int Priority { get; }
+        public bool Interruptible { get; }
+        public bool DrivesRootMotion { get; }
+
+        public XAnimationPlaybackRuntimeOptions CreateRuntimeOptions(bool skipFadeIn)
+        {
+            return new XAnimationPlaybackRuntimeOptions(
+                skipFadeIn ? 0f : FadeIn,
+                FadeOut,
+                1f,
+                EnterTime,
+                Speed,
+                IsLooping,
+                Priority,
+                Interruptible,
+                DrivesRootMotion,
+                Source);
+        }
+    }
+
     public sealed class XAnimationChannelState
     {
         public string channelName;
@@ -684,6 +758,16 @@ namespace XFramework.Animation
         public bool interruptible;
         public bool isTemporaryState;
         public string nextStateKey;
+        public bool isTransitioning;
+        public string previousStateKey;
+        public int previousPlaybackId;
+        public XAnimationTransitionRequestSource transitionSource;
+        public string transitionTargetStateKey;
+        public XAnimationTransitionRejectReason lastRejectReason;
+        public string lastRejectedStateKey;
+        public string lastRejectedClipKey;
+        public int lastRejectedPriority;
+        public XAnimationTransitionRequestSource lastRejectedSource;
     }
 
     public enum XAnimationStateExitReason

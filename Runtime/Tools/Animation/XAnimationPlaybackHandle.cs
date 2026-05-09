@@ -84,7 +84,8 @@ namespace XFramework.Animation
             string channelName,
             string stateKey,
             string clipKey,
-            bool isTemporaryState)
+            bool isTemporaryState,
+            XAnimationTransitionRejectReason rejectReason)
         {
             Started = started;
             PlaybackId = playbackId;
@@ -92,6 +93,7 @@ namespace XFramework.Animation
             StateKey = stateKey ?? string.Empty;
             ClipKey = clipKey ?? string.Empty;
             IsTemporaryState = isTemporaryState;
+            RejectReason = rejectReason;
         }
 
         public bool Started { get; }
@@ -100,10 +102,16 @@ namespace XFramework.Animation
         public string StateKey { get; }
         public string ClipKey { get; }
         public bool IsTemporaryState { get; }
+        public XAnimationTransitionRejectReason RejectReason { get; }
 
-        public static XAnimationPlaybackStartInfo CreateFailed(string channelName, string stateKey, string clipKey, bool isTemporaryState)
+        public static XAnimationPlaybackStartInfo CreateFailed(
+            string channelName,
+            string stateKey,
+            string clipKey,
+            bool isTemporaryState,
+            XAnimationTransitionRejectReason rejectReason)
         {
-            return new XAnimationPlaybackStartInfo(false, 0, channelName, stateKey, clipKey, isTemporaryState);
+            return new XAnimationPlaybackStartInfo(false, 0, channelName, stateKey, clipKey, isTemporaryState, rejectReason);
         }
 
         public static XAnimationPlaybackStartInfo CreateStarted(XAnimationStatePlaybackInstance playback)
@@ -119,7 +127,8 @@ namespace XFramework.Animation
                 playback.ChannelName,
                 playback.StateKey,
                 playback.PrimaryClipKey,
-                playback.IsTemporaryState);
+                playback.IsTemporaryState,
+                XAnimationTransitionRejectReason.None);
         }
     }
 }

@@ -391,7 +391,7 @@ public sealed class HeroAnimationController : MonoBehaviour
 - `SetChannelTimeScale(channelName, timeScale)`：调整通道时间缩放，最小值会被限制为 0。
 - `SetRootMotionEnabled(enabled)`：全局启停 Root Motion 输出；运行时和 `XAnimation Preview` 都直接切换 Unity 原生 `Animator.applyRootMotion`。
 - `RootMotionMoved`：保留为兼容事件，但不再是可靠的 Root Motion 主链路；真正的位移/旋转应用统一由 Unity 原生 `OnAnimatorMove()` 驱动。
-- `GetChannelState(channelName)`：查询当前播放 clip、归一化时间、权重、速度、优先级等调试信息。
+- `GetChannelState(channelName)`：查询当前播放 clip、归一化时间、权重、速度、优先级，以及当前是否处于 transition、previous state、transition 来源、最近一次拒绝原因等调试信息。
 
 ### 4.1 更省事的组件封装：XAnimationActor
 
@@ -420,8 +420,14 @@ MonoBehaviour(Update)
 
 - 同一 channel 内播放新 state 时，会把当前 state 作为 previous 输入淡出，新 state 作为 current 输入淡入。
 - `Blend1D` / 2D Directional Blend 的子 clip 混合只负责状态内部权重，不负责跨状态自动过渡。
-- 当 channel 的 `allowInterrupt = false`，或当前播放请求设置 `interruptible = false` 时，新请求不能打断当前播放。
+- 同一 channel 内的新播放请求统一按以下顺序仲裁：当前无播放则直接成功；否则先检查 `channel.allowInterrupt`，再检查当前播放的 `interruptible`，最后检查 `request.priority >= 当前播放 priority`。
+- `interruptible` 只约束“当前播放是否允许被打断”，不是“这个新请求将来一定不可被打断”。
 - 新请求只有在 `priority >= 当前播放 priority` 时才能打断。
+- 被挡住的新请求会立即失败，不会排队，也不会挂起等待下一帧自动执行。
+- `defaultTransitions` 与 `autoTransitions` 生成的请求，和业务层显式 `PlayState / PlayClip` 一样，都会走同一套仲裁规则。
+- 过渡开始时，旧状态会立刻触发 `StateExited`，新状态会立刻触发 `StateEntered`；`GetChannelState()`、`IsPlaying()` 与 `TryGetCurrentState()` 都只把新状态视为 current。
+- 过渡重叠期内，旧状态只保留姿态淡出身份，不再保有 current state 语义；但 `Cue` / `AnimationEvent` 允许旧状态与新状态同时按各自权重继续触发。
+- `Stop()` / `Dispose()` / 显式终止仍会抑制旧状态后续 `Cue` / `AnimationEvent`，不会沿用“过渡双发”语义。
 - Root Motion 默认由 `channel.canDriveRootMotion` 决定；state 可用 `rootMotionMode` 设置 `ForceOn` / `ForceOff` 覆盖。
 - `Additive` channel 不能驱动 Root Motion。
 
@@ -437,7 +443,16 @@ MonoBehaviour(Update)
   - `interruptible` 强制为 `true`
 - 当 `TransitionDuration > 0` 时，自动切换会统一使用该值作为 `fadeIn / fadeOut`。
 - 当 `TransitionDuration <= 0` 时，自动切换会回退到目标 state 自身配置的 `fadeIn / fadeOut`。
+- 自动切换会和普通 `PlayState` 一样参与同一套仲裁；不会因为是 auto transition 就强制成功。
+- 如果 auto transition 因仲裁失败而没有切出去，当前状态会继续保持播放，不会立即被 `Stop`；后续只要播放实例还在，就允许再次尝试自动切换。
 - 如果配置了 auto transition 但 `nextStateKey` 为空，当前状态播到退出点后会直接停止，而不是切到别的状态。
+
+### 5.3 Default Transition 默认过渡规则
+
+- `defaultTransitions` 只支持显式的 `preStateKey -> nextStateKey` 配对，不支持通配、Any State、from-any / to-any 一类规则。
+- 当业务层调用 `PlayState(next)`，且当前 state 为 `pre`，如果本次调用没有显式传入 `XAnimationTransitionOptions`，运行时会查 `defaultTransitions` 并使用匹配到的那条过渡参数。
+- 一旦本次调用显式传入了 `XAnimationTransitionOptions`，调用方参数优先；运行时不会再把 `defaultTransitions` 的字段叠加到这次请求上。
+- `defaultTransitions` 只决定“这一次从 pre 到 next 怎么切”，不会改写目标 state 自身的常规 `fadeIn / fadeOut / speed / loop` 配置。
 
 ### 5.3 资源加载规则
 
@@ -458,6 +473,16 @@ MonoBehaviour(Update)
 - 它当前也不以“替换 `Animator` 组件本身”为目标；骨骼输出、`AnimationPlayableOutput` 落地以及原生 Root Motion 仍依赖 Unity `Animator`。
 - 复杂业务状态判断应该留在业务代码里，再由业务代码调用 `PlayState` 或写入参数驱动 `Blend1D` / 2D Directional Blend。
 - 如果一个动作只需要“播完自动回 idle / locomotion”或“固定衔接到下一个阶段”，优先用 `autoTransitions`，不要把业务状态判断塞进资源层。
+
+### 5.5 TODO
+
+- 完善过渡语义的手工验证与调试观测，覆盖显式播放、`defaultTransitions`、`autoTransitions`、拒绝原因与重叠期事件行为。
+- 增加相位同步能力，让同类循环动作在共享相位下混合与切换。
+- 增加步态同步能力，支持 `idle / walk / run`、8 向移动、上半身 locomotion 覆盖等同族动作保持统一节奏。
+- 增加镜像语义，支持状态级或样本级复用左右对称动作。
+- 增加速度驱动语义，支持按参数驱动播放速度而不是只依赖固定 `state.speed`。
+- 增加曲线修正速度能力，支持在动作周期内按曲线调整播放节奏。
+- 增强 `XAnimation Preview` 的调试显示，直接展示 transition、镜像、最终速度、同步状态与拒绝信息。
 
 > [!IMPORTANT]
 > `XAnimationDriver` 创建的是手动更新的 PlayableGraph，必须每帧调用 `Update(deltaTime)`；对象销毁或换资源前必须调用 `Dispose()`，否则 PlayableGraph 不会释放。
