@@ -953,42 +953,81 @@ namespace XFramework.Editor
                 return;
             }
 
-            config.stateType = stateType;
+            ApplyMigratedStateType(config, stateType);
+
+            RebuildDriverAndSave();
+        }
+
+        private void ApplyMigratedStateType(XAnimationStateConfig config, XAnimationStateType stateType)
+        {
+            if (config == null)
+            {
+                throw new XFrameworkException("XAnimation state config cannot be null.");
+            }
+
+            XAnimationStateType sourceType = config.stateType;
+            string nextClipKey;
+            string nextParameterName;
+            string nextParameterXName;
+            string nextParameterYName;
+            XAnimationBlend1DSampleConfig[] nextSamples;
+            XAnimationBlend2DSimpleDirectionalSampleConfig[] nextDirectionalSamples;
+
             if (stateType == XAnimationStateType.Single)
             {
-                config.clipKey = string.IsNullOrWhiteSpace(config.clipKey)
-                    ? FindTemplateClipKey(m_CompiledAsset.Asset.clips ?? Array.Empty<XAnimationClipConfig>())
-                    : config.clipKey;
-                config.parameterName = string.Empty;
-                config.parameterXName = string.Empty;
-                config.parameterYName = string.Empty;
-                config.samples = Array.Empty<XAnimationBlend1DSampleConfig>();
-                config.directionalSamples = Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+                nextClipKey = ResolvePreferredSingleClipKey(config);
+                nextParameterName = string.Empty;
+                nextParameterXName = string.Empty;
+                nextParameterYName = string.Empty;
+                nextSamples = Array.Empty<XAnimationBlend1DSampleConfig>();
+                nextDirectionalSamples = Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
             }
             else if (stateType == XAnimationStateType.Blend1D)
             {
-                config.clipKey = string.Empty;
-                config.parameterName = EnsureFloatParameter();
-                config.parameterXName = string.Empty;
-                config.parameterYName = string.Empty;
-                config.samples = CreateDefaultBlendSamples(config.channelName);
-                config.directionalSamples = Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+                nextClipKey = string.Empty;
+                nextParameterName = sourceType switch
+                {
+                    XAnimationStateType.Blend1D when !string.IsNullOrWhiteSpace(config.parameterName) => config.parameterName,
+                    XAnimationStateType.Blend2DSimpleDirectional or XAnimationStateType.Blend2DFreeformDirectional
+                        when !string.IsNullOrWhiteSpace(config.parameterXName) => config.parameterXName,
+                    _ => EnsureFloatParameter(),
+                };
+                nextParameterXName = string.Empty;
+                nextParameterYName = string.Empty;
+                nextSamples = BuildMigratedBlendSamples(config);
+                nextDirectionalSamples = Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
             }
             else if (IsDirectionalBlendStateType(stateType))
             {
-                config.clipKey = string.Empty;
-                config.parameterName = string.Empty;
-                config.parameterXName = EnsureFloatParameter("blendX");
-                config.parameterYName = EnsureFloatParameter("blendY");
-                config.samples = Array.Empty<XAnimationBlend1DSampleConfig>();
-                config.directionalSamples = CreateDefaultDirectionalBlendSamples();
+                nextClipKey = string.Empty;
+                nextParameterName = string.Empty;
+                bool sourceDirectional = IsDirectionalBlendStateType(sourceType);
+                bool sourceBlend1D = sourceType == XAnimationStateType.Blend1D;
+                nextParameterXName = sourceDirectional && !string.IsNullOrWhiteSpace(config.parameterXName)
+                    ? config.parameterXName
+                    : sourceBlend1D && !string.IsNullOrWhiteSpace(config.parameterName)
+                        ? config.parameterName
+                        : EnsureFloatParameter("blendX");
+                nextParameterYName = sourceDirectional && !string.IsNullOrWhiteSpace(config.parameterYName)
+                    ? config.parameterYName
+                    : sourceBlend1D && !string.IsNullOrWhiteSpace(config.parameterName)
+                        ? config.parameterName
+                        : EnsureFloatParameter("blendY");
+                nextSamples = Array.Empty<XAnimationBlend1DSampleConfig>();
+                nextDirectionalSamples = BuildMigratedDirectionalSamples(config);
             }
             else
             {
                 throw new XFrameworkException($"XAnimation stateType '{stateType}' is not supported.");
             }
 
-            RebuildDriverAndSave();
+            config.stateType = stateType;
+            config.clipKey = nextClipKey;
+            config.parameterName = nextParameterName;
+            config.parameterXName = nextParameterXName;
+            config.parameterYName = nextParameterYName;
+            config.samples = nextSamples;
+            config.directionalSamples = nextDirectionalSamples;
         }
 
         public void SetStateChannel(string stateKey, string channelName)
@@ -1637,6 +1676,259 @@ namespace XFramework.Editor
                     positionY = 1f,
                 }
             };
+        }
+
+        private string ResolvePreferredSingleClipKey(XAnimationStateConfig state)
+        {
+            if (state == null)
+            {
+                return FindTemplateClipKey(m_CompiledAsset.Asset.clips ?? Array.Empty<XAnimationClipConfig>());
+            }
+
+            if (!string.IsNullOrWhiteSpace(state.clipKey))
+            {
+                return state.clipKey;
+            }
+
+            if (state.stateType == XAnimationStateType.Blend1D)
+            {
+                return GetFirstBlendSampleClipKey(state) ??
+                       FindTemplateClipKey(m_CompiledAsset.Asset.clips ?? Array.Empty<XAnimationClipConfig>());
+            }
+
+            if (IsDirectionalBlendStateType(state.stateType))
+            {
+                return GetIdleDirectionalClipKey(state) ??
+                       GetFirstDirectionalClipKey(state) ??
+                       FindTemplateClipKey(m_CompiledAsset.Asset.clips ?? Array.Empty<XAnimationClipConfig>());
+            }
+
+            return FindTemplateClipKey(m_CompiledAsset.Asset.clips ?? Array.Empty<XAnimationClipConfig>());
+        }
+
+        private XAnimationBlend1DSampleConfig[] BuildMigratedBlendSamples(XAnimationStateConfig state)
+        {
+            if (state == null)
+            {
+                return CreateDefaultBlendSamples(string.Empty);
+            }
+
+            if (state.stateType == XAnimationStateType.Blend1D && (state.samples?.Length ?? 0) >= 2)
+            {
+                return CloneBlendSamples(state.samples);
+            }
+
+            XAnimationBlend1DSampleConfig[] samples = CreateDefaultBlendSamples(state.channelName);
+            List<string> seedClipKeys = GetBlendSeedClipKeys(state);
+            for (int i = 0; i < samples.Length && i < seedClipKeys.Count; i++)
+            {
+                if (!string.IsNullOrWhiteSpace(seedClipKeys[i]))
+                {
+                    samples[i].clipKey = seedClipKeys[i];
+                }
+            }
+
+            return samples;
+        }
+
+        private XAnimationBlend2DSimpleDirectionalSampleConfig[] BuildMigratedDirectionalSamples(XAnimationStateConfig state)
+        {
+            if (state == null)
+            {
+                return CreateDefaultDirectionalBlendSamples();
+            }
+
+            if (IsDirectionalBlendStateType(state.stateType) && (state.directionalSamples?.Length ?? 0) >= 2)
+            {
+                return CloneDirectionalSamples(state.directionalSamples);
+            }
+
+            XAnimationBlend2DSimpleDirectionalSampleConfig[] samples = CreateDefaultDirectionalBlendSamples();
+            List<string> seedClipKeys = GetDirectionalSeedClipKeys(state);
+            for (int i = 0; i < samples.Length && i < seedClipKeys.Count; i++)
+            {
+                if (!string.IsNullOrWhiteSpace(seedClipKeys[i]))
+                {
+                    samples[i].clipKey = seedClipKeys[i];
+                }
+            }
+
+            return samples;
+        }
+
+        private static XAnimationBlend1DSampleConfig[] CloneBlendSamples(XAnimationBlend1DSampleConfig[] samples)
+        {
+            if (samples == null || samples.Length == 0)
+            {
+                return Array.Empty<XAnimationBlend1DSampleConfig>();
+            }
+
+            XAnimationBlend1DSampleConfig[] cloned = new XAnimationBlend1DSampleConfig[samples.Length];
+            for (int i = 0; i < samples.Length; i++)
+            {
+                XAnimationBlend1DSampleConfig sample = samples[i];
+                cloned[i] = sample == null
+                    ? null
+                    : new XAnimationBlend1DSampleConfig
+                    {
+                        clipKey = sample.clipKey,
+                        threshold = sample.threshold,
+                    };
+            }
+
+            return cloned;
+        }
+
+        private static XAnimationBlend2DSimpleDirectionalSampleConfig[] CloneDirectionalSamples(XAnimationBlend2DSimpleDirectionalSampleConfig[] samples)
+        {
+            if (samples == null || samples.Length == 0)
+            {
+                return Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+            }
+
+            XAnimationBlend2DSimpleDirectionalSampleConfig[] cloned = new XAnimationBlend2DSimpleDirectionalSampleConfig[samples.Length];
+            for (int i = 0; i < samples.Length; i++)
+            {
+                XAnimationBlend2DSimpleDirectionalSampleConfig sample = samples[i];
+                cloned[i] = sample == null
+                    ? null
+                    : new XAnimationBlend2DSimpleDirectionalSampleConfig
+                    {
+                        clipKey = sample.clipKey,
+                        positionX = sample.positionX,
+                        positionY = sample.positionY,
+                    };
+            }
+
+            return cloned;
+        }
+
+        private List<string> GetBlendSeedClipKeys(XAnimationStateConfig state)
+        {
+            List<string> seedClipKeys = new(2);
+            if (state == null)
+            {
+                return seedClipKeys;
+            }
+
+            if (state.stateType == XAnimationStateType.Single)
+            {
+                AddOrderedClipKey(seedClipKeys, state.clipKey);
+                return seedClipKeys;
+            }
+
+            if (IsDirectionalBlendStateType(state.stateType))
+            {
+                string idleClipKey = GetIdleDirectionalClipKey(state);
+                AddOrderedClipKey(seedClipKeys, idleClipKey);
+                XAnimationBlend2DSimpleDirectionalSampleConfig[] samples = state.directionalSamples ?? Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+                for (int i = 0; i < samples.Length && seedClipKeys.Count < 2; i++)
+                {
+                    XAnimationBlend2DSimpleDirectionalSampleConfig sample = samples[i];
+                    if (sample == null)
+                    {
+                        continue;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(idleClipKey) &&
+                        Mathf.Approximately(sample.positionX, 0f) &&
+                        Mathf.Approximately(sample.positionY, 0f))
+                    {
+                        continue;
+                    }
+
+                    AddOrderedClipKey(seedClipKeys, sample.clipKey);
+                }
+
+                return seedClipKeys;
+            }
+
+            return seedClipKeys;
+        }
+
+        private List<string> GetDirectionalSeedClipKeys(XAnimationStateConfig state)
+        {
+            List<string> seedClipKeys = new(2);
+            if (state == null)
+            {
+                return seedClipKeys;
+            }
+
+            if (state.stateType == XAnimationStateType.Single)
+            {
+                AddOrderedClipKey(seedClipKeys, state.clipKey);
+                return seedClipKeys;
+            }
+
+            if (state.stateType == XAnimationStateType.Blend1D)
+            {
+                XAnimationBlend1DSampleConfig[] samples = state.samples ?? Array.Empty<XAnimationBlend1DSampleConfig>();
+                if (samples.Length > 0)
+                {
+                    AddOrderedClipKey(seedClipKeys, samples[0]?.clipKey);
+                }
+
+                if (samples.Length > 1)
+                {
+                    AddOrderedClipKey(seedClipKeys, samples[1]?.clipKey);
+                }
+            }
+
+            return seedClipKeys;
+        }
+
+        private static string GetFirstBlendSampleClipKey(XAnimationStateConfig state)
+        {
+            XAnimationBlend1DSampleConfig[] samples = state?.samples ?? Array.Empty<XAnimationBlend1DSampleConfig>();
+            for (int i = 0; i < samples.Length; i++)
+            {
+                if (!string.IsNullOrWhiteSpace(samples[i]?.clipKey))
+                {
+                    return samples[i].clipKey;
+                }
+            }
+
+            return null;
+        }
+
+        private static string GetIdleDirectionalClipKey(XAnimationStateConfig state)
+        {
+            XAnimationBlend2DSimpleDirectionalSampleConfig[] samples = state?.directionalSamples ?? Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+            for (int i = 0; i < samples.Length; i++)
+            {
+                XAnimationBlend2DSimpleDirectionalSampleConfig sample = samples[i];
+                if (sample != null &&
+                    Mathf.Approximately(sample.positionX, 0f) &&
+                    Mathf.Approximately(sample.positionY, 0f) &&
+                    !string.IsNullOrWhiteSpace(sample.clipKey))
+                {
+                    return sample.clipKey;
+                }
+            }
+
+            return null;
+        }
+
+        private static string GetFirstDirectionalClipKey(XAnimationStateConfig state)
+        {
+            XAnimationBlend2DSimpleDirectionalSampleConfig[] samples = state?.directionalSamples ?? Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+            for (int i = 0; i < samples.Length; i++)
+            {
+                if (!string.IsNullOrWhiteSpace(samples[i]?.clipKey))
+                {
+                    return samples[i].clipKey;
+                }
+            }
+
+            return null;
+        }
+
+        private static void AddOrderedClipKey(List<string> clipKeys, string clipKey)
+        {
+            if (!string.IsNullOrWhiteSpace(clipKey))
+            {
+                clipKeys.Add(clipKey);
+            }
         }
 
         private static Vector2 FindNextDirectionalBlendSamplePosition(

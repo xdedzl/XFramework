@@ -82,8 +82,21 @@ namespace XFramework.Editor
         private const float PlaybackLabelWidth = 118f;
         private const float PlaybackSpeedMin = 0.1f;
         private const float PlaybackSpeedMax = 2f;
-        private const float PlaybackScrubberWidth = 160f;
-        private const float PlaybackSpeedControlWidth = 120f;
+        private const float PlaybackScrubberWidth = 132f;
+        private const float PlaybackSpeedControlWidth = 96f;
+        private const float PlaybackOverlayInitialLeft = 10f;
+        private const float PlaybackOverlayInitialTop = 10f;
+        private const float PlaybackOverlayMinWidth = 392f;
+        private const float PlaybackOverlayClickThreshold = 2f;
+        private const float FreeformBlendGraphOverlayInitialLeft = 12f;
+        private const float FreeformBlendGraphOverlayInitialBottom = 12f;
+        private const float FreeformBlendGraphOverlayWidth = 244f;
+        private const float BlendGraphOverlayHeaderMarginBottomExpanded = 4f;
+        private const float PlaybackToolbarButtonSize = 20f;
+        private const float PlaybackMainFieldLabelWidth = 68f;
+        private const float PlaybackMainFieldValueWidth = 112f;
+        private const float TransitionFieldLabelWidth = 58f;
+        private const float TransitionFieldValueWidth = 64f;
         private const string StateDragDataKey = nameof(XAnimationPreviewWindow) + ".StateKey";
         private const string LastAssetPathPrefsKey = "XFramework.Editor.XAnimation.Preview.LastAssetPath";
         private const string LastPrefabPathPrefsKey = "XFramework.Editor.XAnimation.Preview.LastPrefabPath";
@@ -127,6 +140,9 @@ namespace XFramework.Editor
         [SerializeField] private bool m_ChannelsSectionExpanded = true;
         [SerializeField] private bool m_PreviewRootMotionEnabled = true;
         [SerializeField] private DebugToolbarGroup m_SelectedDebugToolbarGroup;
+        [SerializeField] private Vector2 m_FreeformBlendGraphOverlayPosition = new(FreeformBlendGraphOverlayInitialLeft, FreeformBlendGraphOverlayInitialBottom);
+        [SerializeField] private bool m_FreeformBlendGraphOverlayExpanded = true;
+        [SerializeField] private Vector2 m_PlaybackOverlayPosition = new(PlaybackOverlayInitialLeft, PlaybackOverlayInitialTop);
 
         private TextAsset m_PendingAsset;
         private GameObject m_PendingPrefab;
@@ -194,7 +210,6 @@ namespace XFramework.Editor
         private readonly Dictionary<string, VisualElement> m_ClipRowMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, ClipRowVisualState> m_ClipVisualStateMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, RowVisualState> m_BlendSampleRowMap = new(StringComparer.Ordinal);
-        private readonly Dictionary<string, XAnimationDirectionalBlendGraphElement> m_FreeformBlendGraphMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, Button> m_ClipButtonMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, EditableLabel> m_ChannelLabelMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, VisualElement> m_ChannelRowMap = new(StringComparer.Ordinal);
@@ -225,6 +240,8 @@ namespace XFramework.Editor
         private string m_PendingParameterRenameKey;
         private string m_PendingChannelRenameKey;
         private string m_PlayTargetChannelName;
+        private string m_LastInteractedFreeformStateKey;
+        private string m_CurrentFreeformGraphStateKey;
         private string m_SelectedAutoTransitionStateKey;
         private int m_SelectedDefaultTransitionIndex = -1;
         private float m_PlayFadeInOverride;
@@ -247,15 +264,33 @@ namespace XFramework.Editor
         private bool m_CueLogUiDirty;
         private bool m_LastHasPlayingChannels;
         private bool m_IsDraggingPlaybackScrubber;
+        private bool m_IsDraggingPlaybackOverlay;
+        private bool m_IsDraggingFreeformBlendGraphOverlay;
+        private bool m_PlaybackOverlayDragMoved;
+        private bool m_FreeformBlendGraphOverlayDragMoved;
         private float m_PlaybackScrubberProgress;
         private float m_PlaybackScrubberDragStartX;
         private float m_PlaybackScrubberDragStartProgress;
+        private Vector2 m_PlaybackOverlayDragStartPointer;
+        private Vector2 m_PlaybackOverlayDragStartPosition;
+        private Vector2 m_FreeformBlendGraphOverlayDragStartPointer;
+        private Vector2 m_FreeformBlendGraphOverlayDragStartPosition;
         private FoldoutCard m_StatesCard;
         private FoldoutCard m_ClipsCard;
         private FoldoutCard m_ParametersCard;
         private FoldoutCard m_AutoTransitionCard;
         private FoldoutCard m_DefaultTransitionsCard;
         private FoldoutCard m_ChannelsCard;
+        private VisualElement m_FreeformBlendGraphOverlay;
+        private VisualElement m_FreeformBlendGraphOverlayHeader;
+        private VisualElement m_FreeformBlendGraphOverlayContent;
+        private XAnimationDirectionalBlendGraphElement m_FreeformBlendGraphElement;
+        private XAnimationBlend1DGraphElement m_Blend1DGraphElement;
+        private Label m_FreeformBlendGraphTitleLabel;
+        private Label m_FreeformBlendGraphHintLabel;
+        private VisualElement m_PlaybackOverlayCard;
+        private string m_FreeformBlendGraphTitleText = "Blend Graph";
+        private float m_FreeformBlendGraphLastExpandedContentHeight;
 
         private class RowVisualState
         {
@@ -530,6 +565,28 @@ namespace XFramework.Editor
             return btn;
         }
 
+        private static void ConfigurePlaybackToolbarButton(Button button, float marginLeft = 0f)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            button.style.width = PlaybackToolbarButtonSize;
+            button.style.minWidth = PlaybackToolbarButtonSize;
+            button.style.maxWidth = PlaybackToolbarButtonSize;
+            button.style.height = PlaybackToolbarButtonSize;
+            button.style.minHeight = PlaybackToolbarButtonSize;
+            button.style.maxHeight = PlaybackToolbarButtonSize;
+            button.style.paddingLeft = 0;
+            button.style.paddingRight = 0;
+            button.style.paddingTop = 0;
+            button.style.paddingBottom = 0;
+            button.style.unityTextAlign = TextAnchor.MiddleCenter;
+            button.style.marginLeft = marginLeft;
+            button.style.flexShrink = 0;
+        }
+
         private VisualElement CreatePlaybackScrubber()
         {
             VisualElement scrubber = new();
@@ -648,11 +705,21 @@ namespace XFramework.Editor
             VisualElement pane = CreatePane();
             pane.style.minWidth = PreviewPaneMinWidth;
 
+            VisualElement previewSurface = new VisualElement();
+            previewSurface.style.position = Position.Relative;
+            previewSurface.style.flexGrow = 1;
+            previewSurface.style.minHeight = 0;
+            pane.Add(previewSurface);
+
             m_PreviewImage = new Image
             {
                 scaleMode = ScaleMode.ScaleToFit
             };
-            m_PreviewImage.style.flexGrow = 1;
+            m_PreviewImage.style.position = Position.Absolute;
+            m_PreviewImage.style.left = 0;
+            m_PreviewImage.style.right = 0;
+            m_PreviewImage.style.top = 0;
+            m_PreviewImage.style.bottom = 0;
             m_PreviewImage.style.backgroundColor = new Color(0.11f, 0.11f, 0.12f, 1f);
             m_PreviewImage.style.borderTopWidth = 1;
             m_PreviewImage.style.borderBottomWidth = 1;
@@ -667,7 +734,27 @@ namespace XFramework.Editor
             m_PreviewImage.style.borderBottomLeftRadius = 4;
             m_PreviewImage.style.borderBottomRightRadius = 4;
             RegisterPreviewEvents();
-            pane.Add(m_PreviewImage);
+            previewSurface.Add(m_PreviewImage);
+
+            m_PlaybackOverlayCard = BuildPlaybackSettingsCard();
+            m_PlaybackOverlayCard.style.position = Position.Absolute;
+            m_PlaybackOverlayCard.style.left = m_PlaybackOverlayPosition.x;
+            m_PlaybackOverlayCard.style.top = m_PlaybackOverlayPosition.y;
+            m_PlaybackOverlayCard.style.minWidth = PlaybackOverlayMinWidth;
+            m_PlaybackOverlayCard.style.backgroundColor = new Color(0.12f, 0.12f, 0.13f, 0.94f);
+            m_PlaybackOverlayCard.style.marginBottom = 0;
+            m_PlaybackOverlayCard.style.alignSelf = Align.FlexStart;
+            previewSurface.Add(m_PlaybackOverlayCard);
+            m_PlaybackOverlayCard.BringToFront();
+
+            m_FreeformBlendGraphOverlay = BuildFreeformBlendGraphOverlay();
+            previewSurface.Add(m_FreeformBlendGraphOverlay);
+            m_FreeformBlendGraphOverlay.BringToFront();
+            previewSurface.RegisterCallback<GeometryChangedEvent>(_ =>
+            {
+                ClampPlaybackOverlayPosition();
+                ClampFreeformBlendGraphOverlayPosition();
+            });
 
             VisualElement controls = new VisualElement();
             controls.style.flexDirection = FlexDirection.Row;
@@ -724,7 +811,11 @@ namespace XFramework.Editor
             pane.style.borderRightColor = PaneBorder;
 
             // ── Card: Assets ──
-            FoldoutCard assetsCard = CreateFoldoutCard("资源", m_AssetsSectionExpanded, value => m_AssetsSectionExpanded = value);
+            FoldoutCard assetsCard = CreateFoldoutCard(
+                "资源",
+                m_AssetsSectionExpanded,
+                value => m_AssetsSectionExpanded = value,
+                CreateStyledButton("重载", LoadPreview, AccentColor));
 
             m_PrefabField = new ObjectField("Prefab")
             {
@@ -764,202 +855,20 @@ namespace XFramework.Editor
                 m_SelectedAsset = evt.newValue as TextAsset;
             });
             m_AssetField.style.marginBottom = 4;
-            assetsCard.Content.Add(m_AssetField);
 
-            assetsCard.Content.Add(CreateStyledButton("重载", LoadPreview, AccentColor));
-
-            // ── Card: Playback Settings ──
-            VisualElement playbackActions = new VisualElement();
-            playbackActions.style.flexDirection = FlexDirection.Row;
-            playbackActions.style.alignItems = Align.Center;
-
-            m_PlaybackScrubber = CreatePlaybackScrubber();
-            playbackActions.Add(m_PlaybackScrubber);
-
-            VisualElement speedControls = new VisualElement();
-            speedControls.style.flexDirection = FlexDirection.Row;
-            speedControls.style.alignItems = Align.Center;
-            speedControls.style.width = PlaybackSpeedControlWidth;
-            speedControls.style.flexShrink = 0;
-            speedControls.style.marginLeft = 8;
-            speedControls.tooltip = "本次预览播放使用的时间缩放倍率。";
-
-            m_PlaySpeedSlider = new Slider(PlaybackSpeedMin, PlaybackSpeedMax)
+            VisualElement assetRow = new()
             {
-                value = m_PlaybackPrefsLoaded ? ClampPlaybackSpeed(GetPlaybackSpeed()) : 1f
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    alignItems = Align.Center,
+                    marginBottom = 4
+                }
             };
-            m_PlaySpeedSlider.style.flexGrow = 1;
-            m_PlaySpeedSlider.style.flexShrink = 1;
-            m_PlaySpeedSlider.style.minWidth = 56;
-            m_PlaySpeedSlider.tooltip = "拖动调整 request.speed，只影响当前预览请求。";
-            m_PlaySpeedSlider.RegisterValueChangedCallback(evt => SetPlaybackSpeed(evt.newValue));
-            speedControls.Add(m_PlaySpeedSlider);
-
-            m_PlaySpeedValueLabel = new Label();
-            m_PlaySpeedValueLabel.style.width = 34;
-            m_PlaySpeedValueLabel.style.minWidth = 34;
-            m_PlaySpeedValueLabel.style.unityTextAlign = TextAnchor.MiddleRight;
-            m_PlaySpeedValueLabel.style.color = TextNormal;
-            m_PlaySpeedValueLabel.style.fontSize = BodyFontSize;
-            m_PlaySpeedValueLabel.style.marginLeft = 6;
-            speedControls.Add(m_PlaySpeedValueLabel);
-
-            SetPlaybackSpeed(m_PlaybackPrefsLoaded ? GetPlaybackSpeed() : 1f, savePrefs: false, updateSession: false);
-            playbackActions.Add(speedControls);
-
-            m_PauseButton = CreateStyledButton("Ⅱ", TogglePause, AccentColor);
-            SetPauseButtonState(false, false);
-            m_PauseButton.style.marginLeft = 8;
-            playbackActions.Add(m_PauseButton);
-
-            m_StepForwardButton = CreateStyledButton("▸|", StepForward, AccentColor, 6f);
-            SetStepForwardButtonEnabled(false);
-            playbackActions.Add(m_StepForwardButton);
-
-            m_StopAllButton = CreateStyledButton("■", StopAllClips, DangerColor, 6f);
-            SetStopAllButtonEnabled(false);
-            playbackActions.Add(m_StopAllButton);
-
-            FoldoutCard playbackCard = CreateFoldoutCard("播放设置", m_PlaybackSectionExpanded, value =>
-            {
-                m_PlaybackSectionExpanded = value;
-                SavePlaybackPrefs();
-            }, playbackActions);
-
-            VisualElement playbackFields = new VisualElement();
-            playbackFields.style.flexDirection = FlexDirection.Column;
-            playbackFields.style.alignItems = Align.Stretch;
-
-            m_PlayTargetChannelField = CreateChannelDropdown(string.Empty, m_PlayTargetChannelName);
-            m_PlayTargetChannelField.tooltip = "clip 调试播放使用的 channelName。state 播放始终使用 state 自己配置的 channel。";
-            m_PlayTargetChannelField.style.flexGrow = 1;
-            m_PlayTargetChannelField.style.minWidth = 0;
-            AttachDropdownInspectorButton(
-                m_PlayTargetChannelField,
-                () => m_PlayTargetChannelField?.value ?? m_PlayTargetChannelName,
-                () => HasChannel(m_PlayTargetChannelField?.value ?? m_PlayTargetChannelName),
-                () => FocusChannelInInspector(m_PlayTargetChannelField?.value ?? m_PlayTargetChannelName),
-                "定位到 Channels 面板里当前 channel 对应的条目。");
-            m_PlayTargetChannelField.RegisterValueChangedCallback(evt =>
-            {
-                m_PlayTargetChannelName = evt.newValue ?? string.Empty;
-                SavePlaybackPrefs();
-            });
-            VisualElement channelFieldRow = CreatePlaybackFieldContainer("channelName", m_PlayTargetChannelField, PlaybackLabelWidth);
-            channelFieldRow.tooltip = "用于 clip 调试播放的目标 channel。";
-            playbackFields.Add(channelFieldRow);
-
-            m_RootMotionToggle = new Toggle { value = m_PreviewRootMotionEnabled };
-            m_RootMotionToggle.tooltip = "控制当前预览 session 是否应用 Root Motion。关闭后会将预览实例复位到初始位置。";
-            m_RootMotionToggle.RegisterValueChangedCallback(evt =>
-            {
-                m_PreviewRootMotionEnabled = evt.newValue;
-                if (m_Session != null && m_Session.IsLoaded)
-                {
-                    m_Session.SetRootMotionEnabled(evt.newValue);
-                    RenderPreview();
-                }
-            });
-            VisualElement rootMotionToggleRow = CreatePlaybackToggleRow("rootMotion", m_RootMotionToggle, PlaybackLabelWidth);
-            rootMotionToggleRow.tooltip = "仅影响当前预览窗口的 Root Motion 应用，不修改资源配置。";
-            playbackFields.Add(rootMotionToggleRow);
-
-            playbackCard.Content.Add(playbackFields);
-
-            m_ApplyTransitionRequestToggle = CreateHeaderApplyToggle(m_ApplyTransitionRequestOverrides, "是否应用 Transition 覆盖。关闭时本分区会自动收起。");
-            FoldoutCard transitionCard = CreateSectionFoldoutCard("Transition", m_PlayTransitionSectionExpanded, value =>
-            {
-                m_PlayTransitionSectionExpanded = value;
-                SavePlaybackPrefs();
-            }, m_ApplyTransitionRequestToggle, () => m_ApplyTransitionRequestOverrides);
-            transitionCard.Root.style.marginTop = 4;
-
-            m_ApplyTransitionRequestToggle.tooltip = "只应用 fadeIn / fadeOut / priority / interruptible / enterTime 覆盖。";
-            m_ApplyTransitionRequestToggle.RegisterValueChangedCallback(evt =>
-            {
-                m_ApplyTransitionRequestOverrides = evt.newValue;
-                if (!evt.newValue)
-                {
-                    transitionCard.SetExpanded?.Invoke(false);
-                }
-                transitionCard.RefreshState?.Invoke();
-                SavePlaybackPrefs();
-            });
-
-            m_PlayFadeInField = new FloatField { value = m_PlayFadeInOverride };
-            m_PlayFadeInField.tooltip = "0 表示使用 state/channel 默认值；大于 0 时写入 request.fadeIn。";
-            ConfigureCompactPlaybackField(m_PlayFadeInField, "fadeIn", 66);
-            m_PlayFadeInField.RegisterValueChangedCallback(evt =>
-            {
-                m_PlayFadeInOverride = Mathf.Max(0f, evt.newValue);
-                if (!Mathf.Approximately(m_PlayFadeInOverride, evt.newValue))
-                {
-                    m_PlayFadeInField.SetValueWithoutNotify(m_PlayFadeInOverride);
-                }
-
-                SavePlaybackPrefs();
-            });
-            transitionCard.Content.Add(CreatePlaybackFieldContainer("fadeIn", m_PlayFadeInField, PlaybackLabelWidth));
-
-            m_PlayFadeOutField = new FloatField { value = m_PlayFadeOutOverride };
-            m_PlayFadeOutField.tooltip = "0 表示使用 state/channel 默认值；大于 0 时写入 request.fadeOut。";
-            ConfigureCompactPlaybackField(m_PlayFadeOutField, "fadeOut", 66);
-            m_PlayFadeOutField.RegisterValueChangedCallback(evt =>
-            {
-                m_PlayFadeOutOverride = Mathf.Max(0f, evt.newValue);
-                if (!Mathf.Approximately(m_PlayFadeOutOverride, evt.newValue))
-                {
-                    m_PlayFadeOutField.SetValueWithoutNotify(m_PlayFadeOutOverride);
-                }
-
-                SavePlaybackPrefs();
-            });
-            transitionCard.Content.Add(CreatePlaybackFieldContainer("fadeOut", m_PlayFadeOutField, PlaybackLabelWidth));
-
-            m_PlayPriorityField = new IntegerField { value = m_PlayPriorityOverride };
-            m_PlayPriorityField.tooltip = "request.priority。";
-            ConfigureCompactPlaybackElement(m_PlayPriorityField, 66);
-            m_PlayPriorityField.RegisterValueChangedCallback(evt =>
-            {
-                m_PlayPriorityOverride = evt.newValue;
-                SavePlaybackPrefs();
-            });
-            transitionCard.Content.Add(CreatePlaybackFieldContainer("priority", m_PlayPriorityField, PlaybackLabelWidth));
-
-            m_PlayInterruptibleToggle = new Toggle { value = m_PlayInterruptibleOverride };
-            m_PlayInterruptibleToggle.tooltip = "request.interruptible。";
-            m_PlayInterruptibleToggle.RegisterValueChangedCallback(evt =>
-            {
-                m_PlayInterruptibleOverride = evt.newValue;
-                SavePlaybackPrefs();
-            });
-            transitionCard.Content.Add(CreatePlaybackToggleRow("interruptible", m_PlayInterruptibleToggle, PlaybackLabelWidth));
-
-            m_PlayEnterTimeField = new FloatField { value = m_PlayEnterTimeOverride };
-            m_PlayEnterTimeField.tooltip = "transition.enterTime，会被夹到 [0, 1]。";
-            ConfigureCompactPlaybackField(m_PlayEnterTimeField, "enterTime", 72);
-            m_PlayEnterTimeField.RegisterValueChangedCallback(evt =>
-            {
-                m_PlayEnterTimeOverride = Mathf.Clamp01(evt.newValue);
-                if (!Mathf.Approximately(m_PlayEnterTimeOverride, evt.newValue))
-                {
-                    m_PlayEnterTimeField.SetValueWithoutNotify(m_PlayEnterTimeOverride);
-                }
-
-                SavePlaybackPrefs();
-            });
-            transitionCard.Content.Add(CreatePlaybackFieldContainer("enterTime", m_PlayEnterTimeField, PlaybackLabelWidth));
-
-            playbackCard.Content.Add(transitionCard.Root);
-
-            FoldoutCard previewParametersCard = CreateSectionFoldoutCard("Preview Parameters", m_PreviewParametersSectionExpanded, value =>
-            {
-                m_PreviewParametersSectionExpanded = value;
-            });
-            previewParametersCard.Root.style.marginTop = 4;
-            m_MainParameterPreviewView = new VisualElement();
-            previewParametersCard.Content.Add(m_MainParameterPreviewView);
-            playbackCard.Content.Add(previewParametersCard.Root);
+            m_AssetField.style.flexGrow = 1;
+            m_AssetField.style.marginBottom = 0;
+            assetRow.Add(m_AssetField);
+            assetsCard.Content.Add(assetRow);
 
             VisualElement inspectorPane = new VisualElement();
             inspectorPane.style.position = Position.Relative;
@@ -1009,7 +918,6 @@ namespace XFramework.Editor
             }
 
             m_MainGroupContainer.Add(assetsCard.Root);
-            m_MainGroupContainer.Add(playbackCard.Root);
 
             // ── Card: Parameters ──
             m_AddParameterButton = CreateStyledButton("+", AddParameter, AccentColor);
@@ -1096,8 +1004,574 @@ namespace XFramework.Editor
             return pane;
         }
 
+        private VisualElement BuildFreeformBlendGraphOverlay()
+        {
+            VisualElement overlay = new VisualElement();
+            overlay.style.position = Position.Absolute;
+            overlay.style.left = m_FreeformBlendGraphOverlayPosition.x;
+            overlay.style.bottom = m_FreeformBlendGraphOverlayPosition.y;
+            overlay.style.width = FreeformBlendGraphOverlayWidth;
+            overlay.style.paddingLeft = 6;
+            overlay.style.paddingRight = 6;
+            overlay.style.paddingTop = 6;
+            overlay.style.paddingBottom = 6;
+            overlay.style.backgroundColor = new Color(0.10f, 0.10f, 0.12f, 0.92f);
+            overlay.style.borderTopLeftRadius = 6;
+            overlay.style.borderTopRightRadius = 6;
+            overlay.style.borderBottomLeftRadius = 6;
+            overlay.style.borderBottomRightRadius = 6;
+            overlay.style.borderTopWidth = 1;
+            overlay.style.borderBottomWidth = 1;
+            overlay.style.borderLeftWidth = 1;
+            overlay.style.borderRightWidth = 1;
+            overlay.style.borderTopColor = PaneBorder;
+            overlay.style.borderBottomColor = PaneBorder;
+            overlay.style.borderLeftColor = PaneBorder;
+            overlay.style.borderRightColor = PaneBorder;
+            overlay.style.display = DisplayStyle.None;
+
+            VisualElement headerRow = new VisualElement();
+            headerRow.style.flexDirection = FlexDirection.Row;
+            headerRow.style.alignItems = Align.Center;
+            headerRow.style.marginBottom = BlendGraphOverlayHeaderMarginBottomExpanded;
+            headerRow.AddToClassList("xanim-freeform-graph-overlay-drag-handle");
+            headerRow.tooltip = "拖拽标题栏可以移动这个 Blend Graph HUD，点击标题栏可展开或收起。";
+            overlay.Add(headerRow);
+            m_FreeformBlendGraphOverlayHeader = headerRow;
+
+            m_FreeformBlendGraphTitleLabel = new Label();
+            m_FreeformBlendGraphTitleLabel.style.color = TextNormal;
+            m_FreeformBlendGraphTitleLabel.style.fontSize = BodyFontSize;
+            m_FreeformBlendGraphTitleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            m_FreeformBlendGraphTitleLabel.style.flexGrow = 1f;
+            headerRow.Add(m_FreeformBlendGraphTitleLabel);
+
+            m_FreeformBlendGraphOverlayContent = new VisualElement();
+            m_FreeformBlendGraphOverlayContent.style.flexDirection = FlexDirection.Column;
+            overlay.Add(m_FreeformBlendGraphOverlayContent);
+
+            m_FreeformBlendGraphElement = new XAnimationDirectionalBlendGraphElement();
+            m_FreeformBlendGraphElement.tooltip = "蓝点是 sample，红点是当前 2D 参数值，圆圈大小表示实时 weight。拖动红点可预览 freeform directional blend。";
+            m_FreeformBlendGraphElement.style.display = DisplayStyle.None;
+            m_FreeformBlendGraphOverlayContent.Add(m_FreeformBlendGraphElement);
+
+            m_Blend1DGraphElement = new XAnimationBlend1DGraphElement();
+            m_Blend1DGraphElement.tooltip = "蓝色包络表示 Blend1D sample weight，红线与红点表示当前参数值。拖动红点可预览 Blend1D。";
+            m_Blend1DGraphElement.style.display = DisplayStyle.None;
+            m_FreeformBlendGraphOverlayContent.Add(m_Blend1DGraphElement);
+
+            m_FreeformBlendGraphHintLabel = new Label();
+            m_FreeformBlendGraphHintLabel.style.color = TextMuted;
+            m_FreeformBlendGraphHintLabel.style.fontSize = BodyFontSize;
+            m_FreeformBlendGraphHintLabel.style.whiteSpace = WhiteSpace.Normal;
+            m_FreeformBlendGraphHintLabel.style.display = DisplayStyle.None;
+            m_FreeformBlendGraphOverlayContent.Add(m_FreeformBlendGraphHintLabel);
+
+            RegisterFreeformBlendGraphOverlayDrag(overlay, headerRow, () => SetBlendGraphOverlayExpanded(!m_FreeformBlendGraphOverlayExpanded));
+            SetBlendGraphOverlayExpanded(m_FreeformBlendGraphOverlayExpanded);
+
+            return overlay;
+        }
+
+        private VisualElement BuildPlaybackSettingsCard()
+        {
+            VisualElement playbackActions = new VisualElement();
+            playbackActions.style.flexDirection = FlexDirection.Row;
+            playbackActions.style.alignItems = Align.Center;
+            playbackActions.style.flexWrap = Wrap.NoWrap;
+            playbackActions.style.minWidth = 0;
+
+            m_PlaybackScrubber = CreatePlaybackScrubber();
+            playbackActions.Add(m_PlaybackScrubber);
+
+            VisualElement speedControls = new VisualElement();
+            speedControls.style.flexDirection = FlexDirection.Row;
+            speedControls.style.alignItems = Align.Center;
+            speedControls.style.width = PlaybackSpeedControlWidth;
+            speedControls.style.flexShrink = 0;
+            speedControls.style.marginLeft = 6;
+            speedControls.tooltip = "本次预览播放使用的时间缩放倍率。";
+
+            m_PlaySpeedSlider = new Slider(PlaybackSpeedMin, PlaybackSpeedMax)
+            {
+                value = m_PlaybackPrefsLoaded ? ClampPlaybackSpeed(GetPlaybackSpeed()) : 1f
+            };
+            m_PlaySpeedSlider.style.flexGrow = 1;
+            m_PlaySpeedSlider.style.flexShrink = 1;
+            m_PlaySpeedSlider.style.minWidth = 56;
+            m_PlaySpeedSlider.tooltip = "拖动调整 request.speed，只影响当前预览请求。";
+            m_PlaySpeedSlider.RegisterValueChangedCallback(evt => SetPlaybackSpeed(evt.newValue));
+            speedControls.Add(m_PlaySpeedSlider);
+
+            m_PlaySpeedValueLabel = new Label();
+            m_PlaySpeedValueLabel.style.width = 34;
+            m_PlaySpeedValueLabel.style.minWidth = 34;
+            m_PlaySpeedValueLabel.style.unityTextAlign = TextAnchor.MiddleRight;
+            m_PlaySpeedValueLabel.style.color = TextNormal;
+            m_PlaySpeedValueLabel.style.fontSize = BodyFontSize;
+            m_PlaySpeedValueLabel.style.marginLeft = 4;
+            speedControls.Add(m_PlaySpeedValueLabel);
+
+            SetPlaybackSpeed(m_PlaybackPrefsLoaded ? GetPlaybackSpeed() : 1f, savePrefs: false, updateSession: false);
+            playbackActions.Add(speedControls);
+
+            m_PauseButton = CreateStyledButton("Ⅱ", TogglePause, AccentColor);
+            SetPauseButtonState(false, false);
+            ConfigurePlaybackToolbarButton(m_PauseButton, 6f);
+            playbackActions.Add(m_PauseButton);
+
+            m_StepForwardButton = CreateStyledButton("▸|", StepForward, AccentColor);
+            SetStepForwardButtonEnabled(false);
+            ConfigurePlaybackToolbarButton(m_StepForwardButton, 4f);
+            playbackActions.Add(m_StepForwardButton);
+
+            m_StopAllButton = CreateStyledButton("■", StopAllClips, DangerColor);
+            SetStopAllButtonEnabled(false);
+            ConfigurePlaybackToolbarButton(m_StopAllButton, 4f);
+            playbackActions.Add(m_StopAllButton);
+
+            FoldoutCard playbackCard = CreateFoldoutCard(string.Empty, m_PlaybackSectionExpanded, value =>
+            {
+                m_PlaybackSectionExpanded = value;
+                SavePlaybackPrefs();
+            }, playbackActions);
+            RegisterPlaybackOverlayDrag(playbackCard.Root, () => playbackCard.SetExpanded?.Invoke(!m_PlaybackSectionExpanded));
+
+            VisualElement playbackFields = new VisualElement();
+            playbackFields.style.flexDirection = FlexDirection.Column;
+            playbackFields.style.alignItems = Align.Stretch;
+
+            m_PlayTargetChannelField = CreateChannelDropdown(string.Empty, m_PlayTargetChannelName);
+            m_PlayTargetChannelField.tooltip = "clip 调试播放使用的 channelName。state 播放始终使用 state 自己配置的 channel。";
+            m_PlayTargetChannelField.style.flexGrow = 1;
+            m_PlayTargetChannelField.style.minWidth = 0;
+            AttachDropdownInspectorButton(
+                m_PlayTargetChannelField,
+                () => m_PlayTargetChannelField?.value ?? m_PlayTargetChannelName,
+                () => HasChannel(m_PlayTargetChannelField?.value ?? m_PlayTargetChannelName),
+                () => FocusChannelInInspector(m_PlayTargetChannelField?.value ?? m_PlayTargetChannelName),
+                "定位到 Channels 面板里当前 channel 对应的条目。");
+            m_PlayTargetChannelField.RegisterValueChangedCallback(evt =>
+            {
+                m_PlayTargetChannelName = evt.newValue ?? string.Empty;
+                SavePlaybackPrefs();
+            });
+
+            m_RootMotionToggle = new Toggle { value = m_PreviewRootMotionEnabled };
+            m_RootMotionToggle.tooltip = "控制当前预览 session 是否应用 Root Motion。关闭后会将预览实例复位到初始位置。";
+            m_RootMotionToggle.RegisterValueChangedCallback(evt =>
+            {
+                m_PreviewRootMotionEnabled = evt.newValue;
+                if (m_Session != null && m_Session.IsLoaded)
+                {
+                    m_Session.SetRootMotionEnabled(evt.newValue);
+                    RenderPreview();
+                }
+            });
+            VisualElement channelAndRootMotionRow = CreatePlaybackFieldPairRow(
+                "channelName",
+                m_PlayTargetChannelField,
+                "rootMotion",
+                m_RootMotionToggle,
+                PlaybackMainFieldLabelWidth,
+                PlaybackMainFieldValueWidth);
+            channelAndRootMotionRow.tooltip = "channelName 用于 clip 调试播放；rootMotion 仅影响当前预览窗口。";
+            playbackFields.Add(channelAndRootMotionRow);
+
+            playbackCard.Content.Add(playbackFields);
+
+            m_ApplyTransitionRequestToggle = CreateHeaderApplyToggle(m_ApplyTransitionRequestOverrides, "是否应用 Transition 覆盖。关闭时本分区会自动收起。");
+            FoldoutCard transitionCard = CreateSectionFoldoutCard("Transition", m_PlayTransitionSectionExpanded, value =>
+            {
+                m_PlayTransitionSectionExpanded = value;
+                SavePlaybackPrefs();
+            }, m_ApplyTransitionRequestToggle, () => m_ApplyTransitionRequestOverrides);
+            transitionCard.Root.style.marginTop = 4;
+
+            m_ApplyTransitionRequestToggle.tooltip = "只应用 fadeIn / fadeOut / priority / enterTime 覆盖。";
+            m_ApplyTransitionRequestToggle.RegisterValueChangedCallback(evt =>
+            {
+                m_ApplyTransitionRequestOverrides = evt.newValue;
+                if (!evt.newValue)
+                {
+                    transitionCard.SetExpanded?.Invoke(false);
+                }
+                transitionCard.RefreshState?.Invoke();
+                SavePlaybackPrefs();
+            });
+
+            m_PlayFadeInField = new FloatField { value = m_PlayFadeInOverride };
+            m_PlayFadeInField.tooltip = "0 表示使用 state/channel 默认值；大于 0 时写入 request.fadeIn。";
+            ConfigureCompactPlaybackField(m_PlayFadeInField, "fadeIn", TransitionFieldValueWidth);
+            m_PlayFadeInField.RegisterValueChangedCallback(evt =>
+            {
+                m_PlayFadeInOverride = Mathf.Max(0f, evt.newValue);
+                if (!Mathf.Approximately(m_PlayFadeInOverride, evt.newValue))
+                {
+                    m_PlayFadeInField.SetValueWithoutNotify(m_PlayFadeInOverride);
+                }
+
+                SavePlaybackPrefs();
+            });
+
+            m_PlayFadeOutField = new FloatField { value = m_PlayFadeOutOverride };
+            m_PlayFadeOutField.tooltip = "0 表示使用 state/channel 默认值；大于 0 时写入 request.fadeOut。";
+            ConfigureCompactPlaybackField(m_PlayFadeOutField, "fadeOut", TransitionFieldValueWidth);
+            m_PlayFadeOutField.RegisterValueChangedCallback(evt =>
+            {
+                m_PlayFadeOutOverride = Mathf.Max(0f, evt.newValue);
+                if (!Mathf.Approximately(m_PlayFadeOutOverride, evt.newValue))
+                {
+                    m_PlayFadeOutField.SetValueWithoutNotify(m_PlayFadeOutOverride);
+                }
+
+                SavePlaybackPrefs();
+            });
+
+            m_PlayPriorityField = new IntegerField { value = m_PlayPriorityOverride };
+            m_PlayPriorityField.tooltip = "request.priority。";
+            ConfigureCompactPlaybackElement(m_PlayPriorityField, TransitionFieldValueWidth);
+            m_PlayPriorityField.RegisterValueChangedCallback(evt =>
+            {
+                m_PlayPriorityOverride = evt.newValue;
+                SavePlaybackPrefs();
+            });
+
+            m_PlayEnterTimeField = new FloatField { value = m_PlayEnterTimeOverride };
+            m_PlayEnterTimeField.tooltip = "transition.enterTime，会被夹到 [0, 1]。";
+            ConfigureCompactPlaybackField(m_PlayEnterTimeField, "enterTime", TransitionFieldValueWidth);
+            m_PlayEnterTimeField.RegisterValueChangedCallback(evt =>
+            {
+                m_PlayEnterTimeOverride = Mathf.Clamp01(evt.newValue);
+                if (!Mathf.Approximately(m_PlayEnterTimeOverride, evt.newValue))
+                {
+                    m_PlayEnterTimeField.SetValueWithoutNotify(m_PlayEnterTimeOverride);
+                }
+
+                SavePlaybackPrefs();
+            });
+            VisualElement fadeRow = CreatePlaybackFieldPairRow(
+                "fadeIn",
+                m_PlayFadeInField,
+                "fadeOut",
+                m_PlayFadeOutField,
+                TransitionFieldLabelWidth,
+                TransitionFieldValueWidth);
+            fadeRow.tooltip = "fadeIn / fadeOut 覆盖。0 表示继续使用资源里的默认值。";
+            transitionCard.Content.Add(fadeRow);
+
+            VisualElement timingRow = CreatePlaybackFieldPairRow(
+                "enterTime",
+                m_PlayEnterTimeField,
+                "priority",
+                m_PlayPriorityField,
+                TransitionFieldLabelWidth,
+                TransitionFieldValueWidth);
+            timingRow.tooltip = "enterTime / priority 覆盖。";
+            transitionCard.Content.Add(timingRow);
+
+            playbackCard.Content.Add(transitionCard.Root);
+
+            FoldoutCard previewParametersCard = CreateSectionFoldoutCard("Preview Parameters", m_PreviewParametersSectionExpanded, value =>
+            {
+                m_PreviewParametersSectionExpanded = value;
+            });
+            previewParametersCard.Root.style.marginTop = 4;
+            m_MainParameterPreviewView = new VisualElement();
+            previewParametersCard.Content.Add(m_MainParameterPreviewView);
+            playbackCard.Content.Add(previewParametersCard.Root);
+
+            return playbackCard.Root;
+        }
+
+        private void RegisterPlaybackOverlayDrag(VisualElement card, Action toggleExpanded)
+        {
+            if (card == null)
+            {
+                return;
+            }
+
+            VisualElement titleRow = card.childCount > 0 ? card[0] : null;
+            Label toggleLabel = titleRow?.Q<Label>();
+            if (titleRow == null || toggleLabel == null)
+            {
+                return;
+            }
+
+            toggleLabel.AddToClassList("xanim-playback-overlay-drag-handle");
+            toggleLabel.tooltip = "拖拽左侧三角可以移动这个悬浮面板，鼠标抬起时如果位置没变化则展开/收起。";
+
+            toggleLabel.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button != 0)
+                {
+                    return;
+                }
+
+                m_IsDraggingPlaybackOverlay = true;
+                m_PlaybackOverlayDragMoved = false;
+                m_PlaybackOverlayDragStartPointer = new Vector2(evt.position.x, evt.position.y);
+                m_PlaybackOverlayDragStartPosition = m_PlaybackOverlayPosition;
+                toggleLabel.CapturePointer(evt.pointerId);
+                evt.StopPropagation();
+            });
+
+            toggleLabel.RegisterCallback<PointerMoveEvent>(evt =>
+            {
+                if (!m_IsDraggingPlaybackOverlay || !toggleLabel.HasPointerCapture(evt.pointerId))
+                {
+                    return;
+                }
+
+                Vector2 pointerPosition = new Vector2(evt.position.x, evt.position.y);
+                Vector2 delta = pointerPosition - m_PlaybackOverlayDragStartPointer;
+                if (!m_PlaybackOverlayDragMoved && delta.sqrMagnitude > PlaybackOverlayClickThreshold * PlaybackOverlayClickThreshold)
+                {
+                    m_PlaybackOverlayDragMoved = true;
+                }
+                m_PlaybackOverlayPosition = m_PlaybackOverlayDragStartPosition + delta;
+                ClampPlaybackOverlayPosition();
+                evt.StopPropagation();
+            });
+
+            void EndDrag(IPointerEvent evt, bool canToggle)
+            {
+                if (!m_IsDraggingPlaybackOverlay)
+                {
+                    return;
+                }
+
+                bool shouldToggle = canToggle && !m_PlaybackOverlayDragMoved;
+                m_IsDraggingPlaybackOverlay = false;
+                m_PlaybackOverlayDragMoved = false;
+                if (toggleLabel.HasPointerCapture(evt.pointerId))
+                {
+                    toggleLabel.ReleasePointer(evt.pointerId);
+                }
+
+                ClampPlaybackOverlayPosition();
+                if (shouldToggle)
+                {
+                    toggleExpanded?.Invoke();
+                }
+            }
+
+            toggleLabel.RegisterCallback<PointerUpEvent>(evt =>
+            {
+                EndDrag(evt, canToggle: true);
+                evt.StopPropagation();
+            });
+
+            toggleLabel.RegisterCallback<PointerCancelEvent>(evt =>
+            {
+                EndDrag(evt, canToggle: false);
+                evt.StopPropagation();
+            });
+        }
+
+        private void ClampPlaybackOverlayPosition()
+        {
+            if (m_PlaybackOverlayCard == null || m_PlaybackOverlayCard.parent == null)
+            {
+                return;
+            }
+
+            Rect parentBounds = m_PlaybackOverlayCard.parent.contentRect;
+            float cardWidth = Mathf.Max(PlaybackOverlayMinWidth, m_PlaybackOverlayCard.resolvedStyle.width);
+            float cardHeight = Mathf.Max(0f, m_PlaybackOverlayCard.resolvedStyle.height);
+            float maxX = Mathf.Max(0f, parentBounds.width - cardWidth);
+            float maxY = Mathf.Max(0f, parentBounds.height - cardHeight);
+            m_PlaybackOverlayPosition = new Vector2(
+                Mathf.Clamp(m_PlaybackOverlayPosition.x, 0f, maxX),
+                Mathf.Clamp(m_PlaybackOverlayPosition.y, 0f, maxY));
+
+            m_PlaybackOverlayCard.style.left = m_PlaybackOverlayPosition.x;
+            m_PlaybackOverlayCard.style.top = m_PlaybackOverlayPosition.y;
+        }
+
+        private void RegisterFreeformBlendGraphOverlayDrag(VisualElement card, VisualElement dragHandle, Action toggleExpanded)
+        {
+            if (card == null || dragHandle == null)
+            {
+                return;
+            }
+
+            dragHandle.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button != 0)
+                {
+                    return;
+                }
+
+                m_IsDraggingFreeformBlendGraphOverlay = true;
+                m_FreeformBlendGraphOverlayDragMoved = false;
+                m_FreeformBlendGraphOverlayDragStartPointer = new Vector2(evt.position.x, evt.position.y);
+                m_FreeformBlendGraphOverlayDragStartPosition = m_FreeformBlendGraphOverlayPosition;
+                dragHandle.CapturePointer(evt.pointerId);
+                evt.StopPropagation();
+            });
+
+            dragHandle.RegisterCallback<PointerMoveEvent>(evt =>
+            {
+                if (!m_IsDraggingFreeformBlendGraphOverlay || !dragHandle.HasPointerCapture(evt.pointerId))
+                {
+                    return;
+                }
+
+                Vector2 pointerPosition = new Vector2(evt.position.x, evt.position.y);
+                Vector2 delta = pointerPosition - m_FreeformBlendGraphOverlayDragStartPointer;
+                if (!m_FreeformBlendGraphOverlayDragMoved && delta.sqrMagnitude > PlaybackOverlayClickThreshold * PlaybackOverlayClickThreshold)
+                {
+                    m_FreeformBlendGraphOverlayDragMoved = true;
+                }
+
+                m_FreeformBlendGraphOverlayPosition = new Vector2(
+                    m_FreeformBlendGraphOverlayDragStartPosition.x + delta.x,
+                    m_FreeformBlendGraphOverlayDragStartPosition.y - delta.y);
+                ClampFreeformBlendGraphOverlayPosition();
+                evt.StopPropagation();
+            });
+
+            void EndDrag(IPointerEvent evt, bool canToggle)
+            {
+                if (!m_IsDraggingFreeformBlendGraphOverlay)
+                {
+                    return;
+                }
+
+                bool shouldToggle = canToggle && !m_FreeformBlendGraphOverlayDragMoved;
+                m_IsDraggingFreeformBlendGraphOverlay = false;
+                m_FreeformBlendGraphOverlayDragMoved = false;
+                if (dragHandle.HasPointerCapture(evt.pointerId))
+                {
+                    dragHandle.ReleasePointer(evt.pointerId);
+                }
+
+                ClampFreeformBlendGraphOverlayPosition();
+                if (shouldToggle)
+                {
+                    toggleExpanded?.Invoke();
+                }
+            }
+
+            dragHandle.RegisterCallback<PointerUpEvent>(evt =>
+            {
+                EndDrag(evt, canToggle: true);
+                evt.StopPropagation();
+            });
+
+            dragHandle.RegisterCallback<PointerCancelEvent>(evt =>
+            {
+                EndDrag(evt, canToggle: false);
+                evt.StopPropagation();
+            });
+        }
+
+        private void SetBlendGraphOverlayExpanded(bool expanded)
+        {
+            float visibleContentHeight = GetResolvedElementHeight(m_FreeformBlendGraphOverlayContent);
+            if (visibleContentHeight > 0f)
+            {
+                m_FreeformBlendGraphLastExpandedContentHeight = visibleContentHeight;
+            }
+
+            float heightDelta = 0f;
+            if (expanded == m_FreeformBlendGraphOverlayExpanded)
+            {
+                if (m_FreeformBlendGraphOverlayHeader != null)
+                {
+                    m_FreeformBlendGraphOverlayHeader.style.marginBottom = expanded ? BlendGraphOverlayHeaderMarginBottomExpanded : 0f;
+                }
+            }
+            else if (expanded)
+            {
+                heightDelta = -(Mathf.Max(m_FreeformBlendGraphLastExpandedContentHeight, visibleContentHeight) + BlendGraphOverlayHeaderMarginBottomExpanded);
+            }
+            else
+            {
+                heightDelta = visibleContentHeight + BlendGraphOverlayHeaderMarginBottomExpanded;
+            }
+
+            m_FreeformBlendGraphOverlayExpanded = expanded;
+            if (m_FreeformBlendGraphOverlayHeader != null)
+            {
+                m_FreeformBlendGraphOverlayHeader.style.marginBottom = expanded ? BlendGraphOverlayHeaderMarginBottomExpanded : 0f;
+            }
+
+            if (m_FreeformBlendGraphOverlayContent != null)
+            {
+                m_FreeformBlendGraphOverlayContent.style.display = expanded ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+
+            if (!Mathf.Approximately(heightDelta, 0f))
+            {
+                m_FreeformBlendGraphOverlayPosition = new Vector2(
+                    m_FreeformBlendGraphOverlayPosition.x,
+                    m_FreeformBlendGraphOverlayPosition.y + heightDelta);
+            }
+
+            RefreshBlendGraphOverlayTitle();
+            ClampFreeformBlendGraphOverlayPosition();
+        }
+
+        private static float GetResolvedElementHeight(VisualElement element)
+        {
+            if (element == null)
+            {
+                return 0f;
+            }
+
+            float resolvedHeight = element.resolvedStyle.height;
+            if (!float.IsNaN(resolvedHeight) && resolvedHeight > 0f)
+            {
+                return resolvedHeight;
+            }
+
+            Rect layout = element.layout;
+            return layout.height > 0f ? layout.height : 0f;
+        }
+
+        private void SetBlendGraphOverlayTitle(string title)
+        {
+            m_FreeformBlendGraphTitleText = string.IsNullOrWhiteSpace(title) ? "Blend Graph" : title;
+            RefreshBlendGraphOverlayTitle();
+        }
+
+        private void RefreshBlendGraphOverlayTitle()
+        {
+            if (m_FreeformBlendGraphTitleLabel == null)
+            {
+                return;
+            }
+
+            m_FreeformBlendGraphTitleLabel.text = m_FreeformBlendGraphOverlayExpanded
+                ? $"▾ {m_FreeformBlendGraphTitleText}"
+                : $"▸ {m_FreeformBlendGraphTitleText}";
+        }
+
+        private void ClampFreeformBlendGraphOverlayPosition()
+        {
+            if (m_FreeformBlendGraphOverlay == null || m_FreeformBlendGraphOverlay.parent == null)
+            {
+                return;
+            }
+
+            Rect parentBounds = m_FreeformBlendGraphOverlay.parent.contentRect;
+            float cardWidth = Mathf.Max(FreeformBlendGraphOverlayWidth, m_FreeformBlendGraphOverlay.resolvedStyle.width);
+            float cardHeight = Mathf.Max(0f, m_FreeformBlendGraphOverlay.resolvedStyle.height);
+            float maxX = Mathf.Max(0f, parentBounds.width - cardWidth);
+            float maxBottom = Mathf.Max(0f, parentBounds.height - cardHeight);
+            m_FreeformBlendGraphOverlayPosition = new Vector2(
+                Mathf.Clamp(m_FreeformBlendGraphOverlayPosition.x, 0f, maxX),
+                Mathf.Clamp(m_FreeformBlendGraphOverlayPosition.y, 0f, maxBottom));
+
+            m_FreeformBlendGraphOverlay.style.left = m_FreeformBlendGraphOverlayPosition.x;
+            m_FreeformBlendGraphOverlay.style.bottom = m_FreeformBlendGraphOverlayPosition.y;
+        }
+
         private static VisualElement CreateCard(string titleText, VisualElement titleAction = null)
         {
+            bool hasVisibleTitle = !string.IsNullOrWhiteSpace(titleText);
             VisualElement card = new VisualElement();
             card.style.marginBottom = 2;
             card.style.paddingLeft = 3;
@@ -1142,13 +1616,40 @@ namespace XFramework.Editor
             label.style.unityFontStyleAndWeight = FontStyle.Bold;
             label.style.fontSize = SectionTitleFontSize;
             label.style.color = TextNormal;
-            label.style.flexGrow = 1;
-            titleRow.Add(label);
+            label.style.flexShrink = 0;
 
             if (titleAction != null)
             {
-                titleAction.style.flexShrink = 0;
-                titleRow.Add(titleAction);
+                if (hasVisibleTitle)
+                {
+                    label.style.flexGrow = 1;
+                    label.style.minWidth = 0;
+                    titleRow.Add(label);
+
+                    titleAction.style.flexShrink = 0;
+                    titleAction.style.marginLeft = 8;
+                    titleRow.Add(titleAction);
+                }
+                else
+                {
+                    VisualElement titleContent = new VisualElement();
+                    titleContent.style.flexDirection = FlexDirection.Row;
+                    titleContent.style.alignItems = Align.Center;
+                    titleContent.style.flexGrow = 1;
+                    titleContent.style.minWidth = 0;
+                    label.style.flexGrow = 1;
+                    titleContent.Add(label);
+
+                    titleAction.style.flexShrink = 0;
+                    titleAction.style.marginLeft = 4;
+                    titleContent.Add(titleAction);
+                    titleRow.Add(titleContent);
+                }
+            }
+            else
+            {
+                label.style.flexGrow = 1;
+                titleRow.Add(label);
             }
 
             card.Add(titleRow);
@@ -1738,7 +2239,9 @@ namespace XFramework.Editor
                 content.style.display = value ? DisplayStyle.Flex : DisplayStyle.None;
                 if (label != null)
                 {
-                    label.text = value ? $"▾ {titleText}" : $"▸ {titleText}";
+                    label.text = string.IsNullOrWhiteSpace(titleText)
+                        ? (value ? "▾" : "▸")
+                        : (value ? $"▾ {titleText}" : $"▸ {titleText}");
                 }
 
                 titleRow.style.marginBottom = value ? 2 : 0;
@@ -1755,11 +2258,20 @@ namespace XFramework.Editor
                     return;
                 }
 
-                if (titleAction != null &&
-                    evt.target is VisualElement target &&
-                    (ReferenceEquals(target, titleAction) || titleAction.Contains(target)))
+                if (evt.target is VisualElement target)
                 {
-                    return;
+                    if (titleAction != null && (ReferenceEquals(target, titleAction) || titleAction.Contains(target)))
+                    {
+                        return;
+                    }
+
+                    for (VisualElement current = target; current != null && current != titleRow; current = current.hierarchy.parent)
+                    {
+                        if (current.ClassListContains("xanim-playback-overlay-drag-handle"))
+                        {
+                            return;
+                        }
+                    }
                 }
 
                 ApplyExpanded(!expanded);
@@ -2868,11 +3380,11 @@ namespace XFramework.Editor
             m_StateRowMap.Clear();
             m_StateVisualStateMap.Clear();
             m_BlendSampleRowMap.Clear();
-            m_FreeformBlendGraphMap.Clear();
             m_StateButtonMap.Clear();
             m_StateChannelMap.Clear();
             if (m_Session == null || !m_Session.IsLoaded)
             {
+                RefreshGlobalBlendGraph();
                 return;
             }
 
@@ -2918,6 +3430,7 @@ namespace XFramework.Editor
             RebuildAutoTransitionEditor();
             RebuildDefaultTransitionsEditor();
             RefreshSearchIndex();
+            RefreshGlobalBlendGraph();
         }
 
         private void RebuildParameterList()
@@ -3517,6 +4030,8 @@ namespace XFramework.Editor
                 return;
             }
 
+            MarkFreeformStateInteracted(state.Key);
+
             XAnimationChannelState channelState = m_Session.GetChannelState(state.Config.channelName);
             bool isPlaying = channelState != null && string.Equals(channelState.stateKey, state.Key, StringComparison.Ordinal);
             if (isPlaying)
@@ -3552,6 +4067,8 @@ namespace XFramework.Editor
                 return;
             }
 
+            MarkFreeformStateInteracted(stateKey);
+
             XAnimationCompiledState state = m_Session.CompiledAsset.GetState(stateKey);
             if (state is not XAnimationCompiledBlend1DState blendState)
             {
@@ -3573,6 +4090,8 @@ namespace XFramework.Editor
             {
                 return;
             }
+
+            MarkFreeformStateInteracted(stateKey);
 
             XAnimationCompiledState state = m_Session.CompiledAsset.GetState(stateKey);
             if (!TryGetDirectionalBlendSamples(state, out _))
@@ -3601,6 +4120,8 @@ namespace XFramework.Editor
             {
                 return;
             }
+
+            MarkFreeformStateInteracted(state.Key);
 
             m_IsPaused = false;
             m_Session.SetPaused(false);
@@ -4994,6 +5515,7 @@ namespace XFramework.Editor
             try
             {
                 m_Session.SetStateDirectionalBlendParameters(stateKey, parameterXName, parameterYName);
+                MarkFreeformStateInteracted(stateKey);
                 RebuildStateList();
                 RefreshStatePlayingStates();
                 RefreshChannelStates();
@@ -5134,6 +5656,7 @@ namespace XFramework.Editor
             try
             {
                 m_Session.SetDirectionalBlendSampleClipKey(stateKey, sampleIndex, clipKey);
+                MarkFreeformStateInteracted(stateKey);
                 RebuildStateList();
                 RefreshStatePlayingStates();
                 RefreshChannelStates();
@@ -5165,6 +5688,7 @@ namespace XFramework.Editor
                 float newX = isX ? positionX : sample.positionX;
                 float newY = isX ? sample.positionY : positionY;
                 m_Session.SetDirectionalBlendSamplePosition(stateKey, sampleIndex, newX, newY);
+                MarkFreeformStateInteracted(stateKey);
                 RebuildStateList();
                 RefreshStatePlayingStates();
                 RefreshChannelStates();
@@ -6857,26 +7381,6 @@ namespace XFramework.Editor
             header.Add(addButton);
             box.Add(header);
 
-            if (config.stateType == XAnimationStateType.Blend2DFreeformDirectional)
-            {
-                XAnimationDirectionalBlendGraphElement graph = CreateFreeformDirectionalBlendGraph(stateKey, config);
-                if (graph != null)
-                {
-                    box.Add(graph);
-                    m_FreeformBlendGraphMap[stateKey] = graph;
-
-                    if (string.IsNullOrWhiteSpace(config.parameterXName) || string.IsNullOrWhiteSpace(config.parameterYName))
-                    {
-                        Label hintLabel = new("Graph is read-only because parameterX / parameterY is missing.");
-                        hintLabel.style.color = TextMuted;
-                        hintLabel.style.fontSize = BodyFontSize;
-                        hintLabel.style.marginLeft = 4;
-                        hintLabel.style.marginBottom = 4;
-                        box.Add(hintLabel);
-                    }
-                }
-            }
-
             XAnimationBlend2DSimpleDirectionalSampleConfig[] samples =
                 config.directionalSamples ?? Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
             for (int i = 0; i < samples.Length; i++)
@@ -6895,20 +7399,6 @@ namespace XFramework.Editor
 
             return box;
         }
-
-        private XAnimationDirectionalBlendGraphElement CreateFreeformDirectionalBlendGraph(string stateKey, XAnimationStateConfig config)
-        {
-            if (config?.directionalSamples == null || config.directionalSamples.Length == 0)
-            {
-                return null;
-            }
-
-            XAnimationDirectionalBlendGraphElement graph = new();
-            graph.tooltip = "蓝点是 sample，红点是当前 2D 参数值，圆圈大小表示实时 weight。拖动红点可预览 freeform directional blend。";
-            UpdateFreeformDirectionalBlendGraph(stateKey, graph);
-            return graph;
-        }
-
         private void RegisterBatchEditStateClipsContextMenu(VisualElement target, string stateKey)
         {
             if (target == null || string.IsNullOrWhiteSpace(stateKey))
@@ -7130,7 +7620,14 @@ namespace XFramework.Editor
                 }
 
                 float stateMin = blendState.Samples[0].Threshold;
-                float stateMax = blendState.Samples[blendState.Samples.Count - 1].Threshold;
+                float stateMax = blendState.Samples[0].Threshold;
+                for (int sampleIndex = 1; sampleIndex < blendState.Samples.Count; sampleIndex++)
+                {
+                    float threshold = blendState.Samples[sampleIndex].Threshold;
+                    stateMin = Mathf.Min(stateMin, threshold);
+                    stateMax = Mathf.Max(stateMax, threshold);
+                }
+
                 if (!found)
                 {
                     min = stateMin;
@@ -8834,7 +9331,7 @@ namespace XFramework.Editor
 
         private void RefreshBlendSampleRuntimeState()
         {
-            if (m_BlendSampleRowMap.Count == 0 && m_FreeformBlendGraphMap.Count == 0)
+            if (m_BlendSampleRowMap.Count == 0 && m_FreeformBlendGraphElement == null)
             {
                 return;
             }
@@ -8904,7 +9401,7 @@ namespace XFramework.Editor
                 ApplyRowProgressVisualState(visualState);
             }
 
-            RefreshFreeformBlendGraphs(sampleWeightsByState);
+            RefreshGlobalBlendGraph(sampleWeightsByState);
         }
 
         private bool TryFindBlendSampleRowKey(string stateKey, string clipKey, float positionX, float positionY, out string rowKey, out int sampleIndex)
@@ -8921,7 +9418,9 @@ namespace XFramework.Editor
             {
                 for (int i = 0; i < blendState.Samples.Count; i++)
                 {
-                    if (!string.Equals(blendState.Samples[i].Config.clipKey, clipKey, StringComparison.Ordinal))
+                    XAnimationBlend1DSampleConfig sample = blendState.Samples[i].Config;
+                    if (!string.Equals(sample.clipKey, clipKey, StringComparison.Ordinal) ||
+                        !Mathf.Approximately(sample.threshold, positionX))
                     {
                         continue;
                     }
@@ -8957,42 +9456,148 @@ namespace XFramework.Editor
             return false;
         }
 
-        private void RefreshFreeformBlendGraphs(Dictionary<string, Dictionary<int, float>> sampleWeightsByState)
+        private void RefreshGlobalBlendGraph(Dictionary<string, Dictionary<int, float>> sampleWeightsByState = null)
         {
-            if (m_FreeformBlendGraphMap.Count == 0)
+            if ((m_FreeformBlendGraphElement == null && m_Blend1DGraphElement == null) || m_FreeformBlendGraphOverlay == null)
             {
                 return;
             }
 
-            foreach (KeyValuePair<string, XAnimationDirectionalBlendGraphElement> kvp in m_FreeformBlendGraphMap)
+            if (!TryResolveBlendGraphStateKey(out string stateKey))
             {
-                UpdateFreeformDirectionalBlendGraph(
-                    kvp.Key,
-                    kvp.Value,
-                    sampleWeightsByState != null && sampleWeightsByState.TryGetValue(kvp.Key, out Dictionary<int, float> stateWeights)
-                        ? stateWeights
-                        : null);
+                m_CurrentFreeformGraphStateKey = null;
+                SetBlendGraphOverlayTitle("Blend Graph");
+                m_FreeformBlendGraphOverlay.style.display = DisplayStyle.None;
+                if (m_FreeformBlendGraphHintLabel != null)
+                {
+                    m_FreeformBlendGraphHintLabel.style.display = DisplayStyle.None;
+                }
+
+                return;
             }
+
+            m_CurrentFreeformGraphStateKey = stateKey;
+            m_FreeformBlendGraphOverlay.style.display = DisplayStyle.Flex;
+            Dictionary<int, float> stateSampleWeights = sampleWeightsByState != null && sampleWeightsByState.TryGetValue(stateKey, out Dictionary<int, float> stateWeights)
+                ? stateWeights
+                : null;
+            XAnimationCompiledState compiledState = m_Session.CompiledAsset.GetState(stateKey);
+            if (compiledState is XAnimationCompiledBlend1DState blend1DState)
+            {
+                UpdateBlend1DGraph(stateKey, blend1DState, stateSampleWeights);
+                return;
+            }
+
+            if (compiledState is XAnimationCompiledBlend2DSimpleDirectionalState simpleDirectionalState)
+            {
+                UpdateDirectionalBlendGraph(
+                    stateKey,
+                    m_FreeformBlendGraphElement,
+                    simpleDirectionalState,
+                    "Simple 2D Directional Blend",
+                    stateSampleWeights);
+                return;
+            }
+
+            if (compiledState is XAnimationCompiledBlend2DFreeformDirectionalState freeformState)
+            {
+                UpdateDirectionalBlendGraph(
+                    stateKey,
+                    m_FreeformBlendGraphElement,
+                    freeformState,
+                    "Freeform 2D Blend",
+                    stateSampleWeights);
+                return;
+            }
+
+            m_FreeformBlendGraphOverlay.style.display = DisplayStyle.None;
         }
 
-        private void UpdateFreeformDirectionalBlendGraph(
+        private void UpdateBlend1DGraph(
             string stateKey,
-            XAnimationDirectionalBlendGraphElement graph,
+            XAnimationCompiledBlend1DState blend1DState,
             Dictionary<int, float> sampleWeights = null)
         {
-            if (graph == null || m_Session == null || !m_Session.IsLoaded || string.IsNullOrWhiteSpace(stateKey))
+            if (m_Blend1DGraphElement == null || m_Session == null || !m_Session.IsLoaded || blend1DState == null)
             {
                 return;
             }
 
-            XAnimationCompiledState compiledState = m_Session.CompiledAsset.GetState(stateKey);
-            if (compiledState is not XAnimationCompiledBlend2DFreeformDirectionalState freeformState)
+            SetBlendGraphOverlayTitle("Blend1D");
+            m_Blend1DGraphElement.style.display = DisplayStyle.Flex;
+            if (m_FreeformBlendGraphElement != null)
+            {
+                m_FreeformBlendGraphElement.style.display = DisplayStyle.None;
+            }
+
+            XAnimationStateConfig config = blend1DState.Config;
+            List<XAnimationBlend1DGraphElement.SampleViewData> sampleViews = new(blend1DState.Samples.Count);
+            for (int i = 0; i < blend1DState.Samples.Count; i++)
+            {
+                XAnimationBlend1DSampleConfig sample = blend1DState.Samples[i].Config;
+                float weight = sampleWeights != null && sampleWeights.TryGetValue(i, out float sampleWeight) ? sampleWeight : 0f;
+                sampleViews.Add(new XAnimationBlend1DGraphElement.SampleViewData(sample.clipKey, sample.threshold, weight));
+            }
+            sampleViews.Sort((left, right) => left.Threshold.CompareTo(right.Threshold));
+
+            bool hasParameter = !string.IsNullOrWhiteSpace(config.parameterName);
+            float currentValue = GetBlend1DPreviewValue(config.parameterName);
+            float minValue = 0f;
+            float maxValue = 1f;
+            if (hasParameter && TryGetBlend1DPreviewRange(config.parameterName, out float parameterMin, out float parameterMax))
+            {
+                minValue = parameterMin;
+                maxValue = parameterMax;
+            }
+            else if (blend1DState.Samples.Count > 0)
+            {
+                minValue = blend1DState.Samples[0].Threshold;
+                maxValue = blend1DState.Samples[blend1DState.Samples.Count - 1].Threshold;
+            }
+
+            if (m_FreeformBlendGraphHintLabel != null)
+            {
+                m_FreeformBlendGraphHintLabel.text = hasParameter
+                    ? stateKey
+                    : $"State: {stateKey}\nRead-only because parameter is missing.";
+                m_FreeformBlendGraphHintLabel.style.display = DisplayStyle.Flex;
+            }
+
+            m_Blend1DGraphElement.SetData(new XAnimationBlend1DGraphElement.GraphData(
+                sampleViews,
+                currentValue,
+                minValue,
+                maxValue,
+                hasParameter,
+                hasParameter ? () => BeginBlend1DDragPreview(stateKey) : null,
+                hasParameter ? value => UpdateBlend1DPreviewValue(stateKey, config, value) : null));
+        }
+
+        private void UpdateDirectionalBlendGraph(
+            string stateKey,
+            XAnimationDirectionalBlendGraphElement graph,
+            XAnimationCompiledState directionalState,
+            string title,
+            Dictionary<int, float> sampleWeights = null)
+        {
+            if (graph == null ||
+                m_Session == null ||
+                !m_Session.IsLoaded ||
+                directionalState == null ||
+                string.IsNullOrWhiteSpace(stateKey) ||
+                !TryGetDirectionalBlendSamples(directionalState, out IReadOnlyList<XAnimationCompiledBlend2DSimpleDirectionalSample> samples))
             {
                 return;
             }
 
-            XAnimationStateConfig config = freeformState.Config;
-            IReadOnlyList<XAnimationCompiledBlend2DSimpleDirectionalSample> samples = freeformState.Samples;
+            SetBlendGraphOverlayTitle(title);
+            graph.style.display = DisplayStyle.Flex;
+            if (m_Blend1DGraphElement != null)
+            {
+                m_Blend1DGraphElement.style.display = DisplayStyle.None;
+            }
+
+            XAnimationStateConfig config = directionalState.Config;
             List<XAnimationDirectionalBlendGraphElement.SampleViewData> sampleViews = new(samples.Count);
             for (int i = 0; i < samples.Count; i++)
             {
@@ -9009,12 +9614,96 @@ namespace XFramework.Editor
                 !string.IsNullOrWhiteSpace(config.parameterXName) &&
                 !string.IsNullOrWhiteSpace(config.parameterYName);
             Vector2 currentPosition = GetFreeformDirectionalPreviewPosition(config);
+            if (m_FreeformBlendGraphHintLabel != null)
+            {
+                m_FreeformBlendGraphHintLabel.text = hasParameters
+                    ? stateKey
+                    : $"State: {stateKey}\nRead-only because parameterX / parameterY is missing.";
+                m_FreeformBlendGraphHintLabel.style.display = DisplayStyle.Flex;
+            }
+
             graph.SetData(new XAnimationDirectionalBlendGraphElement.GraphData(
                 sampleViews,
                 currentPosition,
                 hasParameters,
                 hasParameters ? () => BeginFreeformDirectionalDragPreview(stateKey) : null,
                 hasParameters ? position => UpdateFreeformDirectionalPreviewPosition(stateKey, config, position) : null));
+        }
+
+        private bool TryResolveBlendGraphStateKey(out string stateKey)
+        {
+            stateKey = null;
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                return false;
+            }
+
+            IReadOnlyList<XAnimationCompiledChannel> channels = m_Session.CompiledAsset.Channels;
+            for (int i = 0; i < channels.Count; i++)
+            {
+                XAnimationChannelState channelState = m_Session.GetChannelState(channels[i].Name);
+                if (channelState == null || string.IsNullOrWhiteSpace(channelState.stateKey))
+                {
+                    continue;
+                }
+
+                if (!IsBlendGraphCompatibleState(channelState.stateKey))
+                {
+                    continue;
+                }
+
+                stateKey = channelState.stateKey;
+                return true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(m_LastInteractedFreeformStateKey) &&
+                IsBlendGraphCompatibleState(m_LastInteractedFreeformStateKey))
+            {
+                stateKey = m_LastInteractedFreeformStateKey;
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool IsBlendGraphCompatibleState(string stateKey)
+        {
+            if (m_Session == null || !m_Session.IsLoaded || string.IsNullOrWhiteSpace(stateKey))
+            {
+                return false;
+            }
+
+            XAnimationCompiledState compiledState = m_Session.CompiledAsset.GetState(stateKey);
+            return compiledState switch
+            {
+                XAnimationCompiledBlend1DState blend1DState => blend1DState.Samples.Count > 0,
+                XAnimationCompiledBlend2DSimpleDirectionalState simpleDirectionalState => simpleDirectionalState.Samples.Count > 0,
+                XAnimationCompiledBlend2DFreeformDirectionalState freeformState => freeformState.Samples.Count > 0,
+                _ => false,
+            };
+        }
+
+        private bool TryGetFreeformDirectionalState(string stateKey, out XAnimationCompiledBlend2DFreeformDirectionalState state)
+        {
+            state = null;
+            if (m_Session == null || !m_Session.IsLoaded || string.IsNullOrWhiteSpace(stateKey))
+            {
+                return false;
+            }
+
+            XAnimationCompiledState compiledState = m_Session.CompiledAsset.GetState(stateKey);
+            state = compiledState as XAnimationCompiledBlend2DFreeformDirectionalState;
+            return state != null && state.Samples.Count > 0;
+        }
+
+        private void MarkFreeformStateInteracted(string stateKey)
+        {
+            if (string.IsNullOrWhiteSpace(stateKey) || !IsBlendGraphCompatibleState(stateKey))
+            {
+                return;
+            }
+
+            m_LastInteractedFreeformStateKey = stateKey;
         }
 
         private Vector2 GetFreeformDirectionalPreviewPosition(XAnimationStateConfig config)
@@ -9050,6 +9739,29 @@ namespace XFramework.Editor
                 return;
             }
 
+            MarkFreeformStateInteracted(stateKey);
+
+            XAnimationCompiledState state = m_Session.CompiledAsset.GetState(stateKey);
+            if (state == null || IsStateCurrentlyPlaying(stateKey, state.Config.channelName))
+            {
+                return;
+            }
+
+            m_Session.PlayState(stateKey, BuildPreviewTransitionOptions());
+            RefreshStatePlayingStates();
+            RefreshChannelStates();
+            RenderPreview();
+            Repaint();
+        }
+
+        private void BeginBlend1DDragPreview(string stateKey)
+        {
+            if (m_Session == null || !m_Session.IsLoaded || string.IsNullOrWhiteSpace(stateKey))
+            {
+                return;
+            }
+
+            MarkFreeformStateInteracted(stateKey);
             XAnimationCompiledState state = m_Session.CompiledAsset.GetState(stateKey);
             if (state == null || IsStateCurrentlyPlaying(stateKey, state.Config.channelName))
             {
@@ -9070,6 +9782,8 @@ namespace XFramework.Editor
                 return;
             }
 
+            MarkFreeformStateInteracted(stateKey);
+
             if (!string.IsNullOrWhiteSpace(config.parameterXName))
             {
                 SetPreviewFloatParameterWithoutRefresh(config.parameterXName, position.x);
@@ -9080,15 +9794,70 @@ namespace XFramework.Editor
                 SetPreviewFloatParameterWithoutRefresh(config.parameterYName, position.y);
             }
 
-            if (m_FreeformBlendGraphMap.TryGetValue(stateKey, out XAnimationDirectionalBlendGraphElement graph))
+            RebuildParameterList();
+            if (string.Equals(m_CurrentFreeformGraphStateKey, stateKey, StringComparison.Ordinal))
             {
-                UpdateFreeformDirectionalBlendGraph(stateKey, graph);
+                XAnimationCompiledState currentState = m_Session.CompiledAsset.GetState(stateKey);
+                if (currentState is XAnimationCompiledBlend2DSimpleDirectionalState simpleDirectionalState)
+                {
+                    UpdateDirectionalBlendGraph(
+                        stateKey,
+                        m_FreeformBlendGraphElement,
+                        simpleDirectionalState,
+                        "Simple 2D Directional Blend");
+                }
+                else if (currentState is XAnimationCompiledBlend2DFreeformDirectionalState freeformState)
+                {
+                    UpdateDirectionalBlendGraph(
+                        stateKey,
+                        m_FreeformBlendGraphElement,
+                        freeformState,
+                        "Freeform 2D Blend");
+                }
             }
 
             RefreshStatePlayingStates();
             RefreshChannelStates();
             RenderPreview();
             Repaint();
+        }
+
+        private float GetBlend1DPreviewValue(string parameterName)
+        {
+            if (string.IsNullOrWhiteSpace(parameterName) || m_Session == null || !m_Session.IsLoaded)
+            {
+                return 0f;
+            }
+
+            if (m_Session.TryGetPreviewParameter(parameterName, out float value))
+            {
+                return value;
+            }
+
+            RebuildParameterList();
+            return m_Session.TryGetPreviewParameter(parameterName, out value) ? value : 0f;
+        }
+
+        private void UpdateBlend1DPreviewValue(string stateKey, XAnimationStateConfig config, float value)
+        {
+            if (m_Session == null || !m_Session.IsLoaded || config == null)
+            {
+                return;
+            }
+
+            MarkFreeformStateInteracted(stateKey);
+            if (!string.IsNullOrWhiteSpace(config.parameterName))
+            {
+                SetPreviewFloatParameter(config.parameterName, value);
+            }
+
+            if (string.Equals(m_CurrentFreeformGraphStateKey, stateKey, StringComparison.Ordinal) &&
+                m_Session.CompiledAsset.GetState(stateKey) is XAnimationCompiledBlend1DState blend1DState)
+            {
+                UpdateBlend1DGraph(stateKey, blend1DState);
+            }
+
+            RebuildParameterList();
         }
 
         private bool IsStateCurrentlyPlaying(string stateKey, string channelName)
@@ -9402,6 +10171,37 @@ namespace XFramework.Editor
             toggle.style.flexShrink = 0;
             toggle.style.marginLeft = 0;
             return CreatePlaybackFieldContainer(labelText, toggle, labelWidth);
+        }
+
+        private static VisualElement CreatePlaybackFieldPairRow(
+            string leftLabel,
+            VisualElement leftField,
+            string rightLabel,
+            VisualElement rightField,
+            float labelWidth,
+            float valueWidth)
+        {
+            VisualElement row = new();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginTop = 2;
+            row.style.marginBottom = 2;
+            row.style.minWidth = 0;
+
+            ConfigureCompactPlaybackElement(leftField, valueWidth);
+            VisualElement leftContainer = CreatePlaybackFieldContainer(leftLabel, leftField, labelWidth);
+            leftContainer.style.marginTop = 0;
+            leftContainer.style.marginBottom = 0;
+            row.Add(leftContainer);
+
+            ConfigureCompactPlaybackElement(rightField, valueWidth);
+            VisualElement rightContainer = CreatePlaybackFieldContainer(rightLabel, rightField, labelWidth);
+            rightContainer.style.marginTop = 0;
+            rightContainer.style.marginBottom = 0;
+            rightContainer.style.marginLeft = 10;
+            row.Add(rightContainer);
+
+            return row;
         }
 
         private VisualElement CreateChannelConfigEditor(XAnimationCompiledChannel channel)

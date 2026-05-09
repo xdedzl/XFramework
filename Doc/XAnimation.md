@@ -1,6 +1,6 @@
 # XFramework XAnimation 播放系统
 
-> `XAnimation` 是基于 Unity Playables 的轻量动画播放系统，核心代码位于 `Runtime/Tools/Animation/`，统一命名空间为 `XFramework.Animation`。它用 `.xasset` 文本配置描述动画通道、状态、动画片段、事件点和换装覆盖关系，运行时由 `XAnimationDriver` 手动驱动播放。
+> `XAnimation` 是基于 Unity Playables 的轻量动画播放系统，核心代码位于 `Runtime/Tools/Animation/`，统一命名空间为 `XFramework.Animation`。它用 `.xasset` 文本配置描述动画通道、状态、动画片段、事件点和换装覆盖关系，运行时由 `XAnimationDriver` 手动驱动播放。系统的基础目标是保留 Unity `Animator` 作为骨骼输出与原生 Root Motion 容器，只替换 `Animator Controller` 的运行时动画层。
 
 ---
 
@@ -10,6 +10,7 @@
 - README 入口：[`README.md`](../README.md)
 - 适合希望通过代码显式控制动画状态、混合层和事件点，而不是为简单角色维护复杂 Animator Controller 的场景。
 - `XAnimation` 的设计初衷就是不引入 Animator Controller 风格的状态机；业务状态切换由代码显式维护，资源层只提供播放描述和轻量自动流转能力。
+- `XAnimation` 当前定位是“替换 `Animator Controller` 的运行时动画层”，而不是“移除 `Animator` 组件本身”。`Animator` 仍负责 Playables 输出落地、骨骼求值以及原生 Root Motion 回调链路。
 
 ### 1.1 适用场景
 
@@ -451,8 +452,10 @@ MonoBehaviour(Update)
 
 为了避免把系统理解成 Animator Controller 的替代状态机，建议把 `XAnimation` 的边界记成下面这样：
 
+- 它的基础目标是“保留 `Animator`，替换 `Animator Controller` 的运行时动画层”，而不是自己重做一套脱离 `Animator` 的骨骼动画引擎。
 - 它负责“播放什么、怎么混、什么时候触发 Cue、什么时候自动回落”。
 - 它不负责“复杂状态决策图、条件分支图、Any State、子状态机”。
+- 它当前也不以“替换 `Animator` 组件本身”为目标；骨骼输出、`AnimationPlayableOutput` 落地以及原生 Root Motion 仍依赖 Unity `Animator`。
 - 复杂业务状态判断应该留在业务代码里，再由业务代码调用 `PlayState` 或写入参数驱动 `Blend1D` / 2D Directional Blend。
 - 如果一个动作只需要“播完自动回 idle / locomotion”或“固定衔接到下一个阶段”，优先用 `autoTransitions`，不要把业务状态判断塞进资源层。
 
