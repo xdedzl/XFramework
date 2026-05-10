@@ -281,7 +281,9 @@ namespace XFramework.Editor
             }
 
             m_ReferenceContainer = BuildReferencePanel();
-            m_ReferenceContainer.style.marginLeft = 14f;
+            m_ReferenceContainer.style.marginTop = 2f;
+            m_ReferenceContainer.style.flexBasis = Length.Percent(100f);
+            m_ReferenceContainer.style.minWidth = 0f;
             toolbar.Add(m_ReferenceContainer);
 
             return toolbar;
@@ -292,13 +294,11 @@ namespace XFramework.Editor
             VisualElement panel = new();
             panel.style.flexDirection = FlexDirection.Row;
             panel.style.alignItems = Align.Center;
+            panel.style.flexWrap = Wrap.Wrap;
             panel.style.flexGrow = 1f;
-            panel.style.minWidth = 340f;
+            panel.style.minWidth = 0f;
 
             panel.Add(CreateReferenceField("XAsset", m_SourceAsset, typeof(TextAsset), hasTrailingSpacing: true));
-
-            MonoScript tableScript = ResolveScriptAsset(m_Model?.TableType);
-            panel.Add(CreateReferenceField("表类型", tableScript, typeof(MonoScript), hasTrailingSpacing: true));
 
             MonoScript dataScript = ResolveScriptAsset(m_Model?.DataType, m_Model?.TableType);
             panel.Add(CreateReferenceField("数据类型", dataScript, typeof(MonoScript), hasTrailingSpacing: false));
@@ -312,18 +312,20 @@ namespace XFramework.Editor
             container.style.flexDirection = FlexDirection.Row;
             container.style.alignItems = Align.Center;
             container.style.flexGrow = 1f;
-            container.style.minWidth = 0f;
-            container.style.marginRight = hasTrailingSpacing ? 16f : 0f;
+            container.style.flexShrink = 1f;
+            container.style.flexBasis = 180f;
+            container.style.minWidth = 140f;
+            container.style.marginRight = hasTrailingSpacing ? 6f : 0f;
+            container.style.marginBottom = 0f;
 
             Label titleLabel = new(label);
-            titleLabel.style.width = 48f;
-            titleLabel.style.minWidth = 48f;
-            titleLabel.style.marginRight = 4f;
+            titleLabel.style.marginRight = 2f;
             titleLabel.style.flexShrink = 0f;
             container.Add(titleLabel);
 
             ObjectField field = CreatePingObjectField(string.Empty, targetObject, objectType);
             field.style.flexGrow = 1f;
+            field.style.flexShrink = 1f;
             field.style.marginRight = 0f;
             field.style.minWidth = 0f;
             field.labelElement.style.display = DisplayStyle.None;
