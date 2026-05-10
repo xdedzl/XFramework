@@ -53,7 +53,7 @@ namespace XFramework.UI
         /// <param name="member"></param>
         /// <param name="parentElement"></param>
         /// <returns></returns>
-        private InspectorElement CreateItemForMember(MemberInfo member, int depth)
+        private XInspectorElement CreateItemForMember(MemberInfo member, int depth)
         {
             if (Attribute.IsDefined(member, typeof(ElementIgnoreAttribute)))
             {
@@ -61,19 +61,22 @@ namespace XFramework.UI
             }
 
             CustomerElementAttribute attribute = member.GetCustomAttribute<CustomerElementAttribute>();
-
             if (attribute != null && attribute.type != null)
             {
                 if (attribute is ArrayCustomerElementAttribute)
-                    return Inspector.CreateCustomerArrayElement(attribute, depth);
+                    return XInspector.CreateCustomerArrayElement(attribute, depth);
                 else
-                    return Inspector.CreateDrawerForType(attribute.type, depth, attribute.args);
+                    return XInspector.CreateDrawerForType(attribute.type, depth, attribute.args);
             }
-            else
+
+            Type propertyDrawerType = XInspector.GetDrawerForPropertyAttribute(member);
+            if (propertyDrawerType != null)
             {
-                Type variableType = member is FieldInfo ? ((FieldInfo)member).FieldType : ((PropertyInfo)member).PropertyType;
-                return Inspector.CreateDrawerForMemberType(variableType, depth);
+                return XInspector.CreateDrawerForType(propertyDrawerType, depth);
             }
+
+            Type variableType = member is FieldInfo ? ((FieldInfo)member).FieldType : ((PropertyInfo)member).PropertyType;
+            return XInspector.CreateDrawerForMemberType(variableType, depth);
         }
 
         /// <summary>

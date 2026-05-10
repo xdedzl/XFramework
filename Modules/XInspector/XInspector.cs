@@ -8,7 +8,7 @@ using System.Linq;
 
 namespace XFramework.UI
 {
-    public class Inspector : VisualElement
+    public class XInspector : VisualElement
     {
         public const int TabSize = 16;
 
@@ -16,6 +16,7 @@ namespace XFramework.UI
         /// 默认UI
         /// </summary>
         private readonly Dictionary<Type, Type> m_DefaultTypeToDrawer = new ();
+        private readonly Dictionary<Type, Type> m_PropertyAttributeToDrawer = new();
         private readonly Dictionary<ISupport, Type> m_OtherDrawer = new ();
 
         private object m_TargetObj;
@@ -31,7 +32,7 @@ namespace XFramework.UI
             }
         }
 
-        public Inspector(bool useDefaultStyle = true)
+        public XInspector(bool useDefaultStyle = true)
         {
             if (useDefaultStyle)
             {
@@ -48,7 +49,7 @@ namespace XFramework.UI
             }
             
             AddToClassList("inspector");
-            Type[] types = GetSonTypes(typeof(InspectorElement));
+            Type[] types = GetSonTypes(typeof(XInspectorElement));
             foreach (var type in types)
             {
                 var supportType = type.GetCustomAttribute<DefaultSportTypesAttribute>();
@@ -59,7 +60,14 @@ namespace XFramework.UI
                         m_DefaultTypeToDrawer.Add(item, type);
                     }
                 }
-                else
+
+                Type propertyAttributeType = GetPropertyAttributeType(type);
+                if (propertyAttributeType != null)
+                {
+                    m_PropertyAttributeToDrawer[propertyAttributeType] = type;
+                }
+
+                if (supportType == null)
                 {
                     var supportHelper = type.GetCustomAttribute<SupportHelperAttribute>();
                     if(supportHelper != null)
@@ -122,7 +130,7 @@ namespace XFramework.UI
         /// <summary>
         /// 通过成员变量类型获取UIItem
         /// </summary>
-        public InspectorElement CreateDrawerForMemberType(Type memberType, int depth)
+        public XInspectorElement CreateDrawerForMemberType(Type memberType, int depth)
         {
             if (m_DefaultTypeToDrawer.TryGetValue(memberType, out Type elementType))
             {
@@ -148,10 +156,10 @@ namespace XFramework.UI
         /// <param name="elementType"></param>
         /// <param name="drawerParent"></param>
         /// <returns></returns>
-        public InspectorElement CreateDrawerForType(Type elementType, int depth, params object[] args)
+        public XInspectorElement CreateDrawerForType(Type elementType, int depth, params object[] args)
         {
-            InspectorElement element = Activator.CreateInstance(elementType, args) as InspectorElement;
-            element.Inspector = this;
+            XInspectorElement element = Activator.CreateInstance(elementType, args) as XInspectorElement;
+            element.XInspector = this;
             element.Depth = depth;
             return element;
         }
@@ -162,12 +170,39 @@ namespace XFramework.UI
         /// <param name="customerAttribute"></param>
         /// <param name="depth"></param>
         /// <returns></returns>
-        public InspectorElement CreateCustomerArrayElement(CustomerElementAttribute customerAttribute, int depth)
+        public XInspectorElement CreateCustomerArrayElement(CustomerElementAttribute customerAttribute, int depth)
         {
-            InspectorElement element = Activator.CreateInstance(typeof(ArrayElement), customerAttribute) as InspectorElement;
-            element.Inspector = this;
+            XInspectorElement element = Activator.CreateInstance(typeof(ArrayElement), customerAttribute) as XInspectorElement;
+            element.XInspector = this;
             element.Depth = depth;
             return element;
+        }
+
+        public Type GetDrawerForPropertyAttribute(MemberInfo member)
+        {
+            if (member == null)
+            {
+                return null;
+            }
+
+#if UNITY_EDITOR
+            object[] attributes = member.GetCustomAttributes(typeof(UnityEngine.PropertyAttribute), true);
+            foreach (object attribute in attributes)
+            {
+                if (attribute == null)
+                {
+                    continue;
+                }
+
+                Type attributeType = attribute.GetType();
+                if (m_PropertyAttributeToDrawer.TryGetValue(attributeType, out Type drawerType))
+                {
+                    return drawerType;
+                }
+            }
+#endif
+
+            return null;
         }
 
         private Type[] GetSonTypes(Type typeBase)
@@ -199,6 +234,35 @@ namespace XFramework.UI
                 }
             }
             return typeNames.ToArray();
+        }
+
+        private static Type GetPropertyAttributeType(Type inspectorElementType)
+        {
+#if UNITY_EDITOR
+            foreach (object attribute in inspectorElementType.GetCustomAttributes(false))
+            {
+                if (attribute == null)
+                {
+                    continue;
+                }
+
+                Type attributeType = attribute.GetType();
+                if (attributeType.FullName != "UnityEditor.CustomPropertyDrawer")
+                {
+                    continue;
+                }
+
+                FieldInfo targetTypeField =
+                    attributeType.GetField("m_Type", BindingFlags.Instance | BindingFlags.NonPublic)
+                    ?? attributeType.GetField("m_Type", BindingFlags.Instance | BindingFlags.Public);
+                Type targetType = targetTypeField?.GetValue(attribute) as Type;
+                if (targetType != null && typeof(UnityEngine.PropertyAttribute).IsAssignableFrom(targetType))
+                {
+                    return targetType;
+                }
+            }
+#endif
+            return null;
         }
     }
 }

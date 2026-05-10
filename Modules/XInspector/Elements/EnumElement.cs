@@ -7,7 +7,7 @@ using UnityEngine.UIElements;
 namespace XFramework.UI
 {
     [SupportHelper(typeof(EnumSupport))]
-    public class EnumElement : InspectorElement
+    public class EnumElement : XInspectorElement
     {
         private readonly EnumField enumField;
 

@@ -38,7 +38,7 @@ namespace XFramework
 
     public class AssetPathAttribute : PropertyAttribute
     {
-        public Type targetType;
+        public readonly Type targetType;
         public AssetPathAttribute(Type assetType = null)
         {
             if (assetType != null && !assetType.IsSubclassOf(typeof(Object)))
@@ -46,6 +46,21 @@ namespace XFramework
                 throw new ArgumentException("AssetPathAttribute 只能用于 UnityEngine.Object 的子类");
             }
             targetType = assetType;
+        }
+    }
+
+    public class DataTableRefAttribute : PropertyAttribute
+    {
+        public readonly Type tableType;
+
+        public DataTableRefAttribute(Type tableType)
+        {
+            if (tableType == null)
+            {
+                throw new ArgumentNullException(nameof(tableType));
+            }
+
+            this.tableType = tableType;
         }
     }
 }

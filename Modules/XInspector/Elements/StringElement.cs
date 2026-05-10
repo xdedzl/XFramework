@@ -4,7 +4,7 @@ using UnityEngine.UIElements;
 namespace XFramework.UI
 {
     [DefaultSportTypes(typeof(string))]
-    public class StringElement : InspectorElement
+    public class StringElement : XInspectorElement
     {
         protected TextField input;
 

@@ -7,7 +7,7 @@ using UnityEngine.UIElements;
 namespace XFramework.UI
 {
     [SupportHelper(typeof(FlagsEnumSupport))]
-    public class FlagsEnumElement : InspectorElement
+    public class FlagsEnumElement : XInspectorElement
     {
         private readonly VisualElement enumsContainer;
         public FlagsEnumElement()

@@ -145,7 +145,7 @@ namespace XFramework.UI
         protected override void OnDepthChange(int depth)
         {
             base.OnDepthChange(depth);
-            listBox.style.marginLeft = Inspector.TabSize * (Depth);
+            listBox.style.marginLeft = XInspector.TabSize * (Depth);
         }
 
         protected override void CreateElements()
@@ -161,7 +161,7 @@ namespace XFramework.UI
                 Array array = (Array)Value;
                 for (int i = 0; i < array.Length; i++)
                 {
-                    InspectorElement elementDrawer = CreateDrawerForMemberType();
+                    XInspectorElement elementDrawer = CreateDrawerForMemberType();
                     if (elementDrawer == null)
                         break;
 
@@ -182,7 +182,7 @@ namespace XFramework.UI
                 IList list = (IList)Value;
                 for (int i = 0; i < list.Count; i++)
                 {
-                    InspectorElement elementDrawer = CreateDrawerForMemberType();
+                    XInspectorElement elementDrawer = CreateDrawerForMemberType();
                     if (elementDrawer == null)
                         break;
 
@@ -221,16 +221,14 @@ namespace XFramework.UI
             listContainer.Add(emptyLabel);
         }
 
-        private InspectorElement CreateDrawerForMemberType()
+        private XInspectorElement CreateDrawerForMemberType()
         {
-            if(customerAttribute != null)
+            if(customerAttribute?.type != null)
             {
-                return Inspector.CreateDrawerForType(customerAttribute.type, 0, customerAttribute.args);
+                return XInspector.CreateDrawerForType(customerAttribute.type, 0, customerAttribute.args);
             }
-            else
-            {
-                return Inspector.CreateDrawerForMemberType(elementType, 0);
-            }
+
+            return XInspector.CreateDrawerForMemberType(elementType, 0);
         }
 
         private void OnSizeChange(ChangeEvent<string> input)
@@ -303,7 +301,7 @@ namespace XFramework.UI
                 : null;
         }
 
-        private void AddElementRow(int index, InspectorElement elementDrawer)
+        private void AddElementRow(int index, XInspectorElement elementDrawer)
         {
             VisualElement row = new VisualElement();
             row.style.flexDirection = FlexDirection.Column;

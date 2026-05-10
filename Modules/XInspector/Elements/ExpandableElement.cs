@@ -6,7 +6,7 @@ using System.Linq;
 
 namespace XFramework.UI
 {
-    public abstract class ExpandableElement : InspectorElement
+    public abstract class ExpandableElement : XInspectorElement
     {
         private readonly Foldout foldout;
         
@@ -118,16 +118,16 @@ namespace XFramework.UI
             }
         }
 
-        public IEnumerable<InspectorElement> GetChildElements()
+        public IEnumerable<XInspectorElement> GetChildElements()
         {
-            return elementsContent.Children().OfType<InspectorElement>();
+            return elementsContent.Children().OfType<XInspectorElement>();
         }
 
         protected override void OnDepthChange(int depth)
         {
             base.OnDepthChange(depth);
-            variableNameText.style.translate = new Vector2(Inspector.TabSize * Depth, 0f);
-            foldout.style.translate= new Vector2(Inspector.TabSize * Depth, 0f);
+            variableNameText.style.translate = new Vector2(XInspector.TabSize * Depth, 0f);
+            foldout.style.translate= new Vector2(XInspector.TabSize * Depth, 0f);
         }
 
         private void OnTitleMouseDown(MouseDownEvent evt)

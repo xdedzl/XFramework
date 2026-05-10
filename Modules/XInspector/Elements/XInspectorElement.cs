@@ -5,7 +5,7 @@ using UnityEngine.UIElements;
 
 namespace XFramework.UI
 {
-    public abstract class InspectorElement : VisualElement
+    public abstract class XInspectorElement : VisualElement
     {
         public delegate object Getter();
         public delegate void Setter(object value);
@@ -15,14 +15,15 @@ namespace XFramework.UI
 
         private object m_value;
         private Type m_boundVariableType;
-        private Inspector m_inspector;
+        private MemberInfo m_boundMemberInfo;
+        private XInspector _mXInspector;
         private int m_depth;
 
         private string variableName;
         private string customDisplayName;
         protected readonly TextElement variableNameText;
 
-        protected InspectorElement()
+        protected XInspectorElement()
         {
             AddToClassList("inspector-element");
             
@@ -45,15 +46,16 @@ namespace XFramework.UI
         }
 
         protected Type BoundVariableType => m_boundVariableType;
+        protected MemberInfo BoundMemberInfo => m_boundMemberInfo;
 
-        public Inspector Inspector
+        public XInspector XInspector
         {
-            protected get => m_inspector;
+            protected get => _mXInspector;
             set
             {
-                if (m_inspector != value)
+                if (_mXInspector != value)
                 {
-                    m_inspector = value;
+                    _mXInspector = value;
                 }
             }
         }
@@ -84,8 +86,9 @@ namespace XFramework.UI
         /// <param name="parent">UI</param>
         /// <param name="member">成员</param>
         /// <param name="variableName">变量名称</param>
-        public virtual void BindTo(InspectorElement parent, MemberInfo member, string propertyName)
+        public virtual void BindTo(XInspectorElement parent, MemberInfo member, string propertyName)
         {
+            m_boundMemberInfo = member;
             string variableName = propertyName;
             string displayName = GetCustomDisplayName(member);
 
@@ -140,6 +143,10 @@ namespace XFramework.UI
         private void BindTo(Type variableType, string variableName, Getter getter, Setter setter, string displayName)
         {
             m_boundVariableType = variableType;
+            if (m_boundMemberInfo == null)
+            {
+                m_boundMemberInfo = null;
+            }
             customDisplayName = displayName;
             Name = variableName;
 
@@ -186,7 +193,7 @@ namespace XFramework.UI
         protected virtual void OnDepthChange(int depth)
         {
             if (variableNameText != null)
-                variableNameText.style.translate = new Vector2(Inspector.TabSize * Depth, 0f);
+                variableNameText.style.translate = new Vector2(XInspector.TabSize * Depth, 0f);
         }
 
         private void UpdateVariableNameText()

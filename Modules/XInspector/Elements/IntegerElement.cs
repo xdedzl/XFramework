@@ -1,18 +1,16 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using System;
 using UnityEngine.UIElements;
 
 namespace XFramework.UI
 {
-    [DefaultSportTypes(typeof(float), typeof(double), typeof(decimal))]
-    public class DecimalElement : InspectorElement
+    [DefaultSportTypes(typeof(int), typeof(uint), typeof(long), typeof(ulong), typeof(byte), typeof(sbyte), typeof(short), typeof(ushort), typeof(char))]
+    public class IntegerElement : XInspectorElement
     {
         private NumberParser numberParser;
 
         private readonly TextField input;
 
-        public DecimalElement()
+        public IntegerElement()
         {
             style.flexDirection = FlexDirection.Row;
             

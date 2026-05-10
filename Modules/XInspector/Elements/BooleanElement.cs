@@ -3,7 +3,7 @@ using UnityEngine.UIElements;
 namespace XFramework.UI
 {
     [DefaultSportTypes(typeof(bool))]
-    public class BooleanElement : InspectorElement
+    public class BooleanElement : XInspectorElement
     {
         private readonly Toggle toggle;
 

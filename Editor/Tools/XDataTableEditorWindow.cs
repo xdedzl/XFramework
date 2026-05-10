@@ -52,6 +52,16 @@ namespace XFramework.Editor
             window.Focus();
         }
 
+        public static void ShowWindowAndLocate(TextAsset textAsset, object keyValue)
+        {
+            XDataTableEditorWindow window = FindOpenWindow(textAsset) ?? CreateDockedWindow();
+            window.minSize = new Vector2(1180f, 620f);
+            window.LoadTextAsset(textAsset);
+            window.Show();
+            window.Focus();
+            window.TryLocateByKeyValue(keyValue);
+        }
+
         private void OnEnable()
         {
             if (m_SourceAsset != null && m_Model == null)
@@ -138,6 +148,8 @@ namespace XFramework.Editor
             root.style.paddingRight = 6f;
             root.style.paddingTop = 6f;
             root.style.paddingBottom = 6f;
+            root.focusable = true;
+            root.RegisterCallback<KeyDownEvent>(OnRootKeyDown, TrickleDown.TrickleDown);
 
             if (m_Model == null)
             {
@@ -156,6 +168,20 @@ namespace XFramework.Editor
             RebuildRows();
             RebuildDetailPanel();
             RefreshActionState();
+        }
+
+        private void OnRootKeyDown(KeyDownEvent evt)
+        {
+            if (evt == null)
+            {
+                return;
+            }
+
+            if ((evt.ctrlKey || evt.commandKey) && evt.keyCode == KeyCode.S)
+            {
+                SaveCurrentAsset();
+                evt.StopImmediatePropagation();
+            }
         }
 
         private VisualElement BuildTopPanel()
@@ -763,6 +789,35 @@ namespace XFramework.Editor
             return button;
         }
 
+        private Button CreateSmallRoundButton(string text, Action onClick)
+        {
+            Button button = new(onClick)
+            {
+                text = text
+            };
+            button.style.width = 22f;
+            button.style.minWidth = 22f;
+            button.style.maxWidth = 22f;
+            button.style.height = 18f;
+            button.style.minHeight = 18f;
+            button.style.maxHeight = 18f;
+            button.style.marginLeft = 0f;
+            button.style.marginRight = 0f;
+            button.style.marginTop = 0f;
+            button.style.marginBottom = 0f;
+            button.style.paddingLeft = 0f;
+            button.style.paddingRight = 0f;
+            button.style.paddingTop = 0f;
+            button.style.paddingBottom = 0f;
+            button.style.unityTextAlign = TextAnchor.MiddleCenter;
+            button.style.borderTopLeftRadius = 9f;
+            button.style.borderTopRightRadius = 9f;
+            button.style.borderBottomLeftRadius = 9f;
+            button.style.borderBottomRightRadius = 9f;
+            button.style.flexShrink = 0f;
+            return button;
+        }
+
         private void RefreshValidation()
         {
             m_ValidationResult = m_Model?.Validate();
@@ -996,6 +1051,10 @@ namespace XFramework.Editor
                     objectField.RegisterValueChangedCallback(evt => ApplyValueChange(rowIndex, column, evt.newValue));
                     return objectField;
                 }
+                case XDataTableEditorInlineKind.DataTableRef:
+                {
+                    return CreateDataTableRefEditor(rowIndex, column, scrollSelection: true);
+                }
                 default:
                 {
                     Label label = new(displayValue);
@@ -1073,6 +1132,10 @@ namespace XFramework.Editor
                 pathLabel.style.color = new Color(0.75f, 0.75f, 0.75f);
                 container.Add(pathLabel);
             }
+            else if (column.IsDataTableRef)
+            {
+                container.Add(CreateDataTableRefEditor(rowIndex, column, scrollSelection: false));
+            }
             else if (column.Field.FieldType == typeof(string))
             {
                 TextField textField = new()
@@ -1102,6 +1165,83 @@ namespace XFramework.Editor
             }
 
             return container;
+        }
+
+        private VisualElement CreateDataTableRefEditor(int rowIndex, XDataTableEditorColumn column, bool scrollSelection)
+        {
+            VisualElement row = new();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.flexGrow = 1f;
+            row.style.height = InlineEditorHeight;
+            row.style.minHeight = InlineEditorHeight;
+
+            object keyValue = m_Model.GetValue(rowIndex, column);
+            string displayText = m_Model.GetDisplayValue(rowIndex, column);
+            if (string.IsNullOrEmpty(displayText))
+            {
+                displayText = "None";
+            }
+
+            VisualElement refField = new();
+            refField.style.flexGrow = 1f;
+            refField.style.height = InlineEditorHeight;
+            refField.style.minHeight = InlineEditorHeight;
+            refField.style.maxHeight = InlineEditorHeight;
+            refField.style.marginRight = 4f;
+            refField.style.paddingLeft = 6f;
+            refField.style.paddingRight = 6f;
+            refField.style.justifyContent = Justify.Center;
+            refField.style.borderTopWidth = 1f;
+            refField.style.borderBottomWidth = 1f;
+            refField.style.borderLeftWidth = 1f;
+            refField.style.borderRightWidth = 1f;
+            refField.style.borderTopColor = new Color(0.32f, 0.32f, 0.32f, 0.95f);
+            refField.style.borderBottomColor = new Color(0.24f, 0.24f, 0.24f, 0.95f);
+            refField.style.borderLeftColor = new Color(0.28f, 0.28f, 0.28f, 0.95f);
+            refField.style.borderRightColor = new Color(0.28f, 0.28f, 0.28f, 0.95f);
+            refField.style.backgroundColor = new Color(0.18f, 0.18f, 0.18f, 0.85f);
+            refField.tooltip = displayText;
+
+            Label refLabel = new(displayText);
+            refLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
+            refLabel.style.whiteSpace = WhiteSpace.NoWrap;
+            refLabel.style.overflow = Overflow.Hidden;
+            refLabel.style.textOverflow = TextOverflow.Ellipsis;
+            refLabel.style.flexGrow = 1f;
+            refField.Add(refLabel);
+
+            refField.RegisterCallback<MouseDownEvent>(evt =>
+            {
+                if (evt.button != 0)
+                {
+                    return;
+                }
+
+                XDataTableRefResolver.PingReferencedTable(column?.DataTableRefMeta);
+                if (evt.clickCount >= 2)
+                {
+                    XDataTableRefResolver.OpenReferencedTable(column?.DataTableRefMeta, keyValue, column?.Field?.FieldType);
+                }
+
+                evt.StopImmediatePropagation();
+            }, TrickleDown.TrickleDown);
+            row.Add(refField);
+
+            Button pickerButton = CreateSmallRoundButton("◉", () =>
+            {
+                XDataTableRefPickerWindow.ShowWindow(column?.Header, column?.DataTableRefMeta, column?.Field?.FieldType, pickedValue =>
+                {
+                    ApplyValueChange(rowIndex, column, pickedValue, scrollSelection);
+                }, position);
+            });
+            pickerButton.style.height = InlineEditorHeight;
+            pickerButton.style.minHeight = InlineEditorHeight;
+            pickerButton.style.maxHeight = InlineEditorHeight;
+            pickerButton.tooltip = "选择引用";
+            row.Add(pickerButton);
+
+            return row;
         }
 
         private VisualElement BuildListEditor(int rowIndex, XDataTableEditorColumn column)
@@ -1310,7 +1450,9 @@ namespace XFramework.Editor
                 string message = string.Join("\n", m_ValidationResult.Issues
                     .Where(issue => issue.Blocking)
                     .Take(8)
-                    .Select(issue => $"Row {issue.RowIndex + 1} / {issue.Column?.Field.Name}: {issue.Message}"));
+                    .Select(issue => issue.RowIndex >= 0
+                        ? $"Row {issue.RowIndex + 1} / {issue.Column?.Field.Name}: {issue.Message}"
+                        : $"Column {issue.Column?.Field.Name}: {issue.Message}"));
                 EditorUtility.DisplayDialog("保存被阻止", message, "OK");
                 RefreshStatus();
                 return;
@@ -1506,6 +1648,19 @@ namespace XFramework.Editor
             }
         }
 
+        private void TryLocateByKeyValue(object keyValue)
+        {
+            if (m_Model == null || keyValue == null)
+            {
+                return;
+            }
+
+            if (m_Model.TryFindRowByKeyValue(keyValue, out int rowIndex, out _))
+            {
+                SelectRow(rowIndex, true);
+            }
+        }
+
         private void ScrollToSelectedRow()
         {
             if (!HasSelection() || m_RowContainer == null || m_SelectedRowIndex >= m_RowContainer.childCount)
@@ -1521,6 +1676,20 @@ namespace XFramework.Editor
             }
 
             m_MainRowsScrollView?.ScrollTo(target);
+        }
+
+        internal void ApplyRowValueChangeFromDetail(int rowIndex, object newRowValue)
+        {
+            if (m_Model == null || rowIndex < 0 || rowIndex >= m_Model.Rows.Count)
+            {
+                return;
+            }
+
+            m_Model.Rows[rowIndex] = newRowValue;
+            MarkDirty();
+            RefreshValidation();
+            RefreshStatus();
+            RebuildRows();
         }
 
         private void MarkDirty()

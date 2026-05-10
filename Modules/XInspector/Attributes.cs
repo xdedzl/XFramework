@@ -13,9 +13,9 @@ namespace XFramework.UI
 
         public CustomerElementAttribute(Type type, params object[] args)
         {
-            if (type != null && !type.IsSubclassOf(typeof(InspectorElement)))
+            if (type != null && !type.IsSubclassOf(typeof(XInspectorElement)))
             {
-                throw new Exception($"参数type必须为{typeof(InspectorElement).Name}的派生类   type{type.Name}");
+                throw new Exception($"参数type必须为{typeof(XInspectorElement).Name}的派生类   type{type.Name}");
             }
             this.type = type;
             this.args = args;

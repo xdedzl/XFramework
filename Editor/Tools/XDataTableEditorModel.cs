@@ -28,7 +28,8 @@ namespace XFramework.Editor
         Float,
         Toggle,
         Enum,
-        AssetPath
+        AssetPath,
+        DataTableRef
     }
 
     internal sealed class XDataTableEditorModel
@@ -37,7 +38,6 @@ namespace XFramework.Editor
         private readonly FieldInfo m_ItemsField;
         private readonly PropertyInfo m_KeyProperty;
         private readonly PropertyInfo m_AliasProperty;
-
         private XDataTableEditorModel(
             TextAsset sourceAsset,
             Type tableType,
@@ -295,6 +295,46 @@ namespace XFramework.Editor
             return false;
         }
 
+        public bool TryFindRowByKeyValue(object keyValue, out int rowIndex, out string error)
+        {
+            rowIndex = -1;
+            error = null;
+            if (!SupportsKey || m_KeyProperty == null)
+            {
+                error = "当前表不支持 Key 定位。";
+                return false;
+            }
+
+            if (keyValue == null)
+            {
+                error = "Key 不能为空。";
+                return false;
+            }
+
+            for (int i = 0; i < Rows.Count; i++)
+            {
+                object rowKey = m_KeyProperty.GetValue(Rows[i]);
+                if (Equals(rowKey, keyValue))
+                {
+                    rowIndex = i;
+                    return true;
+                }
+            }
+
+            error = $"未找到 Key: {keyValue}";
+            return false;
+        }
+
+        public string GetReferenceDisplayText(XDataTableRefMeta meta, object keyValue, Type ownerFieldType)
+        {
+            return XDataTableRefResolver.GetDisplayText(meta, keyValue, ownerFieldType);
+        }
+
+        public IReadOnlyList<XDataTableRefOption> GetReferenceOptions(XDataTableRefMeta meta, string searchText)
+        {
+            return XDataTableRefResolver.GetOptions(meta, searchText);
+        }
+
         public XDataTableEditorValidationResult Validate()
         {
             var issues = new List<XDataTableEditorIssue>();
@@ -336,6 +376,34 @@ namespace XFramework.Editor
                     {
                         issues.Add(new XDataTableEditorIssue(rowIndex, column,
                             $"资源类型不匹配，期望 {column.AssetType.Name}，实际 {asset.GetType().Name}", true));
+                    }
+                }
+            }
+
+            foreach (XDataTableEditorColumn column in Columns)
+            {
+                if (!column.IsDataTableRef)
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrEmpty(column.DataTableRefResolveError))
+                {
+                    issues.Add(new XDataTableEditorIssue(-1, column, column.DataTableRefResolveError, true));
+                    continue;
+                }
+
+                for (int rowIndex = 0; rowIndex < Rows.Count; rowIndex++)
+                {
+                    object keyValue = column.Field.GetValue(Rows[rowIndex]);
+                    if (XDataTableRefResolver.IsEmptyReferenceValue(keyValue, column.Field.FieldType))
+                    {
+                        continue;
+                    }
+
+                    if (!XDataTableRefResolver.ContainsKey(column.DataTableRefMeta, keyValue))
+                    {
+                        issues.Add(new XDataTableEditorIssue(rowIndex, column, $"引用目标不存在: {keyValue}", true));
                     }
                 }
             }
@@ -407,13 +475,18 @@ namespace XFramework.Editor
             {
                 FieldInfo field = fields[i];
                 AssetPathAttribute assetPathAttribute = field.GetCustomAttribute<AssetPathAttribute>();
+                DataTableRefAttribute dataTableRefAttribute = field.GetCustomAttribute<DataTableRefAttribute>();
                 bool isList = typeof(IList).IsAssignableFrom(field.FieldType) && field.FieldType != typeof(string);
                 Type listElementType = isList && field.FieldType.IsGenericType ? field.FieldType.GetGenericArguments()[0] : null;
+                XDataTableRefMeta dataTableRefMeta = XDataTableRefResolver.Resolve(field, dataTableRefAttribute, out string dataTableRefResolveError);
 
                 var column = new XDataTableEditorColumn(
                     i,
                     field,
                     assetPathAttribute,
+                    dataTableRefAttribute,
+                    dataTableRefMeta,
+                    dataTableRefResolveError,
                     isList,
                     listElementType,
                     string.Equals(field.Name, keyFieldName, StringComparison.OrdinalIgnoreCase),
@@ -476,6 +549,11 @@ namespace XFramework.Editor
 
             FieldInfo firstString = fieldList.FirstOrDefault(field => field.FieldType == typeof(string));
             return firstString?.Name;
+        }
+
+        public static bool SupportsEmptyReference(Type fieldType)
+        {
+            return XDataTableRefResolver.SupportsEmptyReference(fieldType);
         }
 
         private static int CompareValues(object left, object right)
@@ -646,6 +724,12 @@ namespace XFramework.Editor
             }
             else if (targetType == typeof(uint))
             {
+                if (editorValue is uint uintValue)
+                {
+                    converted = uintValue;
+                    return true;
+                }
+
                 if (editorValue is long longValue && longValue >= 0 && longValue <= uint.MaxValue)
                 {
                     converted = (uint)longValue;
@@ -655,6 +739,20 @@ namespace XFramework.Editor
                 if (editorValue is int intValue && intValue >= 0)
                 {
                     converted = (uint)intValue;
+                    return true;
+                }
+            }
+            else if (targetType == typeof(long))
+            {
+                if (editorValue is long longValue)
+                {
+                    converted = longValue;
+                    return true;
+                }
+
+                if (editorValue is int intValue)
+                {
+                    converted = (long)intValue;
                     return true;
                 }
             }
@@ -806,6 +904,12 @@ namespace XFramework.Editor
                 return string.IsNullOrEmpty(path) ? string.Empty : System.IO.Path.GetFileNameWithoutExtension(path);
             }
 
+            if (column.IsDataTableRef)
+            {
+                return XDataTableRefResolver.GetDisplayText(column.DataTableRefMeta, value, column.Field.FieldType)
+                       ?? value.ToString();
+            }
+
             if (column.IsList && value is IList list)
             {
                 if (list.Count == 0)
@@ -834,6 +938,9 @@ namespace XFramework.Editor
             int index,
             FieldInfo field,
             AssetPathAttribute assetPathAttribute,
+            DataTableRefAttribute dataTableRefAttribute,
+            XDataTableRefMeta dataTableRefMeta,
+            string dataTableRefResolveError,
             bool isList,
             Type listElementType,
             bool isKey,
@@ -842,6 +949,9 @@ namespace XFramework.Editor
             Index = index;
             Field = field;
             AssetPathAttribute = assetPathAttribute;
+            DataTableRefAttribute = dataTableRefAttribute;
+            DataTableRefMeta = dataTableRefMeta;
+            DataTableRefResolveError = dataTableRefResolveError;
             IsList = isList;
             ListElementType = listElementType;
             IsKey = isKey;
@@ -856,6 +966,9 @@ namespace XFramework.Editor
         public FieldInfo Field { get; }
         public string Header { get; }
         public AssetPathAttribute AssetPathAttribute { get; }
+        public DataTableRefAttribute DataTableRefAttribute { get; }
+        public XDataTableRefMeta DataTableRefMeta { get; }
+        public string DataTableRefResolveError { get; }
         public Type AssetType { get; }
         public bool IsList { get; }
         public Type ListElementType { get; }
@@ -865,6 +978,7 @@ namespace XFramework.Editor
         public float Width { get; }
 
         public bool IsAssetPath => AssetPathAttribute != null;
+        public bool IsDataTableRef => DataTableRefAttribute != null;
 
         public bool SupportsInlineEdit =>
             InlineKind is XDataTableEditorInlineKind.Text
@@ -873,7 +987,8 @@ namespace XFramework.Editor
                 or XDataTableEditorInlineKind.Float
                 or XDataTableEditorInlineKind.Toggle
                 or XDataTableEditorInlineKind.Enum
-                or XDataTableEditorInlineKind.AssetPath;
+                or XDataTableEditorInlineKind.AssetPath
+                or XDataTableEditorInlineKind.DataTableRef;
 
         private XDataTableEditorInlineKind ResolveInlineKind()
         {
@@ -886,6 +1001,11 @@ namespace XFramework.Editor
             if (IsAssetPath)
             {
                 return XDataTableEditorInlineKind.AssetPath;
+            }
+
+            if (IsDataTableRef)
+            {
+                return XDataTableEditorInlineKind.DataTableRef;
             }
 
             if (fieldType == typeof(string))
@@ -955,6 +1075,11 @@ namespace XFramework.Editor
                 return 220f;
             }
 
+            if (IsDataTableRef)
+            {
+                return 250f;
+            }
+
             if (IsList)
             {
                 return 170f;
@@ -992,13 +1117,13 @@ namespace XFramework.Editor
 
         public int GetIssueCount(int rowIndex, XDataTableEditorColumn column)
         {
-            return Issues.Count(issue => issue.RowIndex == rowIndex && issue.Column == column);
+            return Issues.Count(issue => (issue.RowIndex == rowIndex || issue.RowIndex < 0) && issue.Column == column);
         }
 
         public string GetIssueMessage(int rowIndex, XDataTableEditorColumn column)
         {
             return string.Join("\n", Issues
-                .Where(issue => issue.RowIndex == rowIndex && issue.Column == column)
+                .Where(issue => (issue.RowIndex == rowIndex || issue.RowIndex < 0) && issue.Column == column)
                 .Select(issue => issue.Message));
         }
     }
