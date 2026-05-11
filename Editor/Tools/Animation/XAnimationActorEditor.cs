@@ -7,28 +7,15 @@ using UnityEngine;
 using UnityEngine.UIElements;
 using XFramework.Animation;
 using XFramework.Resource;
+using static XFramework.Editor.XAnimationEditorParameterUtility;
+using static XFramework.Editor.XAnimationEditorUi;
 
 namespace XFramework.Editor
 {
     [CustomEditor(typeof(XAnimationActor))]
     public sealed class XAnimationActorEditor : UnityEditor.Editor
     {
-        private const float SectionTitleFontSize = 12f;
-        private const float BodyFontSize = 11f;
         private const float PlaybackLabelWidth = 118f;
-
-        private static readonly Color SectionDivider = new(0.28f, 0.28f, 0.30f, 1f);
-        private static readonly Color AccentColor = new(0.30f, 0.55f, 0.95f, 1f);
-        private static readonly Color DangerColor = new(0.75f, 0.25f, 0.25f, 1f);
-        private static readonly Color TextMuted = new(0.60f, 0.60f, 0.62f, 1f);
-        private static readonly Color TextNormal = new(0.85f, 0.85f, 0.87f, 1f);
-        private static readonly Color HoverBg = new(0.24f, 0.24f, 0.26f, 1f);
-        private static readonly Color ListGroupBg = new(0.17f, 0.18f, 0.20f, 1f);
-        private static readonly Color ListRowEvenBg = new(0.16f, 0.16f, 0.17f, 1f);
-        private static readonly Color ListRowOddBg = new(0.19f, 0.19f, 0.20f, 1f);
-        private static readonly Color ListHeaderBg = new(0.22f, 0.23f, 0.25f, 1f);
-        private static readonly Color PlayingBg = new(0.20f, 0.35f, 0.55f, 0.65f);
-        private static readonly Color ProgressFillBg = new(0.20f, 0.55f, 0.95f, 0.55f);
 
         private sealed class ChannelNameOption
         {
@@ -40,27 +27,6 @@ namespace XFramework.Editor
             {
                 return DisplayName;
             }
-        }
-
-        private class RowVisualState
-        {
-            public Color BaseColor;
-            public bool Hovered;
-            public bool Playing;
-            public float Progress;
-            public VisualElement ProgressFill;
-        }
-
-        private sealed class ClipRowVisualState : RowVisualState
-        {
-        }
-
-        private sealed class FoldoutCard
-        {
-            public VisualElement Root;
-            public VisualElement Content;
-            public Action<bool> SetExpanded;
-            public Action RefreshState;
         }
 
         private readonly Dictionary<string, VisualElement> m_StateRowMap = new(StringComparer.Ordinal);
@@ -506,9 +472,9 @@ namespace XFramework.Editor
                 m_ParametersListView.Add(CreateParameterRow(parameter, i));
             }
 
-            RemoveStaleRuntimePreviewValues(m_RuntimeFloatPreviewValues, validFloatKeys);
-            RemoveStaleRuntimePreviewValues(m_RuntimeIntPreviewValues, validIntKeys);
-            RemoveStaleRuntimePreviewValues(m_RuntimeBoolPreviewValues, validBoolKeys);
+            RemoveStaleValues(m_RuntimeFloatPreviewValues, validFloatKeys);
+            RemoveStaleValues(m_RuntimeIntPreviewValues, validIntKeys);
+            RemoveStaleValues(m_RuntimeBoolPreviewValues, validBoolKeys);
         }
 
         private VisualElement CreateParameterRow(XAnimationParameterConfig parameter, int rowIndex)
@@ -695,36 +661,6 @@ namespace XFramework.Editor
                 : ConvertParameterDefaultToInt(parameter.defaultValue);
         }
 
-        private static void RemoveStaleRuntimePreviewValues<T>(Dictionary<string, T> cache, HashSet<string> validKeys)
-        {
-            if (cache.Count == 0)
-            {
-                return;
-            }
-
-            List<string> removedKeys = null;
-            foreach (string key in cache.Keys)
-            {
-                if (validKeys.Contains(key))
-                {
-                    continue;
-                }
-
-                removedKeys ??= new List<string>();
-                removedKeys.Add(key);
-            }
-
-            if (removedKeys == null)
-            {
-                return;
-            }
-
-            for (int i = 0; i < removedKeys.Count; i++)
-            {
-                cache.Remove(removedKeys[i]);
-            }
-        }
-
         private void RebuildStateList()
         {
             m_StatesListView?.Clear();
@@ -783,50 +719,15 @@ namespace XFramework.Editor
 
         private VisualElement CreateStateChannelGroup(XAnimationChannelConfig channel, List<XAnimationStateConfig> channelStates)
         {
-            VisualElement group = new();
-            group.style.marginBottom = 3;
-            group.style.paddingLeft = 3;
-            group.style.paddingRight = 3;
-            group.style.paddingTop = 3;
-            group.style.paddingBottom = 2;
-            group.style.backgroundColor = ListGroupBg;
-            group.style.borderTopWidth = 1;
-            group.style.borderBottomWidth = 1;
-            group.style.borderLeftWidth = 1;
-            group.style.borderRightWidth = 1;
-            group.style.borderTopColor = SectionDivider;
-            group.style.borderBottomColor = SectionDivider;
-            group.style.borderLeftColor = SectionDivider;
-            group.style.borderRightColor = SectionDivider;
-            group.style.borderTopLeftRadius = 3;
-            group.style.borderTopRightRadius = 3;
-            group.style.borderBottomLeftRadius = 3;
-            group.style.borderBottomRightRadius = 3;
-
-            VisualElement header = new();
-            header.style.flexDirection = FlexDirection.Row;
-            header.style.alignItems = Align.Center;
-            header.style.marginBottom = 2;
-            header.style.paddingLeft = 3;
-            header.style.paddingRight = 3;
-            header.style.paddingTop = 2;
-            header.style.paddingBottom = 2;
-            header.style.backgroundColor = ListHeaderBg;
-            header.style.borderTopLeftRadius = 3;
-            header.style.borderTopRightRadius = 3;
-            header.style.borderBottomLeftRadius = 3;
-            header.style.borderBottomRightRadius = 3;
+            VisualElement group = CreateListGroup();
+            VisualElement header = CreateListHeader();
             group.Add(header);
 
-            Label title = new(channel.name);
-            title.style.unityFontStyleAndWeight = FontStyle.Bold;
-            title.style.color = TextNormal;
+            Label title = CreateBoldLabel(channel.name);
             title.style.flexGrow = 1;
             header.Add(title);
 
-            Label info = new($"{channel.layerType} | {channelStates.Count} states");
-            info.style.color = TextMuted;
-            info.style.fontSize = 10;
+            Label info = CreateSmallInfoLabel($"{channel.layerType} | {channelStates.Count} states");
             header.Add(info);
 
             for (int i = 0; i < channelStates.Count; i++)
@@ -846,12 +747,11 @@ namespace XFramework.Editor
         private VisualElement CreateStateRow(XAnimationStateConfig state, int rowIndex)
         {
             VisualElement container = CreateRowContainer(rowIndex);
-            Color baseColor = rowIndex % 2 == 0 ? ListRowEvenBg : ListRowOddBg;
             VisualElement progressFill = CreateRowProgressFill();
             container.Add(progressFill);
             RowVisualState visualState = new()
             {
-                BaseColor = baseColor,
+                BaseColor = RowBaseColor(rowIndex),
                 ProgressFill = progressFill,
             };
             m_StateVisualStateMap[state.key] = visualState;
@@ -1087,14 +987,14 @@ namespace XFramework.Editor
 
             if (m_ClipVisualStateMap.TryGetValue(clip.key, out ClipRowVisualState existingState))
             {
-                existingState.BaseColor = rowIndex % 2 == 0 ? ListRowEvenBg : ListRowOddBg;
+                existingState.BaseColor = RowBaseColor(rowIndex);
                 existingState.ProgressFill = progressFill;
             }
             else
             {
                 m_ClipVisualStateMap[clip.key] = new ClipRowVisualState
                 {
-                    BaseColor = rowIndex % 2 == 0 ? ListRowEvenBg : ListRowOddBg,
+                    BaseColor = RowBaseColor(rowIndex),
                     ProgressFill = progressFill,
                 };
             }
@@ -2243,39 +2143,6 @@ namespace XFramework.Editor
             return options != null && options.Count > 0 ? options[0].DisplayName : null;
         }
 
-        private static float ConvertParameterDefaultToFloat(object value)
-        {
-            return value switch
-            {
-                float f => f,
-                double d => (float)d,
-                long l => l,
-                int i => i,
-                _ => 0f,
-            };
-        }
-
-        private static bool ConvertParameterDefaultToBool(object value)
-        {
-            return value switch
-            {
-                bool b => b,
-                _ => false,
-            };
-        }
-
-        private static int ConvertParameterDefaultToInt(object value)
-        {
-            return value switch
-            {
-                int i => i,
-                long l => (int)l,
-                float f => Mathf.RoundToInt(f),
-                double d => (int)Math.Round(d),
-                _ => 0,
-            };
-        }
-
         private void SetStatus(string message, bool isError = false)
         {
             if (m_StatusLabel == null)
@@ -2287,20 +2154,6 @@ namespace XFramework.Editor
             m_StatusLabel.style.color = isError ? DangerColor : TextMuted;
         }
 
-        private static VisualElement CreateRowProgressFill()
-        {
-            VisualElement fill = new();
-            fill.pickingMode = PickingMode.Ignore;
-            fill.style.position = Position.Absolute;
-            fill.style.left = 0f;
-            fill.style.top = 0f;
-            fill.style.bottom = 0f;
-            fill.style.width = Length.Percent(0f);
-            fill.style.backgroundColor = ProgressFillBg;
-            fill.style.visibility = Visibility.Hidden;
-            return fill;
-        }
-
         private void ApplyStateRowVisualState(string stateKey)
         {
             if (!m_StateRowMap.TryGetValue(stateKey, out VisualElement row) ||
@@ -2309,322 +2162,7 @@ namespace XFramework.Editor
                 return;
             }
 
-            row.style.backgroundColor = visualState.Playing
-                ? PlayingBg
-                : visualState.Hovered
-                    ? HoverBg
-                    : visualState.BaseColor;
-            ApplyRowProgressVisualState(visualState);
-        }
-
-        private static void ApplyRowProgressVisualState(RowVisualState visualState)
-        {
-            if (visualState?.ProgressFill == null)
-            {
-                return;
-            }
-
-            float progress = Mathf.Clamp01(visualState.Progress);
-            visualState.ProgressFill.style.width = Length.Percent(progress * 100f);
-            visualState.ProgressFill.style.visibility = progress > 0f ? Visibility.Visible : Visibility.Hidden;
-        }
-
-        private static VisualElement CreateRowContainer(int rowIndex)
-        {
-            VisualElement container = new();
-            container.style.marginBottom = 2;
-            container.style.position = Position.Relative;
-            container.style.overflow = Overflow.Hidden;
-            container.style.borderTopLeftRadius = 2;
-            container.style.borderTopRightRadius = 2;
-            container.style.borderBottomLeftRadius = 2;
-            container.style.borderBottomRightRadius = 2;
-            container.style.backgroundColor = rowIndex % 2 == 0 ? ListRowEvenBg : ListRowOddBg;
-            return container;
-        }
-
-        private static VisualElement CreateRowContent()
-        {
-            VisualElement row = new();
-            row.style.flexDirection = FlexDirection.Row;
-            row.style.alignItems = Align.Center;
-            row.style.paddingLeft = 4;
-            row.style.paddingRight = 4;
-            row.style.paddingTop = 3;
-            row.style.paddingBottom = 3;
-            row.style.position = Position.Relative;
-            return row;
-        }
-
-        private static void AddEmptyLabel(VisualElement root, string text)
-        {
-            if (root == null)
-            {
-                return;
-            }
-
-            Label label = new(text);
-            label.style.color = TextMuted;
-            label.style.fontSize = BodyFontSize;
-            label.style.marginLeft = 4;
-            root.Add(label);
-        }
-
-        private static FoldoutCard CreateFoldoutCard(string titleText, bool expanded, Action<bool> setExpanded)
-        {
-            VisualElement card = CreateCard(titleText);
-            VisualElement titleRow = card[0];
-            Label label = titleRow.Q<Label>();
-            VisualElement content = new();
-            content.style.display = expanded ? DisplayStyle.Flex : DisplayStyle.None;
-            card.Add(content);
-
-            void ApplyExpanded(bool value)
-            {
-                expanded = value;
-                setExpanded?.Invoke(value);
-                content.style.display = value ? DisplayStyle.Flex : DisplayStyle.None;
-                label.text = value ? $"▾ {titleText}" : $"▸ {titleText}";
-            }
-
-            ApplyExpanded(expanded);
-            titleRow.RegisterCallback<MouseDownEvent>(evt =>
-            {
-                if (evt.button != 0)
-                {
-                    return;
-                }
-
-                ApplyExpanded(!expanded);
-                evt.StopPropagation();
-            });
-
-            return new FoldoutCard
-            {
-                Root = card,
-                Content = content,
-            };
-        }
-
-        private static FoldoutCard CreateSectionFoldoutCard(
-            string titleText,
-            bool expanded,
-            Action<bool> setExpanded,
-            VisualElement titleAction = null,
-            Func<bool> canToggle = null)
-        {
-            VisualElement root = CreateSubBox();
-            VisualElement header = new();
-            header.style.flexDirection = FlexDirection.Row;
-            header.style.alignItems = Align.Center;
-
-            Label label = new();
-            label.style.color = TextNormal;
-            label.style.fontSize = BodyFontSize;
-            label.style.unityFontStyleAndWeight = FontStyle.Bold;
-            label.style.flexGrow = 1;
-            header.Add(label);
-            if (titleAction != null)
-            {
-                titleAction.style.flexShrink = 0;
-                titleAction.style.marginLeft = 6;
-                header.Add(titleAction);
-            }
-
-            VisualElement content = new();
-            content.style.marginTop = 4;
-            root.Add(header);
-            root.Add(content);
-
-            void RefreshState()
-            {
-                bool toggleable = canToggle?.Invoke() ?? true;
-                bool isExpanded = toggleable && expanded;
-                label.text = isExpanded ? $"▾ {titleText}" : $"▸ {titleText}";
-                label.style.color = toggleable ? TextNormal : TextMuted;
-                content.style.display = isExpanded ? DisplayStyle.Flex : DisplayStyle.None;
-            }
-
-            void ApplyExpanded(bool value)
-            {
-                expanded = value;
-                setExpanded?.Invoke(value);
-                RefreshState();
-            }
-
-            RefreshState();
-            header.RegisterCallback<MouseDownEvent>(evt =>
-            {
-                if (evt.button != 0)
-                {
-                    return;
-                }
-
-                if (titleAction != null &&
-                    evt.target is VisualElement target &&
-                    (ReferenceEquals(target, titleAction) || titleAction.Contains(target)))
-                {
-                    return;
-                }
-
-                if (!(canToggle?.Invoke() ?? true))
-                {
-                    return;
-                }
-
-                ApplyExpanded(!expanded);
-                evt.StopPropagation();
-            });
-
-            return new FoldoutCard
-            {
-                Root = root,
-                Content = content,
-                SetExpanded = ApplyExpanded,
-                RefreshState = RefreshState,
-            };
-        }
-
-        private static VisualElement CreateCard(string titleText)
-        {
-            VisualElement card = new();
-            card.style.marginBottom = 2;
-            card.style.paddingLeft = 3;
-            card.style.paddingRight = 3;
-            card.style.paddingTop = 3;
-            card.style.paddingBottom = 3;
-            card.style.backgroundColor = new Color(0.15f, 0.15f, 0.16f, 1f);
-            card.style.borderTopLeftRadius = 3;
-            card.style.borderTopRightRadius = 3;
-            card.style.borderBottomLeftRadius = 3;
-            card.style.borderBottomRightRadius = 3;
-            card.style.borderTopWidth = 1;
-            card.style.borderBottomWidth = 1;
-            card.style.borderLeftWidth = 1;
-            card.style.borderRightWidth = 1;
-            card.style.borderTopColor = SectionDivider;
-            card.style.borderBottomColor = SectionDivider;
-            card.style.borderLeftColor = SectionDivider;
-            card.style.borderRightColor = SectionDivider;
-
-            VisualElement titleRow = new();
-            titleRow.style.flexDirection = FlexDirection.Row;
-            titleRow.style.alignItems = Align.Center;
-            titleRow.style.marginBottom = 2;
-            titleRow.style.paddingBottom = 2;
-            titleRow.style.borderBottomWidth = 1;
-            titleRow.style.borderBottomColor = SectionDivider;
-
-            VisualElement accent = new();
-            accent.style.width = 2;
-            accent.style.height = 11;
-            accent.style.backgroundColor = AccentColor;
-            accent.style.marginRight = 4;
-            titleRow.Add(accent);
-
-            Label label = new(titleText);
-            label.style.unityFontStyleAndWeight = FontStyle.Bold;
-            label.style.fontSize = SectionTitleFontSize;
-            label.style.color = TextNormal;
-            label.style.flexGrow = 1;
-            titleRow.Add(label);
-            card.Add(titleRow);
-            return card;
-        }
-
-        private static VisualElement CreateSubBox()
-        {
-            VisualElement box = new();
-            box.style.marginTop = 3;
-            box.style.paddingLeft = 4;
-            box.style.paddingRight = 4;
-            box.style.paddingTop = 4;
-            box.style.paddingBottom = 4;
-            box.style.backgroundColor = new Color(0.14f, 0.14f, 0.15f, 1f);
-            box.style.borderTopWidth = 1;
-            box.style.borderBottomWidth = 1;
-            box.style.borderLeftWidth = 1;
-            box.style.borderRightWidth = 1;
-            box.style.borderTopColor = SectionDivider;
-            box.style.borderBottomColor = SectionDivider;
-            box.style.borderLeftColor = SectionDivider;
-            box.style.borderRightColor = SectionDivider;
-            box.style.borderTopLeftRadius = 3;
-            box.style.borderTopRightRadius = 3;
-            box.style.borderBottomLeftRadius = 3;
-            box.style.borderBottomRightRadius = 3;
-            return box;
-        }
-
-        private static Toggle CreateHeaderApplyToggle(bool value, string tooltip)
-        {
-            Toggle toggle = new("Apply") { value = value };
-            toggle.tooltip = tooltip;
-            toggle.style.flexShrink = 0;
-            toggle.style.unityFontStyleAndWeight = FontStyle.Normal;
-            return toggle;
-        }
-
-        private static void ConfigureCompactPlaybackField(BaseField<float> field, float valueWidth)
-        {
-            field.label = string.Empty;
-            field.style.width = valueWidth;
-            field.style.minWidth = valueWidth;
-            field.style.maxWidth = valueWidth;
-            field.style.flexShrink = 0;
-            field.style.alignSelf = Align.Center;
-        }
-
-        private static void ConfigureCompactPlaybackElement(VisualElement field, float valueWidth)
-        {
-            field.style.width = valueWidth;
-            field.style.minWidth = valueWidth;
-            field.style.maxWidth = valueWidth;
-            field.style.flexShrink = 0;
-            field.style.alignSelf = Align.Center;
-        }
-
-        private static VisualElement CreatePlaybackFieldContainer(string labelText, VisualElement field, float labelWidth)
-        {
-            VisualElement container = new();
-            container.style.flexDirection = FlexDirection.Row;
-            container.style.alignItems = Align.Center;
-            container.style.marginTop = 2;
-            container.style.marginBottom = 2;
-            container.style.minWidth = 0;
-
-            Label label = new(labelText);
-            label.style.width = labelWidth;
-            label.style.minWidth = labelWidth;
-            label.style.maxWidth = labelWidth;
-            label.style.flexShrink = 0;
-            label.style.fontSize = 10;
-            label.style.color = TextMuted;
-            label.style.unityTextAlign = TextAnchor.MiddleLeft;
-            label.style.whiteSpace = WhiteSpace.NoWrap;
-            label.style.marginRight = 6;
-            container.Add(label);
-            container.Add(field);
-            return container;
-        }
-
-        private static VisualElement CreatePlaybackToggleRow(string labelText, Toggle toggle, float labelWidth)
-        {
-            toggle.label = string.Empty;
-            toggle.style.flexShrink = 0;
-            toggle.style.marginLeft = 0;
-            return CreatePlaybackFieldContainer(labelText, toggle, labelWidth);
-        }
-
-        private static void ApplyIconButtonStyle(Button button, bool isPlaying)
-        {
-            button.text = isPlaying ? "■" : "▶";
-            button.style.width = 28;
-            button.style.minWidth = 28;
-            button.style.height = 22;
-            button.style.unityTextAlign = TextAnchor.MiddleCenter;
-            button.style.color = Color.white;
-            button.style.backgroundColor = isPlaying ? DangerColor : AccentColor;
+            ApplyRowVisualState(row, visualState);
         }
     }
 }

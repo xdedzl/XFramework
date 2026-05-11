@@ -54,6 +54,7 @@ namespace XFramework.Animation
     public class XAnimationClipConfig
     {
         public string key;
+        public string editorGroupName;
         [AssetPath(typeof(AnimationClip))]
         public string clipPath;
     }
@@ -81,9 +82,12 @@ namespace XFramework.Animation
     public class XAnimationStateConfig
     {
         public string key;
+        public string editorGroupName;
         public XAnimationStateType stateType = XAnimationStateType.Single;
         public string clipKey;
         public string channelName;
+        public string[] allowedNextStateKeys = Array.Empty<string>();
+        public string[] allowedPreviousStateKeys = Array.Empty<string>();
         public float fadeIn = 0.15f;
         public float fadeOut = 0.15f;
         public float speed = 1f;
@@ -290,6 +294,8 @@ namespace XFramework.Animation
         ChannelDisallowInterrupt = 1,
         CurrentUninterruptible = 2,
         LowerPriority = 3,
+        SourceStateDisallowTarget = 4,
+        TargetStateDisallowSource = 5,
     }
 
     public abstract class XAnimationCompiledState
@@ -675,6 +681,7 @@ namespace XFramework.Animation
         public float enterTime;
         public int priority;
         public bool interruptible = true;
+        public bool force;
     }
 
     internal sealed class XAnimationTransitionRequest
@@ -691,7 +698,8 @@ namespace XFramework.Animation
             bool isLooping,
             int priority,
             bool interruptible,
-            bool drivesRootMotion)
+            bool drivesRootMotion,
+            bool force)
         {
             ChannelName = channelName ?? string.Empty;
             TargetStateKey = targetStateKey ?? string.Empty;
@@ -705,6 +713,7 @@ namespace XFramework.Animation
             Priority = priority;
             Interruptible = interruptible;
             DrivesRootMotion = drivesRootMotion;
+            Force = force;
         }
 
         public string ChannelName { get; }
@@ -719,6 +728,7 @@ namespace XFramework.Animation
         public int Priority { get; }
         public bool Interruptible { get; }
         public bool DrivesRootMotion { get; }
+        public bool Force { get; }
 
         public XAnimationPlaybackRuntimeOptions CreateRuntimeOptions(bool skipFadeIn)
         {

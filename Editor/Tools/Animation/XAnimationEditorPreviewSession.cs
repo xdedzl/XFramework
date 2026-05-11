@@ -617,6 +617,13 @@ namespace XFramework.Editor
             return IsLoaded ? m_Driver.GetChannelState(channelName) : null;
         }
 
+        public XAnimationDebugGraphSnapshot GetDebugGraphSnapshot()
+        {
+            return IsLoaded
+                ? m_Driver.GetDebugGraphSnapshot()
+                : XAnimationDebugGraphSnapshot.Invalid("XAnimation preview session is not loaded.");
+        }
+
         public string AddChannel()
         {
             EnsureBaseAssetEditable();
@@ -679,7 +686,7 @@ namespace XFramework.Editor
             RebuildDriverAndSave();
         }
 
-        public string AddClip()
+        public string AddClip(string groupName = null)
         {
             EnsureBaseAssetEditable();
             XAnimationAsset asset = m_CompiledAsset.Asset;
@@ -696,6 +703,7 @@ namespace XFramework.Editor
                 new XAnimationClipConfig
                 {
                     key = clipKey,
+                    editorGroupName = NormalizeEditorGroupName(groupName),
                     clipPath = clipPath,
                 }
             };
@@ -703,6 +711,95 @@ namespace XFramework.Editor
             m_OriginalClipPathByKey[clipKey] = clipPath;
             RebuildDriverAndSave();
             return clipKey;
+        }
+
+        public void SetClipEditorGroup(string clipKey, string groupName)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationClipConfig config = m_CompiledAsset.GetClip(clipKey).Config;
+            string normalized = NormalizeEditorGroupName(groupName);
+            if (string.Equals(config.editorGroupName ?? string.Empty, normalized ?? string.Empty, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            config.editorGroupName = normalized;
+            RebuildDriverAndSave();
+        }
+
+        public void RenameClipEditorGroup(string oldGroupName, string newGroupName)
+        {
+            EnsureBaseAssetEditable();
+            string normalizedOld = NormalizeEditorGroupName(oldGroupName);
+            string normalizedNew = NormalizeEditorGroupName(newGroupName);
+            if (string.IsNullOrWhiteSpace(normalizedOld))
+            {
+                throw new XFrameworkException("XAnimation clip group oldGroupName cannot be empty.");
+            }
+
+            if (string.IsNullOrWhiteSpace(normalizedNew))
+            {
+                throw new XFrameworkException("XAnimation clip group newGroupName cannot be empty.");
+            }
+
+            if (string.Equals(normalizedOld, normalizedNew, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            bool changed = false;
+            XAnimationClipConfig[] clips = asset.clips ?? Array.Empty<XAnimationClipConfig>();
+            for (int i = 0; i < clips.Length; i++)
+            {
+                XAnimationClipConfig clip = clips[i];
+                if (clip == null ||
+                    !string.Equals(NormalizeEditorGroupName(clip.editorGroupName), normalizedOld, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                clip.editorGroupName = normalizedNew;
+                changed = true;
+            }
+
+            if (!changed)
+            {
+                throw new XFrameworkException($"XAnimation clip group '{normalizedOld}' does not exist.");
+            }
+
+            RebuildDriverAndSave();
+        }
+
+        public void ClearClipEditorGroup(string groupName)
+        {
+            EnsureBaseAssetEditable();
+            string normalizedGroup = NormalizeEditorGroupName(groupName);
+            if (string.IsNullOrWhiteSpace(normalizedGroup))
+            {
+                return;
+            }
+
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            bool changed = false;
+            XAnimationClipConfig[] clips = asset.clips ?? Array.Empty<XAnimationClipConfig>();
+            for (int i = 0; i < clips.Length; i++)
+            {
+                XAnimationClipConfig clip = clips[i];
+                if (clip == null ||
+                    !string.Equals(NormalizeEditorGroupName(clip.editorGroupName), normalizedGroup, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                clip.editorGroupName = string.Empty;
+                changed = true;
+            }
+
+            if (changed)
+            {
+                RebuildDriverAndSave();
+            }
         }
 
         public void DeleteClip(string clipKey)
@@ -806,7 +903,7 @@ namespace XFramework.Editor
             RebuildDriverAndSave();
         }
 
-        public string AddState(string channelName)
+        public string AddState(string channelName, string groupName = null)
         {
             EnsureBaseAssetEditable();
             m_CompiledAsset.GetChannel(channelName);
@@ -823,6 +920,7 @@ namespace XFramework.Editor
                 new XAnimationStateConfig
                 {
                     key = stateKey,
+                    editorGroupName = NormalizeEditorGroupName(groupName),
                     stateType = XAnimationStateType.Single,
                     clipKey = clipKey,
                     channelName = channelName,
@@ -841,6 +939,109 @@ namespace XFramework.Editor
             asset.states = states.ToArray();
             RebuildDriverAndSave();
             return stateKey;
+        }
+
+        public void SetStateEditorGroup(string stateKey, string groupName)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationStateConfig config = m_CompiledAsset.GetState(stateKey).Config;
+            string normalized = NormalizeEditorGroupName(groupName);
+            if (string.Equals(config.editorGroupName ?? string.Empty, normalized ?? string.Empty, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            config.editorGroupName = normalized;
+            RebuildDriverAndSave();
+        }
+
+        public void RenameStateEditorGroup(string channelName, string oldGroupName, string newGroupName)
+        {
+            EnsureBaseAssetEditable();
+            channelName = channelName?.Trim();
+            string normalizedOld = NormalizeEditorGroupName(oldGroupName);
+            string normalizedNew = NormalizeEditorGroupName(newGroupName);
+            if (string.IsNullOrWhiteSpace(channelName))
+            {
+                throw new XFrameworkException("XAnimation state group channelName cannot be empty.");
+            }
+
+            if (string.IsNullOrWhiteSpace(normalizedOld))
+            {
+                throw new XFrameworkException("XAnimation state group oldGroupName cannot be empty.");
+            }
+
+            if (string.IsNullOrWhiteSpace(normalizedNew))
+            {
+                throw new XFrameworkException("XAnimation state group newGroupName cannot be empty.");
+            }
+
+            if (string.Equals(normalizedOld, normalizedNew, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            bool changed = false;
+            XAnimationStateConfig[] states = asset.states ?? Array.Empty<XAnimationStateConfig>();
+            for (int i = 0; i < states.Length; i++)
+            {
+                XAnimationStateConfig state = states[i];
+                if (state == null ||
+                    !string.Equals(state.channelName, channelName, StringComparison.Ordinal) ||
+                    !string.Equals(NormalizeEditorGroupName(state.editorGroupName), normalizedOld, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                state.editorGroupName = normalizedNew;
+                changed = true;
+            }
+
+            if (!changed)
+            {
+                throw new XFrameworkException($"XAnimation state group '{normalizedOld}' does not exist in channel '{channelName}'.");
+            }
+
+            RebuildDriverAndSave();
+        }
+
+        public void ClearStateEditorGroupForChannel(string channelName, string groupName)
+        {
+            EnsureBaseAssetEditable();
+            channelName = channelName?.Trim();
+            string normalizedGroup = NormalizeEditorGroupName(groupName);
+            if (string.IsNullOrWhiteSpace(channelName))
+            {
+                throw new XFrameworkException("XAnimation state group channelName cannot be empty.");
+            }
+
+            if (string.IsNullOrWhiteSpace(normalizedGroup))
+            {
+                return;
+            }
+
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            bool changed = false;
+            XAnimationStateConfig[] states = asset.states ?? Array.Empty<XAnimationStateConfig>();
+            for (int i = 0; i < states.Length; i++)
+            {
+                XAnimationStateConfig state = states[i];
+                if (state == null ||
+                    !string.Equals(state.channelName, channelName, StringComparison.Ordinal) ||
+                    !string.Equals(NormalizeEditorGroupName(state.editorGroupName), normalizedGroup, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                state.editorGroupName = string.Empty;
+                changed = true;
+            }
+
+            if (changed)
+            {
+                RebuildDriverAndSave();
+            }
         }
 
         public void DeleteState(string stateKey)
@@ -869,6 +1070,7 @@ namespace XFramework.Editor
             asset.states = orderedStates.ToArray();
             ClearAutoTransitionReferences(asset, stateKey);
             ClearDefaultTransitionReferences(asset, stateKey);
+            ClearStateGateReferences(asset, stateKey);
             RebuildDriverAndSave();
         }
 
@@ -895,10 +1097,11 @@ namespace XFramework.Editor
             m_CompiledAsset.GetState(oldKey).Config.key = newKey;
             RenameAutoTransitionReferences(asset, oldKey, newKey);
             RenameDefaultTransitionReferences(asset, oldKey, newKey);
+            RenameStateGateReferences(asset, oldKey, newKey);
             RebuildDriverAndSave();
         }
 
-        public void MoveState(string stateKey, string channelName, string insertBeforeStateKey = null)
+        public void MoveState(string stateKey, string channelName, string insertBeforeStateKey = null, string groupName = null)
         {
             EnsureLoaded();
             m_CompiledAsset.GetChannel(channelName);
@@ -925,6 +1128,7 @@ namespace XFramework.Editor
             }
 
             movedState.channelName = channelName;
+            movedState.editorGroupName = NormalizeEditorGroupName(groupName);
             int insertIndex = orderedStates.Count;
             if (!string.IsNullOrWhiteSpace(insertBeforeStateKey))
             {
@@ -1127,6 +1331,42 @@ namespace XFramework.Editor
             EnsureLoaded();
             m_CompiledAsset.GetState(stateKey).Config.rootMotionMode = rootMotionMode;
             RebuildDriverAndSave();
+        }
+
+        public void AddStateAllowedNextState(string stateKey)
+        {
+            EnsureBaseAssetEditable();
+            AddStateGateValue(stateKey, allowedNext: true);
+        }
+
+        public void AddStateAllowedPreviousState(string stateKey)
+        {
+            EnsureBaseAssetEditable();
+            AddStateGateValue(stateKey, allowedNext: false);
+        }
+
+        public void DeleteStateAllowedNextState(string stateKey, int index)
+        {
+            EnsureBaseAssetEditable();
+            DeleteStateGateValue(stateKey, index, allowedNext: true);
+        }
+
+        public void DeleteStateAllowedPreviousState(string stateKey, int index)
+        {
+            EnsureBaseAssetEditable();
+            DeleteStateGateValue(stateKey, index, allowedNext: false);
+        }
+
+        public void SetStateAllowedNextState(string stateKey, int index, string targetStateKey)
+        {
+            EnsureBaseAssetEditable();
+            SetStateGateValue(stateKey, index, targetStateKey, allowedNext: true);
+        }
+
+        public void SetStateAllowedPreviousState(string stateKey, int index, string sourceStateKey)
+        {
+            EnsureBaseAssetEditable();
+            SetStateGateValue(stateKey, index, sourceStateKey, allowedNext: false);
         }
 
         public void AddBlendSample(string stateKey)
@@ -1458,6 +1698,12 @@ namespace XFramework.Editor
             return CreateUniqueName(prefix, key => m_CompiledAsset.TryGetStateIndex(key, out _));
         }
 
+        private static string NormalizeEditorGroupName(string groupName)
+        {
+            groupName = groupName?.Trim();
+            return string.IsNullOrWhiteSpace(groupName) ? string.Empty : groupName;
+        }
+
         private string CreateUniqueCueEventKey(string prefix)
         {
             return CreateUniqueName(prefix, key =>
@@ -1497,6 +1743,100 @@ namespace XFramework.Editor
             }
 
             return samples[sampleIndex];
+        }
+
+        private void AddStateGateValue(string stateKey, bool allowedNext)
+        {
+            XAnimationStateConfig state = m_CompiledAsset.GetState(stateKey).Config;
+            List<string> values = new(GetStateGateValues(state, allowedNext));
+            string candidate = FindAvailableStateGateCandidate(stateKey, values);
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                throw new XFrameworkException("没有更多可配置的 state。");
+            }
+
+            values.Add(candidate);
+            SetStateGateValues(state, values, allowedNext);
+            RebuildDriverAndSave();
+        }
+
+        private void DeleteStateGateValue(string stateKey, int index, bool allowedNext)
+        {
+            XAnimationStateConfig state = m_CompiledAsset.GetState(stateKey).Config;
+            List<string> values = new(GetStateGateValues(state, allowedNext));
+            if (index < 0 || index >= values.Count)
+            {
+                throw new XFrameworkException($"XAnimation state gate index '{index}' does not exist.");
+            }
+
+            values.RemoveAt(index);
+            SetStateGateValues(state, values, allowedNext);
+            RebuildDriverAndSave();
+        }
+
+        private void SetStateGateValue(string stateKey, int index, string targetStateKey, bool allowedNext)
+        {
+            targetStateKey = targetStateKey?.Trim();
+            if (string.IsNullOrWhiteSpace(targetStateKey))
+            {
+                throw new XFrameworkException("XAnimation state gate target cannot be empty.");
+            }
+
+            m_CompiledAsset.GetState(targetStateKey);
+            XAnimationStateConfig state = m_CompiledAsset.GetState(stateKey).Config;
+            List<string> values = new(GetStateGateValues(state, allowedNext));
+            if (index < 0 || index >= values.Count)
+            {
+                throw new XFrameworkException($"XAnimation state gate index '{index}' does not exist.");
+            }
+
+            for (int i = 0; i < values.Count; i++)
+            {
+                if (i != index && string.Equals(values[i], targetStateKey, StringComparison.Ordinal))
+                {
+                    throw new XFrameworkException($"XAnimation state '{stateKey}' gate target '{targetStateKey}' is duplicated.");
+                }
+            }
+
+            values[index] = targetStateKey;
+            SetStateGateValues(state, values, allowedNext);
+            RebuildDriverAndSave();
+        }
+
+        private string FindAvailableStateGateCandidate(string stateKey, IReadOnlyList<string> existing)
+        {
+            HashSet<string> used = new(existing ?? Array.Empty<string>(), StringComparer.Ordinal);
+            IReadOnlyList<XAnimationCompiledState> states = m_CompiledAsset.States;
+            for (int i = 0; i < states.Count; i++)
+            {
+                string candidate = states[i].Key;
+                if (!string.Equals(candidate, stateKey, StringComparison.Ordinal) && !used.Contains(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static string[] GetStateGateValues(XAnimationStateConfig state, bool allowedNext)
+        {
+            return allowedNext
+                ? state.allowedNextStateKeys ?? Array.Empty<string>()
+                : state.allowedPreviousStateKeys ?? Array.Empty<string>();
+        }
+
+        private static void SetStateGateValues(XAnimationStateConfig state, List<string> values, bool allowedNext)
+        {
+            string[] array = values == null || values.Count == 0 ? Array.Empty<string>() : values.ToArray();
+            if (allowedNext)
+            {
+                state.allowedNextStateKeys = array;
+            }
+            else
+            {
+                state.allowedPreviousStateKeys = array;
+            }
         }
 
         private XAnimationBlend2DSimpleDirectionalSampleConfig GetDirectionalBlendSampleConfig(string stateKey, int sampleIndex)
@@ -3541,6 +3881,38 @@ namespace XFramework.Editor
             }
         }
 
+        private static void RenameStateGateReferences(XAnimationAsset asset, string oldKey, string newKey)
+        {
+            XAnimationStateConfig[] states = asset?.states ?? Array.Empty<XAnimationStateConfig>();
+            for (int i = 0; i < states.Length; i++)
+            {
+                XAnimationStateConfig state = states[i];
+                if (state == null)
+                {
+                    continue;
+                }
+
+                RenameStateKeyArray(state.allowedNextStateKeys, oldKey, newKey);
+                RenameStateKeyArray(state.allowedPreviousStateKeys, oldKey, newKey);
+            }
+        }
+
+        private static void RenameStateKeyArray(string[] values, string oldKey, string newKey)
+        {
+            if (values == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < values.Length; i++)
+            {
+                if (string.Equals(values[i], oldKey, StringComparison.Ordinal))
+                {
+                    values[i] = newKey;
+                }
+            }
+        }
+
         private static void ClearAutoTransitionReferences(XAnimationAsset asset, string deletedStateKey)
         {
             XAnimationAutoTransitionConfig[] transitions = asset?.autoTransitions ?? Array.Empty<XAnimationAutoTransitionConfig>();
@@ -3619,6 +3991,43 @@ namespace XFramework.Editor
             }
 
             asset.defaultTransitions = remainingTransitions.ToArray();
+        }
+
+        private static void ClearStateGateReferences(XAnimationAsset asset, string deletedStateKey)
+        {
+            XAnimationStateConfig[] states = asset?.states ?? Array.Empty<XAnimationStateConfig>();
+            for (int i = 0; i < states.Length; i++)
+            {
+                XAnimationStateConfig state = states[i];
+                if (state == null)
+                {
+                    continue;
+                }
+
+                state.allowedNextStateKeys = RemoveStateKeyFromArray(state.allowedNextStateKeys, deletedStateKey);
+                state.allowedPreviousStateKeys = RemoveStateKeyFromArray(state.allowedPreviousStateKeys, deletedStateKey);
+            }
+        }
+
+        private static string[] RemoveStateKeyFromArray(string[] values, string deletedStateKey)
+        {
+            if (values == null || values.Length == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            List<string> remaining = new(values.Length);
+            for (int i = 0; i < values.Length; i++)
+            {
+                string value = values[i];
+                if (!string.IsNullOrWhiteSpace(value) &&
+                    !string.Equals(value, deletedStateKey, StringComparison.Ordinal))
+                {
+                    remaining.Add(value);
+                }
+            }
+
+            return remaining.Count == 0 ? Array.Empty<string>() : remaining.ToArray();
         }
 
     }

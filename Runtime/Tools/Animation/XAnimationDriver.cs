@@ -110,32 +110,42 @@ namespace XFramework.Animation
             m_Context.ResetTrigger(key);
         }
 
-        public XAnimationPlaybackHandle PlayClip(
-            string clipName,
-            string channelName,
-            XAnimationTransitionOptions transition = default)
+        public XAnimationPlaybackHandle PlayClip(string clipName, string channelName, XAnimationTransitionOptions transition = null)
         {
             EnsureInitialized();
             XAnimationPlaybackStartInfo startInfo = m_Player.PlayClip(clipName, channelName, NormalizeTransitionOptions(transition));
             return CreatePlaybackHandle(startInfo, string.Empty, clipName);
         }
 
-        public XAnimationPlaybackHandle PlayState(
-            string stateName,
-            XAnimationTransitionOptions transition = default)
+        public XAnimationPlaybackHandle PlayState(string stateName, XAnimationTransitionOptions transition = null)
         {
             EnsureInitialized();
             XAnimationPlaybackStartInfo startInfo = m_Player.PlayState(stateName, NormalizeTransitionOptions(transition));
             return CreatePlaybackHandle(startInfo, stateName, string.Empty);
         }
 
-        public void Stop(string channelName, float fadeOut = default)
+        public XAnimationPlaybackHandle PlayState(string stateName, bool force)
+        {
+            return PlayState(stateName, new XAnimationTransitionOptions { force = force });
+        }
+
+        public XAnimationPlaybackHandle PlayState(
+            string stateName,
+            XAnimationTransitionOptions transition,
+            bool force)
+        {
+            transition ??= new XAnimationTransitionOptions();
+            transition.force = force;
+            return PlayState(stateName, transition);
+        }
+
+        public void Stop(string channelName, float fadeOut = 0)
         {
             EnsureInitialized();
             m_Player.Stop(channelName, fadeOut);
         }
 
-        public void StopAll(float fadeOut = default)
+        public void StopAll(float fadeOut = 0)
         {
             EnsureInitialized();
             m_Player.StopAll(fadeOut);
@@ -239,6 +249,16 @@ namespace XFramework.Animation
         public bool ShouldApplyNativeRootMotion()
         {
             return m_Player != null && m_Player.ShouldApplyNativeRootMotion();
+        }
+
+        public XAnimationDebugGraphSnapshot GetDebugGraphSnapshot()
+        {
+            if (m_Player == null)
+            {
+                return XAnimationDebugGraphSnapshot.Invalid("XAnimationDriver is not initialized.");
+            }
+
+            return m_Player.GetDebugGraphSnapshot();
         }
 
         internal void Update(float deltaTime)
@@ -362,9 +382,8 @@ namespace XFramework.Animation
         {
             if (stateEvent != null &&
                 stateEvent.playbackId > 0 &&
-                m_PendingPlaybackExits.TryGetValue(stateEvent.playbackId, out PendingPlaybackExit pending))
+                m_PendingPlaybackExits.Remove(stateEvent.playbackId, out PendingPlaybackExit pending))
             {
-                m_PendingPlaybackExits.Remove(stateEvent.playbackId);
                 XAnimationPlaybackExitResult result = new()
                 {
                     WasStarted = true,
@@ -395,6 +414,7 @@ namespace XFramework.Animation
                 enterTime = Mathf.Clamp01(options.enterTime),
                 priority = options.priority,
                 interruptible = options.interruptible,
+                force = options.force,
             };
         }
 

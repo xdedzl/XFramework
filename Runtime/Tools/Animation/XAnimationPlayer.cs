@@ -48,6 +48,68 @@ namespace XFramework.Animation
         public XAnimationContext Context { get; }
         public bool IsDisposed { get; private set; }
 
+        public XAnimationDebugGraphSnapshot GetDebugGraphSnapshot()
+        {
+            if (IsDisposed)
+            {
+                return XAnimationDebugGraphSnapshot.Invalid(
+                    "XAnimationPlayer has been disposed.",
+                    m_Graph.IsValid() ? m_Graph.GetEditorName() : string.Empty,
+                    isDisposed: true);
+            }
+
+            if (!m_Graph.IsValid())
+            {
+                return XAnimationDebugGraphSnapshot.Invalid(
+                    "PlayableGraph is invalid.",
+                    string.Empty);
+            }
+
+            XAnimationDebugSnapshotBuilder builder = new();
+            XAnimationDebugNodeSnapshot graphNode = builder.CreateNode(0, m_Graph.GetEditorName(), "PlayableGraph");
+            graphNode.isConnected = true;
+            graphNode.isActive = m_Graph.IsPlaying();
+            graphNode.details = $"Time Update Mode: {m_Graph.GetTimeUpdateMode()}";
+
+            XAnimationDebugNodeSnapshot outputNode = builder.CreateNode(graphNode.id, "XAnimationOutput", "AnimationPlayableOutput");
+            outputNode.isConnected = m_Output.IsOutputValid();
+            outputNode.isActive = outputNode.isConnected;
+            outputNode.details = Animator != null ? $"Animator: {Animator.name}" : "Animator: <null>";
+
+            XAnimationDebugNodeSnapshot layerMixerNode = builder.CreateNode(outputNode.id, "Layer Mixer", "AnimationLayerMixerPlayable");
+            layerMixerNode.isConnected = m_LayerMixer.IsValid();
+            layerMixerNode.isActive = m_LayerMixer.IsValid();
+            layerMixerNode.inputWeight = 1f;
+            layerMixerNode.effectiveWeight = 1f;
+            layerMixerNode.details = $"Input Count: {(m_LayerMixer.IsValid() ? m_LayerMixer.GetInputCount() : 0)}";
+
+            XAnimationDebugChannelSnapshot[] channels = new XAnimationDebugChannelSnapshot[m_Channels.Count];
+            XAnimationDebugNodeSnapshot[] channelNodes = new XAnimationDebugNodeSnapshot[m_Channels.Count];
+            for (int i = 0; i < m_Channels.Count; i++)
+            {
+                XAnimationChannel channel = m_Channels[i];
+                float layerWeight = m_LayerMixer.IsValid() ? m_LayerMixer.GetInputWeight(i) : 0f;
+                channels[i] = channel.BuildDebugChannelSnapshot(layerWeight);
+                channelNodes[i] = channel.BuildDebugNode(builder, layerMixerNode.id, i, layerWeight);
+            }
+
+            layerMixerNode.children = channelNodes;
+            outputNode.children = new[] { layerMixerNode };
+            graphNode.children = new[] { outputNode };
+
+            return new XAnimationDebugGraphSnapshot
+            {
+                graphName = m_Graph.GetEditorName(),
+                isValid = true,
+                isPlaying = m_Graph.IsPlaying(),
+                isDisposed = false,
+                animatorName = Animator != null ? Animator.name : string.Empty,
+                message = string.Empty,
+                channels = channels,
+                rootNodes = new[] { graphNode },
+            };
+        }
+
         internal XAnimationPlaybackStartInfo PlayClip(string clipKey, string channelName, XAnimationTransitionOptions transition = default)
         {
             ThrowIfDisposed();
@@ -77,11 +139,22 @@ namespace XFramework.Animation
             ThrowIfDisposed();
             XAnimationCompiledState state = CompiledAsset.GetState(stateKey);
             XAnimationCompiledChannel channel = GetStateChannel(state);
+            XAnimationTransitionOptions normalizedTransition = transition ?? new XAnimationTransitionOptions();
+            if (!normalizedTransition.force &&
+                !CanTransitionFromCurrentPlayback(m_ChannelMap[channel.Name], state, out XAnimationTransitionRejectReason gateRejectReason))
+            {
+                string clipKey = state is XAnimationCompiledSingleState singleState
+                    ? ((XAnimationCompiledClip)CompiledAsset.Clips[singleState.ClipIndex]).Key
+                    : string.Empty;
+                return XAnimationPlaybackStartInfo.CreateFailed(channel.Name, state.Key, clipKey, IsTemporaryClipState(state.Key), gateRejectReason);
+            }
+
             XAnimationTransitionRequest request = BuildTransitionRequest(
                 state,
                 channel,
                 transition,
-                transition != null ? XAnimationTransitionRequestSource.ExplicitPlay : ResolveRequestSource(state, channel));
+                transition != null ? XAnimationTransitionRequestSource.ExplicitPlay : ResolveRequestSource(state, channel),
+                normalizedTransition.force);
             return TryPlayCompiledState(state, channel, request);
         }
 
@@ -117,7 +190,8 @@ namespace XFramework.Animation
             XAnimationCompiledState state,
             XAnimationCompiledChannel channel,
             XAnimationTransitionOptions transition,
-            XAnimationTransitionRequestSource explicitSource)
+            XAnimationTransitionRequestSource explicitSource,
+            bool force = false)
         {
             XAnimationTransitionOptions resolvedTransition = ResolveTransitionOptions(state, channel, transition);
             float fadeIn = resolvedTransition.fadeIn > 0f ? resolvedTransition.fadeIn : state.Config.fadeIn;
@@ -142,7 +216,8 @@ namespace XFramework.Animation
                 isLooping,
                 resolvedTransition.priority,
                 resolvedTransition.interruptible,
-                drivesRootMotion);
+                drivesRootMotion,
+                force || resolvedTransition.force);
         }
 
         private XAnimationTransitionOptions ResolveTransitionOptions(
@@ -187,6 +262,87 @@ namespace XFramework.Animation
             }
 
             return XAnimationTransitionRequestSource.ExplicitPlay;
+        }
+
+        private bool CanTransitionToState(
+            XAnimationCompiledChannel channel,
+            XAnimationCompiledState targetState,
+            out XAnimationTransitionRejectReason rejectReason)
+        {
+            rejectReason = XAnimationTransitionRejectReason.None;
+            if (!m_ChannelMap.TryGetValue(channel.Name, out XAnimationChannel runtimeChannel) ||
+                !runtimeChannel.TryGetCurrentPlayback(out XAnimationStatePlaybackInstance currentPlayback) ||
+                currentPlayback == null)
+            {
+                return true;
+            }
+
+            if (!CompiledAsset.TryGetStateIndex(currentPlayback.StateKey, out int currentStateIndex))
+            {
+                return true;
+            }
+
+            XAnimationCompiledState currentState = (XAnimationCompiledState)CompiledAsset.States[currentStateIndex];
+            string[] allowedNext = currentState.Config.allowedNextStateKeys ?? Array.Empty<string>();
+            if (allowedNext.Length > 0 && Array.IndexOf(allowedNext, targetState.Key) < 0)
+            {
+                rejectReason = XAnimationTransitionRejectReason.SourceStateDisallowTarget;
+                return false;
+            }
+
+            string[] allowedPrevious = targetState.Config.allowedPreviousStateKeys ?? Array.Empty<string>();
+            if (allowedPrevious.Length > 0 && Array.IndexOf(allowedPrevious, currentState.Key) < 0)
+            {
+                rejectReason = XAnimationTransitionRejectReason.TargetStateDisallowSource;
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool CanTransitionFromCurrentPlayback(
+            XAnimationChannel channel,
+            XAnimationCompiledState targetState,
+            out XAnimationTransitionRejectReason rejectReason)
+        {
+            rejectReason = XAnimationTransitionRejectReason.None;
+            if (channel == null ||
+                !channel.TryGetCurrentPlayback(out XAnimationStatePlaybackInstance currentPlayback) ||
+                currentPlayback == null)
+            {
+                return true;
+            }
+
+            string[] allowedNext = GetAllowedNextStateKeys(currentPlayback);
+            if (allowedNext.Length > 0 && Array.IndexOf(allowedNext, targetState.Key) < 0)
+            {
+                rejectReason = XAnimationTransitionRejectReason.SourceStateDisallowTarget;
+                return false;
+            }
+
+            string[] allowedPrevious = targetState.Config.allowedPreviousStateKeys ?? Array.Empty<string>();
+            if (allowedPrevious.Length > 0 && Array.IndexOf(allowedPrevious, currentPlayback.StateKey) < 0)
+            {
+                rejectReason = XAnimationTransitionRejectReason.TargetStateDisallowSource;
+                return false;
+            }
+
+            return true;
+        }
+
+        private string[] GetAllowedNextStateKeys(XAnimationStatePlaybackInstance playback)
+        {
+            if (playback == null)
+            {
+                return Array.Empty<string>();
+            }
+
+            if (CompiledAsset.TryGetStateIndex(playback.StateKey, out int stateIndex))
+            {
+                return ((XAnimationCompiledState)CompiledAsset.States[stateIndex]).Config.allowedNextStateKeys ?? Array.Empty<string>();
+            }
+
+            return Array.Empty<string>();
         }
 
         public void Stop(string channelName, float fadeOut = default)
@@ -683,7 +839,13 @@ namespace XFramework.Animation
                     nextState.Config.loop,
                     playback.Priority,
                     true,
-                    ResolveRootMotion(nextState, channel.CompiledChannel));
+                    ResolveRootMotion(nextState, channel.CompiledChannel),
+                    false);
+
+                if (!CanTransitionFromCurrentPlayback(channel, nextState, out _))
+                {
+                    continue;
+                }
 
                 XAnimationPlaybackStartInfo startInfo = TryPlayCompiledState(nextState, channel.CompiledChannel, request);
                 if (startInfo.Started)

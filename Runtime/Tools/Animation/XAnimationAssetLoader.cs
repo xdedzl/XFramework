@@ -76,6 +76,7 @@ namespace XFramework.Animation
 
         public XAnimationCompiledAsset Compile(XAnimationAsset asset)
         {
+            NormalizeStateTransitionGateValues(asset);
             NormalizeAutoTransitionValues(asset);
             NormalizeDefaultTransitionValues(asset);
             m_Validator.Validate(asset);
@@ -444,6 +445,49 @@ namespace XFramework.Animation
                     : transition.nextStateKey.Trim();
                 transition.transitionDuration = Mathf.Max(0f, transition.transitionDuration);
             }
+        }
+
+        private static void NormalizeStateTransitionGateValues(XAnimationAsset asset)
+        {
+            if (asset?.states == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < asset.states.Length; i++)
+            {
+                XAnimationStateConfig state = asset.states[i];
+                if (state == null)
+                {
+                    continue;
+                }
+
+                state.allowedNextStateKeys = NormalizeStateKeyList(state.allowedNextStateKeys);
+                state.allowedPreviousStateKeys = NormalizeStateKeyList(state.allowedPreviousStateKeys);
+            }
+        }
+
+        private static string[] NormalizeStateKeyList(string[] values)
+        {
+            if (values == null || values.Length == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            List<string> normalized = new(values.Length);
+            HashSet<string> unique = new(StringComparer.Ordinal);
+            for (int i = 0; i < values.Length; i++)
+            {
+                string value = values[i]?.Trim();
+                if (string.IsNullOrWhiteSpace(value) || !unique.Add(value))
+                {
+                    continue;
+                }
+
+                normalized.Add(value);
+            }
+
+            return normalized.Count == 0 ? Array.Empty<string>() : normalized.ToArray();
         }
 
         private static void NormalizeDefaultTransitionValues(XAnimationAsset asset)

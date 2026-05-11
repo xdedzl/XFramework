@@ -137,6 +137,15 @@ namespace XFramework.Animation
 
         public abstract void FinalizeFrame(XAnimationCueDispatcher cueDispatcher, float channelWeight);
         public abstract XAnimationChannelState BuildState(float channelWeight, float channelTimeScale);
+        internal abstract XAnimationDebugNodeSnapshot BuildDebugNode(
+            XAnimationDebugSnapshotBuilder builder,
+            int parentId,
+            string displayName,
+            int inputIndex,
+            float inputWeight,
+            float channelWeight,
+            float channelTimeScale,
+            bool isConnected);
         public abstract void Dispose(XAnimationCueDispatcher cueDispatcher);
         public abstract float GetNormalizedTime();
         public abstract float GetTotalNormalizedTime();
@@ -161,6 +170,37 @@ namespace XFramework.Animation
             m_FadeElapsed = Mathf.Min(m_FadeElapsed + deltaTime, FadeDuration);
             float t = FadeDuration <= Mathf.Epsilon ? 1f : m_FadeElapsed / FadeDuration;
             CurrentWeight = Mathf.Lerp(FadeFrom, FadeTo, t);
+        }
+
+        protected void PopulateDebugPlaybackNode(
+            XAnimationDebugNodeSnapshot node,
+            int inputIndex,
+            float inputWeight,
+            float channelWeight,
+            float channelTimeScale,
+            bool isConnected)
+        {
+            node.inputIndex = inputIndex;
+            node.isConnected = isConnected;
+            node.isActive = isConnected && CurrentWeight > 0.0001f;
+            node.inputWeight = inputWeight;
+            node.effectiveWeight = CurrentWeight * channelWeight;
+            node.channelName = ChannelName;
+            node.stateKey = StateKey;
+            node.stateType = StateType;
+            node.clipKey = PrimaryClipKey;
+            node.playbackId = PlaybackId;
+            node.normalizedTime = GetNormalizedTime();
+            node.totalNormalizedTime = GetTotalNormalizedTime();
+            node.speed = Speed * channelTimeScale;
+            node.timeScale = channelTimeScale;
+            node.channelWeight = channelWeight;
+            node.stateWeight = CurrentWeight;
+            node.isLooping = IsLooping;
+            node.isFading = IsFading;
+            node.isTemporaryState = IsTemporaryState;
+            node.drivesRootMotion = DrivesRootMotion;
+            node.transitionSource = RequestSource;
         }
     }
 
@@ -262,6 +302,22 @@ namespace XFramework.Animation
             };
         }
 
+        internal override XAnimationDebugNodeSnapshot BuildDebugNode(
+            XAnimationDebugSnapshotBuilder builder,
+            int parentId,
+            string displayName,
+            int inputIndex,
+            float inputWeight,
+            float channelWeight,
+            float channelTimeScale,
+            bool isConnected)
+        {
+            XAnimationDebugNodeSnapshot node = builder.CreateNode(parentId, displayName, "AnimationClipPlayable");
+            PopulateDebugPlaybackNode(node, inputIndex, inputWeight, channelWeight, channelTimeScale, isConnected);
+            node.details = $"Clip: {PrimaryClipKey} | Unity Clip: {m_Clip.Clip.name} | Length: {m_ClipLength:0.###}";
+            return node;
+        }
+
         public override void Dispose(XAnimationCueDispatcher cueDispatcher)
         {
             cueDispatcher?.RemovePlayback(PlaybackId);
@@ -321,6 +377,7 @@ namespace XFramework.Animation
         private readonly float[] m_SampleWeights;
 
         private int m_PrimaryClipIndex;
+        private float m_BlendParameterValue;
         private float m_TotalNormalizedTime;
         private float m_PreviousTotalNormalizedTime;
 
@@ -371,6 +428,7 @@ namespace XFramework.Animation
             }
 
             ResolveWeights(parameterValue);
+            m_BlendParameterValue = parameterValue;
             m_PreviousTotalNormalizedTime = m_TotalNormalizedTime;
             float blendedClipLength = GetBlendedClipLength();
             m_TotalNormalizedTime += deltaTime * Speed * channelTimeScale / blendedClipLength;
@@ -440,6 +498,24 @@ namespace XFramework.Animation
                 interruptible = Interruptible,
                 isTemporaryState = IsTemporaryState,
             };
+        }
+
+        internal override XAnimationDebugNodeSnapshot BuildDebugNode(
+            XAnimationDebugSnapshotBuilder builder,
+            int parentId,
+            string displayName,
+            int inputIndex,
+            float inputWeight,
+            float channelWeight,
+            float channelTimeScale,
+            bool isConnected)
+        {
+            XAnimationDebugNodeSnapshot node = builder.CreateNode(parentId, displayName, "AnimationMixerPlayable");
+            PopulateDebugPlaybackNode(node, inputIndex, inputWeight, channelWeight, channelTimeScale, isConnected);
+            node.blendParameterX = m_BlendParameterValue;
+            node.details = $"Blend1D Parameter: {m_State.Config.parameterName} = {m_BlendParameterValue:0.###}";
+            node.children = BuildBlendClipDebugNodes(builder, node.id, channelWeight);
+            return node;
         }
 
         public override void Dispose(XAnimationCueDispatcher cueDispatcher)
@@ -589,6 +665,37 @@ namespace XFramework.Animation
             }
 
             return states;
+        }
+
+        private XAnimationDebugNodeSnapshot[] BuildBlendClipDebugNodes(
+            XAnimationDebugSnapshotBuilder builder,
+            int parentId,
+            float channelWeight)
+        {
+            XAnimationDebugNodeSnapshot[] nodes = new XAnimationDebugNodeSnapshot[m_Clips.Length];
+            for (int i = 0; i < m_Clips.Length; i++)
+            {
+                XAnimationCompiledClip clip = m_Clips[i];
+                float sampleWeight = m_SampleWeights[i];
+                XAnimationDebugNodeSnapshot node = builder.CreateNode(parentId, clip.Key, "AnimationClipPlayable");
+                node.inputIndex = i;
+                node.isConnected = m_Playables[i].IsValid() && m_Mixer.GetInput(i).IsValid();
+                node.isActive = sampleWeight > ActiveCueWeightThreshold;
+                node.inputWeight = sampleWeight;
+                node.effectiveWeight = CurrentWeight * channelWeight * sampleWeight;
+                node.channelName = ChannelName;
+                node.stateKey = StateKey;
+                node.stateType = StateType;
+                node.clipKey = clip.Key;
+                node.playbackId = PlaybackId;
+                node.normalizedTime = GetNormalizedTime();
+                node.totalNormalizedTime = m_TotalNormalizedTime;
+                node.stateWeight = sampleWeight;
+                node.details = $"Threshold: {m_State.Samples[i].Threshold:0.###} | Unity Clip: {clip.Clip.name} | Length: {m_ClipLengths[i]:0.###}";
+                nodes[i] = node;
+            }
+
+            return nodes;
         }
 
         private float GetBlendedClipLength()
@@ -768,6 +875,25 @@ namespace XFramework.Animation
                 interruptible = Interruptible,
                 isTemporaryState = IsTemporaryState,
             };
+        }
+
+        internal override XAnimationDebugNodeSnapshot BuildDebugNode(
+            XAnimationDebugSnapshotBuilder builder,
+            int parentId,
+            string displayName,
+            int inputIndex,
+            float inputWeight,
+            float channelWeight,
+            float channelTimeScale,
+            bool isConnected)
+        {
+            XAnimationDebugNodeSnapshot node = builder.CreateNode(parentId, displayName, "AnimationMixerPlayable");
+            PopulateDebugPlaybackNode(node, inputIndex, inputWeight, channelWeight, channelTimeScale, isConnected);
+            node.blendParameterX = m_BlendParameterX;
+            node.blendParameterY = m_BlendParameterY;
+            node.details = $"Blend2D Simple Directional Parameters: {m_State.Config.parameterXName}, {m_State.Config.parameterYName}";
+            node.children = BuildBlendClipDebugNodes(builder, node.id, channelWeight);
+            return node;
         }
 
         public override void Dispose(XAnimationCueDispatcher cueDispatcher)
@@ -1063,6 +1189,38 @@ namespace XFramework.Animation
             return states;
         }
 
+        private XAnimationDebugNodeSnapshot[] BuildBlendClipDebugNodes(
+            XAnimationDebugSnapshotBuilder builder,
+            int parentId,
+            float channelWeight)
+        {
+            XAnimationDebugNodeSnapshot[] nodes = new XAnimationDebugNodeSnapshot[m_Clips.Length];
+            for (int i = 0; i < m_Clips.Length; i++)
+            {
+                XAnimationCompiledClip clip = m_Clips[i];
+                float sampleWeight = m_SampleWeights[i];
+                Vector2 position = m_SamplePositions[i];
+                XAnimationDebugNodeSnapshot node = builder.CreateNode(parentId, clip.Key, "AnimationClipPlayable");
+                node.inputIndex = i;
+                node.isConnected = m_Playables[i].IsValid() && m_Mixer.GetInput(i).IsValid();
+                node.isActive = sampleWeight > ActiveCueWeightThreshold;
+                node.inputWeight = sampleWeight;
+                node.effectiveWeight = CurrentWeight * channelWeight * sampleWeight;
+                node.channelName = ChannelName;
+                node.stateKey = StateKey;
+                node.stateType = StateType;
+                node.clipKey = clip.Key;
+                node.playbackId = PlaybackId;
+                node.normalizedTime = GetNormalizedTime();
+                node.totalNormalizedTime = m_TotalNormalizedTime;
+                node.stateWeight = sampleWeight;
+                node.details = $"Position: ({position.x:0.###}, {position.y:0.###}) | Unity Clip: {clip.Clip.name} | Length: {m_ClipLengths[i]:0.###}";
+                nodes[i] = node;
+            }
+
+            return nodes;
+        }
+
         private float GetBlendedClipLength()
         {
             float blendedClipLength = 0f;
@@ -1242,6 +1400,25 @@ namespace XFramework.Animation
                 interruptible = Interruptible,
                 isTemporaryState = IsTemporaryState,
             };
+        }
+
+        internal override XAnimationDebugNodeSnapshot BuildDebugNode(
+            XAnimationDebugSnapshotBuilder builder,
+            int parentId,
+            string displayName,
+            int inputIndex,
+            float inputWeight,
+            float channelWeight,
+            float channelTimeScale,
+            bool isConnected)
+        {
+            XAnimationDebugNodeSnapshot node = builder.CreateNode(parentId, displayName, "AnimationMixerPlayable");
+            PopulateDebugPlaybackNode(node, inputIndex, inputWeight, channelWeight, channelTimeScale, isConnected);
+            node.blendParameterX = m_BlendParameterX;
+            node.blendParameterY = m_BlendParameterY;
+            node.details = $"Blend2D Freeform Directional Parameters: {m_State.Config.parameterXName}, {m_State.Config.parameterYName}";
+            node.children = BuildBlendClipDebugNodes(builder, node.id, channelWeight);
+            return node;
         }
 
         public override void Dispose(XAnimationCueDispatcher cueDispatcher)
@@ -1669,6 +1846,38 @@ namespace XFramework.Animation
             return states;
         }
 
+        private XAnimationDebugNodeSnapshot[] BuildBlendClipDebugNodes(
+            XAnimationDebugSnapshotBuilder builder,
+            int parentId,
+            float channelWeight)
+        {
+            XAnimationDebugNodeSnapshot[] nodes = new XAnimationDebugNodeSnapshot[m_Clips.Length];
+            for (int i = 0; i < m_Clips.Length; i++)
+            {
+                XAnimationCompiledClip clip = m_Clips[i];
+                float sampleWeight = m_SampleWeights[i];
+                Vector2 position = m_SamplePositions[i];
+                XAnimationDebugNodeSnapshot node = builder.CreateNode(parentId, clip.Key, "AnimationClipPlayable");
+                node.inputIndex = i;
+                node.isConnected = m_Playables[i].IsValid() && m_Mixer.GetInput(i).IsValid();
+                node.isActive = sampleWeight > ActiveCueWeightThreshold;
+                node.inputWeight = sampleWeight;
+                node.effectiveWeight = CurrentWeight * channelWeight * sampleWeight;
+                node.channelName = ChannelName;
+                node.stateKey = StateKey;
+                node.stateType = StateType;
+                node.clipKey = clip.Key;
+                node.playbackId = PlaybackId;
+                node.normalizedTime = GetNormalizedTime();
+                node.totalNormalizedTime = m_TotalNormalizedTime;
+                node.stateWeight = sampleWeight;
+                node.details = $"Position: ({position.x:0.###}, {position.y:0.###}) | Unity Clip: {clip.Clip.name} | Length: {m_ClipLengths[i]:0.###}";
+                nodes[i] = node;
+            }
+
+            return nodes;
+        }
+
         private float GetBlendedClipLength()
         {
             float blendedClipLength = 0f;
@@ -1775,12 +1984,15 @@ namespace XFramework.Animation
                 throw new ArgumentNullException(nameof(request));
             }
 
-            XAnimationTransitionRejectReason interruptRejectReason = CanInterrupt(request.Priority);
-            if (interruptRejectReason != XAnimationTransitionRejectReason.None)
+            if (!request.Force)
             {
-                rejectReason = interruptRejectReason;
-                RecordRejectedRequest(request, rejectReason);
-                return false;
+                XAnimationTransitionRejectReason interruptRejectReason = CanInterrupt(request.Priority);
+                if (interruptRejectReason != XAnimationTransitionRejectReason.None)
+                {
+                    rejectReason = interruptRejectReason;
+                    RecordRejectedRequest(request, rejectReason);
+                    return false;
+                }
             }
 
             ClearRejectedRequest();
@@ -1923,6 +2135,101 @@ namespace XFramework.Animation
             }
 
             return state;
+        }
+
+        internal XAnimationDebugChannelSnapshot BuildDebugChannelSnapshot(float layerWeight)
+        {
+            return new XAnimationDebugChannelSnapshot
+            {
+                name = Name,
+                layerIndex = CompiledChannel.LayerIndex,
+                layerType = LayerType,
+                layerWeight = layerWeight,
+                channelWeight = m_ChannelWeight,
+                timeScale = m_TimeScale,
+                hasActivePlayback = HasActivePlayback,
+                canDriveRootMotion = CanDriveRootMotion,
+                isRootMotionCandidate = IsRootMotionSourceCandidate(),
+                hasAvatarMask = CompiledChannel.Mask != null,
+                avatarMaskName = CompiledChannel.Mask != null ? CompiledChannel.Mask.name : string.Empty,
+                currentStateKey = m_Current?.StateKey ?? string.Empty,
+                previousStateKey = m_Previous?.StateKey ?? string.Empty,
+                currentPlaybackId = m_Current?.PlaybackId ?? 0,
+                previousPlaybackId = m_Previous?.PlaybackId ?? 0,
+                lastRejectReason = m_LastRejectReason,
+                lastRejectedStateKey = m_LastRejectedStateKey,
+                lastRejectedClipKey = m_LastRejectedClipKey,
+                lastRejectedPriority = m_LastRejectedPriority,
+                lastRejectedSource = m_LastRejectedSource,
+            };
+        }
+
+        internal XAnimationDebugNodeSnapshot BuildDebugNode(
+            XAnimationDebugSnapshotBuilder builder,
+            int parentId,
+            int inputIndex,
+            float layerWeight)
+        {
+            XAnimationDebugNodeSnapshot node = builder.CreateNode(parentId, Name, "AnimationMixerPlayable");
+            node.inputIndex = inputIndex;
+            node.isConnected = Mixer.IsValid();
+            node.isActive = HasActivePlayback && layerWeight > 0.0001f;
+            node.inputWeight = layerWeight;
+            node.effectiveWeight = layerWeight;
+            node.channelName = Name;
+            node.channelWeight = m_ChannelWeight;
+            node.timeScale = m_TimeScale;
+            node.isAdditive = LayerType == XAnimationChannelLayerType.Additive;
+            node.canDriveRootMotion = CanDriveRootMotion;
+            node.isRootMotionCandidate = IsRootMotionSourceCandidate();
+            node.hasAvatarMask = CompiledChannel.Mask != null;
+            node.avatarMaskName = CompiledChannel.Mask != null ? CompiledChannel.Mask.name : string.Empty;
+            node.lastRejectReason = m_LastRejectReason;
+            node.lastRejectedStateKey = m_LastRejectedStateKey;
+            node.lastRejectedClipKey = m_LastRejectedClipKey;
+            node.lastRejectedPriority = m_LastRejectedPriority;
+            node.lastRejectedSource = m_LastRejectedSource;
+            node.details = $"Layer: {LayerType} | Channel Weight: {m_ChannelWeight:0.###} | TimeScale: {m_TimeScale:0.###}";
+
+            List<XAnimationDebugNodeSnapshot> children = new(2);
+            if (m_Current != null)
+            {
+                float inputWeight = Mixer.IsValid() ? Mixer.GetInputWeight(0) : m_Current.CurrentWeight;
+                bool connected = Mixer.IsValid() && Mixer.GetInput(0).IsValid();
+                XAnimationDebugNodeSnapshot child = m_Current.BuildDebugNode(
+                    builder,
+                    node.id,
+                    $"Current: {m_Current.StateKey}",
+                    0,
+                    inputWeight,
+                    m_ChannelWeight,
+                    m_TimeScale,
+                    connected);
+                child.isTransitioning = m_Previous != null;
+                child.canDriveRootMotion = CanDriveRootMotion;
+                child.isRootMotionCandidate = IsRootMotionSourceCandidate();
+                children.Add(child);
+            }
+
+            if (m_Previous != null)
+            {
+                float inputWeight = Mixer.IsValid() ? Mixer.GetInputWeight(1) : m_Previous.CurrentWeight;
+                bool connected = Mixer.IsValid() && Mixer.GetInput(1).IsValid();
+                XAnimationDebugNodeSnapshot child = m_Previous.BuildDebugNode(
+                    builder,
+                    node.id,
+                    $"Previous: {m_Previous.StateKey}",
+                    1,
+                    inputWeight,
+                    m_ChannelWeight,
+                    m_TimeScale,
+                    connected);
+                child.isTransitioning = true;
+                children.Add(child);
+            }
+
+            node.children = children.ToArray();
+            return node;
         }
 
         public bool TryMarkCompletedExit(out XAnimationStatePlaybackInstance playback)

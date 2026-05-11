@@ -118,16 +118,33 @@ namespace XFramework.Animation
             m_IsInitialized = true;
         }
 
-        public XAnimationPlaybackHandle PlayClip(string clipName, string channelName, XAnimationTransitionOptions transition = default)
+        public XAnimationPlaybackHandle PlayClip(string clipName, string channelName, XAnimationTransitionOptions transition = null)
         {
             EnsureInitialized();
             return m_Driver.PlayClip(clipName, channelName, transition);
         }
 
-        public XAnimationPlaybackHandle PlayState(string stateName, XAnimationTransitionOptions transition = default)
+        public XAnimationPlaybackHandle PlayState(string stateName, XAnimationTransitionOptions transition)
         {
             EnsureInitialized();
             return m_Driver.PlayState(stateName, transition);
+        }
+
+        public XAnimationPlaybackHandle PlayState(string stateName)
+        {
+            return PlayState(stateName, null);
+        }
+
+        public XAnimationPlaybackHandle PlayState(string stateName, bool force)
+        {
+            EnsureInitialized();
+            return m_Driver.PlayState(stateName, force);
+        }
+
+        public XAnimationPlaybackHandle PlayState(string stateName, XAnimationTransitionOptions transition, bool force)
+        {
+            EnsureInitialized();
+            return m_Driver.PlayState(stateName, transition, force);
         }
 
         public void Play(string clipKey)
@@ -138,11 +155,6 @@ namespace XFramework.Animation
         public XAnimationPlaybackHandle Play(string clipKey, string channelName)
         {
             return PlayClip(clipKey, channelName);
-        }
-
-        public XAnimationPlaybackHandle PlayState(string stateKey)
-        {
-            return PlayState(stateKey, default);
         }
 
         public void Stop(string channelName, float fadeOut = default)
@@ -266,6 +278,16 @@ namespace XFramework.Animation
         {
             EnsureInitialized();
             return m_Driver.GetClipDuration(clipKey);
+        }
+
+        public XAnimationDebugGraphSnapshot GetDebugGraphSnapshot()
+        {
+            if (!m_IsInitialized)
+            {
+                return XAnimationDebugGraphSnapshot.Invalid($"{nameof(XAnimationActor)} is not initialized.");
+            }
+
+            return m_Driver.GetDebugGraphSnapshot();
         }
 
         public void Dispose()

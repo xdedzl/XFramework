@@ -17,7 +17,8 @@ namespace XFramework.Editor
 
         private readonly Dictionary<(int rowIndex, int columnIndex), string> m_CellErrors = new();
 
-        private TextAsset m_SourceAsset;
+        [SerializeField] private TextAsset m_SourceAsset;
+        [SerializeField] private string m_SourceAssetGuid;
         private XDataTableEditorModel m_Model;
         private XDataTableEditorValidationResult m_ValidationResult;
 
@@ -64,10 +65,13 @@ namespace XFramework.Editor
 
         private void OnEnable()
         {
+            RestoreSourceAssetReference();
             if (m_SourceAsset != null && m_Model == null)
             {
                 LoadTextAsset(m_SourceAsset);
             }
+
+            UpdateWindowTitle();
         }
 
         private void OnDisable()
@@ -94,6 +98,7 @@ namespace XFramework.Editor
         private void LoadTextAsset(TextAsset textAsset)
         {
             m_SourceAsset = textAsset;
+            m_SourceAssetGuid = ResolveAssetGuid(textAsset);
             m_CellErrors.Clear();
             m_SortColumnIndex = -1;
             m_SortAscending = true;
@@ -119,6 +124,33 @@ namespace XFramework.Editor
             }
 
             UpdateWindowTitle();
+        }
+
+        private void RestoreSourceAssetReference()
+        {
+            if (m_SourceAsset != null || string.IsNullOrEmpty(m_SourceAssetGuid))
+            {
+                return;
+            }
+
+            string assetPath = AssetDatabase.GUIDToAssetPath(m_SourceAssetGuid);
+            if (string.IsNullOrEmpty(assetPath))
+            {
+                return;
+            }
+
+            m_SourceAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(assetPath);
+        }
+
+        private static string ResolveAssetGuid(TextAsset textAsset)
+        {
+            if (textAsset == null)
+            {
+                return string.Empty;
+            }
+
+            string assetPath = AssetDatabase.GetAssetPath(textAsset);
+            return string.IsNullOrEmpty(assetPath) ? string.Empty : AssetDatabase.AssetPathToGUID(assetPath);
         }
 
         private void BuildPlaceholder()

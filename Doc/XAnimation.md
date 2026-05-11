@@ -98,6 +98,27 @@ flowchart TD
 - 切回 `XAnimation Preview` 时，窗口会立即同步当前预览状态，不会在后台偷偷累计时间后一次性快进。
 - 示例资源可参考 `Assets/Animation/XAnimationSamples/XAnimationPreview_WolfLite.xasset` 与 `XAnimationOverride_WolfLite.xasset`。
 
+### 2.1 Editor 代码注意事项
+
+- `XFramework` 内已经存在命名空间 `XFramework.Event`。
+- 在 Editor 窗口、Inspector、`OnGUI` 或 IMGUI 代码里，如果需要访问 Unity 的 `Event.current`，不要直接写 `Event.current`。
+- 推荐统一写法：
+
+```csharp
+using UEvent = UnityEngine.Event;
+```
+
+然后使用：
+
+```csharp
+if (UEvent.current.type == EventType.Repaint)
+{
+    // ...
+}
+```
+
+- 这样可以避免 `Event` 被解析到 `XFramework.Event`，出现 `Event.current` 不存在或 `Event` 被当成命名空间的编译错误。
+
 ---
 
 ## 3. 配置结构
@@ -131,6 +152,8 @@ flowchart TD
       "stateType": "Single",
       "clipKey": "idle",
       "channelName": "base",
+      "allowedNextStateKeys": [],
+      "allowedPreviousStateKeys": [],
       "fadeIn": 0.15,
       "fadeOut": 0.15,
       "speed": 1.0,
@@ -142,6 +165,8 @@ flowchart TD
       "stateType": "Blend1D",
       "channelName": "base",
       "parameterName": "moveSpeed",
+      "allowedNextStateKeys": [],
+      "allowedPreviousStateKeys": [],
       "fadeIn": 0.15,
       "fadeOut": 0.15,
       "speed": 1.0,
@@ -159,6 +184,8 @@ flowchart TD
       "channelName": "base",
       "parameterXName": "moveX",
       "parameterYName": "moveY",
+      "allowedNextStateKeys": [],
+      "allowedPreviousStateKeys": [],
       "fadeIn": 0.15,
       "fadeOut": 0.15,
       "speed": 1.0,
@@ -182,6 +209,8 @@ flowchart TD
       "channelName": "base",
       "parameterXName": "moveX",
       "parameterYName": "moveY",
+      "allowedNextStateKeys": [],
+      "allowedPreviousStateKeys": [],
       "fadeIn": 0.15,
       "fadeOut": 0.15,
       "speed": 1.0,
@@ -236,7 +265,7 @@ flowchart TD
 
 - `channels`：动画混合通道。`layerType` 支持 `Base`、`Override`、`Additive`；`maskPath` 可绑定 `AvatarMask`；`canDriveRootMotion` 表示该通道是否允许驱动 Root Motion。
 - `clips`：动画片段索引，是 state 引用的叶子资源，只描述 `key` 与 `clipPath`。`clipPath` 支持普通资源路径，也支持 `FBX路径|子动画名`。
-- `states`：业务播放单位。`Single` 引用一个 `clipKey`；`Blend1D` 绑定一个 Float 参数和若干采样点，运行时只混合相邻两个采样 clip；`Blend2DSimpleDirectional` / `Blend2DFreeformDirectional` 绑定两个 Float 参数和一组二维采样点，前者按方向相似度混合邻近方向，后者支持同方向不同半径样本，例如 walk/run forward；channel、fade、loop、speed、Root Motion 等播放语义都属于 state。
+- `states`：业务播放单位。`Single` 引用一个 `clipKey`；`Blend1D` 绑定一个 Float 参数和若干采样点，运行时只混合相邻两个采样 clip；`Blend2DSimpleDirectional` / `Blend2DFreeformDirectional` 绑定两个 Float 参数和一组二维采样点，前者按方向相似度混合邻近方向，后者支持同方向不同半径样本，例如 walk/run forward；channel、fade、loop、speed、Root Motion 等播放语义都属于 state。`allowedNextStateKeys` / `allowedPreviousStateKeys` 是可选的双向门禁：空数组或不填都表示不限制。
 - `autoTransitions`：状态自动切换配置。用于声明某个非循环 state 在播放到指定进度后，自动切到下一个 state，并可指定切换时长与目标状态起播时间。
 - `parameters`：状态运行时参数，支持 `Float`、`Int`、`Bool`、`Trigger`。`Blend1D` 每帧从 `XAnimationContext` 读取一个 Float 参数；2D Directional Blend 每帧读取 `parameterXName + parameterYName` 两个 Float 参数。
 - `cues`：动画事件点。`time` 是 `[0, 1]` 归一化时间；循环动画每轮都会按 `loopCount` 分发一次。
@@ -301,6 +330,7 @@ Override Asset 用于复用 base 配置，只替换指定 clip：
 - `ExitTime`：当前状态播放到哪个 normalized time 时触发自动切换，范围 `[0, 1]`。
 - `TransitionDuration`：自动切换过渡时长；当值 `<= 0` 时，会回退到目标 state 自身的 `fadeIn / fadeOut`。
 - `EnterTime`：目标状态从哪个 normalized time 开始播放，范围 `[0, 1]`。
+- `autoTransitions` 也受 state 门禁限制；如果 `preState -> nextState` 不满足来源 state 的 `allowedNextStateKeys` 或目标 state 的 `allowedPreviousStateKeys`，这次自动切换会被拒绝。
 
 编辑器中的 `XAnimation Preview` 已提供对应的 Auto Transition 编辑区，可直接配置 `preState`、`nextState`、`ExitTime`、`TransitionDuration` 与 `EnterTime`，并通过时间轴可视化观察切换时机。
 
@@ -383,7 +413,8 @@ public sealed class HeroAnimationController : MonoBehaviour
 
 常用控制接口：
 
-- `PlayState(string stateKey, XAnimationTransitionOptions transition = default)`：按 state key 播放，始终使用 state 自己配置的 channel，推荐业务层统一使用。
+- `PlayState(string stateKey, XAnimationTransitionOptions transition = default)`：按 state key 播放，始终使用 state 自己配置的 channel，推荐业务层统一使用。`transition.force = true` 时会忽略门禁、`allowInterrupt`、`interruptible` 与 `priority`。
+- `PlayState(string stateKey, bool force)` / `PlayState(string stateKey, XAnimationTransitionOptions transition, bool force)`：`XAnimationActor` / `XAnimationDriver` 提供的便捷重载，内部会归并到 `transition.force`。
 - `PlayClip(string clipKey, string channelName, XAnimationTransitionOptions transition = default)`：底层/调试接口，按 clip key 直接播放；必须显式提供 `channelName`。
 - `SetParameter(key, float/int/bool)` / `SetTrigger(key)`：写入运行时参数，`Blend1D` 默认从 Float 参数读取混合值，2D Directional Blend 默认从两个 Float 参数读取二维输入。
 - `Stop(channelName, fadeOut)` / `StopAll(fadeOut)`：停止指定通道或全部通道。
@@ -421,10 +452,16 @@ MonoBehaviour(Update)
 - 同一 channel 内播放新 state 时，会把当前 state 作为 previous 输入淡出，新 state 作为 current 输入淡入。
 - `Blend1D` / 2D Directional Blend 的子 clip 混合只负责状态内部权重，不负责跨状态自动过渡。
 - 同一 channel 内的新播放请求统一按以下顺序仲裁：当前无播放则直接成功；否则先检查 `channel.allowInterrupt`，再检查当前播放的 `interruptible`，最后检查 `request.priority >= 当前播放 priority`。
+- 如果当前播放和目标播放都是真实 state，还会额外检查双向门禁：
+  - 当前 state 的 `allowedNextStateKeys` 非空时，目标 state 必须在其中。
+  - 目标 state 的 `allowedPreviousStateKeys` 非空时，当前 state 必须在其中。
+  - 两边都配置时，两边都要满足。
 - `interruptible` 只约束“当前播放是否允许被打断”，不是“这个新请求将来一定不可被打断”。
 - 新请求只有在 `priority >= 当前播放 priority` 时才能打断。
 - 被挡住的新请求会立即失败，不会排队，也不会挂起等待下一帧自动执行。
 - `defaultTransitions` 与 `autoTransitions` 生成的请求，和业务层显式 `PlayState / PlayClip` 一样，都会走同一套仲裁规则。
+- `PlayClip` 本身不读取 state 门禁，但它创建出来的临时 state 一旦成为当前播放，后续再切到别的真实 state 时，会像普通 state 一样参与 `allowedNextStateKeys / allowedPreviousStateKeys` 判定。
+- `force=true` 的显式 `PlayState` 会跳过门禁、`channel.allowInterrupt`、当前 `interruptible` 与 `priority` 检查，直接强制切换到目标 state。
 - 过渡开始时，旧状态会立刻触发 `StateExited`，新状态会立刻触发 `StateEntered`；`GetChannelState()`、`IsPlaying()` 与 `TryGetCurrentState()` 都只把新状态视为 current。
 - 过渡重叠期内，旧状态只保留姿态淡出身份，不再保有 current state 语义；但 `Cue` / `AnimationEvent` 允许旧状态与新状态同时按各自权重继续触发。
 - `Stop()` / `Dispose()` / 显式终止仍会抑制旧状态后续 `Cue` / `AnimationEvent`，不会沿用“过渡双发”语义。
@@ -444,6 +481,7 @@ MonoBehaviour(Update)
 - 当 `TransitionDuration > 0` 时，自动切换会统一使用该值作为 `fadeIn / fadeOut`。
 - 当 `TransitionDuration <= 0` 时，自动切换会回退到目标 state 自身配置的 `fadeIn / fadeOut`。
 - 自动切换会和普通 `PlayState` 一样参与同一套仲裁；不会因为是 auto transition 就强制成功。
+- 自动切换同样受 `allowedNextStateKeys / allowedPreviousStateKeys` 约束，不会绕过 state 门禁。
 - 如果 auto transition 因仲裁失败而没有切出去，当前状态会继续保持播放，不会立即被 `Stop`；后续只要播放实例还在，就允许再次尝试自动切换。
 - 如果配置了 auto transition 但 `nextStateKey` 为空，当前状态播到退出点后会直接停止，而不是切到别的状态。
 
@@ -453,6 +491,7 @@ MonoBehaviour(Update)
 - 当业务层调用 `PlayState(next)`，且当前 state 为 `pre`，如果本次调用没有显式传入 `XAnimationTransitionOptions`，运行时会查 `defaultTransitions` 并使用匹配到的那条过渡参数。
 - 一旦本次调用显式传入了 `XAnimationTransitionOptions`，调用方参数优先；运行时不会再把 `defaultTransitions` 的字段叠加到这次请求上。
 - `defaultTransitions` 只决定“这一次从 pre 到 next 怎么切”，不会改写目标 state 自身的常规 `fadeIn / fadeOut / speed / loop` 配置。
+- 即便命中了 `defaultTransitions`，`pre -> next` 仍然要满足 `allowedNextStateKeys / allowedPreviousStateKeys`；只有显式 `force=true` 的 `PlayState` 才会忽略这些限制。
 
 ### 5.3 资源加载规则
 

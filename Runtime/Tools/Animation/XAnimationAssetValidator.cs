@@ -271,6 +271,14 @@ namespace XFramework.Animation
                 }
             }
 
+            foreach (XAnimationStateConfig state in states)
+            {
+                if (state != null)
+                {
+                    ValidateStateTransitionGate(state, stateMap);
+                }
+            }
+
             return stateMap;
         }
 
@@ -498,6 +506,45 @@ namespace XFramework.Animation
             if (state.rootMotionMode == XAnimationClipRootMotionMode.ForceOn && !channel.canDriveRootMotion)
             {
                 throw new XFrameworkException($"XAnimation state '{state.key}' forces root motion, but channel '{state.channelName}' cannot drive root motion.");
+            }
+        }
+
+        private static void ValidateStateTransitionGate(
+            XAnimationStateConfig state,
+            IReadOnlyDictionary<string, XAnimationStateConfig> stateMap)
+        {
+            ValidateStateKeyList(state.key, state.allowedNextStateKeys, stateMap, "allowedNextStateKeys");
+            ValidateStateKeyList(state.key, state.allowedPreviousStateKeys, stateMap, "allowedPreviousStateKeys");
+        }
+
+        private static void ValidateStateKeyList(
+            string stateKey,
+            IReadOnlyList<string> values,
+            IReadOnlyDictionary<string, XAnimationStateConfig> stateMap,
+            string fieldName)
+        {
+            if (values == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < values.Count; i++)
+            {
+                string candidate = values[i];
+                if (string.IsNullOrWhiteSpace(candidate))
+                {
+                    continue;
+                }
+
+                if (string.Equals(stateKey, candidate, StringComparison.Ordinal))
+                {
+                    throw new XFrameworkException($"XAnimation state '{stateKey}' cannot include itself in {fieldName}.");
+                }
+
+                if (!stateMap.ContainsKey(candidate))
+                {
+                    throw new XFrameworkException($"XAnimation state '{stateKey}' {fieldName} references unknown state '{candidate}'.");
+                }
             }
         }
 
