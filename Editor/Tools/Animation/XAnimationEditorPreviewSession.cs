@@ -214,6 +214,8 @@ namespace XFramework.Editor
             {
                 return;
             }
+
+            m_Driver.SyncFrame();
         }
 
         public void PlayClip(

@@ -463,8 +463,8 @@ namespace XFramework.Editor
 
         private void ApplyClipButtonStyle(Button btn, bool isPlaying)
         {
-            btn.text = isPlaying ? "■" : "▶";
-            ApplyClipIconButtonStyle(btn, isPlaying ? DangerColor : null);
+            btn.text = isPlaying && !m_IsPaused ? "Ⅱ" : "▶";
+            ApplyClipIconButtonStyle(btn, isPlaying && !m_IsPaused ? AccentColor : null);
         }
 
         private void SetStopAllButtonEnabled(bool enabled)
@@ -1378,17 +1378,22 @@ namespace XFramework.Editor
 
             MarkFreeformStateInteracted(stateKey);
 
+            bool changed = false;
             if (!string.IsNullOrWhiteSpace(config.parameterXName))
             {
-                SetPreviewFloatParameterWithoutRefresh(config.parameterXName, position.x);
+                changed |= TrySetPreviewParameter(config.parameterXName, position.x);
             }
 
             if (!string.IsNullOrWhiteSpace(config.parameterYName))
             {
-                SetPreviewFloatParameterWithoutRefresh(config.parameterYName, position.y);
+                changed |= TrySetPreviewParameter(config.parameterYName, position.y);
             }
 
-            RebuildParameterList();
+            if (changed)
+            {
+                RefreshPreviewAfterParameterChanged(rebuildParameterList: true);
+            }
+
             if (string.Equals(m_CurrentFreeformGraphStateKey, stateKey, StringComparison.Ordinal))
             {
                 if (!TryGetCompiledBlendGraphState(stateKey, out XAnimationCompiledState currentState))
@@ -1412,10 +1417,6 @@ namespace XFramework.Editor
                         "Freeform 2D Blend");
                 }
             }
-
-            RefreshStatePlaybackViews();
-            RenderPreview();
-            Repaint();
         }
 
         private float GetBlend1DPreviewValue(string parameterName)
@@ -1444,7 +1445,10 @@ namespace XFramework.Editor
             MarkFreeformStateInteracted(stateKey);
             if (!string.IsNullOrWhiteSpace(config.parameterName))
             {
-                SetPreviewFloatParameter(config.parameterName, value);
+                if (TrySetPreviewParameter(config.parameterName, value))
+                {
+                    RefreshPreviewAfterParameterChanged(rebuildParameterList: true);
+                }
             }
 
             if (string.Equals(m_CurrentFreeformGraphStateKey, stateKey, StringComparison.Ordinal) &&
@@ -1453,8 +1457,6 @@ namespace XFramework.Editor
             {
                 UpdateBlend1DGraph(stateKey, blend1DState);
             }
-
-            RebuildParameterList();
         }
 
         private bool IsStateCurrentlyPlaying(string stateKey, string channelName)

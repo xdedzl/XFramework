@@ -23,7 +23,8 @@ namespace XFramework.Editor
 
         private static readonly Color PaneBg = new(0.15f, 0.15f, 0.16f, 1f);
         private static readonly Color CanvasBg = new(0.105f, 0.11f, 0.12f, 1f);
-        private static readonly Color CanvasGrid = new(1f, 1f, 1f, 0.035f);
+        private static readonly Color CanvasGrid = new(0.76f, 0.77f, 0.75f, 0.08f);
+        private static readonly Color CanvasGridMajor = new(0.76f, 0.77f, 0.75f, 0.13f);
         private static readonly Color SectionDivider = new(0.28f, 0.28f, 0.30f, 1f);
         private static readonly Color ToolbarBg = new(0.14f, 0.14f, 0.15f, 1f);
         private static readonly Color NodeBg = new(0.20f, 0.21f, 0.23f, 0.98f);
@@ -59,8 +60,12 @@ namespace XFramework.Editor
         private float m_NextLeafY;
         private float m_CanvasWidth;
         private float m_CanvasHeight;
+        private float m_CanvasVisualWidth;
+        private float m_CanvasVisualHeight;
+        private Vector2 m_CanvasOrigin;
         private float m_Zoom = 1f;
         private bool m_IsPanning;
+        private bool m_CanvasScrollInitialized;
         private int m_PanPointerId = PointerId.invalidPointerId;
         private Vector2 m_PanStartPointer;
         private Vector2 m_PanStartScrollOffset;
@@ -149,12 +154,13 @@ namespace XFramework.Editor
             split.style.minHeight = 0;
             Add(split);
 
-            m_GraphScrollView = new ScrollView();
-            m_GraphScrollView.verticalScrollerVisibility = ScrollerVisibility.Auto;
-            m_GraphScrollView.horizontalScrollerVisibility = ScrollerVisibility.Auto;
+            m_GraphScrollView = new ScrollView(ScrollViewMode.VerticalAndHorizontal);
+            m_GraphScrollView.verticalScrollerVisibility = ScrollerVisibility.Hidden;
+            m_GraphScrollView.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
             m_GraphScrollView.style.flexGrow = 1;
             m_GraphScrollView.style.minWidth = 420;
             m_GraphScrollView.style.minHeight = 0;
+            m_GraphScrollView.RegisterCallback<GeometryChangedEvent>(_ => RefreshCanvasViewport());
             split.Add(m_GraphScrollView);
 
             m_Canvas = new VisualElement();
@@ -393,17 +399,52 @@ namespace XFramework.Editor
         {
             float scaledWidth = Scale(width);
             float scaledHeight = Scale(height);
-            m_Canvas.style.width = scaledWidth;
-            m_Canvas.style.height = scaledHeight;
-            m_Canvas.style.minWidth = scaledWidth;
-            m_Canvas.style.minHeight = scaledHeight;
+            Vector2 viewportSize = GetGraphViewportSize();
+            Vector2 previousOrigin = m_CanvasOrigin;
+            Vector2 previousOffset = GetScrollOffset();
+            m_CanvasOrigin = GetCanvasOrigin(viewportSize);
+            m_CanvasVisualWidth = Mathf.Max(scaledWidth + m_CanvasOrigin.x * 2f, viewportSize.x);
+            m_CanvasVisualHeight = Mathf.Max(scaledHeight + m_CanvasOrigin.y * 2f, viewportSize.y);
 
-            m_EdgeCanvas.style.width = scaledWidth;
-            m_EdgeCanvas.style.height = scaledHeight;
-            m_EdgeLabelLayer.style.width = scaledWidth;
-            m_EdgeLabelLayer.style.height = scaledHeight;
-            m_NodeLayer.style.width = scaledWidth;
-            m_NodeLayer.style.height = scaledHeight;
+            m_Canvas.style.width = m_CanvasVisualWidth;
+            m_Canvas.style.height = m_CanvasVisualHeight;
+            m_Canvas.style.minWidth = m_CanvasVisualWidth;
+            m_Canvas.style.minHeight = m_CanvasVisualHeight;
+
+            m_EdgeCanvas.style.width = m_CanvasVisualWidth;
+            m_EdgeCanvas.style.height = m_CanvasVisualHeight;
+            m_EdgeLabelLayer.style.width = m_CanvasVisualWidth;
+            m_EdgeLabelLayer.style.height = m_CanvasVisualHeight;
+            m_NodeLayer.style.width = m_CanvasVisualWidth;
+            m_NodeLayer.style.height = m_CanvasVisualHeight;
+
+            if (m_CanvasScrollInitialized)
+            {
+                SetScrollOffset(ClampScrollOffset(previousOffset + m_CanvasOrigin - previousOrigin));
+                return;
+            }
+
+            m_CanvasScrollInitialized = true;
+            SetScrollOffset(ClampScrollOffset(m_CanvasOrigin));
+        }
+
+        private void RefreshCanvasViewport()
+        {
+            if (m_CanvasWidth <= 0f || m_CanvasHeight <= 0f)
+            {
+                return;
+            }
+
+            float previousWidth = m_CanvasVisualWidth;
+            float previousHeight = m_CanvasVisualHeight;
+            ApplyCanvasSize(m_CanvasWidth, m_CanvasHeight);
+            SetScrollOffset(ClampScrollOffset(GetScrollOffset()));
+
+            if (!Mathf.Approximately(previousWidth, m_CanvasVisualWidth) ||
+                !Mathf.Approximately(previousHeight, m_CanvasVisualHeight))
+            {
+                m_EdgeCanvas.MarkDirtyRepaint();
+            }
         }
 
         private int GetMaxDepth()
@@ -419,11 +460,14 @@ namespace XFramework.Editor
 
         private void ShowEmpty(string text)
         {
-            ApplyCanvasSize(520f, 240f);
+            m_CanvasWidth = 520f;
+            m_CanvasHeight = 240f;
+            ApplyCanvasSize(m_CanvasWidth, m_CanvasHeight);
             Label label = new(text);
             label.style.position = Position.Absolute;
-            label.style.left = Scale(18f);
-            label.style.top = Scale(16f);
+            Vector2 labelPosition = ToCanvasPoint(new Vector2(18f, 16f));
+            label.style.left = labelPosition.x;
+            label.style.top = labelPosition.y;
             label.style.color = TextMuted;
             label.style.fontSize = ScaleFont(12f);
             label.style.whiteSpace = WhiteSpace.Normal;
@@ -437,10 +481,11 @@ namespace XFramework.Editor
         private void CreateNodeElement(NodeLayout layout)
         {
             XAnimationDebugNodeSnapshot node = layout.Node;
+            Vector2 cardPosition = ToCanvasPoint(layout.Position);
             VisualElement card = new();
             card.style.position = Position.Absolute;
-            card.style.left = Scale(layout.Position.x);
-            card.style.top = Scale(layout.Position.y);
+            card.style.left = cardPosition.x;
+            card.style.top = cardPosition.y;
             card.style.width = Scale(NodeWidth);
             card.style.height = Scale(NodeHeight);
             card.style.paddingLeft = Scale(8f);
@@ -565,9 +610,10 @@ namespace XFramework.Editor
                 Vector2 middle = new((from.xMax + to.xMin) * 0.5f, (from.center.y + to.center.y) * 0.5f);
 
                 Label label = new($"w {child.inputWeight:0.##} / {child.effectiveWeight:0.##}");
+                Vector2 labelPosition = ToCanvasPoint(new Vector2(middle.x - EdgeLabelWidth * 0.5f, middle.y - EdgeLabelHeight * 0.5f));
                 label.style.position = Position.Absolute;
-                label.style.left = Scale(middle.x - EdgeLabelWidth * 0.5f);
-                label.style.top = Scale(middle.y - EdgeLabelHeight * 0.5f);
+                label.style.left = labelPosition.x;
+                label.style.top = labelPosition.y;
                 label.style.width = Scale(EdgeLabelWidth);
                 label.style.height = Scale(EdgeLabelHeight);
                 label.style.unityTextAlign = TextAnchor.MiddleCenter;
@@ -603,9 +649,9 @@ namespace XFramework.Editor
             Painter2D painter = context.painter2D;
             DrawGrid(
                 painter,
-                contentWidth: Scale(m_CanvasWidth),
-                contentHeight: Scale(m_CanvasHeight),
-                gridSize: Scale(32f));
+                visibleRect: GetVisibleCanvasRect(),
+                gridSize: Scale(32f),
+                origin: m_CanvasOrigin);
 
             for (int i = 0; i < m_Edges.Count; i++)
             {
@@ -613,36 +659,51 @@ namespace XFramework.Editor
             }
         }
 
-        private static void DrawGrid(Painter2D painter, float contentWidth, float contentHeight, float gridSize)
+        private static void DrawGrid(Painter2D painter, Rect visibleRect, float gridSize, Vector2 origin)
         {
-            painter.lineWidth = 1f;
-            painter.strokeColor = CanvasGrid;
-            for (float x = 0f; x <= contentWidth; x += gridSize)
+            if (visibleRect.width <= 0f || visibleRect.height <= 0f || gridSize <= 0.01f)
+            {
+                return;
+            }
+
+            DrawGridLines(painter, visibleRect, gridSize, origin, CanvasGrid, 1f);
+            DrawGridLines(painter, visibleRect, gridSize * 5f, origin, CanvasGridMajor, 1.15f);
+        }
+
+        private static void DrawGridLines(Painter2D painter, Rect visibleRect, float gridSize, Vector2 origin, Color color, float lineWidth)
+        {
+            float startX = origin.x + Mathf.Floor((visibleRect.xMin - origin.x) / gridSize) * gridSize;
+            float startY = origin.y + Mathf.Floor((visibleRect.yMin - origin.y) / gridSize) * gridSize;
+            float endX = visibleRect.xMax;
+            float endY = visibleRect.yMax;
+            painter.strokeColor = color;
+            painter.lineWidth = lineWidth;
+            for (float x = startX; x <= endX; x += gridSize)
             {
                 painter.BeginPath();
-                painter.MoveTo(new Vector2(x, 0f));
-                painter.LineTo(new Vector2(x, contentHeight));
+                painter.MoveTo(new Vector2(x, visibleRect.yMin));
+                painter.LineTo(new Vector2(x, endY));
                 painter.Stroke();
             }
 
-            for (float y = 0f; y <= contentHeight; y += gridSize)
+            for (float y = startY; y <= endY; y += gridSize)
             {
                 painter.BeginPath();
-                painter.MoveTo(new Vector2(0f, y));
-                painter.LineTo(new Vector2(contentWidth, y));
+                painter.MoveTo(new Vector2(visibleRect.xMin, y));
+                painter.LineTo(new Vector2(endX, y));
                 painter.Stroke();
             }
         }
 
-        private static void DrawEdge(Painter2D painter, EdgeLayout edge, float zoom)
+        private void DrawEdge(Painter2D painter, EdgeLayout edge, float zoom)
         {
             XAnimationDebugNodeSnapshot node = edge.Child.Node;
             float weight = GetNodeVisualWeight(node);
             Color color = node.isActive ? EdgeActive : EdgeInactive;
             color.a = Mathf.Lerp(0.18f, 0.92f, Mathf.Clamp01(weight));
 
-            Vector2 from = ScalePoint(new Vector2(edge.Parent.Rect.xMax, edge.Parent.Rect.center.y), zoom);
-            Vector2 to = ScalePoint(new Vector2(edge.Child.Rect.xMin, edge.Child.Rect.center.y), zoom);
+            Vector2 from = ToCanvasPoint(new Vector2(edge.Parent.Rect.xMax, edge.Parent.Rect.center.y));
+            Vector2 to = ToCanvasPoint(new Vector2(edge.Child.Rect.xMin, edge.Child.Rect.center.y));
             float tangent = Mathf.Clamp((to.x - from.x) * 0.45f, 44f, 112f);
             Vector2 c1 = from + new Vector2(tangent, 0f);
             Vector2 c2 = to - new Vector2(tangent, 0f);
@@ -689,12 +750,12 @@ namespace XFramework.Editor
 
             Vector2 scrollOffset = GetScrollOffset();
             Vector2 viewportPoint = m_GraphScrollView.WorldToLocal(evt.mousePosition);
-            Vector2 graphPoint = (scrollOffset + viewportPoint) / previousZoom;
+            Vector2 graphPoint = (scrollOffset + viewportPoint - m_CanvasOrigin) / previousZoom;
             m_Zoom = nextZoom;
 
             RebuildGraph();
 
-            Vector2 nextOffset = graphPoint * nextZoom - viewportPoint;
+            Vector2 nextOffset = graphPoint * nextZoom + m_CanvasOrigin - viewportPoint;
             SetScrollOffset(ClampScrollOffset(nextOffset));
             evt.StopPropagation();
         }
@@ -783,16 +844,52 @@ namespace XFramework.Editor
 
             m_GraphScrollView.horizontalScroller.value = offset.x;
             m_GraphScrollView.verticalScroller.value = offset.y;
+            m_EdgeCanvas?.MarkDirtyRepaint();
         }
 
         private Vector2 ClampScrollOffset(Vector2 offset)
         {
-            Rect viewport = m_GraphScrollView?.contentViewport?.layout ?? Rect.zero;
-            float maxX = Mathf.Max(0f, Scale(m_CanvasWidth) - viewport.width);
-            float maxY = Mathf.Max(0f, Scale(m_CanvasHeight) - viewport.height);
+            Vector2 viewportSize = GetGraphViewportSize();
+            float maxX = Mathf.Max(0f, m_CanvasVisualWidth - viewportSize.x);
+            float maxY = Mathf.Max(0f, m_CanvasVisualHeight - viewportSize.y);
             return new Vector2(
                 Mathf.Clamp(offset.x, 0f, maxX),
                 Mathf.Clamp(offset.y, 0f, maxY));
+        }
+
+        private Vector2 GetGraphViewportSize()
+        {
+            if (m_GraphScrollView == null)
+            {
+                return Vector2.zero;
+            }
+
+            Rect viewport = m_GraphScrollView.contentViewport?.layout ?? Rect.zero;
+            if (viewport.width > 0f && viewport.height > 0f)
+            {
+                return viewport.size;
+            }
+
+            Rect scrollViewLayout = m_GraphScrollView.layout;
+            return new Vector2(Mathf.Max(0f, scrollViewLayout.width), Mathf.Max(0f, scrollViewLayout.height));
+        }
+
+        private static Vector2 GetCanvasOrigin(Vector2 viewportSize)
+        {
+            return new Vector2(Mathf.Max(0f, viewportSize.x), Mathf.Max(0f, viewportSize.y));
+        }
+
+        private Rect GetVisibleCanvasRect()
+        {
+            Vector2 offset = GetScrollOffset();
+            Vector2 viewportSize = GetGraphViewportSize();
+            float width = viewportSize.x > 0f ? viewportSize.x : m_CanvasVisualWidth;
+            float height = viewportSize.y > 0f ? viewportSize.y : m_CanvasVisualHeight;
+            return new Rect(
+                offset.x,
+                offset.y,
+                Mathf.Min(width, Mathf.Max(0f, m_CanvasVisualWidth - offset.x)),
+                Mathf.Min(height, Mathf.Max(0f, m_CanvasVisualHeight - offset.y)));
         }
 
         private float Scale(float value)
@@ -800,9 +897,9 @@ namespace XFramework.Editor
             return value * m_Zoom;
         }
 
-        private static Vector2 ScalePoint(Vector2 value, float zoom)
+        private Vector2 ToCanvasPoint(Vector2 value)
         {
-            return value * zoom;
+            return m_CanvasOrigin + value * m_Zoom;
         }
 
         private float ScaleFont(float value)

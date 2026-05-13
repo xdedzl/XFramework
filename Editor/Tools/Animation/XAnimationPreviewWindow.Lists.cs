@@ -1064,7 +1064,7 @@ namespace XFramework.Editor
             {
                 text = "▶"
             };
-            playButton.tooltip = "播放或停止这个 state。Blend1D 和 2D directional blend 会读取绑定参数实时混合。";
+            playButton.tooltip = "播放或暂停这个 state。Blend1D 和 2D directional blend 会读取绑定参数实时混合。";
             ApplyClipButtonStyle(playButton, false);
             playButton.style.flexShrink = 0;
             playButton.style.position = Position.Relative;
@@ -1116,9 +1116,12 @@ namespace XFramework.Editor
             bool isPlaying = channelState != null && string.Equals(channelState.stateKey, state.Key, StringComparison.Ordinal);
             if (isPlaying)
             {
-                m_Session.StopChannel(state.Config.channelName);
+                m_IsPaused = !m_IsPaused;
+                m_Session.SetPaused(m_IsPaused);
+                SetPauseButtonState(true, m_IsPaused);
+                SetStepForwardButtonEnabled(true);
                 RefreshPlaybackViews();
-                SetStatus($"已停止 state {state.Key}。");
+                SetStatus(m_IsPaused ? $"已暂停 state {state.Key}。" : $"已继续 state {state.Key}。");
                 return;
             }
 
@@ -1154,7 +1157,7 @@ namespace XFramework.Editor
             string parameterName = blendState.Config.parameterName;
             if (!string.IsNullOrWhiteSpace(parameterName))
             {
-                m_Session.SetPreviewParameter(parameterName, threshold);
+                TrySetPreviewParameter(parameterName, threshold);
             }
 
             PlayStateForSamplePreview(blendState, $"正在预览 {stateKey} sample，{parameterName} = {threshold:0.###}。");
@@ -1177,12 +1180,12 @@ namespace XFramework.Editor
 
             if (!string.IsNullOrWhiteSpace(state.Config.parameterXName))
             {
-                m_Session.SetPreviewParameter(state.Config.parameterXName, positionX);
+                TrySetPreviewParameter(state.Config.parameterXName, positionX);
             }
 
             if (!string.IsNullOrWhiteSpace(state.Config.parameterYName))
             {
-                m_Session.SetPreviewParameter(state.Config.parameterYName, positionY);
+                TrySetPreviewParameter(state.Config.parameterYName, positionY);
             }
 
             PlayStateForSamplePreview(
@@ -1550,9 +1553,12 @@ namespace XFramework.Editor
 
                 if (isPlaying)
                 {
-                    m_Session.StopChannel(playingChannelName, 0f);
+                    m_IsPaused = !m_IsPaused;
+                    m_Session.SetPaused(m_IsPaused);
+                    SetPauseButtonState(true, m_IsPaused);
+                    SetStepForwardButtonEnabled(true);
                     RefreshPlaybackViews();
-                    SetStatus($"已停止 {clipKey}。");
+                    SetStatus(m_IsPaused ? $"已暂停 {clipKey}。" : $"已继续 {clipKey}。");
                 }
                 else
                 {
@@ -1573,7 +1579,7 @@ namespace XFramework.Editor
             {
                 text = "▶"
             };
-            toggleButton.tooltip = "使用 Target.channelName 调试播放或停止这个 clip。";
+            toggleButton.tooltip = "使用 Target.channelName 调试播放或暂停这个 clip。";
             ApplyClipButtonStyle(toggleButton, false);
             toggleButton.style.flexShrink = 0;
             toggleButton.style.marginLeft = 4;

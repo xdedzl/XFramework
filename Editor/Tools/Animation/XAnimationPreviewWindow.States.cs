@@ -665,40 +665,87 @@ namespace XFramework.Editor
                 return;
             }
 
+            if (TrySetPreviewParameter(parameterName, value))
+            {
+                RefreshPreviewAfterParameterChanged();
+            }
+        }
+
+        private bool TrySetPreviewParameter(string parameterName, float value)
+        {
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                return false;
+            }
+
             try
             {
                 m_Session.SetPreviewParameter(parameterName, value);
                 SetStatus($"Preview parameter {parameterName} = {value:0.###}。");
+                return true;
             }
             catch (Exception ex)
             {
                 SetStatus(ex.Message, true);
                 Debug.LogException(ex);
+                return false;
+            }
+        }
+
+        private bool TrySetPreviewParameter(string parameterName, bool value)
+        {
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                return false;
             }
 
+            try
+            {
+                m_Session.SetPreviewParameter(parameterName, value);
+                SetStatus($"Preview parameter {parameterName} = {value}。");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+                return false;
+            }
+        }
+
+        private bool TrySetPreviewParameter(string parameterName, int value)
+        {
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                return false;
+            }
+
+            try
+            {
+                m_Session.SetPreviewParameter(parameterName, value);
+                SetStatus($"Preview parameter {parameterName} = {value}。");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message, true);
+                Debug.LogException(ex);
+                return false;
+            }
+        }
+
+        private void RefreshPreviewAfterParameterChanged(bool rebuildParameterList = false)
+        {
+            if (rebuildParameterList)
+            {
+                RebuildParameterList();
+            }
+
+            m_Session?.SyncPreviewFrame();
             RefreshStatePlayingStates();
             RefreshChannelStates();
             RenderPreview();
             Repaint();
-        }
-
-        private void SetPreviewFloatParameterWithoutRefresh(string parameterName, float value)
-        {
-            if (m_Session == null || !m_Session.IsLoaded)
-            {
-                return;
-            }
-
-            try
-            {
-                m_Session.SetPreviewParameter(parameterName, value);
-                SetStatus($"Preview parameter {parameterName} = {value:0.###}。");
-            }
-            catch (Exception ex)
-            {
-                SetStatus(ex.Message, true);
-                Debug.LogException(ex);
-            }
         }
 
         private VisualElement CreateBoolPreviewParameterRow(string parameterName, bool value)
@@ -735,15 +782,9 @@ namespace XFramework.Editor
                 return;
             }
 
-            try
+            if (TrySetPreviewParameter(parameterName, value))
             {
-                m_Session.SetPreviewParameter(parameterName, value);
-                SetStatus($"Preview parameter {parameterName} = {value}。");
-            }
-            catch (Exception ex)
-            {
-                SetStatus(ex.Message, true);
-                Debug.LogException(ex);
+                RefreshPreviewAfterParameterChanged();
             }
         }
 
@@ -794,15 +835,9 @@ namespace XFramework.Editor
                 return;
             }
 
-            try
+            if (TrySetPreviewParameter(parameterName, value))
             {
-                m_Session.SetPreviewParameter(parameterName, value);
-                SetStatus($"Preview parameter {parameterName} = {value}。");
-            }
-            catch (Exception ex)
-            {
-                SetStatus(ex.Message, true);
-                Debug.LogException(ex);
+                RefreshPreviewAfterParameterChanged();
             }
         }
 

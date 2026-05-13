@@ -677,7 +677,7 @@ namespace XFramework.Editor
             {
                 text = "▶"
             };
-            playButton.tooltip = "播放或停止这个 Auto Transition 对应的 preState。";
+            playButton.tooltip = "播放或暂停这个 Auto Transition 对应的 preState。";
             ApplyClipButtonStyle(playButton, false);
 
             VisualElement headerActions = new();

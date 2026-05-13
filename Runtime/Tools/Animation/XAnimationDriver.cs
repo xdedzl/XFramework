@@ -267,6 +267,12 @@ namespace XFramework.Animation
             UpdateInternal(deltaTime);
         }
 
+        public void SyncFrame()
+        {
+            EnsureInitialized();
+            UpdateInternal(0f);
+        }
+
         public void Dispose()
         {
             UnregisterFromAutomaticUpdate();
@@ -488,7 +494,7 @@ namespace XFramework.Animation
 
         private void UpdateInternal(float deltaTime)
         {
-            if (deltaTime <= 0f || m_Player == null)
+            if (deltaTime < 0f || m_Player == null)
             {
                 return;
             }
