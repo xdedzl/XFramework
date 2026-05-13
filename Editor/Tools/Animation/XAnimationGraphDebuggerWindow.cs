@@ -1,4 +1,5 @@
 #if UNITY_EDITOR
+using System;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -15,8 +16,12 @@ namespace XFramework.Editor
         private ObjectField m_ActorField;
         private Toggle m_FollowSelectionToggle;
         private Toggle m_AutoRefreshToggle;
+        private Button m_ClearProviderButton;
+        private Label m_SourceLabel;
         private Label m_StatusLabel;
         private XAnimationGraphDebugView m_GraphView;
+        private Func<XAnimationDebugGraphSnapshot> m_ExternalSnapshotProvider;
+        private string m_ExternalSourceName;
         private double m_LastRefreshTime;
 
         [SerializeField] private XAnimationActor m_TargetActor;
@@ -28,7 +33,17 @@ namespace XFramework.Editor
         {
             XAnimationGraphDebuggerWindow window = GetWindow<XAnimationGraphDebuggerWindow>("XAnimation Graph");
             window.minSize = new Vector2(720f, 360f);
+            window.ClearExternalProvider();
             window.Show();
+        }
+
+        public static void ShowPreview(Func<XAnimationDebugGraphSnapshot> snapshotProvider, string sourceName)
+        {
+            XAnimationGraphDebuggerWindow window = GetWindow<XAnimationGraphDebuggerWindow>("XAnimation Graph");
+            window.minSize = new Vector2(920f, 520f);
+            window.SetExternalProvider(snapshotProvider, string.IsNullOrWhiteSpace(sourceName) ? "Preview" : sourceName);
+            window.Show();
+            window.Focus();
         }
 
         public void CreateGUI()
@@ -84,6 +99,14 @@ namespace XFramework.Editor
             });
             toolbar.Add(m_ActorField);
 
+            m_ClearProviderButton = new Button(ClearExternalProvider)
+            {
+                text = "Actor Mode"
+            };
+            m_ClearProviderButton.tooltip = "切回场景 Actor 数据源。";
+            m_ClearProviderButton.style.marginLeft = 6;
+            toolbar.Add(m_ClearProviderButton);
+
             m_AutoRefreshToggle = new Toggle("Auto Refresh") { value = m_AutoRefresh };
             m_AutoRefreshToggle.style.marginLeft = 8;
             m_AutoRefreshToggle.RegisterValueChangedCallback(evt => m_AutoRefresh = evt.newValue);
@@ -96,6 +119,11 @@ namespace XFramework.Editor
             refreshButton.style.marginLeft = 8;
             toolbar.Add(refreshButton);
 
+            m_SourceLabel = new();
+            m_SourceLabel.style.marginLeft = 8;
+            m_SourceLabel.style.color = new Color(0.72f, 0.72f, 0.74f, 1f);
+            toolbar.Add(m_SourceLabel);
+
             m_StatusLabel = new();
             m_StatusLabel.style.marginLeft = 8;
             m_StatusLabel.style.flexGrow = 1;
@@ -104,6 +132,29 @@ namespace XFramework.Editor
             toolbar.Add(m_StatusLabel);
 
             return toolbar;
+        }
+
+        private void SetExternalProvider(Func<XAnimationDebugGraphSnapshot> snapshotProvider, string sourceName)
+        {
+            m_ExternalSnapshotProvider = snapshotProvider;
+            m_ExternalSourceName = sourceName ?? "Preview";
+            m_FollowSelection = false;
+            if (m_FollowSelectionToggle != null)
+            {
+                m_FollowSelectionToggle.SetValueWithoutNotify(false);
+            }
+
+            RefreshSourceControls();
+            RefreshView();
+        }
+
+        private void ClearExternalProvider()
+        {
+            m_ExternalSnapshotProvider = null;
+            m_ExternalSourceName = null;
+            RefreshSourceControls();
+            RefreshFromSelectionIfNeeded();
+            RefreshView();
         }
 
         private void OnEnable()
@@ -120,7 +171,7 @@ namespace XFramework.Editor
 
         private void OnSelectionChanged()
         {
-            if (!m_FollowSelection)
+            if (m_ExternalSnapshotProvider != null || !m_FollowSelection)
             {
                 return;
             }
@@ -148,7 +199,7 @@ namespace XFramework.Editor
 
         private void RefreshFromSelectionIfNeeded()
         {
-            if (!m_FollowSelection)
+            if (m_ExternalSnapshotProvider != null || !m_FollowSelection)
             {
                 return;
             }
@@ -168,19 +219,66 @@ namespace XFramework.Editor
         private void RefreshView()
         {
             m_LastRefreshTime = EditorApplication.timeSinceStartup;
+            RefreshSourceControls();
             m_GraphView?.Refresh();
             if (m_StatusLabel != null)
             {
-                m_StatusLabel.text = m_TargetActor == null
-                    ? "未选择 XAnimationActor"
-                    : m_TargetActor.IsInitialized
-                        ? "Ready"
-                        : "Actor 未初始化";
+                if (m_ExternalSnapshotProvider != null)
+                {
+                    m_StatusLabel.text = $"Preview: {m_ExternalSourceName}";
+                }
+                else
+                {
+                    m_StatusLabel.text = m_TargetActor == null
+                        ? "未选择 XAnimationActor"
+                        : m_TargetActor.IsInitialized
+                            ? "Ready"
+                            : "Actor 未初始化";
+                }
+            }
+        }
+
+        private void RefreshSourceControls()
+        {
+            bool externalMode = m_ExternalSnapshotProvider != null;
+            if (m_FollowSelectionToggle != null)
+            {
+                m_FollowSelectionToggle.SetEnabled(!externalMode);
+            }
+
+            if (m_ActorField != null)
+            {
+                m_ActorField.SetEnabled(!externalMode);
+            }
+
+            if (m_ClearProviderButton != null)
+            {
+                m_ClearProviderButton.style.display = externalMode ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+
+            if (m_SourceLabel != null)
+            {
+                m_SourceLabel.text = externalMode
+                    ? $"Source: Preview | {m_ExternalSourceName}"
+                    : "Source: Scene Actor";
             }
         }
 
         private XAnimationDebugGraphSnapshot GetSnapshot()
         {
+            if (m_ExternalSnapshotProvider != null)
+            {
+                try
+                {
+                    return m_ExternalSnapshotProvider() ??
+                           XAnimationDebugGraphSnapshot.Invalid("Preview graph provider returned null.");
+                }
+                catch (Exception ex)
+                {
+                    return XAnimationDebugGraphSnapshot.Invalid($"Preview graph provider failed: {ex.Message}");
+                }
+            }
+
             if (m_TargetActor == null)
             {
                 return XAnimationDebugGraphSnapshot.Invalid("未选择 XAnimationActor。选中场景对象，或把 Actor 拖到窗口顶部。");

@@ -41,7 +41,6 @@ namespace XFramework.Editor
             Clip,
             Channels,
             Parameters,
-            Graph,
         }
 
         private enum SearchEntryType
@@ -262,7 +261,7 @@ namespace XFramework.Editor
         private Button m_ClipGroupButton;
         private Button m_ChannelsGroupButton;
         private Button m_ParametersGroupButton;
-        private Button m_GraphGroupButton;
+        private Button m_OpenGraphButton;
         private TextField m_SearchField;
         private VisualElement m_SearchResultsPopup;
         private VisualElement m_SearchResultsList;
@@ -278,7 +277,6 @@ namespace XFramework.Editor
         private VisualElement m_ClipGroupContainer;
         private VisualElement m_ChannelsGroupContainer;
         private VisualElement m_ParametersGroupContainer;
-        private VisualElement m_GraphGroupContainer;
         private readonly HashSet<string> m_ExpandedStateKeys = new(StringComparer.Ordinal);
         private readonly HashSet<string> m_CollapsedStateGroupKeys = new(StringComparer.Ordinal);
         private readonly HashSet<string> m_CollapsedBlendSampleStateKeys = new(StringComparer.Ordinal);
@@ -314,7 +312,6 @@ namespace XFramework.Editor
         private readonly List<SearchEntry> m_SearchEntries = new();
         private readonly List<SearchEntry> m_VisibleSearchEntries = new();
         private VisualElement m_ChannelControlsContainer;
-        private XAnimationGraphDebugView m_GraphDebugView;
         private ScrollView m_CueLogContainer;
         private readonly List<Label> m_LogLabels = new();
 

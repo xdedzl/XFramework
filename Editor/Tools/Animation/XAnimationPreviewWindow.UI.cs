@@ -383,7 +383,6 @@ namespace XFramework.Editor
             ComposeClipTab();
             ComposeChannelsTab();
             ComposeParametersTab();
-            ComposeGraphTab();
 
             Button clearCueLogButton = CreateStyledButton("Clear", ClearCueLog, DangerColor);
             clearCueLogButton.tooltip = "清空当前 Preview Session 的 Log。";
@@ -485,9 +484,6 @@ namespace XFramework.Editor
 
             m_ParametersGroupContainer = CreateDebugTabContainer();
             m_InspectorScrollView.Add(m_ParametersGroupContainer);
-
-            m_GraphGroupContainer = CreateDebugTabContainer();
-            m_InspectorScrollView.Add(m_GraphGroupContainer);
         }
 
         private static VisualElement CreateDebugTabContainer()
@@ -518,13 +514,6 @@ namespace XFramework.Editor
         private void ComposeParametersTab()
         {
             m_ParametersGroupContainer.Add(CreateParametersSection().Root);
-        }
-
-        private void ComposeGraphTab()
-        {
-            m_GraphDebugView = new XAnimationGraphDebugView(GetPreviewDebugGraphSnapshot);
-            m_GraphDebugView.style.minHeight = InspectorMinHeight;
-            m_GraphGroupContainer.Add(m_GraphDebugView);
         }
 
         private FoldoutCard CreateAssetsSection()

@@ -636,7 +636,6 @@ namespace XFramework.Editor
             m_VisibleSearchEntries.Clear();
             HideSearchResults();
             m_ChannelControlsContainer?.Clear();
-            m_GraphDebugView?.Refresh();
             m_ChannelLabelMap.Clear();
             m_CueLogContainer?.Clear();
             m_LogLabels.Clear();

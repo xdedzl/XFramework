@@ -43,17 +43,19 @@ namespace XFramework.Editor
             m_ClipGroupButton = CreateToolbarTabButton("Clips", () => SetDebugToolbarGroup(DebugToolbarGroup.Clip));
             m_ChannelsGroupButton = CreateToolbarTabButton("Channels", () => SetDebugToolbarGroup(DebugToolbarGroup.Channels));
             m_ParametersGroupButton = CreateToolbarTabButton("Parameters", () => SetDebugToolbarGroup(DebugToolbarGroup.Parameters));
-            m_GraphGroupButton = CreateToolbarTabButton("Graph", () => SetDebugToolbarGroup(DebugToolbarGroup.Graph));
 
             toolbar.Add(m_MainGroupButton);
             toolbar.Add(m_ClipGroupButton);
             toolbar.Add(m_ChannelsGroupButton);
             toolbar.Add(m_ParametersGroupButton);
-            toolbar.Add(m_GraphGroupButton);
 
             VisualElement spacer = new();
             spacer.style.flexGrow = 1;
             toolbar.Add(spacer);
+
+            m_OpenGraphButton = CreateToolbarActionButton("Graph", OpenGraphDebuggerForPreview);
+            m_OpenGraphButton.tooltip = "打开独立的 PlayableGraph 调试窗口。";
+            toolbar.Add(m_OpenGraphButton);
 
             VisualElement searchContainer = new();
             searchContainer.style.position = Position.Relative;
@@ -161,6 +163,37 @@ namespace XFramework.Editor
             return toolbar;
         }
 
+        private Button CreateToolbarActionButton(string label, Action onClick)
+        {
+            Button button = new(onClick)
+            {
+                text = label
+            };
+            button.style.marginRight = 1;
+            button.style.marginBottom = 0;
+            button.style.paddingLeft = 10;
+            button.style.paddingRight = 10;
+            button.style.paddingTop = 3;
+            button.style.paddingBottom = 4;
+            button.style.borderTopLeftRadius = 4;
+            button.style.borderTopRightRadius = 4;
+            button.style.borderBottomLeftRadius = 4;
+            button.style.borderBottomRightRadius = 4;
+            button.style.borderTopWidth = 1;
+            button.style.borderBottomWidth = 1;
+            button.style.borderLeftWidth = 1;
+            button.style.borderRightWidth = 1;
+            button.style.borderTopColor = SectionDivider;
+            button.style.borderBottomColor = SectionDivider;
+            button.style.borderLeftColor = SectionDivider;
+            button.style.borderRightColor = SectionDivider;
+            button.style.color = TextNormal;
+            button.style.backgroundColor = new Color(0.18f, 0.24f, 0.34f, 1f);
+            button.style.fontSize = BodyFontSize;
+            button.style.unityFontStyleAndWeight = FontStyle.Bold;
+            return button;
+        }
+
         private Button CreateToolbarTabButton(string label, Action onClick)
         {
             Button button = new(onClick)
@@ -197,8 +230,7 @@ namespace XFramework.Editor
                 m_MainGroupContainer != null &&
                 m_ClipGroupContainer != null &&
                 m_ChannelsGroupContainer != null &&
-                m_ParametersGroupContainer != null &&
-                m_GraphGroupContainer != null)
+                m_ParametersGroupContainer != null)
             {
                 ApplyDebugToolbarGroup();
                 return;
@@ -210,7 +242,7 @@ namespace XFramework.Editor
 
         private void ApplyDebugToolbarGroup()
         {
-            if (m_MainGroupContainer == null || m_ClipGroupContainer == null || m_ChannelsGroupContainer == null || m_ParametersGroupContainer == null || m_GraphGroupContainer == null)
+            if (m_MainGroupContainer == null || m_ClipGroupContainer == null || m_ChannelsGroupContainer == null || m_ParametersGroupContainer == null)
             {
                 return;
             }
@@ -219,18 +251,11 @@ namespace XFramework.Editor
             m_ClipGroupContainer.style.display = m_SelectedDebugToolbarGroup == DebugToolbarGroup.Clip ? DisplayStyle.Flex : DisplayStyle.None;
             m_ChannelsGroupContainer.style.display = m_SelectedDebugToolbarGroup == DebugToolbarGroup.Channels ? DisplayStyle.Flex : DisplayStyle.None;
             m_ParametersGroupContainer.style.display = m_SelectedDebugToolbarGroup == DebugToolbarGroup.Parameters ? DisplayStyle.Flex : DisplayStyle.None;
-            m_GraphGroupContainer.style.display = m_SelectedDebugToolbarGroup == DebugToolbarGroup.Graph ? DisplayStyle.Flex : DisplayStyle.None;
 
             ApplyToolbarTabVisual(m_MainGroupButton, m_SelectedDebugToolbarGroup == DebugToolbarGroup.Main);
             ApplyToolbarTabVisual(m_ClipGroupButton, m_SelectedDebugToolbarGroup == DebugToolbarGroup.Clip);
             ApplyToolbarTabVisual(m_ChannelsGroupButton, m_SelectedDebugToolbarGroup == DebugToolbarGroup.Channels);
             ApplyToolbarTabVisual(m_ParametersGroupButton, m_SelectedDebugToolbarGroup == DebugToolbarGroup.Parameters);
-            ApplyToolbarTabVisual(m_GraphGroupButton, m_SelectedDebugToolbarGroup == DebugToolbarGroup.Graph);
-
-            if (m_SelectedDebugToolbarGroup == DebugToolbarGroup.Graph)
-            {
-                RefreshGraphDebugView();
-            }
         }
 
         private void RefreshSearchIndex()

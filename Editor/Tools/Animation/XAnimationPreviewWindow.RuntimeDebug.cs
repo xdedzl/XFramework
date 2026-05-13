@@ -178,7 +178,6 @@ namespace XFramework.Editor
             if (result.ShouldRefreshChannels)
             {
                 RefreshChannelStates();
-                RefreshGraphDebugView();
             }
 
             if (result.ShouldRefreshPlaybackScrubber)
@@ -230,21 +229,23 @@ namespace XFramework.Editor
             m_PlaybackUiState.MarkAllDirty();
         }
 
+        private void OpenGraphDebuggerForPreview()
+        {
+            XAnimationGraphDebuggerWindow.ShowPreview(GetPreviewDebugGraphSnapshot, BuildGraphDebuggerSourceName());
+        }
+
+        private string BuildGraphDebuggerSourceName()
+        {
+            string assetName = m_SelectedAsset != null ? m_SelectedAsset.name : "Preview";
+            string prefabName = m_SelectedPrefab != null ? m_SelectedPrefab.name : "No Prefab";
+            return $"{assetName} / {prefabName}";
+        }
+
         private XAnimationDebugGraphSnapshot GetPreviewDebugGraphSnapshot()
         {
             return m_Session != null && m_Session.IsLoaded
                 ? m_Session.GetDebugGraphSnapshot()
                 : XAnimationDebugGraphSnapshot.Invalid("XAnimation Preview 尚未加载。请选择 asset 和 prefab 后点击 Load。");
-        }
-
-        private void RefreshGraphDebugView()
-        {
-            if (m_SelectedDebugToolbarGroup != DebugToolbarGroup.Graph)
-            {
-                return;
-            }
-
-            m_GraphDebugView?.Refresh();
         }
 
         private bool IsPreviewTabVisible()
