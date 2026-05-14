@@ -116,27 +116,27 @@ namespace XFramework.Animation
             XAnimationPlaybackStartInfo startInfo = m_Player.PlayClip(clipName, channelName, NormalizeTransitionOptions(transition));
             return CreatePlaybackHandle(startInfo, string.Empty, clipName);
         }
-
-        public XAnimationPlaybackHandle PlayState(string stateName, XAnimationTransitionOptions transition = null)
+        
+        public XAnimationPlaybackHandle PlayState(string stateName)
         {
-            EnsureInitialized();
-            XAnimationPlaybackStartInfo startInfo = m_Player.PlayState(stateName, NormalizeTransitionOptions(transition));
-            return CreatePlaybackHandle(startInfo, stateName, string.Empty);
+            return PlayState(stateName, null);
         }
 
         public XAnimationPlaybackHandle PlayState(string stateName, bool force)
         {
-            return PlayState(stateName, new XAnimationTransitionOptions { force = force });
+            return PlayState(stateName, null, force);
         }
 
-        public XAnimationPlaybackHandle PlayState(
-            string stateName,
-            XAnimationTransitionOptions transition,
-            bool force)
+        public XAnimationPlaybackHandle PlayState(string stateName, XAnimationTransitionOptions transition)
         {
-            transition ??= new XAnimationTransitionOptions();
-            transition.force = force;
-            return PlayState(stateName, transition);
+            return PlayState(stateName, transition, false);
+        }
+
+        public XAnimationPlaybackHandle PlayState(string stateName, XAnimationTransitionOptions transition, bool force)
+        {
+            EnsureInitialized();
+            XAnimationPlaybackStartInfo startInfo = m_Player.PlayState(stateName, NormalizeTransitionOptions(transition), force);
+            return CreatePlaybackHandle(startInfo, stateName, string.Empty);
         }
 
         public void Stop(string channelName, float fadeOut = 0)
@@ -420,7 +420,6 @@ namespace XFramework.Animation
                 enterTime = Mathf.Clamp01(options.enterTime),
                 priority = options.priority,
                 interruptible = options.interruptible,
-                force = options.force,
             };
         }
 

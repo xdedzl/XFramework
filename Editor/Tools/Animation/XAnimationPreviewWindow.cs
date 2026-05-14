@@ -228,9 +228,13 @@ namespace XFramework.Editor
         private GameObject m_PendingPrefab;
         private bool m_PendingAutoLoad;
         private PendingPlaybackRequest? m_PendingPlaybackRequest;
+        private string m_PendingFocusStateKey;
 
         private ObjectField m_PrefabField;
         private ObjectField m_AssetField;
+        private Button m_ReloadPreviewButton;
+        private Button m_SaveCurrentPrefabAsDefaultButton;
+        private Button m_ResetPrefabToDefaultButton;
         private Image m_PreviewImage;
         private Label m_StatusLabel;
         private VisualElement m_PlaybackScrubber;
@@ -1079,18 +1083,21 @@ namespace XFramework.Editor
             return window;
         }
 
+        public static XAnimationPreviewWindow ShowWindowAndFocusState(
+            TextAsset animationAsset,
+            GameObject prefab,
+            string stateKey)
+        {
+            XAnimationPreviewWindow window = ShowWindow(animationAsset, prefab, autoLoad: true);
+            window.SetPendingFocusState(stateKey);
+            return window;
+        }
+
         private static XAnimationPreviewWindow GetOpenWindow()
         {
-            XAnimationPreviewWindow[] windows = Resources.FindObjectsOfTypeAll<XAnimationPreviewWindow>();
-            for (int i = 0; i < windows.Length; i++)
-            {
-                if (windows[i] != null)
-                {
-                    return windows[i];
-                }
-            }
-
-            return null;
+            return HasOpenInstances<XAnimationPreviewWindow>()
+                ? GetWindow<XAnimationPreviewWindow>()
+                : null;
         }
 
         private static XAnimationPreviewWindow CreateDockedWindow()

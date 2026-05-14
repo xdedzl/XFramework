@@ -413,8 +413,8 @@ public sealed class HeroAnimationController : MonoBehaviour
 
 常用控制接口：
 
-- `PlayState(string stateKey, XAnimationTransitionOptions transition = default)`：按 state key 播放，始终使用 state 自己配置的 channel，推荐业务层统一使用。`transition.force = true` 时会忽略门禁、`allowInterrupt`、`interruptible` 与 `priority`。
-- `PlayState(string stateKey, bool force)` / `PlayState(string stateKey, XAnimationTransitionOptions transition, bool force)`：`XAnimationActor` / `XAnimationDriver` 提供的便捷重载，内部会归并到 `transition.force`。
+- `PlayState(string stateKey, XAnimationTransitionOptions transition = default)`：按 state key 播放，始终使用 state 自己配置的 channel，推荐业务层统一使用；`transition` 仅描述过渡参数。
+- `PlayState(string stateKey, bool force)` / `PlayState(string stateKey, XAnimationTransitionOptions transition, bool force)`：`XAnimationActor` / `XAnimationDriver` 提供的强制切换重载；`force = true` 时会忽略门禁、`allowInterrupt`、`interruptible` 与 `priority`。
 - `PlayClip(string clipKey, string channelName, XAnimationTransitionOptions transition = default)`：底层/调试接口，按 clip key 直接播放；必须显式提供 `channelName`。
 - `SetParameter(key, float/int/bool)` / `SetTrigger(key)`：写入运行时参数，`Blend1D` 默认从 Float 参数读取混合值，2D Directional Blend 默认从两个 Float 参数读取二维输入。
 - `Stop(channelName, fadeOut)` / `StopAll(fadeOut)`：停止指定通道或全部通道。

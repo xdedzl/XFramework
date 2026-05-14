@@ -65,6 +65,7 @@ namespace XFramework.Editor
                 RefreshCueLogView(force: true);
                 SetStatus("预览已加载。");
                 ApplyPendingPlaybackRequest();
+                ApplyPendingFocusState();
                 RenderPreview();
             }
             catch (Exception ex)
@@ -163,6 +164,15 @@ namespace XFramework.Editor
         {
             if (m_Session == null || !m_Session.IsLoaded)
             {
+                return;
+            }
+
+            if (!HasAnyPlayingChannel())
+            {
+                if (!TryPlayFirstStateFromOverlay())
+                {
+                    SetStatus("当前没有可播放的 state。", true);
+                }
                 return;
             }
 
@@ -571,16 +581,55 @@ namespace XFramework.Editor
             }
         }
 
-        private void SetPauseButtonState(bool enabled, bool paused)
+        private void SetPauseButtonState(bool enabled, bool paused, bool? hasActivePlayback = null)
         {
             if (m_PauseButton == null)
             {
                 return;
             }
 
-            m_PauseButton.text = paused ? "▶" : "Ⅱ";
+            bool isPlaying = hasActivePlayback ?? HasAnyPlayingChannel();
+            m_PauseButton.text = enabled && isPlaying && !paused
+                ? "Ⅱ"
+                : "▶";
             m_PauseButton.SetEnabled(enabled);
             m_PauseButton.style.opacity = enabled ? 1f : 0.45f;
+        }
+
+        private bool TryPlayFirstStateFromOverlay()
+        {
+            if (m_Session == null || !m_Session.IsLoaded)
+            {
+                return false;
+            }
+
+            IReadOnlyList<XAnimationCompiledState> states = m_Session.CompiledAsset.States;
+            if (states == null || states.Count == 0)
+            {
+                return false;
+            }
+
+            XAnimationCompiledState firstState = states[0];
+            if (firstState == null || string.IsNullOrWhiteSpace(firstState.Key))
+            {
+                return false;
+            }
+
+            m_IsPaused = false;
+            m_Session.SetPaused(false);
+            SetPauseButtonState(true, false);
+            SetStepForwardButtonEnabled(true);
+            m_Session.SetTimeScale(GetPlaybackSpeed());
+            m_Session.PlayState(firstState.Key, BuildPreviewTransitionOptions());
+            if (!string.IsNullOrWhiteSpace(firstState.Config.channelName))
+            {
+                m_Session.SetChannelTimeScale(firstState.Config.channelName, GetPlaybackSpeed());
+            }
+
+            RefreshPlaybackViews();
+            FocusStateInInspector(firstState.Key);
+            SetStatus($"正在播放 state {firstState.Key}。");
+            return true;
         }
 
         private void RefreshClipPlayingStates()
@@ -652,7 +701,11 @@ namespace XFramework.Editor
             {
                 m_IsPaused = false;
             }
-            SetPauseButtonState(hasPlaying, m_IsPaused);
+            bool canPlayFirstState = m_Session != null &&
+                                     m_Session.IsLoaded &&
+                                     m_Session.CompiledAsset?.States != null &&
+                                     m_Session.CompiledAsset.States.Count > 0;
+            SetPauseButtonState(hasPlaying || canPlayFirstState, m_IsPaused);
             SetStepForwardButtonEnabled(hasPlaying);
             RefreshPlaybackScrubber();
 

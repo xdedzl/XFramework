@@ -495,7 +495,6 @@ namespace XFramework.Editor
 
         private void ComposeMainTab()
         {
-            m_MainGroupContainer.Add(CreateAssetsSection().Root);
             m_MainGroupContainer.Add(CreateStatesSection().Root);
             m_MainGroupContainer.Add(CreateAutoTransitionsSection().Root);
             m_MainGroupContainer.Add(CreateDefaultTransitionsSection().Root);
@@ -516,15 +515,69 @@ namespace XFramework.Editor
             m_ParametersGroupContainer.Add(CreateParametersSection().Root);
         }
 
-        private FoldoutCard CreateAssetsSection()
+        private static void ApplyToolbarButtonIcon(Button button, params string[] iconNames)
         {
-            FoldoutCard assetsCard = CreateFoldoutCard(
-                "资源",
-                m_AssetsSectionExpanded,
-                value => m_AssetsSectionExpanded = value,
-                CreateStyledButton("重载", LoadPreview, AccentColor));
+            if (button == null || iconNames == null || iconNames.Length == 0)
+            {
+                return;
+            }
 
-            m_PrefabField = new ObjectField("Prefab")
+            Texture icon = null;
+            for (int i = 0; i < iconNames.Length; i++)
+            {
+                if (string.IsNullOrWhiteSpace(iconNames[i]))
+                {
+                    continue;
+                }
+
+                icon = EditorGUIUtility.IconContent(iconNames[i]).image;
+                if (icon != null)
+                {
+                    break;
+                }
+            }
+
+            if (icon == null)
+            {
+                return;
+            }
+
+            button.text = string.Empty;
+            button.Clear();
+            Image image = new() { image = icon };
+            image.tintColor = TextNormal;
+            image.style.width = 13;
+            image.style.height = 13;
+            image.style.alignSelf = Align.Center;
+            image.style.flexShrink = 0;
+            button.Add(image);
+        }
+
+        private static Button CreateAssetToolbarIconButton(string text, string tooltip, Action onClick, Color? bgColor = null, params string[] iconNames)
+        {
+            Button button = new(onClick)
+            {
+                text = text
+            };
+            button.tooltip = tooltip;
+            ApplyClipIconButtonStyle(button, bgColor ?? AccentColor);
+            button.style.flexShrink = 0;
+            ApplyToolbarButtonIcon(button, iconNames);
+            return button;
+        }
+
+        private VisualElement CreateAssetsSection()
+        {
+            VisualElement assetsBar = CreateSubBox();
+            assetsBar.style.marginBottom = 4;
+            assetsBar.style.marginTop = 0;
+
+            VisualElement assetsRow = new();
+            assetsRow.style.flexDirection = FlexDirection.Row;
+            assetsRow.style.alignItems = Align.Center;
+            assetsBar.Add(assetsRow);
+
+            m_PrefabField = new ObjectField()
             {
                 objectType = typeof(GameObject),
                 allowSceneObjects = false
@@ -533,25 +586,40 @@ namespace XFramework.Editor
             m_PrefabField.RegisterValueChangedCallback(evt =>
             {
                 m_SelectedPrefab = evt.newValue as GameObject;
+                RefreshAssetsToolbarButtons();
+                if (evt.newValue != null && m_AssetField?.value != null)
+                {
+                    LoadPreview();
+                }
             });
+            if (m_PrefabField.labelElement != null)
+            {
+                m_PrefabField.labelElement.style.display = DisplayStyle.None;
+            }
             m_PrefabField.style.marginBottom = 4;
 
-            VisualElement prefabRow = new()
-            {
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    alignItems = Align.Center,
-                    marginBottom = 4
-                }
-            };
             m_PrefabField.style.flexGrow = 1;
+            m_PrefabField.style.flexBasis = 0;
+            m_PrefabField.style.minWidth = 0;
             m_PrefabField.style.marginBottom = 0;
-            prefabRow.Add(m_PrefabField);
-            prefabRow.Add(CreateStyledButton("设为默认", SaveCurrentPrefabAsDefault, AccentColor, 6f));
-            assetsCard.Content.Add(prefabRow);
+            assetsRow.Add(m_PrefabField);
 
-            m_AssetField = new ObjectField("XAnimation / Override Asset")
+            m_SaveCurrentPrefabAsDefaultButton = CreateAssetToolbarIconButton(
+                "✓",
+                "把当前 Prefab 设为这个 XAnimation 的默认模型。",
+                SaveCurrentPrefabAsDefault);
+            m_SaveCurrentPrefabAsDefaultButton.style.marginLeft = 6;
+            assetsRow.Add(m_SaveCurrentPrefabAsDefaultButton);
+
+            m_ResetPrefabToDefaultButton = CreateAssetToolbarIconButton(
+                "↺",
+                "把当前模型恢复成默认 Prefab，并重新加载预览。",
+                ResetPrefabToDefault,
+                ListHeaderBg);
+            m_ResetPrefabToDefaultButton.style.marginLeft = 4;
+            assetsRow.Add(m_ResetPrefabToDefaultButton);
+
+            m_AssetField = new ObjectField()
             {
                 objectType = typeof(TextAsset),
                 allowSceneObjects = false
@@ -560,24 +628,31 @@ namespace XFramework.Editor
             m_AssetField.RegisterValueChangedCallback(evt =>
             {
                 m_SelectedAsset = evt.newValue as TextAsset;
+                RefreshAssetsToolbarButtons();
             });
+            if (m_AssetField.labelElement != null)
+            {
+                m_AssetField.labelElement.style.display = DisplayStyle.None;
+            }
             m_AssetField.style.marginBottom = 4;
 
-            VisualElement assetRow = new()
-            {
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    alignItems = Align.Center,
-                    marginBottom = 4
-                }
-            };
             m_AssetField.style.flexGrow = 1;
+            m_AssetField.style.flexBasis = 0;
+            m_AssetField.style.minWidth = 0;
             m_AssetField.style.marginBottom = 0;
-            assetRow.Add(m_AssetField);
-            assetsCard.Content.Add(assetRow);
+            m_AssetField.style.marginLeft = 6;
+            assetsRow.Add(m_AssetField);
 
-            return assetsCard;
+            m_ReloadPreviewButton = CreateAssetToolbarIconButton(
+                "⟳",
+                "重新读取 Prefab 和 XAnimation 资源并刷新预览。",
+                LoadPreview,
+                iconNames: new[] { "d_Refresh", "Refresh", "d_TreeEditor.Refresh", "TreeEditor.Refresh" });
+            m_ReloadPreviewButton.style.marginLeft = 6;
+            assetsRow.Add(m_ReloadPreviewButton);
+
+            RefreshAssetsToolbarButtons();
+            return assetsBar;
         }
 
         private FoldoutCard CreateStatesSection()
@@ -800,6 +875,9 @@ namespace XFramework.Editor
             }, playbackActions);
             RegisterPlaybackOverlayDrag(playbackCard.Root, () => playbackCard.SetExpanded?.Invoke(!m_PlaybackSectionExpanded));
 
+            VisualElement assetsBar = CreateAssetsSection();
+            playbackCard.Content.Add(assetsBar);
+
             VisualElement playbackFields = new VisualElement();
             playbackFields.style.flexDirection = FlexDirection.Column;
             playbackFields.style.alignItems = Align.Stretch;
@@ -839,7 +917,10 @@ namespace XFramework.Editor
                 PlaybackMainFieldLabelWidth,
                 PlaybackMainFieldValueWidth);
             channelAndRootMotionRow.tooltip = "channelName 用于 clip 调试播放；rootMotion 仅影响当前预览窗口。";
-            playbackFields.Add(channelAndRootMotionRow);
+            VisualElement channelAndRootMotionBox = CreateSubBox();
+            channelAndRootMotionBox.tooltip = channelAndRootMotionRow.tooltip;
+            channelAndRootMotionBox.Add(channelAndRootMotionRow);
+            playbackFields.Add(channelAndRootMotionBox);
 
             playbackCard.Content.Add(playbackFields);
 

@@ -199,6 +199,7 @@ namespace XFramework.Editor
             RebuildDefaultTransitionsEditor();
             RefreshSearchIndex();
             RefreshGlobalBlendGraph();
+            ApplyPendingFocusState();
         }
 
         private void RebuildParameterList()

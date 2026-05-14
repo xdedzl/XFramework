@@ -17,6 +17,21 @@ namespace XFramework.Editor
     {
         private const float PlaybackLabelWidth = 118f;
 
+        private sealed class StateGroupBucket
+        {
+            public StateGroupBucket(string channelName, string groupName)
+            {
+                ChannelName = channelName ?? string.Empty;
+                GroupName = groupName ?? string.Empty;
+                States = new List<XAnimationStateConfig>();
+            }
+
+            public string ChannelName { get; }
+            public string GroupName { get; }
+            public List<XAnimationStateConfig> States { get; }
+            public bool IsUngrouped => string.IsNullOrWhiteSpace(GroupName);
+        }
+
         private sealed class ChannelNameOption
         {
             public string Name;
@@ -32,6 +47,7 @@ namespace XFramework.Editor
         private readonly Dictionary<string, VisualElement> m_StateRowMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, Button> m_StateButtonMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, RowVisualState> m_StateVisualStateMap = new(StringComparer.Ordinal);
+        private readonly HashSet<string> m_CollapsedStateGroupKeys = new(StringComparer.Ordinal);
         private readonly Dictionary<string, VisualElement> m_ClipRowMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, Button> m_ClipButtonMap = new(StringComparer.Ordinal);
         private readonly Dictionary<string, ClipRowVisualState> m_ClipVisualStateMap = new(StringComparer.Ordinal);
@@ -50,7 +66,6 @@ namespace XFramework.Editor
         private Button m_PlayCommandButton;
         private VisualElement m_ParametersListView;
         private VisualElement m_StatesListView;
-        private VisualElement m_ClipsListView;
         private Label m_StatusLabel;
         private IVisualElementScheduledItem m_RefreshItem;
         private VisualElement m_Root;
@@ -76,7 +91,6 @@ namespace XFramework.Editor
         [SerializeField] private bool m_PlayTransitionSectionExpanded;
         [SerializeField] private bool m_ParametersSectionExpanded = true;
         [SerializeField] private bool m_StatesSectionExpanded = true;
-        [SerializeField] private bool m_ClipsSectionExpanded = true;
 
         public override VisualElement CreateInspectorGUI()
         {
@@ -140,11 +154,6 @@ namespace XFramework.Editor
             m_StatesListView = new VisualElement();
             statesCard.Content.Add(m_StatesListView);
             root.Add(statesCard.Root);
-
-            FoldoutCard clipsCard = CreateFoldoutCard("Clips", m_ClipsSectionExpanded, value => m_ClipsSectionExpanded = value);
-            m_ClipsListView = new VisualElement();
-            clipsCard.Content.Add(m_ClipsListView);
-            root.Add(clipsCard.Root);
 
             m_StatusLabel = new("Play Mode 下可直接调试播放和参数。")
             {
@@ -349,12 +358,10 @@ namespace XFramework.Editor
                 RefreshChannelChoices();
                 RebuildParameterList();
                 RebuildStateList();
-                RebuildClipList();
                 m_RuntimeViewsDirty = false;
             }
 
             RefreshStatePlayingStates();
-            RefreshClipPlayingStates();
         }
 
         private void RefreshRuntimeLoop()
@@ -675,7 +682,7 @@ namespace XFramework.Editor
                 return;
             }
 
-            Dictionary<string, List<XAnimationStateConfig>> statesByChannel = new(StringComparer.Ordinal);
+            Dictionary<string, List<StateGroupBucket>> statesByChannel = new(StringComparer.Ordinal);
             for (int i = 0; i < asset.channels.Length; i++)
             {
                 XAnimationChannelConfig channel = asset.channels[i];
@@ -684,7 +691,7 @@ namespace XFramework.Editor
                     continue;
                 }
 
-                statesByChannel[channel.name] = new List<XAnimationStateConfig>();
+                statesByChannel[channel.name] = new List<StateGroupBucket>();
             }
 
             for (int i = 0; i < asset.states.Length; i++)
@@ -695,13 +702,22 @@ namespace XFramework.Editor
                     continue;
                 }
 
-                if (!statesByChannel.TryGetValue(state.channelName ?? string.Empty, out List<XAnimationStateConfig> channelStates))
+                string channelName = state.channelName ?? string.Empty;
+                if (!statesByChannel.TryGetValue(channelName, out List<StateGroupBucket> channelStates))
                 {
-                    channelStates = new List<XAnimationStateConfig>();
-                    statesByChannel[state.channelName ?? string.Empty] = channelStates;
+                    channelStates = new List<StateGroupBucket>();
+                    statesByChannel[channelName] = channelStates;
                 }
 
-                channelStates.Add(state);
+                string groupName = NormalizeStateEditorGroupName(state.editorGroupName);
+                StateGroupBucket bucket = FindStateGroupBucket(channelStates, groupName);
+                if (bucket == null)
+                {
+                    bucket = new StateGroupBucket(channelName, groupName);
+                    channelStates.Add(bucket);
+                }
+
+                bucket.States.Add(state);
             }
 
             for (int i = 0; i < asset.channels.Length; i++)
@@ -712,12 +728,12 @@ namespace XFramework.Editor
                     continue;
                 }
 
-                statesByChannel.TryGetValue(channel.name, out List<XAnimationStateConfig> channelStates);
-                m_StatesListView.Add(CreateStateChannelGroup(channel, channelStates ?? new List<XAnimationStateConfig>()));
+                statesByChannel.TryGetValue(channel.name, out List<StateGroupBucket> channelStates);
+                m_StatesListView.Add(CreateStateChannelGroup(channel, channelStates ?? new List<StateGroupBucket>()));
             }
         }
 
-        private VisualElement CreateStateChannelGroup(XAnimationChannelConfig channel, List<XAnimationStateConfig> channelStates)
+        private VisualElement CreateStateChannelGroup(XAnimationChannelConfig channel, List<StateGroupBucket> channelStates)
         {
             VisualElement group = CreateListGroup();
             VisualElement header = CreateListHeader();
@@ -727,20 +743,83 @@ namespace XFramework.Editor
             title.style.flexGrow = 1;
             header.Add(title);
 
-            Label info = CreateSmallInfoLabel($"{channel.layerType} | {channelStates.Count} states");
+            int stateCount = CountStatesInBuckets(channelStates);
+            int groupedCount = CountGroupedBuckets(channelStates);
+            Label info = CreateSmallInfoLabel(groupedCount > 0
+                ? $"{channel.layerType} | {stateCount} states | {groupedCount} groups"
+                : $"{channel.layerType} | {stateCount} states");
             header.Add(info);
 
+            int rowIndex = 0;
             for (int i = 0; i < channelStates.Count; i++)
             {
-                XAnimationStateConfig state = channelStates[i];
-                group.Add(CreateStateRow(state, i));
+                StateGroupBucket bucket = channelStates[i];
+                if (bucket == null)
+                {
+                    continue;
+                }
+
+                if (bucket.IsUngrouped)
+                {
+                    for (int stateIndex = 0; stateIndex < bucket.States.Count; stateIndex++)
+                    {
+                        group.Add(CreateStateRow(bucket.States[stateIndex], rowIndex++));
+                    }
+
+                    continue;
+                }
+
+                group.Add(CreateStateEditorGroup(channel.name, bucket, ref rowIndex));
             }
 
-            if (channelStates.Count == 0)
+            if (stateCount == 0)
             {
                 AddEmptyLabel(group, "No states");
             }
 
+            return group;
+        }
+
+        private VisualElement CreateStateEditorGroup(string channelName, StateGroupBucket bucket, ref int rowIndex)
+        {
+            VisualElement group = CreateNestedListGroup();
+            string groupKey = BuildStateGroupKey(channelName, bucket.GroupName);
+
+            VisualElement header = CreateListHeader();
+            Label foldoutLabel = CreateFoldoutGlyph(!IsStateGroupCollapsed(groupKey));
+            header.Add(foldoutLabel);
+
+            Label title = CreateBoldLabel(bucket.GroupName);
+            title.style.flexGrow = 1;
+            title.style.minWidth = 0;
+            header.Add(title);
+
+            Label info = CreateSmallInfoLabel($"{bucket.States.Count} states");
+            header.Add(info);
+            group.Add(header);
+
+            VisualElement content = new VisualElement();
+            content.style.display = IsStateGroupCollapsed(groupKey) ? DisplayStyle.None : DisplayStyle.Flex;
+            for (int i = 0; i < bucket.States.Count; i++)
+            {
+                content.Add(CreateStateRow(bucket.States[i], rowIndex++));
+            }
+
+            header.RegisterCallback<MouseDownEvent>(evt =>
+            {
+                if (evt.button != 0)
+                {
+                    return;
+                }
+
+                bool expanded = content.style.display != DisplayStyle.None;
+                content.style.display = expanded ? DisplayStyle.None : DisplayStyle.Flex;
+                foldoutLabel.text = expanded ? "▸" : "▾";
+                SetStateGroupCollapsed(groupKey, expanded);
+                evt.StopPropagation();
+            });
+
+            group.Add(content);
             return group;
         }
 
@@ -776,24 +855,33 @@ namespace XFramework.Editor
             nameLabel.style.position = Position.Relative;
             row.Add(nameLabel);
 
-            DropdownField stateTypeField = CreateStateTypeField(state);
-            stateTypeField.style.width = 200;
-            stateTypeField.style.flexShrink = 0;
-            stateTypeField.style.marginLeft = 6;
-            stateTypeField.style.position = Position.Relative;
-            row.Add(stateTypeField);
+            Label stateTypeLabel = new(GetStateTypeDisplayText(state));
+            stateTypeLabel.style.flexGrow = 1;
+            stateTypeLabel.style.flexShrink = 1;
+            stateTypeLabel.style.minWidth = 0;
+            stateTypeLabel.style.marginLeft = 6;
+            stateTypeLabel.style.color = TextMuted;
+            stateTypeLabel.style.fontSize = BodyFontSize;
+            stateTypeLabel.style.position = Position.Relative;
+            row.Add(stateTypeLabel);
 
-            DropdownField channelField = CreateStateChannelField(state);
-            channelField.style.flexGrow = 1;
-            channelField.style.marginLeft = 6;
-            channelField.style.position = Position.Relative;
-            row.Add(channelField);
+            Button locateButton = new(() => OpenPreviewAndFocusState(target as XAnimationActor, state.key))
+            {
+                text = "↗"
+            };
+            locateButton.tooltip = "在预览窗口中定位到这个 state。";
+            ApplyClipIconButtonStyle(locateButton);
+            locateButton.style.marginLeft = 6;
+            locateButton.style.position = Position.Relative;
+            locateButton.SetEnabled(true);
+            row.Add(locateButton);
 
             Button playButton = new(() => ToggleStatePlayback(state))
             {
                 text = "▶"
             };
-            ApplyIconButtonStyle(playButton, false);
+            playButton.tooltip = "播放或停止这个 state。";
+            ApplyClipIconButtonStyle(playButton);
             playButton.style.marginLeft = 6;
             playButton.style.position = Position.Relative;
             playButton.SetEnabled(true);
@@ -802,114 +890,6 @@ namespace XFramework.Editor
             m_StateRowMap[state.key] = container;
             m_StateButtonMap[state.key] = playButton;
             return container;
-        }
-
-        private DropdownField CreateStateTypeField(XAnimationStateConfig state)
-        {
-            string[] typeNames = Enum.GetNames(typeof(XAnimationStateType));
-            List<string> choices = new(typeNames);
-            string currentValue = state?.stateType.ToString() ?? XAnimationStateType.Single.ToString();
-            DropdownField field = new(string.Empty, choices, Mathf.Max(0, choices.IndexOf(currentValue)));
-            field.tooltip = "stateType";
-            field.RegisterValueChangedCallback(evt =>
-            {
-                if (state == null || string.Equals(evt.newValue, evt.previousValue, StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                if (!Enum.TryParse(evt.newValue, out XAnimationStateType stateType))
-                {
-                    field.SetValueWithoutNotify(evt.previousValue);
-                    return;
-                }
-
-                ChangeStateType(state, stateType, evt.previousValue, field);
-            });
-            return field;
-        }
-
-        private DropdownField CreateStateChannelField(XAnimationStateConfig state)
-        {
-            List<ChannelNameOption> options = GetChannelOptions();
-            List<string> choices = new(options.Count);
-            for (int i = 0; i < options.Count; i++)
-            {
-                choices.Add(options[i].DisplayName);
-            }
-
-            string currentValue = FindChannelDisplayName(options, state?.channelName) ?? FindFirstChannelName(options) ?? string.Empty;
-            DropdownField field = new(string.Empty, choices, Mathf.Max(0, choices.IndexOf(currentValue)));
-            field.tooltip = "channelName";
-            field.RegisterValueChangedCallback(evt =>
-            {
-                if (state == null || string.Equals(evt.newValue, evt.previousValue, StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                ChangeStateChannel(state, NormalizeChannelOptionValue(evt.newValue), field, evt.previousValue);
-            });
-            return field;
-        }
-
-        private void ChangeStateType(XAnimationStateConfig state, XAnimationStateType stateType, string previousValue, DropdownField field)
-        {
-            if (state == null)
-            {
-                return;
-            }
-
-            XAnimationStateType previousStateType = state.stateType;
-            try
-            {
-                ApplyStateType(state, stateType);
-                SaveCurrentAnimationAsset();
-                SetStatus($"{state.key} stateType = {stateType}。");
-                InvalidateAnimationAssetCache();
-                RebuildStateList();
-                RefreshRuntimeViews();
-            }
-            catch (Exception ex)
-            {
-                state.stateType = previousStateType;
-                field.SetValueWithoutNotify(previousValue);
-                SetStatus(ex.Message, true);
-                Debug.LogException(ex);
-            }
-        }
-
-        private void ChangeStateChannel(XAnimationStateConfig state, string channelName, DropdownField field, string previousValue)
-        {
-            if (state == null)
-            {
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(channelName))
-            {
-                field.SetValueWithoutNotify(previousValue);
-                SetStatus("channelName 不能为空。", true);
-                return;
-            }
-
-            string previousChannelName = state.channelName;
-            try
-            {
-                state.channelName = channelName;
-                SaveCurrentAnimationAsset();
-                SetStatus($"{state.key} channel = {channelName}。");
-                InvalidateAnimationAssetCache();
-                RebuildStateList();
-                RefreshRuntimeViews();
-            }
-            catch (Exception ex)
-            {
-                state.channelName = previousChannelName;
-                field.SetValueWithoutNotify(previousValue);
-                SetStatus(ex.Message, true);
-                Debug.LogException(ex);
-            }
         }
 
         private void ToggleStatePlayback(XAnimationStateConfig state)
@@ -941,154 +921,6 @@ namespace XFramework.Editor
                     actor.PlayState(state.key, BuildTransitionOptions());
                     actor.SetChannelTimeScale(state.channelName, GetPlaybackSpeed());
                     SetStatus($"正在播放 state {state.key}。");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogException(ex, actor);
-                SetStatus(ex.Message, true);
-            }
-
-            RefreshRuntimeViews();
-        }
-
-        private void RebuildClipList()
-        {
-            m_ClipsListView?.Clear();
-            m_ClipRowMap.Clear();
-            m_ClipButtonMap.Clear();
-            m_ClipVisualStateMap.Clear();
-
-            XAnimationAsset asset = LoadCurrentAnimationAsset();
-            if (m_ClipsListView == null || asset?.clips == null || asset.clips.Length == 0)
-            {
-                AddEmptyLabel(m_ClipsListView, "No clips");
-                return;
-            }
-
-            for (int i = 0; i < asset.clips.Length; i++)
-            {
-                XAnimationClipConfig clip = asset.clips[i];
-                if (clip == null || string.IsNullOrWhiteSpace(clip.key))
-                {
-                    continue;
-                }
-
-                m_ClipsListView.Add(CreateClipRow(clip, i));
-            }
-        }
-
-        private VisualElement CreateClipRow(XAnimationClipConfig clip, int rowIndex)
-        {
-            VisualElement container = CreateRowContainer(rowIndex);
-            m_ClipRowMap[clip.key] = container;
-            VisualElement progressFill = CreateRowProgressFill();
-            container.Add(progressFill);
-
-            if (m_ClipVisualStateMap.TryGetValue(clip.key, out ClipRowVisualState existingState))
-            {
-                existingState.BaseColor = RowBaseColor(rowIndex);
-                existingState.ProgressFill = progressFill;
-            }
-            else
-            {
-                m_ClipVisualStateMap[clip.key] = new ClipRowVisualState
-                {
-                    BaseColor = RowBaseColor(rowIndex),
-                    ProgressFill = progressFill,
-                };
-            }
-
-            container.RegisterCallback<MouseEnterEvent>(_ =>
-            {
-                if (m_ClipVisualStateMap.TryGetValue(clip.key, out ClipRowVisualState state))
-                {
-                    state.Hovered = true;
-                    ApplyClipRowVisualState(clip.key);
-                }
-            });
-            container.RegisterCallback<MouseLeaveEvent>(_ =>
-            {
-                if (m_ClipVisualStateMap.TryGetValue(clip.key, out ClipRowVisualState state))
-                {
-                    state.Hovered = false;
-                    ApplyClipRowVisualState(clip.key);
-                }
-            });
-
-            VisualElement row = CreateRowContent();
-            container.Add(row);
-
-            Label nameLabel = new(clip.key);
-            nameLabel.style.width = 140;
-            nameLabel.style.flexShrink = 0;
-            nameLabel.style.color = TextNormal;
-            nameLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            nameLabel.style.position = Position.Relative;
-            row.Add(nameLabel);
-
-            ObjectField clipField = new()
-            {
-                objectType = typeof(AnimationClip),
-                allowSceneObjects = false,
-            };
-            clipField.SetValueWithoutNotify(GetClipObject(clip));
-            clipField.SetEnabled(false);
-            clipField.style.opacity = 1f;
-            clipField.style.flexGrow = 1;
-            clipField.style.marginRight = 4;
-            clipField.style.position = Position.Relative;
-            row.Add(clipField);
-
-            Button playButton = new(() => ToggleClipPlayback(clip))
-            {
-                text = "▶"
-            };
-            ApplyIconButtonStyle(playButton, false);
-            playButton.style.marginLeft = 6;
-            playButton.style.position = Position.Relative;
-            playButton.SetEnabled(true);
-            row.Add(playButton);
-
-            m_ClipButtonMap[clip.key] = playButton;
-            return container;
-        }
-
-        private void ToggleClipPlayback(XAnimationClipConfig clip)
-        {
-            XAnimationActor actor = target as XAnimationActor;
-            if (actor == null)
-            {
-                return;
-            }
-
-            string channelName = m_PlayTargetChannelName;
-            if (string.IsNullOrWhiteSpace(channelName))
-            {
-                SetStatus("请先在 Target 中选择 channelName 后再调试播放 clip。", true);
-                return;
-            }
-
-            if (!Application.isPlaying)
-            {
-                OpenPreviewAndPlayClip(actor, clip.key, channelName);
-                return;
-            }
-
-            try
-            {
-                XAnimationChannelState state = actor.GetChannelState(channelName);
-                bool isPlaying = state != null && string.Equals(state.clipKey, clip.key, StringComparison.Ordinal);
-                if (isPlaying)
-                {
-                    actor.Stop(channelName, 0f);
-                    SetStatus($"已停止 clip {clip.key}。");
-                }
-                else
-                {
-                    actor.PlayClip(clip.key, channelName, BuildTransitionOptions());
-                    actor.SetChannelTimeScale(channelName, GetPlaybackSpeed());
-                    SetStatus($"正在 {channelName} 播放 clip {clip.key}。");
                 }
             }
             catch (Exception ex)
@@ -1143,107 +975,10 @@ namespace XFramework.Editor
                 }
                 if (m_StateButtonMap.TryGetValue(kvp.Key, out Button button))
                 {
-                    ApplyIconButtonStyle(button, isPlaying);
+                    ApplyClipIconButtonStyle(button, isPlaying ? AccentColor : null);
+                    button.text = isPlaying ? "■" : "▶";
                 }
             }
-        }
-
-        private void RefreshClipPlayingStates()
-        {
-            XAnimationActor actor = target as XAnimationActor;
-            HashSet<string> playingClipKeys = null;
-            Dictionary<string, float> clipProgressByKey = null;
-            if (actor != null && Application.isPlaying && actor.IsInitialized)
-            {
-                XAnimationAsset asset = LoadCurrentAnimationAsset();
-                if (asset?.channels != null)
-                {
-                    for (int i = 0; i < asset.channels.Length; i++)
-                    {
-                        XAnimationChannelConfig channel = asset.channels[i];
-                        if (channel == null || string.IsNullOrWhiteSpace(channel.name))
-                        {
-                            continue;
-                        }
-
-                        XAnimationChannelState state = actor.GetChannelState(channel.name);
-                        if (state == null)
-                        {
-                            continue;
-                        }
-
-                        if (!string.IsNullOrWhiteSpace(state.clipKey))
-                        {
-                            playingClipKeys ??= new HashSet<string>(StringComparer.Ordinal);
-                            playingClipKeys.Add(state.clipKey);
-                            clipProgressByKey ??= new Dictionary<string, float>(StringComparer.Ordinal);
-                            float progress = Mathf.Clamp01(state.normalizedTime);
-                            if (!clipProgressByKey.TryGetValue(state.clipKey, out float existingProgress) || progress > existingProgress)
-                            {
-                                clipProgressByKey[state.clipKey] = progress;
-                            }
-                        }
-
-                        XAnimationBlendClipState[] blendClips = state.blendClips;
-                        if (blendClips == null)
-                        {
-                            continue;
-                        }
-
-                        for (int blendIndex = 0; blendIndex < blendClips.Length; blendIndex++)
-                        {
-                            XAnimationBlendClipState blendClip = blendClips[blendIndex];
-                            if (blendClip == null || string.IsNullOrWhiteSpace(blendClip.clipKey))
-                            {
-                                continue;
-                            }
-
-                            playingClipKeys ??= new HashSet<string>(StringComparer.Ordinal);
-                            playingClipKeys.Add(blendClip.clipKey);
-                            clipProgressByKey ??= new Dictionary<string, float>(StringComparer.Ordinal);
-                            float blendProgress = Mathf.Clamp01(blendClip.normalizedTime);
-                            if (!clipProgressByKey.TryGetValue(blendClip.clipKey, out float existingBlendProgress) || blendProgress > existingBlendProgress)
-                            {
-                                clipProgressByKey[blendClip.clipKey] = blendProgress;
-                            }
-                        }
-                    }
-                }
-            }
-
-            foreach (KeyValuePair<string, VisualElement> kvp in m_ClipRowMap)
-            {
-                bool isPlaying = playingClipKeys != null && playingClipKeys.Contains(kvp.Key);
-                if (m_ClipVisualStateMap.TryGetValue(kvp.Key, out ClipRowVisualState visualState))
-                {
-                    visualState.Playing = isPlaying;
-                    visualState.Progress = isPlaying && clipProgressByKey != null && clipProgressByKey.TryGetValue(kvp.Key, out float progress)
-                        ? progress
-                        : 0f;
-                    ApplyClipRowVisualState(kvp.Key);
-                }
-
-                if (m_ClipButtonMap.TryGetValue(kvp.Key, out Button button))
-                {
-                    ApplyIconButtonStyle(button, isPlaying);
-                }
-            }
-        }
-
-        private void ApplyClipRowVisualState(string clipKey)
-        {
-            if (!m_ClipRowMap.TryGetValue(clipKey, out VisualElement row) ||
-                !m_ClipVisualStateMap.TryGetValue(clipKey, out ClipRowVisualState visualState))
-            {
-                return;
-            }
-
-            row.style.backgroundColor = visualState.Playing
-                ? PlayingBg
-                : visualState.Hovered
-                    ? HoverBg
-                    : visualState.BaseColor;
-            ApplyRowProgressVisualState(visualState);
         }
 
         private void PlayConfiguredCommand()
@@ -1355,7 +1090,7 @@ namespace XFramework.Editor
             }
         }
 
-        private void OpenPreviewAndPlayClip(XAnimationActor actor, string clipKey, string channelName)
+        private void OpenPreviewAndFocusState(XAnimationActor actor, string stateKey)
         {
             if (!TryGetPreviewSelection(actor, out TextAsset animationAsset, out GameObject prefab))
             {
@@ -1364,14 +1099,11 @@ namespace XFramework.Editor
 
             try
             {
-                XAnimationPreviewWindow.ShowWindowAndPlayClip(
+                XAnimationPreviewWindow.ShowWindowAndFocusState(
                     animationAsset,
                     prefab,
-                    clipKey,
-                    channelName,
-                    GetPlaybackSpeed(),
-                    BuildTransitionOptions());
-                SetStatus($"已在预览窗口打开并播放 clip {clipKey}。");
+                    stateKey);
+                SetStatus($"已在预览窗口定位 state {stateKey}。");
             }
             catch (Exception ex)
             {
@@ -2087,25 +1819,6 @@ namespace XFramework.Editor
                    stateType == XAnimationStateType.Blend2DFreeformDirectional;
         }
 
-        private AnimationClip GetClipObject(XAnimationClipConfig clip)
-        {
-            if (clip == null || string.IsNullOrWhiteSpace(clip.key))
-            {
-                return null;
-            }
-
-            if (m_CachedClipObjectMap.TryGetValue(clip.key, out AnimationClip existingClip))
-            {
-                return existingClip;
-            }
-
-            AnimationClip clipObject = string.IsNullOrWhiteSpace(clip.clipPath)
-                ? null
-                : XAnimationEditorAssetResolver.ResolveAnimationClip(clip.clipPath);
-            m_CachedClipObjectMap[clip.key] = clipObject;
-            return clipObject;
-        }
-
         private void InvalidateAnimationAssetCache()
         {
             m_CachedSelectedAssetInstanceId = int.MinValue;
@@ -2163,6 +1876,111 @@ namespace XFramework.Editor
             }
 
             ApplyRowVisualState(row, visualState);
+        }
+
+        private static string NormalizeStateEditorGroupName(string groupName)
+        {
+            groupName = groupName?.Trim();
+            return string.IsNullOrWhiteSpace(groupName) ? string.Empty : groupName;
+        }
+
+        private static string BuildStateGroupKey(string channelName, string groupName)
+        {
+            return $"{channelName ?? string.Empty}::{NormalizeStateEditorGroupName(groupName)}";
+        }
+
+        private bool IsStateGroupCollapsed(string groupKey)
+        {
+            return !string.IsNullOrWhiteSpace(groupKey) && m_CollapsedStateGroupKeys.Contains(groupKey);
+        }
+
+        private void SetStateGroupCollapsed(string groupKey, bool collapsed)
+        {
+            if (string.IsNullOrWhiteSpace(groupKey))
+            {
+                return;
+            }
+
+            if (collapsed)
+            {
+                m_CollapsedStateGroupKeys.Add(groupKey);
+            }
+            else
+            {
+                m_CollapsedStateGroupKeys.Remove(groupKey);
+            }
+        }
+
+        private static StateGroupBucket FindStateGroupBucket(List<StateGroupBucket> buckets, string groupName)
+        {
+            if (buckets == null)
+            {
+                return null;
+            }
+
+            groupName = NormalizeStateEditorGroupName(groupName);
+            for (int i = 0; i < buckets.Count; i++)
+            {
+                StateGroupBucket bucket = buckets[i];
+                if (bucket != null &&
+                    string.Equals(NormalizeStateEditorGroupName(bucket.GroupName), groupName, StringComparison.Ordinal))
+                {
+                    return bucket;
+                }
+            }
+
+            return null;
+        }
+
+        private static int CountStatesInBuckets(List<StateGroupBucket> buckets)
+        {
+            int count = 0;
+            if (buckets == null)
+            {
+                return count;
+            }
+
+            for (int i = 0; i < buckets.Count; i++)
+            {
+                count += buckets[i]?.States?.Count ?? 0;
+            }
+
+            return count;
+        }
+
+        private static int CountGroupedBuckets(List<StateGroupBucket> buckets)
+        {
+            int count = 0;
+            if (buckets == null)
+            {
+                return count;
+            }
+
+            for (int i = 0; i < buckets.Count; i++)
+            {
+                if (buckets[i] != null && !buckets[i].IsUngrouped)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private static string GetStateTypeDisplayText(XAnimationStateConfig state)
+        {
+            if (state == null)
+            {
+                return string.Empty;
+            }
+
+            return state.stateType switch
+            {
+                XAnimationStateType.Blend1D => "Blend1D",
+                XAnimationStateType.Blend2DSimpleDirectional => "Blend2DSimpleDirectional",
+                XAnimationStateType.Blend2DFreeformDirectional => "Blend2DFreeformDirectional",
+                _ => "Single",
+            };
         }
     }
 }

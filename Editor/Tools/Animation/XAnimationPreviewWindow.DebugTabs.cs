@@ -39,7 +39,7 @@ namespace XFramework.Editor
             toolbar.style.borderBottomColor = SectionDivider;
             toolbar.style.justifyContent = Justify.FlexStart;
 
-            m_MainGroupButton = CreateToolbarTabButton("Main", () => SetDebugToolbarGroup(DebugToolbarGroup.Main));
+            m_MainGroupButton = CreateToolbarTabButton("State", () => SetDebugToolbarGroup(DebugToolbarGroup.Main));
             m_ClipGroupButton = CreateToolbarTabButton("Clips", () => SetDebugToolbarGroup(DebugToolbarGroup.Clip));
             m_ChannelsGroupButton = CreateToolbarTabButton("Channels", () => SetDebugToolbarGroup(DebugToolbarGroup.Channels));
             m_ParametersGroupButton = CreateToolbarTabButton("Parameters", () => SetDebugToolbarGroup(DebugToolbarGroup.Parameters));

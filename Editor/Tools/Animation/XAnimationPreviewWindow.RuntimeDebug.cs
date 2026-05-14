@@ -278,6 +278,8 @@ namespace XFramework.Editor
             {
                 m_AssetField.SetValueWithoutNotify(m_SelectedAsset);
             }
+
+            RefreshAssetsToolbarButtons();
         }
 
         private void SetPendingOpenRequest(TextAsset animationAsset, GameObject prefab, bool autoLoad)
@@ -301,6 +303,24 @@ namespace XFramework.Editor
             {
                 ApplyPendingPlaybackRequest();
             }
+        }
+
+        private void SetPendingFocusState(string stateKey)
+        {
+            m_PendingFocusStateKey = string.IsNullOrWhiteSpace(stateKey) ? null : stateKey;
+            ApplyPendingFocusState();
+        }
+
+        private void ApplyPendingFocusState()
+        {
+            if (m_Session == null || !m_Session.IsLoaded || string.IsNullOrWhiteSpace(m_PendingFocusStateKey))
+            {
+                return;
+            }
+
+            string stateKey = m_PendingFocusStateKey;
+            m_PendingFocusStateKey = null;
+            FocusStateInInspector(stateKey);
         }
 
         private void ApplyPendingOpenRequest()
@@ -354,12 +374,14 @@ namespace XFramework.Editor
             {
                 LoadPreview();
             }
+
+            RefreshAssetsToolbarButtons();
         }
 
         private void ScheduleAutoReloadPreview()
         {
             bool hasPendingRequest = m_PendingAsset != null || m_PendingPrefab != null || m_PendingAutoLoad;
-            if (hasPendingRequest)
+            if (hasPendingRequest || m_Session != null || m_PendingPlaybackRequest.HasValue || !string.IsNullOrWhiteSpace(m_PendingFocusStateKey))
             {
                 return;
             }
@@ -397,6 +419,7 @@ namespace XFramework.Editor
             m_ShouldAutoReloadPreview = true;
             m_PrefabField.SetValueWithoutNotify(m_SelectedPrefab);
             m_AssetField.SetValueWithoutNotify(m_SelectedAsset);
+            RefreshAssetsToolbarButtons();
             LoadPreview();
         }
 
@@ -515,6 +538,7 @@ namespace XFramework.Editor
             {
                 overrideAsset.DefaultPrefabPath = prefabPath;
                 overrideAsset.SaveAsset();
+                RefreshAssetsToolbarButtons();
                 SetStatus($"已写入 Override 默认 prefab：{prefabPath}");
                 return;
             }
@@ -528,7 +552,57 @@ namespace XFramework.Editor
 
             asset.DefaultPrefabPath = prefabPath;
             asset.SaveAsset();
+            RefreshAssetsToolbarButtons();
             SetStatus($"已写入默认 prefab：{prefabPath}");
+        }
+
+        private void ResetPrefabToDefault()
+        {
+            TextAsset assetText = m_AssetField?.value as TextAsset;
+            if (assetText == null)
+            {
+                SetStatus("请选择一个 XAnimationAsset 后再恢复默认模型。", true);
+                return;
+            }
+
+            GameObject defaultPrefab = LoadDefaultPrefabForAsset(assetText);
+            if (defaultPrefab == null)
+            {
+                SetStatus("当前资源没有可用的默认 prefab。", true);
+                RefreshAssetsToolbarButtons();
+                return;
+            }
+
+            m_SelectedPrefab = defaultPrefab;
+            m_PrefabField?.SetValueWithoutNotify(defaultPrefab);
+            RefreshAssetsToolbarButtons();
+
+            if (m_AssetField?.value != null && m_PrefabField?.value != null)
+            {
+                LoadPreview();
+            }
+
+            SetStatus($"已恢复默认 prefab：{defaultPrefab.name}。");
+        }
+
+        private void RefreshAssetsToolbarButtons()
+        {
+            if (m_SaveCurrentPrefabAsDefaultButton == null || m_ResetPrefabToDefaultButton == null)
+            {
+                return;
+            }
+
+            TextAsset assetText = m_AssetField?.value as TextAsset;
+            GameObject currentPrefab = m_PrefabField?.value as GameObject;
+            string currentPrefabPath = currentPrefab == null ? string.Empty : AssetDatabase.GetAssetPath(currentPrefab);
+            bool hasDefaultPrefab = TryGetDefaultPrefabPath(assetText, out string defaultPrefabPath) &&
+                                    !string.IsNullOrWhiteSpace(defaultPrefabPath);
+            bool matchesDefaultPrefab = hasDefaultPrefab &&
+                                        string.Equals(currentPrefabPath, defaultPrefabPath, StringComparison.Ordinal);
+            bool showDefaultActions = currentPrefab != null && !matchesDefaultPrefab;
+
+            m_SaveCurrentPrefabAsDefaultButton.style.display = showDefaultActions ? DisplayStyle.Flex : DisplayStyle.None;
+            m_ResetPrefabToDefaultButton.style.display = showDefaultActions && hasDefaultPrefab ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
     }

@@ -124,21 +124,22 @@ namespace XFramework.Animation
             return m_Driver.PlayClip(clipName, channelName, transition);
         }
 
-        public XAnimationPlaybackHandle PlayState(string stateName, XAnimationTransitionOptions transition)
-        {
-            EnsureInitialized();
-            return m_Driver.PlayState(stateName, transition);
-        }
-
         public XAnimationPlaybackHandle PlayState(string stateName)
         {
-            return PlayState(stateName, null);
+            EnsureInitialized();
+            return m_Driver.PlayState(stateName);
         }
 
         public XAnimationPlaybackHandle PlayState(string stateName, bool force)
         {
             EnsureInitialized();
             return m_Driver.PlayState(stateName, force);
+        }
+
+        public XAnimationPlaybackHandle PlayState(string stateName, XAnimationTransitionOptions transition)
+        {
+            EnsureInitialized();
+            return m_Driver.PlayState(stateName, transition, false);
         }
 
         public XAnimationPlaybackHandle PlayState(string stateName, XAnimationTransitionOptions transition, bool force)
@@ -157,13 +158,13 @@ namespace XFramework.Animation
             return PlayClip(clipKey, channelName);
         }
 
-        public void Stop(string channelName, float fadeOut = default)
+        public void Stop(string channelName, float fadeOut = 0)
         {
             EnsureInitialized();
             m_Driver.Stop(channelName, fadeOut);
         }
 
-        public void StopAll(float fadeOut = default)
+        public void StopAll(float fadeOut = 0)
         {
             EnsureInitialized();
             m_Driver.StopAll(fadeOut);

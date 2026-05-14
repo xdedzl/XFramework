@@ -681,7 +681,6 @@ namespace XFramework.Animation
         public float enterTime;
         public int priority;
         public bool interruptible = true;
-        public bool force;
     }
 
     internal sealed class XAnimationTransitionRequest

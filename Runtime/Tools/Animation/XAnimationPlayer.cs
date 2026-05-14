@@ -134,13 +134,15 @@ namespace XFramework.Animation
             return TryPlayCompiledState(temporaryState, channel, request);
         }
 
-        internal XAnimationPlaybackStartInfo PlayState(string stateKey, XAnimationTransitionOptions transition = default)
+        internal XAnimationPlaybackStartInfo PlayState(
+            string stateKey,
+            XAnimationTransitionOptions transition = default,
+            bool force = false)
         {
             ThrowIfDisposed();
             XAnimationCompiledState state = CompiledAsset.GetState(stateKey);
             XAnimationCompiledChannel channel = GetStateChannel(state);
-            XAnimationTransitionOptions normalizedTransition = transition ?? new XAnimationTransitionOptions();
-            if (!normalizedTransition.force &&
+            if (!force &&
                 !CanTransitionFromCurrentPlayback(m_ChannelMap[channel.Name], state, out XAnimationTransitionRejectReason gateRejectReason))
             {
                 string clipKey = state is XAnimationCompiledSingleState singleState
@@ -154,7 +156,7 @@ namespace XFramework.Animation
                 channel,
                 transition,
                 transition != null ? XAnimationTransitionRequestSource.ExplicitPlay : ResolveRequestSource(state, channel),
-                normalizedTransition.force);
+                force);
             return TryPlayCompiledState(state, channel, request);
         }
 
@@ -217,7 +219,7 @@ namespace XFramework.Animation
                 resolvedTransition.priority,
                 resolvedTransition.interruptible,
                 drivesRootMotion,
-                force || resolvedTransition.force);
+                force);
         }
 
         private XAnimationTransitionOptions ResolveTransitionOptions(
@@ -345,14 +347,14 @@ namespace XFramework.Animation
             return Array.Empty<string>();
         }
 
-        public void Stop(string channelName, float fadeOut = default)
+        public void Stop(string channelName, float fadeOut = 0)
         {
             ThrowIfDisposed();
             XAnimationChannel channel = GetChannel(channelName);
             channel.Stop(fadeOut > 0f ? fadeOut : channel.CompiledChannel.Config.defaultFadeOut, m_CueDispatcher);
         }
 
-        public void StopAll(float fadeOut = default)
+        public void StopAll(float fadeOut = 0)
         {
             ThrowIfDisposed();
             foreach (XAnimationChannel channel in m_Channels)

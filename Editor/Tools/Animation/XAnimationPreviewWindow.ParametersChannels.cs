@@ -808,11 +808,41 @@ namespace XFramework.Editor
 
             void ApplyScroll()
             {
-                m_InspectorScrollView?.ScrollTo(target);
+                ScrollView scrollView = m_InspectorScrollView;
+                VisualElement contentContainer = scrollView?.contentContainer;
+                if (scrollView == null || contentContainer == null)
+                {
+                    return;
+                }
+
+                if (scrollView.panel == null || target.panel == null || scrollView.panel != target.panel)
+                {
+                    return;
+                }
+
+                if (!IsDescendantOf(target, contentContainer))
+                {
+                    return;
+                }
+
+                scrollView.ScrollTo(target);
             }
 
             m_InspectorScrollView.schedule.Execute(ApplyScroll).ExecuteLater(0);
             m_InspectorScrollView.schedule.Execute(ApplyScroll).ExecuteLater(16);
+        }
+
+        private static bool IsDescendantOf(VisualElement element, VisualElement ancestor)
+        {
+            for (VisualElement current = element; current != null; current = current.parent)
+            {
+                if (current == ancestor)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
     }

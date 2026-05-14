@@ -91,7 +91,7 @@
 
 ## 5. 异步及驱动系统 (XTask & FSM)
 
-> `XAnimationDriver.PlayState(...)` / `XAnimationActor.PlayState(...)` 支持通过 `XAnimationTransitionOptions.force` 或 `PlayState(stateKey, force)` 强制切换；启用后会忽略 state 门禁、`allowInterrupt`、`interruptible` 与 `priority`。
+> `XAnimationDriver.PlayState(...)` / `XAnimationActor.PlayState(...)` 支持通过 `PlayState(stateKey, force)` 或 `PlayState(stateKey, transition, force)` 强制切换；启用后会忽略 state 门禁、`allowInterrupt`、`interruptible` 与 `priority`。
 
 ### 5.1 `XAwaitableTask`
 - `static Delay(float seconds)` / `static Yield()`。
