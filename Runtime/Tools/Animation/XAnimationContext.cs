@@ -88,6 +88,11 @@ namespace XFramework.Animation
             return m_IntValues.TryGetValue(key, out value);
         }
 
+        public bool TryGetTrigger(string key, out bool value)
+        {
+            return m_TriggerValues.TryGetValue(key, out value);
+        }
+
         public bool ConsumeTrigger(string key)
         {
             EnsureType(key, XAnimationParameterType.Trigger);

@@ -233,6 +233,30 @@ namespace XFramework.Animation
             m_Driver.ResetTrigger(key);
         }
 
+        public bool TryGetParameter(string key, out float value)
+        {
+            EnsureInitialized();
+            return m_Driver.TryGetParameter(key, out value);
+        }
+
+        public bool TryGetParameter(string key, out bool value)
+        {
+            EnsureInitialized();
+            return m_Driver.TryGetParameter(key, out value);
+        }
+
+        public bool TryGetParameter(string key, out int value)
+        {
+            EnsureInitialized();
+            return m_Driver.TryGetParameter(key, out value);
+        }
+
+        public bool TryGetTrigger(string key, out bool value)
+        {
+            EnsureInitialized();
+            return m_Driver.TryGetTrigger(key, out value);
+        }
+
         public void SetChannelWeight(string channelName, float weight)
         {
             EnsureInitialized();

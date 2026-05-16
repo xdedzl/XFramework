@@ -110,6 +110,30 @@ namespace XFramework.Animation
             m_Context.ResetTrigger(key);
         }
 
+        public bool TryGetParameter(string key, out float value)
+        {
+            EnsureInitialized();
+            return m_Context.TryGetFloat(key, out value);
+        }
+
+        public bool TryGetParameter(string key, out bool value)
+        {
+            EnsureInitialized();
+            return m_Context.TryGetBool(key, out value);
+        }
+
+        public bool TryGetParameter(string key, out int value)
+        {
+            EnsureInitialized();
+            return m_Context.TryGetInt(key, out value);
+        }
+
+        public bool TryGetTrigger(string key, out bool value)
+        {
+            EnsureInitialized();
+            return m_Context.TryGetTrigger(key, out value);
+        }
+
         public XAnimationPlaybackHandle PlayClip(string clipName, string channelName, XAnimationTransitionOptions transition = null)
         {
             EnsureInitialized();

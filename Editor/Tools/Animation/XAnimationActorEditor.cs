@@ -16,6 +16,8 @@ namespace XFramework.Editor
     public sealed class XAnimationActorEditor : UnityEditor.Editor
     {
         private const float PlaybackLabelWidth = 118f;
+        private const long RuntimeRefreshIntervalMs = 33;
+        private const float PlaybackSpeedMin = 0.1f;
 
         private sealed class StateGroupBucket
         {
@@ -54,6 +56,9 @@ namespace XFramework.Editor
         private readonly Dictionary<string, float> m_RuntimeFloatPreviewValues = new(StringComparer.Ordinal);
         private readonly Dictionary<string, int> m_RuntimeIntPreviewValues = new(StringComparer.Ordinal);
         private readonly Dictionary<string, bool> m_RuntimeBoolPreviewValues = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, FloatField> m_RuntimeFloatFields = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, IntegerField> m_RuntimeIntFields = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, Toggle> m_RuntimeBoolFields = new(StringComparer.Ordinal);
 
         private FloatField m_PlaySpeedField;
         private DropdownField m_PlayTargetChannelField;
@@ -175,7 +180,7 @@ namespace XFramework.Editor
             m_PlaybackSectionExpanded = settings.PlaybackSectionExpanded;
             m_PlayTransitionSectionExpanded = settings.TransitionSectionExpanded;
             m_PlayTargetChannelName = settings.ChannelName;
-            m_PlaySpeed = Mathf.Approximately(settings.Speed, 0f) ? 1f : settings.Speed;
+            m_PlaySpeed = ClampPlaybackSpeed(settings.Speed);
             m_ApplyTransitionOverrides = settings.ApplyTransition;
             m_PlayFadeInOverride = Mathf.Max(0f, settings.FadeIn);
             m_PlayFadeOutOverride = Mathf.Max(0f, settings.FadeOut);
@@ -187,7 +192,17 @@ namespace XFramework.Editor
 
         private float GetPlaybackSpeed()
         {
-            return Mathf.Approximately(m_PlaySpeed, 0f) ? 1f : m_PlaySpeed;
+            return ClampPlaybackSpeed(m_PlaySpeed);
+        }
+
+        private static float ClampPlaybackSpeed(float speed)
+        {
+            if (float.IsNaN(speed) || float.IsInfinity(speed))
+            {
+                return 1f;
+            }
+
+            return Mathf.Max(PlaybackSpeedMin, speed);
         }
 
         private void SavePlaybackPrefs()
@@ -198,7 +213,7 @@ namespace XFramework.Editor
             }
 
             float speed = m_PlaySpeedField?.value ?? m_PlaySpeed;
-            m_PlaySpeed = Mathf.Approximately(speed, 0f) ? 1f : speed;
+            m_PlaySpeed = ClampPlaybackSpeed(speed);
 
             XAnimationPlaybackSettingsPrefs.Save(new XAnimationPlaybackSettings
             {
@@ -226,7 +241,17 @@ namespace XFramework.Editor
 
             m_PlaySpeedField = new FloatField { value = GetPlaybackSpeed() };
             ConfigureCompactPlaybackField(m_PlaySpeedField, 66);
-            m_PlaySpeedField.RegisterValueChangedCallback(_ => SavePlaybackPrefs());
+            m_PlaySpeedField.RegisterValueChangedCallback(evt =>
+            {
+                m_PlaySpeed = ClampPlaybackSpeed(evt.newValue);
+                if (!Mathf.Approximately(m_PlaySpeed, evt.newValue))
+                {
+                    m_PlaySpeedField.SetValueWithoutNotify(m_PlaySpeed);
+                }
+
+                SavePlaybackPrefs();
+                ApplyPlaybackSpeedToPlayingChannels();
+            });
             VisualElement speedFieldRow = CreatePlaybackFieldContainer("speed", m_PlaySpeedField, PlaybackLabelWidth);
             speedRow.Add(speedFieldRow);
 
@@ -340,7 +365,7 @@ namespace XFramework.Editor
                 return;
             }
 
-            m_RefreshItem = m_Root.schedule.Execute(RefreshRuntimeLoop).Every(200);
+            m_RefreshItem = m_Root.schedule.Execute(RefreshRuntimeLoop).Every(RuntimeRefreshIntervalMs);
         }
 
         private void StopRefreshLoop()
@@ -361,6 +386,7 @@ namespace XFramework.Editor
                 m_RuntimeViewsDirty = false;
             }
 
+            RefreshRuntimeParameterValues();
             RefreshStatePlayingStates();
         }
 
@@ -430,6 +456,9 @@ namespace XFramework.Editor
         private void RebuildParameterList()
         {
             m_ParametersListView?.Clear();
+            m_RuntimeFloatFields.Clear();
+            m_RuntimeIntFields.Clear();
+            m_RuntimeBoolFields.Clear();
             XAnimationAsset asset = LoadCurrentAnimationAsset();
             if (m_ParametersListView == null || asset?.parameters == null || asset.parameters.Length == 0)
             {
@@ -544,6 +573,7 @@ namespace XFramework.Editor
                             SetStatus(ex.Message, true);
                         }
                     });
+                    m_RuntimeFloatFields[parameter.name] = field;
                     return field;
                 }
                 case XAnimationParameterType.Bool:
@@ -572,6 +602,7 @@ namespace XFramework.Editor
                             SetStatus(ex.Message, true);
                         }
                     });
+                    m_RuntimeBoolFields[parameter.name] = toggle;
                     return toggle;
                 }
                 case XAnimationParameterType.Int:
@@ -600,6 +631,7 @@ namespace XFramework.Editor
                             SetStatus(ex.Message, true);
                         }
                     });
+                    m_RuntimeIntFields[parameter.name] = field;
                     return field;
                 }
                 case XAnimationParameterType.Trigger:
@@ -628,6 +660,57 @@ namespace XFramework.Editor
                     };
                     button.SetEnabled(Application.isPlaying);
                     return button;
+                }
+            }
+        }
+
+        private void RefreshRuntimeParameterValues()
+        {
+            XAnimationActor actor = target as XAnimationActor;
+            if (actor == null || !Application.isPlaying || !actor.IsInitialized)
+            {
+                return;
+            }
+
+            foreach (KeyValuePair<string, FloatField> kvp in m_RuntimeFloatFields)
+            {
+                if (kvp.Value == null || !actor.TryGetParameter(kvp.Key, out float value))
+                {
+                    continue;
+                }
+
+                m_RuntimeFloatPreviewValues[kvp.Key] = value;
+                if (!Mathf.Approximately(kvp.Value.value, value))
+                {
+                    kvp.Value.SetValueWithoutNotify(value);
+                }
+            }
+
+            foreach (KeyValuePair<string, IntegerField> kvp in m_RuntimeIntFields)
+            {
+                if (kvp.Value == null || !actor.TryGetParameter(kvp.Key, out int value))
+                {
+                    continue;
+                }
+
+                m_RuntimeIntPreviewValues[kvp.Key] = value;
+                if (kvp.Value.value != value)
+                {
+                    kvp.Value.SetValueWithoutNotify(value);
+                }
+            }
+
+            foreach (KeyValuePair<string, Toggle> kvp in m_RuntimeBoolFields)
+            {
+                if (kvp.Value == null || !actor.TryGetParameter(kvp.Key, out bool value))
+                {
+                    continue;
+                }
+
+                m_RuntimeBoolPreviewValues[kvp.Key] = value;
+                if (kvp.Value.value != value)
+                {
+                    kvp.Value.SetValueWithoutNotify(value);
                 }
             }
         }
@@ -930,6 +1013,45 @@ namespace XFramework.Editor
             }
 
             RefreshRuntimeViews();
+        }
+
+        private void ApplyPlaybackSpeedToPlayingChannels()
+        {
+            XAnimationActor actor = target as XAnimationActor;
+            if (actor == null || !Application.isPlaying || !actor.IsInitialized)
+            {
+                return;
+            }
+
+            XAnimationAsset asset = LoadCurrentAnimationAsset();
+            if (asset?.channels == null)
+            {
+                return;
+            }
+
+            float speed = GetPlaybackSpeed();
+            for (int i = 0; i < asset.channels.Length; i++)
+            {
+                XAnimationChannelConfig channel = asset.channels[i];
+                if (channel == null || string.IsNullOrWhiteSpace(channel.name))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    if (actor.GetChannelState(channel.name) != null)
+                    {
+                        actor.SetChannelTimeScale(channel.name, speed);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogException(ex, actor);
+                    SetStatus(ex.Message, true);
+                    return;
+                }
+            }
         }
 
         private void RefreshStatePlayingStates()
