@@ -20,6 +20,10 @@ namespace XFramework.Entity
         /// </summary>
         private readonly Dictionary<string, Entity> m_EntityDic = new();
         /// <summary>
+        /// 存储所有在使用的实体别名字典
+        /// </summary>
+        private readonly Dictionary<string, Entity> m_EntityAliasDic = new();
+        /// <summary>
         /// 存储实体父子关系的字典(从实际经验看大多数entity都不需要attach/detach,所以不直接存在Entity中)
         /// </summary>
         private readonly Dictionary<string, EntityInfo> m_EntityInfoDic = new();
@@ -92,6 +96,7 @@ namespace XFramework.Entity
                     {
                         m_EntityDic.Remove(item.Id);
                         m_EntityInfoDic.Remove(item.Id);
+                        UnregisterEntityAlias(item);
                         UnityEngine.Object.Destroy(item.gameObject);
                     }
                 }
@@ -107,33 +112,32 @@ namespace XFramework.Entity
         {
             return m_EntityContainerDic.ContainsKey(key);
         }
-
-
+        
+        #region Allocate
         /// <summary>
-        /// 分配实体
+        /// 分配实体，模板不存在时使用传入Prefab自动添加模板
         /// </summary>
-        /// <typeparam name="T">实体子类型</typeparam>
-        /// <param name="id">实体编号</param>
-        /// <param name="pos">位置</param>
-        /// <param name="quaternion">朝向</param>
-        /// <param name="parent">实体父物体</param>
-        /// <returns>实体</returns>
-        public T Allocate<T>(Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null) where T : Entity
+        public T AllocateWithPrefab<T>(GameObject prefab, string alias, IEntityData data, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
-            return Allocate<T>(entityData:null, pos, quaternion, parent, id);
+            if (prefab == null)
+            {
+                throw new XFrameworkException("[EntityError] prefab is null");
+            }
+
+            if (!TryGetContainer(prefab.name, out EntityContainer _))
+            {
+                AddTemplate<T>(prefab.name, prefab, prefab.name);
+            }
+            
+            return Allocate(prefab.name, alias, data, pos, quaternion, parent) as T;
+        }
+        
+        public T Allocate<T>(Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
+        {
+            return Allocate<T>(entityData: null, pos, quaternion, parent);
         }
 
-        /// <summary>
-        /// 分配实体
-        /// </summary>
-        /// <typeparam name="T">实体子类型</typeparam>
-        /// <param name="id">实体编号</param>
-        /// <param name="entityData">实体数据</param>
-        /// <param name="pos">位置</param>
-        /// <param name="quaternion">朝向</param>
-        /// <param name="parent">实体父物体</param>
-        /// <returns>实体</returns>
-        public T Allocate<T>(IEntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null) where T : Entity
+        public T Allocate<T>(IEntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
             string key = typeof(T).Name;
             if(!TryGetContainer(key, out EntityContainer _))
@@ -141,7 +145,22 @@ namespace XFramework.Entity
                 var obj = new GameObject(key + "template");
                 AddTemplate<T>(obj);
             }
-            return Allocate(key, entityData, pos, quaternion, parent, id) as T;
+            return Allocate(key, null, entityData, pos, quaternion, parent) as T;
+        }
+        
+        public T Allocate<T>(string key, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string alias = null) where T : Entity
+        {
+            return Allocate<T>(key, alias, null, pos, quaternion, parent);
+        }
+        
+        public T Allocate<T>(string key, string alias, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
+        {
+            return Allocate(key, alias, null, pos, quaternion, parent) as T;
+        }
+        
+        public T Allocate<T>(string key, IEntityData data, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
+        {
+            return Allocate(key, null, data, pos, quaternion, parent) as T;
         }
 
         /// <summary>
@@ -155,58 +174,9 @@ namespace XFramework.Entity
         /// <param name="quaternion">朝向</param>
         /// <param name="parent">实体父物体</param>
         /// <returns>实体</returns>
-        public T Allocate<T>(string key, IEntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null) where T : Entity
+        public T Allocate<T>(string key, string alias, IEntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
-            return Allocate(key, entityData, pos, quaternion, parent, id) as T;
-        }
-
-        /// <summary>
-        /// 分配实体
-        /// </summary>
-        /// <param name="id">实体编号</param>
-        /// <returns>实体</returns>
-        public Entity Allocate(string key)
-        {
-            return Allocate(key, null);
-        }
-
-        /// <summary>
-        /// 分配实体
-        /// </summary>
-        /// <param name="key">键值</param>
-        /// <returns>实体</returns>
-        public T Allocate<T>(string key) where T : Entity
-        {
-            return Allocate(key, null) as T;
-        }
-
-        /// <summary>
-        /// 分配实体
-        /// </summary>
-        /// <typeparam name="T">实体子类型</typeparam>
-        /// <param name="id">实体编号</param>
-        /// <param name="key">键值</param>
-        /// <param name="pos">位置</param>
-        /// <param name="quaternion">朝向</param>
-        /// <param name="parent">实体父物体</param>
-        /// <returns>实体</returns>
-        public T Allocate<T>(string key, Vector3 pos, Quaternion quaternion = default, Transform parent = null, string id = null) where T : Entity
-        {
-            return Allocate(key, null, pos, quaternion, parent, id) as T;
-        }
-
-        /// <summary>
-        /// 分配实体
-        /// </summary>
-        /// <param name="id">实体编号</param>
-        /// <param name="key">键值</param>
-        /// <param name="pos">位置</param>
-        /// <param name="quaternion">朝向</param>
-        /// <param name="parent">实体父物体</param>
-        /// <returns>实体</returns>
-        public Entity Allocate(string key, Vector3 pos, Quaternion quaternion = default, Transform parent = null, string id = null)
-        {
-            return Allocate(key, null, pos, quaternion, parent, id);
+            return Allocate(key, alias, entityData, pos, quaternion, parent) as T;
         }
 
         /// <summary>
@@ -219,7 +189,7 @@ namespace XFramework.Entity
         /// <param name="quaternion">角度</param>
         /// <param name="parent">实体父物体</param>
         /// <returns></returns>
-        public Entity Allocate(string key, IEntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string id = null)
+        public Entity Allocate(string key, string alias, IEntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null)
         {
             if (!TryGetContainer(key, out EntityContainer _))
             {
@@ -227,7 +197,7 @@ namespace XFramework.Entity
                 AddTemplate<CommonEntity>(obj);
             }
             var entityContainer = GetContainer(key);
-            id ??= Guid.NewGuid().ToString();
+            var id = Guid.NewGuid().ToString();
 
             if (m_EntityDic.ContainsKey(id))
             {
@@ -237,8 +207,19 @@ namespace XFramework.Entity
 
             var entity = entityContainer.Allocate(id, pos, quaternion, entityData, parent);
             m_EntityDic.Add(entity.Id, entity);
+            try
+            {
+                RegisterEntityAlias(entity, alias);
+            }
+            catch
+            {
+                m_EntityDic.Remove(entity.Id);
+                entityContainer.Recycle(entity);
+                throw;
+            }
             return entity;
         }
+        #endregion
         
         internal void RegisterExistEntity(string templateKey, GameObject entityObj)
         {
@@ -246,6 +227,7 @@ namespace XFramework.Entity
             var id = Guid.NewGuid().ToString();
             var entity = container.RegisterExistEntity(id, entityObj);
             m_EntityDic.Add(entity.Id, entity);
+            entity.Alias = null;
         }
         
         /// <summary>
@@ -262,6 +244,7 @@ namespace XFramework.Entity
                     Detach(entity);
                     m_EntityInfoDic.Remove(entity.Id);
                     m_EntityDic.Remove(entity.Id);
+                    UnregisterEntityAlias(entity);
                     return container.Recycle(entity);
                 }
                 else
@@ -408,6 +391,11 @@ namespace XFramework.Entity
             return m_EntityDic.ContainsKey(id);
         }
 
+        public bool IsEntityAliasValid(string alias)
+        {
+            return !string.IsNullOrEmpty(alias) && m_EntityAliasDic.ContainsKey(alias);
+        }
+
         /// <summary>
         /// 获取实体
         /// </summary>
@@ -438,6 +426,47 @@ namespace XFramework.Entity
             {
                 throw new XFrameworkException($"[Entity] There is no entity with an id of {entityId}");
             }
+        }
+
+        /// <summary>
+        /// 通过别名获取实体
+        /// </summary>
+        /// <param name="alias">实体别名</param>
+        public Entity GetEntityByAlias(string alias)
+        {
+            if (TryGetEntityByAlias(alias, out Entity entity))
+            {
+                return entity;
+            }
+            else
+            {
+                throw new XFrameworkException($"[Entity] There is no entity with an alias of {alias}");
+            }
+        }
+
+        /// <summary>
+        /// 通过别名获取实体
+        /// </summary>
+        /// <param name="alias">实体别名</param>
+        public T GetEntityByAlias<T>(string alias) where T : Entity
+        {
+            return GetEntityByAlias(alias) as T;
+        }
+
+        /// <summary>
+        /// 尝试通过别名获取实体
+        /// </summary>
+        /// <param name="alias">实体别名</param>
+        /// <param name="entity">实体</param>
+        public bool TryGetEntityByAlias(string alias, out Entity entity)
+        {
+            if (string.IsNullOrEmpty(alias))
+            {
+                entity = null;
+                return false;
+            }
+
+            return m_EntityAliasDic.TryGetValue(alias, out entity);
         }
 
         /// <summary>
@@ -565,6 +594,7 @@ namespace XFramework.Entity
                 {
                     m_EntityDic.Remove(item.Id);
                     m_EntityInfoDic.Remove(item.Id);
+                    UnregisterEntityAlias(item);
                     GameObject.Destroy(item.gameObject);
                 }
                 m_EntityContainerDic.Remove(key);
@@ -581,6 +611,7 @@ namespace XFramework.Entity
         {
             m_EntityContainerDic.Clear();
             m_EntityDic.Clear();
+            m_EntityAliasDic.Clear();
             m_EntityInfoDic.Clear();
         }
 
@@ -590,6 +621,42 @@ namespace XFramework.Entity
             {
                 item.OnUpdate();
             }
+        }
+
+        #endregion
+
+        #region 模板
+
+        #endregion
+
+        #region 别名
+
+        private void RegisterEntityAlias(Entity entity, string alias)
+        {
+            entity.Alias = null;
+            if (string.IsNullOrEmpty(alias))
+            {
+                return;
+            }
+
+            if (m_EntityAliasDic.TryGetValue(alias, out Entity existEntity))
+            {
+                throw new XFrameworkException($"[EntityError] alias is already occupied. Alias {alias}, Entity {existEntity}");
+            }
+
+            entity.Alias = alias;
+            m_EntityAliasDic.Add(alias, entity);
+        }
+
+        private void UnregisterEntityAlias(Entity entity)
+        {
+            if (entity == null || string.IsNullOrEmpty(entity.Alias))
+            {
+                return;
+            }
+
+            m_EntityAliasDic.Remove(entity.Alias);
+            entity.Alias = null;
         }
 
         #endregion

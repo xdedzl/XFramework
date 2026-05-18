@@ -28,6 +28,11 @@ namespace XFramework.Save
     public abstract class SaveDatabase
     {
         /// <summary>
+        /// 存档数据库创建后的回调，可用于初始化新存档默认值
+        /// </summary>
+        public virtual void OnAfterCreate() { }
+
+        /// <summary>
         /// 存档加载后的回调，可用于数据迁移或修复
         /// </summary>
         public virtual void OnAfterLoad() { }

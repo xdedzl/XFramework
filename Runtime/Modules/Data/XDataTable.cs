@@ -106,6 +106,11 @@ namespace XFramework.Data
             return table;
         }
 
+        internal static XDataTable LoadTableByType(Type tableType)
+        {
+            return LoadTable(tableType);
+        }
+
         public static IReadOnlyDictionary<TKey, TValue> LoadDictData<TKey, TValue>() where TValue : IDataHasKey<TKey>
         {
             var dataType = typeof(TValue);

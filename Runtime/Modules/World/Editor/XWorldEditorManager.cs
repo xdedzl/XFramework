@@ -19,8 +19,6 @@ namespace XFramework.World
             GenerateTrunks(scene.path);
         }
         
-
-        [MenuItem("XFramework/XWorld/Generate Trunks for Current Scene")]
         public static void GenerateTrunks(string scenePath)
         {
             var scene = EditorSceneManager.GetSceneByPath(scenePath);

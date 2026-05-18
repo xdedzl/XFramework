@@ -140,8 +140,8 @@ namespace XFramework.Tasks
         {
             return new XTaskAwaiter(this);
         }
-        
-        internal void SetResult(T result)
+
+        public void SetResult(T result)
         {
             m_IsCompleted = true;
             m_Result = result;

@@ -108,7 +108,7 @@ flowchart TB
 | **状态机**         | [Runtime/Modules/FSM/](./Runtime/Modules/FSM/)           | [有限状态机 (`FSM`)](#36-有限状态机-fsm)                                          |
 | **工具库 (Core)**  | [Core/Utility/](./Core/Utility/)                         | [通用工具 (`Utility`)](#51-通用底层-utility)                                      |
 | **工具库 (Unity)** | [Runtime/Tools/](./Runtime/Tools/)                       | [引擎工具 (`UUtility`)](#52-引擎特定高级工具-uutility)                            |
-| **动画工具**       | [Runtime/Tools/Animation/](./Runtime/Tools/Animation/)   | [XAnimation 播放系统](./Doc/XAnimation.md)                                        |
+| **动画工具**       | [XAnimation/Runtime/](./XAnimation/Runtime/)             | [XAnimation 播放系统](./XAnimation/Doc/XAnimation.md)                             |
 | **控制台**         | [Runtime/Tools/XConsole/](./Runtime/Tools/XConsole/)     | [XConsole 运行时控制台](#55-xconsole-运行时控制台)                                |
 
 ---
@@ -571,10 +571,10 @@ IReadOnlyList<Transform> spawnPoints = UObjectFinder.FindList<Transform>("NpcSpa
 
 ### 4.6 XAnimation 播放系统
 
-`XAnimation` 是基于 Unity Playables 的轻量动画播放系统，核心代码位于 `Runtime/Tools/Animation/`，统一命名空间为 `XFramework.Animation`。它用 `.xasset` 文本配置描述动画通道、状态、动画片段、事件点和换装覆盖关系，运行时由 `XAnimationDriver` 手动驱动播放。
+`XAnimation` 是基于 Unity Playables 的轻量动画播放系统，核心代码位于 `XAnimation/Runtime/`，统一命名空间为 `XFramework.Animation`。它用 `.xanimation` / `.xanimationoverride` 文本配置描述动画通道、状态、动画片段、事件点和换装覆盖关系，运行时由 `XAnimationDriver` 手动驱动播放。
 
-- 核心源码目录：[`Runtime/Tools/Animation/`](./Runtime/Tools/Animation/)
-- 完整专题文档：[`Doc/XAnimation.md`](./Doc/XAnimation.md)
+- 核心源码目录：[`XAnimation/Runtime/`](./XAnimation/Runtime/)
+- 完整专题文档：[`XAnimation/Doc/XAnimation.md`](./XAnimation/Doc/XAnimation.md)
 
 适合用于代码显式控制动画状态、多通道混合、1D Blend、2D Directional Blend、Cue 事件分发以及 Override Asset 复用。2D Blend 支持 `Blend2DSimpleDirectional` 与 `Blend2DFreeformDirectional`，后者可表达同方向 walk/run 这类方向 + 半径混合。详细的资源结构、运行时示例、播放接口、打断规则和 Root Motion 约定，请直接阅读专题文档。
 

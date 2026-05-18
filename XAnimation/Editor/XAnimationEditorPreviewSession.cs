@@ -1,0 +1,4057 @@
+#if UNITY_EDITOR
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using UnityEditor;
+using UnityEngine;
+using UnityEngine.Rendering;
+using XFramework.Animation;
+
+namespace XFramework.Editor
+{
+    internal sealed class XAnimationEditorPreviewSession : IDisposable
+    {
+        public readonly struct PreviewLogEntry
+        {
+            public PreviewLogEntry(int id, string message)
+            {
+                Id = id;
+                Message = message ?? string.Empty;
+            }
+
+            public int Id { get; }
+            public string Message { get; }
+        }
+
+        private const float CloseGridSpacing = 1f;
+        private const float FarGridSpacing = 10f;
+        private const float SwitchToFarGridCellPixels = 8f;
+        private const float SwitchToCloseGridCellPixels = 12f;
+        private const float MinGridHalfSize = 250f;
+        private const float PreviewFarClipPlane = 500f;
+
+        private readonly XAnimationAssetLoader m_AssetLoader = new(new XAnimationEditorAssetResolver());
+        private readonly List<PreviewLogEntry> m_CueLogs = new();
+        private readonly Dictionary<string, float> m_PreviewFloatParameters = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, int> m_PreviewIntParameters = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, bool> m_PreviewBoolParameters = new(StringComparer.Ordinal);
+
+        private PreviewRenderUtility m_PreviewUtility;
+        private RenderTexture m_RenderTexture;
+        private GameObject m_Instance;
+        private Animator m_Animator;
+        private GameObject m_KeyLight;
+        private GameObject m_FillLight;
+        private GameObject m_RimLight;
+        private XAnimationDriver m_Driver;
+        private XAnimationCompiledAsset m_CompiledAsset;
+        private Vector2Int m_RenderTextureSize;
+        private readonly Dictionary<string, string> m_OriginalClipPathByKey = new(StringComparer.Ordinal);
+        private string m_AssetPath;
+        private bool m_IsOverrideAsset;
+        private XAnimationOverrideAsset m_OverrideAsset;
+
+        private Vector3 m_InitialPosition;
+        private Quaternion m_InitialRotation;
+        private Bounds m_InitialBounds;
+        private Vector3 m_CameraPivot;
+        private float m_CameraDistance;
+        private float m_CameraYaw = 140f;
+        private float m_CameraPitch = 18f;
+        private Vector3 m_CameraPosition;
+        private bool m_CameraInitialized;
+        private bool m_RootMotionEnabled = true;
+
+        private bool m_GridVisible = true;
+        private GameObject m_GridPlane;
+        private Material m_GridMaterial;
+        private float m_GridSpacing = CloseGridSpacing;
+        private int m_NextLogId = 1;
+        private int m_LogVersion;
+
+        public IReadOnlyList<PreviewLogEntry> CueLogs => m_CueLogs;
+        public XAnimationCompiledAsset CompiledAsset => m_CompiledAsset;
+        public Texture PreviewTexture => m_RenderTexture;
+        public bool IsLoaded => m_Driver != null && m_Animator != null;
+        public bool IsOverrideAsset => m_IsOverrideAsset;
+        public int LogVersion => m_LogVersion;
+        public bool IsPaused => m_Driver != null && m_Driver.IsPaused;
+        public float TimeScale => m_Driver != null ? m_Driver.TimeScale : 1f;
+
+        public void Load(GameObject prefabAsset, string assetPath)
+        {
+            if (prefabAsset == null)
+            {
+                throw new XAnimationException("XAnimation preview prefab cannot be null.");
+            }
+
+            if (string.IsNullOrWhiteSpace(assetPath))
+            {
+                throw new XAnimationException("XAnimation preview assetPath cannot be empty.");
+            }
+
+            DisposePreview();
+
+            m_AssetPath = assetPath;
+            CacheOriginalClipPaths(assetPath);
+            m_CompiledAsset = m_AssetLoader.Load(assetPath);
+
+            m_PreviewUtility = new PreviewRenderUtility();
+            ConfigurePreviewCamera();
+            ConfigurePreviewLights();
+
+            m_Instance = UnityEngine.Object.Instantiate(prefabAsset);
+            m_Instance.transform.position = Vector3.zero;
+            ApplyHideFlags(m_Instance);
+
+            m_Animator = m_Instance.GetComponent<Animator>();
+            if (m_Animator == null)
+            {
+                m_Animator = m_Instance.GetComponentInChildren<Animator>(true);
+            }
+
+            if (m_Animator == null)
+            {
+                m_Animator = m_Instance.AddComponent<Animator>();
+            }
+
+            SanitizePreviewInstance();
+            m_Animator.runtimeAnimatorController = null;
+            m_Animator.enabled = true;
+            m_Animator.applyRootMotion = false;
+            m_Animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+
+            m_PreviewUtility.AddSingleGO(m_Instance);
+
+            CacheInitialTransform();
+            CacheInitialBounds();
+            PrepareGrid();
+
+            m_Driver = new XAnimationDriver();
+            m_Driver.Initialize(m_CompiledAsset, m_Animator);
+            m_Driver.CueTriggered += OnCueTriggered;
+            m_Driver.OnStateEnter += OnStateEnter;
+            m_Driver.OnStateExit += OnStateExit;
+            m_Driver.FrameEvaluated += OnPreviewFrameEvaluated;
+            RestorePreviewParameters();
+            SetRootMotionEnabled(m_RootMotionEnabled);
+        }
+
+        public void Render(Vector2 size)
+        {
+            if (!IsLoaded)
+            {
+                return;
+            }
+
+            int width = Mathf.Max(1, Mathf.RoundToInt(size.x));
+            int height = Mathf.Max(1, Mathf.RoundToInt(size.y));
+            EnsureRenderTexture(width, height);
+            UpdateCameraTransform();
+
+            Camera camera = m_PreviewUtility.camera;
+            camera.targetTexture = m_RenderTexture;
+            camera.Render();
+            camera.targetTexture = null;
+        }
+
+        public void Pause()
+        {
+            if (!IsLoaded)
+            {
+                return;
+            }
+
+            m_Driver.Pause();
+        }
+
+        public void Resume()
+        {
+            if (!IsLoaded)
+            {
+                return;
+            }
+
+            m_Driver.Resume();
+        }
+
+        public void SetPaused(bool paused)
+        {
+            if (!IsLoaded)
+            {
+                return;
+            }
+
+            m_Driver.SetPaused(paused);
+        }
+
+        public void SetTimeScale(float timeScale)
+        {
+            if (!IsLoaded)
+            {
+                return;
+            }
+
+            m_Driver.SetTimeScale(timeScale);
+        }
+
+        public void Step(float deltaTime)
+        {
+            EnsureLoaded();
+            float clampedDeltaTime = Mathf.Clamp(deltaTime, 0f, 0.1f);
+            if (clampedDeltaTime <= 0f)
+            {
+                throw new XAnimationException("XAnimation preview step deltaTime must be greater than 0.");
+            }
+
+            m_Driver.Step(clampedDeltaTime);
+        }
+
+        public void SyncPreviewFrame()
+        {
+            if (!IsLoaded)
+            {
+                return;
+            }
+
+            m_Driver.SyncFrame();
+        }
+
+        public void PlayClip(
+            string clipKey,
+            string channelName,
+            XAnimationTransitionOptions transition = default)
+        {
+            EnsureLoaded();
+            m_Driver.PlayClip(clipKey, channelName, transition);
+        }
+
+        public void PlayState(
+            string stateKey,
+            XAnimationTransitionOptions transition = default)
+        {
+            EnsureLoaded();
+            m_Driver.PlayState(stateKey, transition);
+        }
+
+        public void PreloadAll()
+        {
+            EnsureLoaded();
+            m_Driver.PreloadAll();
+        }
+
+        public void StopAll()
+        {
+            if (!IsLoaded)
+            {
+                return;
+            }
+
+            m_Driver.StopAll();
+        }
+
+        public void StopChannel(string channelName, float fadeOut = default)
+        {
+            if (!IsLoaded)
+            {
+                return;
+            }
+
+            m_Driver.Stop(channelName, fadeOut);
+        }
+
+        public void SetChannelWeight(string channelName, float weight)
+        {
+            EnsureLoaded();
+            m_Driver.SetChannelWeight(channelName, weight);
+        }
+
+        public void SetChannelTimeScale(string channelName, float timeScale)
+        {
+            EnsureLoaded();
+            m_Driver.SetChannelTimeScale(channelName, timeScale);
+        }
+
+        public bool SeekChannel(string channelName, float normalizedTime)
+        {
+            EnsureLoaded();
+            return m_Driver.SeekChannel(channelName, normalizedTime);
+        }
+
+        public void SetPreviewParameter(string key, float value)
+        {
+            EnsureLoaded();
+            m_PreviewFloatParameters[key] = value;
+            m_Driver.SetParameter(key, value);
+        }
+
+        public void SetPreviewParameter(string key, bool value)
+        {
+            EnsureLoaded();
+            m_PreviewBoolParameters[key] = value;
+            m_Driver.SetParameter(key, value);
+        }
+
+        public void SetPreviewParameter(string key, int value)
+        {
+            EnsureLoaded();
+            m_PreviewIntParameters[key] = value;
+            m_Driver.SetParameter(key, value);
+        }
+
+        public bool TryGetPreviewParameter(string key, out float value)
+        {
+            return m_PreviewFloatParameters.TryGetValue(key, out value);
+        }
+
+        public bool TryGetPreviewParameter(string key, out bool value)
+        {
+            return m_PreviewBoolParameters.TryGetValue(key, out value);
+        }
+
+        public bool TryGetPreviewParameter(string key, out int value)
+        {
+            return m_PreviewIntParameters.TryGetValue(key, out value);
+        }
+
+        public void ClearCueLogs()
+        {
+            m_CueLogs.Clear();
+            m_LogVersion++;
+        }
+
+        public string AddParameter()
+        {
+            EnsureBaseAssetEditable();
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            string parameterName = CreateUniqueParameterName("NewParameter");
+            List<XAnimationParameterConfig> parameters = new(asset.parameters ?? Array.Empty<XAnimationParameterConfig>())
+            {
+                new XAnimationParameterConfig
+                {
+                    name = parameterName,
+                    type = XAnimationParameterType.Float,
+                    defaultValue = 0f,
+                }
+            };
+            asset.parameters = parameters.ToArray();
+            RebuildDriverAndSave();
+            return parameterName;
+        }
+
+        public void DeleteParameter(string parameterName)
+        {
+            EnsureBaseAssetEditable();
+            parameterName = parameterName?.Trim();
+            if (string.IsNullOrWhiteSpace(parameterName))
+            {
+                return;
+            }
+
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            XAnimationParameterConfig[] parameters = asset.parameters ?? Array.Empty<XAnimationParameterConfig>();
+            bool hasReference = HasStateParameterReference(asset, parameterName);
+            bool removed = false;
+            List<XAnimationParameterConfig> orderedParameters = new(parameters.Length);
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                XAnimationParameterConfig parameter = parameters[i];
+                if (parameter != null && string.Equals(parameter.name, parameterName, StringComparison.Ordinal))
+                {
+                    removed = true;
+                    continue;
+                }
+
+                orderedParameters.Add(parameter);
+            }
+
+            if (!removed)
+            {
+                return;
+            }
+
+            asset.parameters = orderedParameters.ToArray();
+            string fallbackParameterName = hasReference ? EnsureFloatParameter() : null;
+            RemoveStateParameterReferences(asset, parameterName, fallbackParameterName);
+            RebuildDriverAndSave();
+        }
+
+        public void RenameParameter(string oldName, string newName)
+        {
+            EnsureLoaded();
+            newName = newName?.Trim();
+            if (string.Equals(oldName, newName, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(newName))
+            {
+                throw new XAnimationException("XAnimation parameter name cannot be empty.");
+            }
+
+            if (m_CompiledAsset.TryGetParameterIndex(newName, out _))
+            {
+                throw new XAnimationException($"XAnimation parameter '{newName}' is duplicated.");
+            }
+
+            XAnimationParameterConfig config = m_CompiledAsset.GetParameter(oldName).Config;
+            config.name = newName;
+            RenameStateParameterReferences(m_CompiledAsset.Asset, oldName, newName);
+            RebuildDriverAndSave();
+        }
+
+        public void SetParameterType(string parameterName, XAnimationParameterType type)
+        {
+            EnsureLoaded();
+            XAnimationParameterConfig config = m_CompiledAsset.GetParameter(parameterName).Config;
+            config.type = type;
+            config.defaultValue = type switch
+            {
+                XAnimationParameterType.Float => ConvertParameterDefaultToFloat(config.defaultValue),
+                XAnimationParameterType.Int => ConvertParameterDefaultToInt(config.defaultValue),
+                XAnimationParameterType.Bool => ConvertParameterDefaultToBool(config.defaultValue),
+                XAnimationParameterType.Trigger => null,
+                _ => config.defaultValue,
+            };
+
+            if (type != XAnimationParameterType.Float)
+            {
+                XAnimationAsset asset = m_CompiledAsset.Asset;
+                string fallbackParameterName = HasStateParameterReference(asset, parameterName)
+                    ? EnsureFloatParameter()
+                    : null;
+                RemoveStateParameterReferences(asset, parameterName, fallbackParameterName);
+            }
+
+            RebuildDriverAndSave();
+        }
+
+        public void SetParameterDefaultValue(string parameterName, object defaultValue)
+        {
+            EnsureLoaded();
+            XAnimationParameterConfig config = m_CompiledAsset.GetParameter(parameterName).Config;
+            config.defaultValue = config.type switch
+            {
+                XAnimationParameterType.Float => Convert.ToSingle(defaultValue, CultureInfo.InvariantCulture),
+                XAnimationParameterType.Int => Convert.ToInt32(defaultValue, CultureInfo.InvariantCulture),
+                XAnimationParameterType.Bool => Convert.ToBoolean(defaultValue, CultureInfo.InvariantCulture),
+                XAnimationParameterType.Trigger => null,
+                _ => defaultValue,
+            };
+            RebuildDriverAndSave();
+        }
+
+        public void RenameChannel(string oldName, string newName)
+        {
+            EnsureLoaded();
+            newName = newName?.Trim();
+            if (string.Equals(oldName, newName, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(newName))
+            {
+                throw new XAnimationException("XAnimation channel name cannot be empty.");
+            }
+
+            if (m_CompiledAsset.TryGetChannelIndex(newName, out _))
+            {
+                throw new XAnimationException($"XAnimation channel '{newName}' is duplicated.");
+            }
+
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            XAnimationChannelConfig channel = m_CompiledAsset.GetChannel(oldName).Config;
+            channel.name = newName;
+
+            RenameStateChannelReferences(asset, oldName, newName);
+
+            RebuildDriverAndSave();
+        }
+
+        public void SetChannelLayerType(string channelName, XAnimationChannelLayerType layerType)
+        {
+            EnsureLoaded();
+            XAnimationChannelConfig config = m_CompiledAsset.GetChannel(channelName).Config;
+            config.layerType = layerType;
+            if (layerType == XAnimationChannelLayerType.Additive)
+            {
+                config.canDriveRootMotion = false;
+            }
+
+            RebuildDriverAndSave();
+        }
+
+        public void SetChannelMaskPath(string channelName, string maskPath)
+        {
+            EnsureLoaded();
+            m_CompiledAsset.GetChannel(channelName).Config.maskPath = maskPath ?? string.Empty;
+            RebuildDriverAndSave();
+        }
+
+        public void SetChannelAllowInterrupt(string channelName, bool allowInterrupt)
+        {
+            EnsureLoaded();
+            m_CompiledAsset.GetChannel(channelName).Config.allowInterrupt = allowInterrupt;
+            SaveCompiledAsset();
+        }
+
+        public void SetChannelDefaultWeight(string channelName, float weight, bool save = true)
+        {
+            EnsureLoaded();
+            float defaultWeight = Mathf.Max(0f, weight);
+            m_CompiledAsset.GetChannel(channelName).Config.defaultWeight = defaultWeight;
+            m_Driver.SetChannelWeight(channelName, defaultWeight);
+            if (save)
+            {
+                SaveCompiledAsset();
+            }
+        }
+
+        public void SetChannelFade(string channelName, float fadeIn, float fadeOut, bool save = true)
+        {
+            EnsureLoaded();
+            XAnimationChannelConfig config = m_CompiledAsset.GetChannel(channelName).Config;
+            config.defaultFadeIn = Mathf.Max(0f, fadeIn);
+            config.defaultFadeOut = Mathf.Max(0f, fadeOut);
+            if (save)
+            {
+                SaveCompiledAsset();
+            }
+        }
+
+        public void SetChannelCanDriveRootMotion(string channelName, bool canDriveRootMotion)
+        {
+            EnsureLoaded();
+            XAnimationChannelConfig config = m_CompiledAsset.GetChannel(channelName).Config;
+            if (canDriveRootMotion && config.layerType == XAnimationChannelLayerType.Additive)
+            {
+                throw new XAnimationException($"XAnimation channel '{channelName}' cannot drive root motion when layerType is Additive.");
+            }
+
+            config.canDriveRootMotion = canDriveRootMotion;
+            RebuildDriverAndSave();
+        }
+
+        public void SetRootMotionEnabled(bool enabled)
+        {
+            EnsureLoaded();
+            m_RootMotionEnabled = enabled;
+            m_Driver.SetRootMotionEnabled(enabled);
+            if (!enabled)
+            {
+                ResetTransform();
+            }
+        }
+
+        public bool GetRootMotionEnabled()
+        {
+            return m_RootMotionEnabled;
+        }
+
+        public void SetGridVisible(bool visible)
+        {
+            m_GridVisible = visible;
+            if (m_GridPlane != null)
+            {
+                m_GridPlane.SetActive(visible);
+            }
+            else if (visible && IsLoaded)
+            {
+                PrepareGrid();
+            }
+        }
+
+        public bool GetGridVisible()
+        {
+            return m_GridVisible;
+        }
+
+        public void ResetTransform()
+        {
+            if (m_Instance == null)
+            {
+                return;
+            }
+
+            m_Instance.transform.SetPositionAndRotation(m_InitialPosition, m_InitialRotation);
+            CacheInitialBounds();
+            UpdateGridTransform();
+        }
+
+        public void ResetCamera()
+        {
+            m_CameraYaw = 140f;
+            m_CameraPitch = 18f;
+            CacheInitialBounds();
+            RecalculateCameraPosition();
+        }
+
+        public void Orbit(Vector2 delta)
+        {
+            m_CameraYaw += delta.x * 0.12f;
+            m_CameraPitch = Mathf.Clamp(m_CameraPitch + delta.y * 0.08f, -80f, 80f);
+        }
+
+        public void Zoom(float delta)
+        {
+            Quaternion rotation = Quaternion.Euler(m_CameraPitch, m_CameraYaw, 0f);
+            float distance = Mathf.Max(m_CameraDistance * 0.08f, 0.05f);
+            m_CameraPosition -= rotation * Vector3.forward * delta * distance;
+            m_CameraDistance = Mathf.Max(Vector3.Distance(m_CameraPosition, m_CameraPivot), 0.05f);
+        }
+
+        /// <summary>
+        /// Move camera in its local space. x=right, y=up, z=forward.
+        /// </summary>
+        public void MoveCamera(Vector3 localDelta)
+        {
+            Quaternion rotation = Quaternion.Euler(m_CameraPitch, m_CameraYaw, 0f);
+            m_CameraPosition += rotation * localDelta;
+            // Keep pivot in sync so orbit still works around the look-at point
+            m_CameraPivot = m_CameraPosition + rotation * Vector3.forward * m_CameraDistance;
+        }
+
+        private void RecalculateCameraPosition()
+        {
+            Quaternion rotation = Quaternion.Euler(m_CameraPitch, m_CameraYaw, 0f);
+            m_CameraPosition = m_CameraPivot - rotation * Vector3.forward * m_CameraDistance;
+        }
+
+        public XAnimationChannelState GetChannelState(string channelName)
+        {
+            return IsLoaded ? m_Driver.GetChannelState(channelName) : null;
+        }
+
+        public XAnimationDebugGraphSnapshot GetDebugGraphSnapshot()
+        {
+            return IsLoaded
+                ? m_Driver.GetDebugGraphSnapshot()
+                : XAnimationDebugGraphSnapshot.Invalid("XAnimation preview session is not loaded.");
+        }
+
+        public string AddChannel()
+        {
+            EnsureBaseAssetEditable();
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            string channelName = CreateUniqueChannelName("NewChannel");
+            List<XAnimationChannelConfig> channels = new(asset.channels ?? Array.Empty<XAnimationChannelConfig>());
+            channels.Add(new XAnimationChannelConfig
+            {
+                name = channelName,
+                layerType = XAnimationChannelLayerType.Override,
+                defaultWeight = 1f,
+                allowInterrupt = true,
+                defaultFadeIn = 0.15f,
+                defaultFadeOut = 0.15f,
+            });
+            asset.channels = channels.ToArray();
+            RebuildDriverAndSave();
+            return channelName;
+        }
+
+        public void DeleteChannel(string channelName)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            XAnimationChannelConfig[] channels = asset.channels ?? Array.Empty<XAnimationChannelConfig>();
+            if (channels.Length <= 1)
+            {
+                throw new XAnimationException("XAnimation asset must contain at least one channel.");
+            }
+
+            XAnimationChannelConfig channel = m_CompiledAsset.GetChannel(channelName).Config;
+            bool hasOtherBaseChannel = false;
+            for (int i = 0; i < channels.Length; i++)
+            {
+                XAnimationChannelConfig item = channels[i];
+                if (!ReferenceEquals(item, channel) && item != null && item.layerType == XAnimationChannelLayerType.Base)
+                {
+                    hasOtherBaseChannel = true;
+                    break;
+                }
+            }
+
+            if (channel.layerType == XAnimationChannelLayerType.Base && !hasOtherBaseChannel)
+            {
+                throw new XAnimationException("XAnimation asset must contain at least one Base channel.");
+            }
+
+            List<XAnimationChannelConfig> orderedChannels = new(channels.Length - 1);
+            for (int i = 0; i < channels.Length; i++)
+            {
+                if (!ReferenceEquals(channels[i], channel))
+                {
+                    orderedChannels.Add(channels[i]);
+                }
+            }
+
+            asset.channels = orderedChannels.ToArray();
+            RemoveStatesInChannel(asset, channelName);
+
+            RebuildDriverAndSave();
+        }
+
+        public string AddClip(string groupName = null)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            XAnimationClipConfig[] clips = asset.clips ?? Array.Empty<XAnimationClipConfig>();
+            string clipPath = FindTemplateClipPath(clips);
+            if (string.IsNullOrWhiteSpace(clipPath))
+            {
+                throw new XAnimationException("Cannot add clip because no template AnimationClip exists.");
+            }
+
+            string clipKey = CreateUniqueClipKey("NewClip");
+            List<XAnimationClipConfig> orderedClips = new(clips)
+            {
+                new XAnimationClipConfig
+                {
+                    key = clipKey,
+                    editorGroupName = NormalizeEditorGroupName(groupName),
+                    clipPath = clipPath,
+                }
+            };
+            asset.clips = orderedClips.ToArray();
+            m_OriginalClipPathByKey[clipKey] = clipPath;
+            RebuildDriverAndSave();
+            return clipKey;
+        }
+
+        public void SetClipEditorGroup(string clipKey, string groupName)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationClipConfig config = m_CompiledAsset.GetClip(clipKey).Config;
+            string normalized = NormalizeEditorGroupName(groupName);
+            if (string.Equals(config.editorGroupName ?? string.Empty, normalized ?? string.Empty, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            config.editorGroupName = normalized;
+            RebuildDriverAndSave();
+        }
+
+        public void RenameClipEditorGroup(string oldGroupName, string newGroupName)
+        {
+            EnsureBaseAssetEditable();
+            string normalizedOld = NormalizeEditorGroupName(oldGroupName);
+            string normalizedNew = NormalizeEditorGroupName(newGroupName);
+            if (string.IsNullOrWhiteSpace(normalizedOld))
+            {
+                throw new XAnimationException("XAnimation clip group oldGroupName cannot be empty.");
+            }
+
+            if (string.IsNullOrWhiteSpace(normalizedNew))
+            {
+                throw new XAnimationException("XAnimation clip group newGroupName cannot be empty.");
+            }
+
+            if (string.Equals(normalizedOld, normalizedNew, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            bool changed = false;
+            XAnimationClipConfig[] clips = asset.clips ?? Array.Empty<XAnimationClipConfig>();
+            for (int i = 0; i < clips.Length; i++)
+            {
+                XAnimationClipConfig clip = clips[i];
+                if (clip == null ||
+                    !string.Equals(NormalizeEditorGroupName(clip.editorGroupName), normalizedOld, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                clip.editorGroupName = normalizedNew;
+                changed = true;
+            }
+
+            if (!changed)
+            {
+                throw new XAnimationException($"XAnimation clip group '{normalizedOld}' does not exist.");
+            }
+
+            RebuildDriverAndSave();
+        }
+
+        public void ClearClipEditorGroup(string groupName)
+        {
+            EnsureBaseAssetEditable();
+            string normalizedGroup = NormalizeEditorGroupName(groupName);
+            if (string.IsNullOrWhiteSpace(normalizedGroup))
+            {
+                return;
+            }
+
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            bool changed = false;
+            XAnimationClipConfig[] clips = asset.clips ?? Array.Empty<XAnimationClipConfig>();
+            for (int i = 0; i < clips.Length; i++)
+            {
+                XAnimationClipConfig clip = clips[i];
+                if (clip == null ||
+                    !string.Equals(NormalizeEditorGroupName(clip.editorGroupName), normalizedGroup, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                clip.editorGroupName = string.Empty;
+                changed = true;
+            }
+
+            if (changed)
+            {
+                RebuildDriverAndSave();
+            }
+        }
+
+        public void DeleteClip(string clipKey)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            XAnimationClipConfig[] clips = asset.clips ?? Array.Empty<XAnimationClipConfig>();
+            if (clips.Length <= 1)
+            {
+                throw new XAnimationException("XAnimation asset must contain at least one clip.");
+            }
+
+            m_CompiledAsset.GetClip(clipKey);
+            List<XAnimationClipConfig> orderedClips = new(clips.Length - 1);
+            for (int i = 0; i < clips.Length; i++)
+            {
+                XAnimationClipConfig clip = clips[i];
+                if (clip != null && string.Equals(clip.key, clipKey, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                orderedClips.Add(clip);
+            }
+
+            asset.clips = orderedClips.ToArray();
+            RemoveCueReferences(asset, new HashSet<string>(StringComparer.Ordinal) { clipKey });
+            RemoveStateReferences(asset, new HashSet<string>(StringComparer.Ordinal) { clipKey });
+            m_OriginalClipPathByKey.Remove(clipKey);
+            RebuildDriverAndSave();
+        }
+
+        public void RenameClip(string oldKey, string newKey)
+        {
+            EnsureLoaded();
+            newKey = newKey?.Trim();
+            if (string.Equals(oldKey, newKey, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(newKey))
+            {
+                throw new XAnimationException("XAnimation clip key cannot be empty.");
+            }
+
+            if (m_CompiledAsset.TryGetClipIndex(newKey, out _))
+            {
+                throw new XAnimationException($"XAnimation clip '{newKey}' is duplicated.");
+            }
+
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            XAnimationClipConfig clipConfig = m_CompiledAsset.GetClip(oldKey).Config;
+            clipConfig.key = newKey;
+
+            if (asset.cues != null)
+            {
+                for (int i = 0; i < asset.cues.Length; i++)
+                {
+                    XAnimationCueConfig cue = asset.cues[i];
+                    if (cue != null && string.Equals(cue.clipKey, oldKey, StringComparison.Ordinal))
+                    {
+                        cue.clipKey = newKey;
+                    }
+                }
+            }
+
+            RenameStateClipReferences(asset, oldKey, newKey);
+
+            if (m_OriginalClipPathByKey.Remove(oldKey, out string originalClipPath))
+            {
+                m_OriginalClipPathByKey[newKey] = originalClipPath;
+            }
+
+            RebuildDriverAndSave();
+        }
+
+        public void SetClipPath(string clipKey, string clipPath)
+        {
+            EnsureLoaded();
+            if (string.IsNullOrWhiteSpace(clipPath))
+            {
+                throw new XAnimationException("XAnimation clipPath cannot be empty.");
+            }
+
+            m_CompiledAsset.GetClip(clipKey);
+            if (m_IsOverrideAsset)
+            {
+                SetOverrideClipPath(clipKey, clipPath);
+                return;
+            }
+
+            XAnimationClipConfig config = m_CompiledAsset.GetClip(clipKey).Config;
+            if (string.Equals(config.clipPath, clipPath, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            config.clipPath = clipPath;
+            m_OriginalClipPathByKey[clipKey] = clipPath;
+            RebuildDriverAndSave();
+        }
+
+        public string AddState(string channelName, string groupName = null)
+        {
+            EnsureBaseAssetEditable();
+            m_CompiledAsset.GetChannel(channelName);
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            string clipKey = FindTemplateClipKey(asset.clips ?? Array.Empty<XAnimationClipConfig>());
+            if (string.IsNullOrWhiteSpace(clipKey))
+            {
+                throw new XAnimationException("Cannot add state because no template clip exists.");
+            }
+
+            string stateKey = CreateUniqueStateKey("NewState");
+            List<XAnimationStateConfig> states = new(asset.states ?? Array.Empty<XAnimationStateConfig>())
+            {
+                new XAnimationStateConfig
+                {
+                    key = stateKey,
+                    editorGroupName = NormalizeEditorGroupName(groupName),
+                    stateType = XAnimationStateType.Single,
+                    clipKey = clipKey,
+                    channelName = channelName,
+                    fadeIn = 0.15f,
+                    fadeOut = 0.15f,
+                    speed = 1f,
+                    loop = true,
+                    rootMotionMode = XAnimationClipRootMotionMode.Inherit,
+                    parameterName = string.Empty,
+                    parameterXName = string.Empty,
+                    parameterYName = string.Empty,
+                    samples = Array.Empty<XAnimationBlend1DSampleConfig>(),
+                    directionalSamples = Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>(),
+                }
+            };
+            asset.states = states.ToArray();
+            RebuildDriverAndSave();
+            return stateKey;
+        }
+
+        public void SetStateEditorGroup(string stateKey, string groupName)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationStateConfig config = m_CompiledAsset.GetState(stateKey).Config;
+            string normalized = NormalizeEditorGroupName(groupName);
+            if (string.Equals(config.editorGroupName ?? string.Empty, normalized ?? string.Empty, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            config.editorGroupName = normalized;
+            RebuildDriverAndSave();
+        }
+
+        public void RenameStateEditorGroup(string channelName, string oldGroupName, string newGroupName)
+        {
+            EnsureBaseAssetEditable();
+            channelName = channelName?.Trim();
+            string normalizedOld = NormalizeEditorGroupName(oldGroupName);
+            string normalizedNew = NormalizeEditorGroupName(newGroupName);
+            if (string.IsNullOrWhiteSpace(channelName))
+            {
+                throw new XAnimationException("XAnimation state group channelName cannot be empty.");
+            }
+
+            if (string.IsNullOrWhiteSpace(normalizedOld))
+            {
+                throw new XAnimationException("XAnimation state group oldGroupName cannot be empty.");
+            }
+
+            if (string.IsNullOrWhiteSpace(normalizedNew))
+            {
+                throw new XAnimationException("XAnimation state group newGroupName cannot be empty.");
+            }
+
+            if (string.Equals(normalizedOld, normalizedNew, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            bool changed = false;
+            XAnimationStateConfig[] states = asset.states ?? Array.Empty<XAnimationStateConfig>();
+            for (int i = 0; i < states.Length; i++)
+            {
+                XAnimationStateConfig state = states[i];
+                if (state == null ||
+                    !string.Equals(state.channelName, channelName, StringComparison.Ordinal) ||
+                    !string.Equals(NormalizeEditorGroupName(state.editorGroupName), normalizedOld, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                state.editorGroupName = normalizedNew;
+                changed = true;
+            }
+
+            if (!changed)
+            {
+                throw new XAnimationException($"XAnimation state group '{normalizedOld}' does not exist in channel '{channelName}'.");
+            }
+
+            RebuildDriverAndSave();
+        }
+
+        public void ClearStateEditorGroupForChannel(string channelName, string groupName)
+        {
+            EnsureBaseAssetEditable();
+            channelName = channelName?.Trim();
+            string normalizedGroup = NormalizeEditorGroupName(groupName);
+            if (string.IsNullOrWhiteSpace(channelName))
+            {
+                throw new XAnimationException("XAnimation state group channelName cannot be empty.");
+            }
+
+            if (string.IsNullOrWhiteSpace(normalizedGroup))
+            {
+                return;
+            }
+
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            bool changed = false;
+            XAnimationStateConfig[] states = asset.states ?? Array.Empty<XAnimationStateConfig>();
+            for (int i = 0; i < states.Length; i++)
+            {
+                XAnimationStateConfig state = states[i];
+                if (state == null ||
+                    !string.Equals(state.channelName, channelName, StringComparison.Ordinal) ||
+                    !string.Equals(NormalizeEditorGroupName(state.editorGroupName), normalizedGroup, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                state.editorGroupName = string.Empty;
+                changed = true;
+            }
+
+            if (changed)
+            {
+                RebuildDriverAndSave();
+            }
+        }
+
+        public void DeleteState(string stateKey)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            XAnimationStateConfig[] states = asset.states ?? Array.Empty<XAnimationStateConfig>();
+            if (states.Length <= 1)
+            {
+                throw new XAnimationException("XAnimation asset must contain at least one state.");
+            }
+
+            m_CompiledAsset.GetState(stateKey);
+            List<XAnimationStateConfig> orderedStates = new(states.Length - 1);
+            for (int i = 0; i < states.Length; i++)
+            {
+                XAnimationStateConfig state = states[i];
+                if (state != null && string.Equals(state.key, stateKey, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                orderedStates.Add(state);
+            }
+
+            asset.states = orderedStates.ToArray();
+            ClearAutoTransitionReferences(asset, stateKey);
+            ClearDefaultTransitionReferences(asset, stateKey);
+            ClearStateGateReferences(asset, stateKey);
+            RebuildDriverAndSave();
+        }
+
+        public void RenameState(string oldKey, string newKey)
+        {
+            EnsureLoaded();
+            newKey = newKey?.Trim();
+            if (string.Equals(oldKey, newKey, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(newKey))
+            {
+                throw new XAnimationException("XAnimation state key cannot be empty.");
+            }
+
+            if (m_CompiledAsset.TryGetStateIndex(newKey, out _))
+            {
+                throw new XAnimationException($"XAnimation state '{newKey}' is duplicated.");
+            }
+
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            m_CompiledAsset.GetState(oldKey).Config.key = newKey;
+            RenameAutoTransitionReferences(asset, oldKey, newKey);
+            RenameDefaultTransitionReferences(asset, oldKey, newKey);
+            RenameStateGateReferences(asset, oldKey, newKey);
+            RebuildDriverAndSave();
+        }
+
+        public void MoveState(string stateKey, string channelName, string insertBeforeStateKey = null, string groupName = null)
+        {
+            EnsureLoaded();
+            m_CompiledAsset.GetChannel(channelName);
+
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            XAnimationStateConfig[] states = asset.states ?? Array.Empty<XAnimationStateConfig>();
+            XAnimationStateConfig movedState = null;
+            List<XAnimationStateConfig> orderedStates = new(states.Length);
+            for (int i = 0; i < states.Length; i++)
+            {
+                XAnimationStateConfig state = states[i];
+                if (state != null && string.Equals(state.key, stateKey, StringComparison.Ordinal))
+                {
+                    movedState = state;
+                    continue;
+                }
+
+                orderedStates.Add(state);
+            }
+
+            if (movedState == null)
+            {
+                throw new XAnimationException($"XAnimation state '{stateKey}' does not exist.");
+            }
+
+            movedState.channelName = channelName;
+            movedState.editorGroupName = NormalizeEditorGroupName(groupName);
+            int insertIndex = orderedStates.Count;
+            if (!string.IsNullOrWhiteSpace(insertBeforeStateKey))
+            {
+                for (int i = 0; i < orderedStates.Count; i++)
+                {
+                    XAnimationStateConfig state = orderedStates[i];
+                    if (state != null && string.Equals(state.key, insertBeforeStateKey, StringComparison.Ordinal))
+                    {
+                        insertIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            orderedStates.Insert(insertIndex, movedState);
+            asset.states = orderedStates.ToArray();
+            RebuildDriverAndSave();
+        }
+
+        public void SetStateType(string stateKey, XAnimationStateType stateType)
+        {
+            EnsureLoaded();
+            XAnimationStateConfig config = m_CompiledAsset.GetState(stateKey).Config;
+            if (config.stateType == stateType)
+            {
+                return;
+            }
+
+            ApplyMigratedStateType(config, stateType);
+
+            RebuildDriverAndSave();
+        }
+
+        private void ApplyMigratedStateType(XAnimationStateConfig config, XAnimationStateType stateType)
+        {
+            if (config == null)
+            {
+                throw new XAnimationException("XAnimation state config cannot be null.");
+            }
+
+            XAnimationStateType sourceType = config.stateType;
+            string nextClipKey;
+            string nextParameterName;
+            string nextParameterXName;
+            string nextParameterYName;
+            XAnimationBlend1DSampleConfig[] nextSamples;
+            XAnimationBlend2DSimpleDirectionalSampleConfig[] nextDirectionalSamples;
+
+            if (stateType == XAnimationStateType.Single)
+            {
+                nextClipKey = ResolvePreferredSingleClipKey(config);
+                nextParameterName = string.Empty;
+                nextParameterXName = string.Empty;
+                nextParameterYName = string.Empty;
+                nextSamples = Array.Empty<XAnimationBlend1DSampleConfig>();
+                nextDirectionalSamples = Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+            }
+            else if (stateType == XAnimationStateType.Blend1D)
+            {
+                nextClipKey = string.Empty;
+                nextParameterName = sourceType switch
+                {
+                    XAnimationStateType.Blend1D when !string.IsNullOrWhiteSpace(config.parameterName) => config.parameterName,
+                    XAnimationStateType.Blend2DSimpleDirectional or XAnimationStateType.Blend2DFreeformDirectional
+                        when !string.IsNullOrWhiteSpace(config.parameterXName) => config.parameterXName,
+                    _ => EnsureFloatParameter(),
+                };
+                nextParameterXName = string.Empty;
+                nextParameterYName = string.Empty;
+                nextSamples = BuildMigratedBlendSamples(config);
+                nextDirectionalSamples = Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+            }
+            else if (IsDirectionalBlendStateType(stateType))
+            {
+                nextClipKey = string.Empty;
+                nextParameterName = string.Empty;
+                bool sourceDirectional = IsDirectionalBlendStateType(sourceType);
+                bool sourceBlend1D = sourceType == XAnimationStateType.Blend1D;
+                nextParameterXName = sourceDirectional && !string.IsNullOrWhiteSpace(config.parameterXName)
+                    ? config.parameterXName
+                    : sourceBlend1D && !string.IsNullOrWhiteSpace(config.parameterName)
+                        ? config.parameterName
+                        : EnsureFloatParameter("blendX");
+                nextParameterYName = sourceDirectional && !string.IsNullOrWhiteSpace(config.parameterYName)
+                    ? config.parameterYName
+                    : sourceBlend1D && !string.IsNullOrWhiteSpace(config.parameterName)
+                        ? config.parameterName
+                        : EnsureFloatParameter("blendY");
+                nextSamples = Array.Empty<XAnimationBlend1DSampleConfig>();
+                nextDirectionalSamples = BuildMigratedDirectionalSamples(config);
+            }
+            else
+            {
+                throw new XAnimationException($"XAnimation stateType '{stateType}' is not supported.");
+            }
+
+            config.stateType = stateType;
+            config.clipKey = nextClipKey;
+            config.parameterName = nextParameterName;
+            config.parameterXName = nextParameterXName;
+            config.parameterYName = nextParameterYName;
+            config.samples = nextSamples;
+            config.directionalSamples = nextDirectionalSamples;
+        }
+
+        public void SetStateChannel(string stateKey, string channelName)
+        {
+            EnsureLoaded();
+            m_CompiledAsset.GetChannel(channelName);
+            m_CompiledAsset.GetState(stateKey).Config.channelName = channelName;
+            RebuildDriverAndSave();
+        }
+
+        public void SetStateClipKey(string stateKey, string clipKey)
+        {
+            EnsureLoaded();
+            clipKey = clipKey?.Trim();
+            if (string.IsNullOrWhiteSpace(clipKey))
+            {
+                throw new XAnimationException("XAnimation state clipKey cannot be empty.");
+            }
+
+            m_CompiledAsset.GetClip(clipKey);
+            XAnimationStateConfig config = m_CompiledAsset.GetState(stateKey).Config;
+            config.clipKey = clipKey;
+            RebuildDriverAndSave();
+        }
+
+        public void SetStateBlendParameter(string stateKey, string parameterName)
+        {
+            EnsureLoaded();
+            parameterName = parameterName?.Trim();
+            XAnimationCompiledParameter parameter = m_CompiledAsset.GetParameter(parameterName);
+            if (parameter.Type != XAnimationParameterType.Float)
+            {
+                throw new XAnimationException($"XAnimation parameter '{parameterName}' must be Float for Blend1D.");
+            }
+
+            m_CompiledAsset.GetState(stateKey).Config.parameterName = parameterName;
+            RebuildDriverAndSave();
+        }
+
+        public void SetStateDirectionalBlendParameters(string stateKey, string parameterXName, string parameterYName)
+        {
+            EnsureLoaded();
+            parameterXName = parameterXName?.Trim();
+            parameterYName = parameterYName?.Trim();
+            XAnimationCompiledParameter parameterX = m_CompiledAsset.GetParameter(parameterXName);
+            if (parameterX.Type != XAnimationParameterType.Float)
+            {
+                throw new XAnimationException($"XAnimation parameter '{parameterXName}' must be Float for 2D directional blend states.");
+            }
+
+            XAnimationCompiledParameter parameterY = m_CompiledAsset.GetParameter(parameterYName);
+            if (parameterY.Type != XAnimationParameterType.Float)
+            {
+                throw new XAnimationException($"XAnimation parameter '{parameterYName}' must be Float for 2D directional blend states.");
+            }
+
+            XAnimationStateConfig config = m_CompiledAsset.GetState(stateKey).Config;
+            config.parameterXName = parameterXName;
+            config.parameterYName = parameterYName;
+            RebuildDriverAndSave();
+        }
+
+        public void SetStateLoop(string stateKey, bool loop, bool save = true)
+        {
+            EnsureLoaded();
+            m_CompiledAsset.GetState(stateKey).Config.loop = loop;
+            if (save)
+            {
+                SaveCompiledAsset();
+            }
+        }
+
+        public void SetStateFade(string stateKey, float fadeIn, float fadeOut, bool save = true)
+        {
+            EnsureLoaded();
+            XAnimationStateConfig config = m_CompiledAsset.GetState(stateKey).Config;
+            config.fadeIn = Mathf.Max(0f, fadeIn);
+            config.fadeOut = Mathf.Max(0f, fadeOut);
+            if (save)
+            {
+                SaveCompiledAsset();
+            }
+        }
+
+        public void SetStateSpeed(string stateKey, float speed, bool save = true)
+        {
+            EnsureLoaded();
+            m_CompiledAsset.GetState(stateKey).Config.speed = Mathf.Approximately(speed, 0f) ? 1f : speed;
+            if (save)
+            {
+                SaveCompiledAsset();
+            }
+        }
+
+        public void SetStateRootMotionMode(string stateKey, XAnimationClipRootMotionMode rootMotionMode)
+        {
+            EnsureLoaded();
+            m_CompiledAsset.GetState(stateKey).Config.rootMotionMode = rootMotionMode;
+            RebuildDriverAndSave();
+        }
+
+        public void AddStateAllowedNextState(string stateKey)
+        {
+            EnsureBaseAssetEditable();
+            AddStateGateValue(stateKey, allowedNext: true);
+        }
+
+        public void AddStateAllowedPreviousState(string stateKey)
+        {
+            EnsureBaseAssetEditable();
+            AddStateGateValue(stateKey, allowedNext: false);
+        }
+
+        public void DeleteStateAllowedNextState(string stateKey, int index)
+        {
+            EnsureBaseAssetEditable();
+            DeleteStateGateValue(stateKey, index, allowedNext: true);
+        }
+
+        public void DeleteStateAllowedPreviousState(string stateKey, int index)
+        {
+            EnsureBaseAssetEditable();
+            DeleteStateGateValue(stateKey, index, allowedNext: false);
+        }
+
+        public void SetStateAllowedNextState(string stateKey, int index, string targetStateKey)
+        {
+            EnsureBaseAssetEditable();
+            SetStateGateValue(stateKey, index, targetStateKey, allowedNext: true);
+        }
+
+        public void SetStateAllowedPreviousState(string stateKey, int index, string sourceStateKey)
+        {
+            EnsureBaseAssetEditable();
+            SetStateGateValue(stateKey, index, sourceStateKey, allowedNext: false);
+        }
+
+        public void AddBlendSample(string stateKey)
+        {
+            EnsureLoaded();
+            XAnimationStateConfig config = m_CompiledAsset.GetState(stateKey).Config;
+            if (config.stateType != XAnimationStateType.Blend1D)
+            {
+                throw new XAnimationException($"XAnimation state '{stateKey}' is not Blend1D.");
+            }
+
+            List<XAnimationBlend1DSampleConfig> samples = new(config.samples ?? Array.Empty<XAnimationBlend1DSampleConfig>());
+            string clipKey = FindTemplateClipKey(m_CompiledAsset.Asset.clips ?? Array.Empty<XAnimationClipConfig>());
+            float threshold = samples.Count == 0 ? 0f : samples[^1].threshold + 1f;
+            samples.Add(new XAnimationBlend1DSampleConfig
+            {
+                clipKey = clipKey,
+                threshold = threshold,
+            });
+            config.samples = samples.ToArray();
+            RebuildDriverAndSave();
+        }
+
+        public void AddDirectionalBlendSample(string stateKey)
+        {
+            EnsureLoaded();
+            XAnimationStateConfig config = m_CompiledAsset.GetState(stateKey).Config;
+            if (!IsDirectionalBlendStateType(config.stateType))
+            {
+                throw new XAnimationException($"XAnimation state '{stateKey}' is not a 2D directional blend state.");
+            }
+
+            List<XAnimationBlend2DSimpleDirectionalSampleConfig> samples = new(
+                config.directionalSamples ?? Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>());
+            string clipKey = FindTemplateClipKey(m_CompiledAsset.Asset.clips ?? Array.Empty<XAnimationClipConfig>());
+            Vector2 samplePosition = FindNextDirectionalBlendSamplePosition(samples);
+            samples.Add(new XAnimationBlend2DSimpleDirectionalSampleConfig
+            {
+                clipKey = clipKey,
+                positionX = samplePosition.x,
+                positionY = samplePosition.y,
+            });
+            config.directionalSamples = samples.ToArray();
+            RebuildDriverAndSave();
+        }
+
+        public void DeleteBlendSample(string stateKey, int sampleIndex)
+        {
+            EnsureLoaded();
+            XAnimationStateConfig config = m_CompiledAsset.GetState(stateKey).Config;
+            XAnimationBlend1DSampleConfig[] samples = config.samples ?? Array.Empty<XAnimationBlend1DSampleConfig>();
+            if (sampleIndex < 0 || sampleIndex >= samples.Length)
+            {
+                throw new XAnimationException($"XAnimation Blend1D sample index '{sampleIndex}' does not exist.");
+            }
+
+            if (samples.Length <= 2)
+            {
+                throw new XAnimationException("XAnimation Blend1D state must contain at least two samples.");
+            }
+
+            List<XAnimationBlend1DSampleConfig> orderedSamples = new(samples.Length - 1);
+            for (int i = 0; i < samples.Length; i++)
+            {
+                if (i != sampleIndex)
+                {
+                    orderedSamples.Add(samples[i]);
+                }
+            }
+
+            config.samples = orderedSamples.ToArray();
+            RebuildDriverAndSave();
+        }
+
+        public void DeleteDirectionalBlendSample(string stateKey, int sampleIndex)
+        {
+            EnsureLoaded();
+            XAnimationStateConfig config = m_CompiledAsset.GetState(stateKey).Config;
+            XAnimationBlend2DSimpleDirectionalSampleConfig[] samples =
+                config.directionalSamples ?? Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+            if (sampleIndex < 0 || sampleIndex >= samples.Length)
+            {
+                throw new XAnimationException($"XAnimation 2D directional blend sample index '{sampleIndex}' does not exist.");
+            }
+
+            if (samples.Length <= 2)
+            {
+                throw new XAnimationException("XAnimation 2D directional blend state must contain at least two samples.");
+            }
+
+            if (config.stateType == XAnimationStateType.Blend2DFreeformDirectional && IsIdleDirectionalSample(samples[sampleIndex]))
+            {
+                throw new XAnimationException("XAnimation Blend2DFreeformDirectional state must keep exactly one idle sample at (0, 0).");
+            }
+
+            List<XAnimationBlend2DSimpleDirectionalSampleConfig> orderedSamples = new(samples.Length - 1);
+            for (int i = 0; i < samples.Length; i++)
+            {
+                if (i != sampleIndex)
+                {
+                    orderedSamples.Add(samples[i]);
+                }
+            }
+
+            config.directionalSamples = orderedSamples.ToArray();
+            RebuildDriverAndSave();
+        }
+
+        public void SetBlendSampleClipKey(string stateKey, int sampleIndex, string clipKey)
+        {
+            EnsureLoaded();
+            clipKey = clipKey?.Trim();
+            m_CompiledAsset.GetClip(clipKey);
+            XAnimationBlend1DSampleConfig sample = GetBlendSampleConfig(stateKey, sampleIndex);
+            sample.clipKey = clipKey;
+            RebuildDriverAndSave();
+        }
+
+        public void SetBlendSampleThreshold(string stateKey, int sampleIndex, float threshold)
+        {
+            EnsureLoaded();
+            XAnimationBlend1DSampleConfig sample = GetBlendSampleConfig(stateKey, sampleIndex);
+            sample.threshold = threshold;
+            RebuildDriverAndSave();
+        }
+
+        public void SetDirectionalBlendSampleClipKey(string stateKey, int sampleIndex, string clipKey)
+        {
+            EnsureLoaded();
+            clipKey = clipKey?.Trim();
+            m_CompiledAsset.GetClip(clipKey);
+            XAnimationBlend2DSimpleDirectionalSampleConfig sample = GetDirectionalBlendSampleConfig(stateKey, sampleIndex);
+            sample.clipKey = clipKey;
+            RebuildDriverAndSave();
+        }
+
+        public void SetDirectionalBlendSamplePosition(string stateKey, int sampleIndex, float positionX, float positionY)
+        {
+            EnsureLoaded();
+            XAnimationStateConfig state = m_CompiledAsset.GetState(stateKey).Config;
+            XAnimationBlend2DSimpleDirectionalSampleConfig[] samples =
+                state.directionalSamples ?? Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+            if (sampleIndex < 0 || sampleIndex >= samples.Length)
+            {
+                throw new XAnimationException($"XAnimation 2D directional blend sample index '{sampleIndex}' does not exist.");
+            }
+
+            if (state.stateType == XAnimationStateType.Blend2DFreeformDirectional)
+            {
+                bool wasIdle = IsIdleDirectionalSample(samples[sampleIndex]);
+                bool willBeIdle = Mathf.Approximately(positionX, 0f) && Mathf.Approximately(positionY, 0f);
+                if (wasIdle != willBeIdle)
+                {
+                    throw new XAnimationException("XAnimation Blend2DFreeformDirectional state must keep exactly one idle sample at (0, 0).");
+                }
+            }
+
+            XAnimationBlend2DSimpleDirectionalSampleConfig sample = GetDirectionalBlendSampleConfig(stateKey, sampleIndex);
+            sample.positionX = positionX;
+            sample.positionY = positionY;
+            RebuildDriverAndSave();
+        }
+
+        public int AddCue(string clipKey, float normalizedTime = 0f)
+        {
+            EnsureBaseAssetEditable();
+            if (string.IsNullOrWhiteSpace(clipKey))
+            {
+                if (m_CompiledAsset.Clips.Count == 0)
+                {
+                    throw new XAnimationException("Cannot add cue because no clip exists.");
+                }
+
+                clipKey = m_CompiledAsset.Clips[0].Key;
+            }
+
+            m_CompiledAsset.GetClip(clipKey);
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            XAnimationCueConfig[] cues = asset.cues ?? Array.Empty<XAnimationCueConfig>();
+            List<XAnimationCueConfig> orderedCues = new(cues)
+            {
+                new XAnimationCueConfig
+                {
+                    clipKey = clipKey,
+                    time = Mathf.Clamp01(normalizedTime),
+                    eventKey = CreateUniqueCueEventKey("NewCue"),
+                    payload = string.Empty,
+                }
+            };
+
+            asset.cues = orderedCues.ToArray();
+            RebuildDriverAndSave();
+            return asset.cues.Length - 1;
+        }
+
+        public void DeleteCue(int cueIndex)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            XAnimationCueConfig[] cues = asset.cues ?? Array.Empty<XAnimationCueConfig>();
+            if (cueIndex < 0 || cueIndex >= cues.Length)
+            {
+                throw new XAnimationException($"XAnimation cue index '{cueIndex}' does not exist.");
+            }
+
+            List<XAnimationCueConfig> orderedCues = new(cues.Length - 1);
+            for (int i = 0; i < cues.Length; i++)
+            {
+                if (i != cueIndex)
+                {
+                    orderedCues.Add(cues[i]);
+                }
+            }
+
+            asset.cues = orderedCues.ToArray();
+            RebuildDriverAndSave();
+        }
+
+        public void SetCueClipKey(int cueIndex, string clipKey)
+        {
+            EnsureBaseAssetEditable();
+            clipKey = clipKey?.Trim();
+            if (string.IsNullOrWhiteSpace(clipKey))
+            {
+                throw new XAnimationException("XAnimation cue clipKey cannot be empty.");
+            }
+
+            m_CompiledAsset.GetClip(clipKey);
+            XAnimationCueConfig cue = GetCueConfig(cueIndex);
+            if (string.Equals(cue.clipKey, clipKey, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            cue.clipKey = clipKey;
+            RebuildDriverAndSave();
+        }
+
+        public void SetCueTime(int cueIndex, float time, bool save = true)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationCueConfig cue = GetCueConfig(cueIndex);
+            cue.time = Mathf.Clamp01(time);
+            if (save)
+            {
+                SaveCompiledAsset();
+            }
+        }
+
+        public void SetCueEventKey(int cueIndex, string eventKey)
+        {
+            EnsureBaseAssetEditable();
+            eventKey = eventKey?.Trim();
+            if (string.IsNullOrWhiteSpace(eventKey))
+            {
+                throw new XAnimationException("XAnimation cue eventKey cannot be empty.");
+            }
+
+            XAnimationCueConfig cue = GetCueConfig(cueIndex);
+            cue.eventKey = eventKey;
+            SaveCompiledAsset();
+        }
+
+        public void SetCuePayload(int cueIndex, string payload)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationCueConfig cue = GetCueConfig(cueIndex);
+            cue.payload = payload ?? string.Empty;
+            SaveCompiledAsset();
+        }
+
+        private void SetOverrideClipPath(string clipKey, string clipPath)
+        {
+            if (m_OverrideAsset == null)
+            {
+                throw new XAnimationException("XAnimation override asset is not loaded.");
+            }
+
+            string originalClipPath = GetOriginalClipPath(clipKey);
+            List<XAnimationOverrideClipConfig> overrideClips = new(m_OverrideAsset.clips ?? Array.Empty<XAnimationOverrideClipConfig>());
+            int index = overrideClips.FindIndex(item => item != null && string.Equals(item.key, clipKey, StringComparison.Ordinal));
+            if (string.Equals(originalClipPath, clipPath, StringComparison.Ordinal))
+            {
+                if (index >= 0)
+                {
+                    overrideClips.RemoveAt(index);
+                }
+            }
+            else if (index >= 0)
+            {
+                overrideClips[index].clipPath = clipPath;
+            }
+            else
+            {
+                overrideClips.Add(new XAnimationOverrideClipConfig
+                {
+                    key = clipKey,
+                    clipPath = clipPath,
+                });
+            }
+
+            m_OverrideAsset.clips = overrideClips.ToArray();
+            m_OverrideAsset.SaveAsset();
+            m_CompiledAsset = m_AssetLoader.Load(m_AssetPath);
+            RebuildDriver();
+        }
+
+        private void EnsureBaseAssetEditable()
+        {
+            EnsureLoaded();
+            if (m_IsOverrideAsset)
+            {
+                throw new XAnimationException("XAnimation override asset cannot edit channels or clip structure.");
+            }
+        }
+
+        private string CreateUniqueChannelName(string prefix)
+        {
+            return CreateUniqueName(prefix, name => m_CompiledAsset.TryGetChannelIndex(name, out _));
+        }
+
+        private string CreateUniqueClipKey(string prefix)
+        {
+            return CreateUniqueName(prefix, key => m_CompiledAsset.TryGetClipIndex(key, out _));
+        }
+
+        private string CreateUniqueStateKey(string prefix)
+        {
+            return CreateUniqueName(prefix, key => m_CompiledAsset.TryGetStateIndex(key, out _));
+        }
+
+        private static string NormalizeEditorGroupName(string groupName)
+        {
+            groupName = groupName?.Trim();
+            return string.IsNullOrWhiteSpace(groupName) ? string.Empty : groupName;
+        }
+
+        private string CreateUniqueCueEventKey(string prefix)
+        {
+            return CreateUniqueName(prefix, key =>
+            {
+                XAnimationCueConfig[] cues = m_CompiledAsset.Asset.cues ?? Array.Empty<XAnimationCueConfig>();
+                for (int i = 0; i < cues.Length; i++)
+                {
+                    XAnimationCueConfig cue = cues[i];
+                    if (cue != null && string.Equals(cue.eventKey, key, StringComparison.Ordinal))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            });
+        }
+
+        private XAnimationCueConfig GetCueConfig(int cueIndex)
+        {
+            XAnimationCueConfig[] cues = m_CompiledAsset.Asset.cues ?? Array.Empty<XAnimationCueConfig>();
+            if (cueIndex < 0 || cueIndex >= cues.Length || cues[cueIndex] == null)
+            {
+                throw new XAnimationException($"XAnimation cue index '{cueIndex}' does not exist.");
+            }
+
+            return cues[cueIndex];
+        }
+
+        private XAnimationBlend1DSampleConfig GetBlendSampleConfig(string stateKey, int sampleIndex)
+        {
+            XAnimationStateConfig state = m_CompiledAsset.GetState(stateKey).Config;
+            XAnimationBlend1DSampleConfig[] samples = state.samples ?? Array.Empty<XAnimationBlend1DSampleConfig>();
+            if (sampleIndex < 0 || sampleIndex >= samples.Length || samples[sampleIndex] == null)
+            {
+                throw new XAnimationException($"XAnimation Blend1D sample index '{sampleIndex}' does not exist.");
+            }
+
+            return samples[sampleIndex];
+        }
+
+        private void AddStateGateValue(string stateKey, bool allowedNext)
+        {
+            XAnimationStateConfig state = m_CompiledAsset.GetState(stateKey).Config;
+            List<string> values = new(GetStateGateValues(state, allowedNext));
+            string candidate = FindAvailableStateGateCandidate(stateKey, values);
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                throw new XAnimationException("没有更多可配置的 state。");
+            }
+
+            values.Add(candidate);
+            SetStateGateValues(state, values, allowedNext);
+            RebuildDriverAndSave();
+        }
+
+        private void DeleteStateGateValue(string stateKey, int index, bool allowedNext)
+        {
+            XAnimationStateConfig state = m_CompiledAsset.GetState(stateKey).Config;
+            List<string> values = new(GetStateGateValues(state, allowedNext));
+            if (index < 0 || index >= values.Count)
+            {
+                throw new XAnimationException($"XAnimation state gate index '{index}' does not exist.");
+            }
+
+            values.RemoveAt(index);
+            SetStateGateValues(state, values, allowedNext);
+            RebuildDriverAndSave();
+        }
+
+        private void SetStateGateValue(string stateKey, int index, string targetStateKey, bool allowedNext)
+        {
+            targetStateKey = targetStateKey?.Trim();
+            if (string.IsNullOrWhiteSpace(targetStateKey))
+            {
+                throw new XAnimationException("XAnimation state gate target cannot be empty.");
+            }
+
+            m_CompiledAsset.GetState(targetStateKey);
+            XAnimationStateConfig state = m_CompiledAsset.GetState(stateKey).Config;
+            List<string> values = new(GetStateGateValues(state, allowedNext));
+            if (index < 0 || index >= values.Count)
+            {
+                throw new XAnimationException($"XAnimation state gate index '{index}' does not exist.");
+            }
+
+            for (int i = 0; i < values.Count; i++)
+            {
+                if (i != index && string.Equals(values[i], targetStateKey, StringComparison.Ordinal))
+                {
+                    throw new XAnimationException($"XAnimation state '{stateKey}' gate target '{targetStateKey}' is duplicated.");
+                }
+            }
+
+            values[index] = targetStateKey;
+            SetStateGateValues(state, values, allowedNext);
+            RebuildDriverAndSave();
+        }
+
+        private string FindAvailableStateGateCandidate(string stateKey, IReadOnlyList<string> existing)
+        {
+            HashSet<string> used = new(existing ?? Array.Empty<string>(), StringComparer.Ordinal);
+            IReadOnlyList<XAnimationCompiledState> states = m_CompiledAsset.States;
+            for (int i = 0; i < states.Count; i++)
+            {
+                string candidate = states[i].Key;
+                if (!string.Equals(candidate, stateKey, StringComparison.Ordinal) && !used.Contains(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static string[] GetStateGateValues(XAnimationStateConfig state, bool allowedNext)
+        {
+            return allowedNext
+                ? state.allowedNextStateKeys ?? Array.Empty<string>()
+                : state.allowedPreviousStateKeys ?? Array.Empty<string>();
+        }
+
+        private static void SetStateGateValues(XAnimationStateConfig state, List<string> values, bool allowedNext)
+        {
+            string[] array = values == null || values.Count == 0 ? Array.Empty<string>() : values.ToArray();
+            if (allowedNext)
+            {
+                state.allowedNextStateKeys = array;
+            }
+            else
+            {
+                state.allowedPreviousStateKeys = array;
+            }
+        }
+
+        private XAnimationBlend2DSimpleDirectionalSampleConfig GetDirectionalBlendSampleConfig(string stateKey, int sampleIndex)
+        {
+            XAnimationStateConfig state = m_CompiledAsset.GetState(stateKey).Config;
+            XAnimationBlend2DSimpleDirectionalSampleConfig[] samples =
+                state.directionalSamples ?? Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+            if (sampleIndex < 0 || sampleIndex >= samples.Length || samples[sampleIndex] == null)
+            {
+                throw new XAnimationException($"XAnimation Blend2DSimpleDirectional sample index '{sampleIndex}' does not exist.");
+            }
+
+            return samples[sampleIndex];
+        }
+
+        private static string CreateUniqueName(string prefix, Predicate<string> exists)
+        {
+            if (!exists(prefix))
+            {
+                return prefix;
+            }
+
+            for (int i = 1; i < 10000; i++)
+            {
+                string name = $"{prefix}{i}";
+                if (!exists(name))
+                {
+                    return name;
+                }
+            }
+
+            throw new XAnimationException($"Unable to create unique name with prefix '{prefix}'.");
+        }
+
+        private static string FindTemplateClipPath(XAnimationClipConfig[] clips)
+        {
+            for (int i = 0; i < clips.Length; i++)
+            {
+                XAnimationClipConfig clip = clips[i];
+                if (clip != null && !string.IsNullOrWhiteSpace(clip.clipPath))
+                {
+                    return clip.clipPath;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static string FindTemplateClipKey(XAnimationClipConfig[] clips)
+        {
+            for (int i = 0; i < clips.Length; i++)
+            {
+                XAnimationClipConfig clip = clips[i];
+                if (clip != null && !string.IsNullOrWhiteSpace(clip.key))
+                {
+                    return clip.key;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private string EnsureFloatParameter(string prefix = "blend")
+        {
+            XAnimationParameterConfig[] parameters = m_CompiledAsset.Asset.parameters ?? Array.Empty<XAnimationParameterConfig>();
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                XAnimationParameterConfig parameter = parameters[i];
+                if (parameter != null && parameter.type == XAnimationParameterType.Float && !string.IsNullOrWhiteSpace(parameter.name))
+                {
+                    if (string.IsNullOrWhiteSpace(prefix) || parameter.name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return parameter.name;
+                    }
+                }
+            }
+
+            string parameterName = CreateUniqueParameterName(prefix);
+            List<XAnimationParameterConfig> orderedParameters = new(parameters)
+            {
+                new XAnimationParameterConfig
+                {
+                    name = parameterName,
+                    type = XAnimationParameterType.Float,
+                    defaultValue = 0f,
+                }
+            };
+            m_CompiledAsset.Asset.parameters = orderedParameters.ToArray();
+            return parameterName;
+        }
+
+        private string CreateUniqueParameterName(string prefix)
+        {
+            return CreateUniqueName(prefix, name =>
+            {
+                XAnimationParameterConfig[] parameters = m_CompiledAsset.Asset.parameters ?? Array.Empty<XAnimationParameterConfig>();
+                for (int i = 0; i < parameters.Length; i++)
+                {
+                    XAnimationParameterConfig parameter = parameters[i];
+                    if (parameter != null && string.Equals(parameter.name, name, StringComparison.Ordinal))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            });
+        }
+
+        private XAnimationBlend1DSampleConfig[] CreateDefaultBlendSamples(string channelName)
+        {
+            XAnimationClipConfig[] clips = m_CompiledAsset.Asset.clips ?? Array.Empty<XAnimationClipConfig>();
+            List<string> clipKeys = new(2);
+            for (int i = 0; i < clips.Length && clipKeys.Count < 2; i++)
+            {
+                XAnimationClipConfig clip = clips[i];
+                if (clip != null && !string.IsNullOrWhiteSpace(clip.key) && !clipKeys.Contains(clip.key))
+                {
+                    clipKeys.Add(clip.key);
+                }
+            }
+
+            if (clipKeys.Count < 2)
+            {
+                throw new XAnimationException("Cannot create Blend1D state because at least two clips are required.");
+            }
+
+            return new[]
+            {
+                new XAnimationBlend1DSampleConfig
+                {
+                    clipKey = clipKeys[0],
+                    threshold = 0f,
+                },
+                new XAnimationBlend1DSampleConfig
+                {
+                    clipKey = clipKeys[1],
+                    threshold = 1f,
+                }
+            };
+        }
+
+        private XAnimationBlend2DSimpleDirectionalSampleConfig[] CreateDefaultDirectionalBlendSamples()
+        {
+            XAnimationClipConfig[] clips = m_CompiledAsset.Asset.clips ?? Array.Empty<XAnimationClipConfig>();
+            if (clips.Length < 2)
+            {
+                throw new XAnimationException("Cannot create Blend2DSimpleDirectional state because at least two clips are required.");
+            }
+
+            string idleClipKey = FindTemplateClipKey(clips);
+            string directionalClipKey = idleClipKey;
+            for (int i = 0; i < clips.Length; i++)
+            {
+                XAnimationClipConfig clip = clips[i];
+                if (clip == null || string.IsNullOrWhiteSpace(clip.key) || string.Equals(clip.key, idleClipKey, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                directionalClipKey = clip.key;
+                break;
+            }
+
+            return new[]
+            {
+                new XAnimationBlend2DSimpleDirectionalSampleConfig
+                {
+                    clipKey = idleClipKey,
+                    positionX = 0f,
+                    positionY = 0f,
+                },
+                new XAnimationBlend2DSimpleDirectionalSampleConfig
+                {
+                    clipKey = directionalClipKey,
+                    positionX = 0f,
+                    positionY = 1f,
+                }
+            };
+        }
+
+        private string ResolvePreferredSingleClipKey(XAnimationStateConfig state)
+        {
+            if (state == null)
+            {
+                return FindTemplateClipKey(m_CompiledAsset.Asset.clips ?? Array.Empty<XAnimationClipConfig>());
+            }
+
+            if (!string.IsNullOrWhiteSpace(state.clipKey))
+            {
+                return state.clipKey;
+            }
+
+            if (state.stateType == XAnimationStateType.Blend1D)
+            {
+                return GetFirstBlendSampleClipKey(state) ??
+                       FindTemplateClipKey(m_CompiledAsset.Asset.clips ?? Array.Empty<XAnimationClipConfig>());
+            }
+
+            if (IsDirectionalBlendStateType(state.stateType))
+            {
+                return GetIdleDirectionalClipKey(state) ??
+                       GetFirstDirectionalClipKey(state) ??
+                       FindTemplateClipKey(m_CompiledAsset.Asset.clips ?? Array.Empty<XAnimationClipConfig>());
+            }
+
+            return FindTemplateClipKey(m_CompiledAsset.Asset.clips ?? Array.Empty<XAnimationClipConfig>());
+        }
+
+        private XAnimationBlend1DSampleConfig[] BuildMigratedBlendSamples(XAnimationStateConfig state)
+        {
+            if (state == null)
+            {
+                return CreateDefaultBlendSamples(string.Empty);
+            }
+
+            if (state.stateType == XAnimationStateType.Blend1D && (state.samples?.Length ?? 0) >= 2)
+            {
+                return CloneBlendSamples(state.samples);
+            }
+
+            XAnimationBlend1DSampleConfig[] samples = CreateDefaultBlendSamples(state.channelName);
+            List<string> seedClipKeys = GetBlendSeedClipKeys(state);
+            for (int i = 0; i < samples.Length && i < seedClipKeys.Count; i++)
+            {
+                if (!string.IsNullOrWhiteSpace(seedClipKeys[i]))
+                {
+                    samples[i].clipKey = seedClipKeys[i];
+                }
+            }
+
+            return samples;
+        }
+
+        private XAnimationBlend2DSimpleDirectionalSampleConfig[] BuildMigratedDirectionalSamples(XAnimationStateConfig state)
+        {
+            if (state == null)
+            {
+                return CreateDefaultDirectionalBlendSamples();
+            }
+
+            if (IsDirectionalBlendStateType(state.stateType) && (state.directionalSamples?.Length ?? 0) >= 2)
+            {
+                return CloneDirectionalSamples(state.directionalSamples);
+            }
+
+            XAnimationBlend2DSimpleDirectionalSampleConfig[] samples = CreateDefaultDirectionalBlendSamples();
+            List<string> seedClipKeys = GetDirectionalSeedClipKeys(state);
+            for (int i = 0; i < samples.Length && i < seedClipKeys.Count; i++)
+            {
+                if (!string.IsNullOrWhiteSpace(seedClipKeys[i]))
+                {
+                    samples[i].clipKey = seedClipKeys[i];
+                }
+            }
+
+            return samples;
+        }
+
+        private static XAnimationBlend1DSampleConfig[] CloneBlendSamples(XAnimationBlend1DSampleConfig[] samples)
+        {
+            if (samples == null || samples.Length == 0)
+            {
+                return Array.Empty<XAnimationBlend1DSampleConfig>();
+            }
+
+            XAnimationBlend1DSampleConfig[] cloned = new XAnimationBlend1DSampleConfig[samples.Length];
+            for (int i = 0; i < samples.Length; i++)
+            {
+                XAnimationBlend1DSampleConfig sample = samples[i];
+                cloned[i] = sample == null
+                    ? null
+                    : new XAnimationBlend1DSampleConfig
+                    {
+                        clipKey = sample.clipKey,
+                        threshold = sample.threshold,
+                    };
+            }
+
+            return cloned;
+        }
+
+        private static XAnimationBlend2DSimpleDirectionalSampleConfig[] CloneDirectionalSamples(XAnimationBlend2DSimpleDirectionalSampleConfig[] samples)
+        {
+            if (samples == null || samples.Length == 0)
+            {
+                return Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+            }
+
+            XAnimationBlend2DSimpleDirectionalSampleConfig[] cloned = new XAnimationBlend2DSimpleDirectionalSampleConfig[samples.Length];
+            for (int i = 0; i < samples.Length; i++)
+            {
+                XAnimationBlend2DSimpleDirectionalSampleConfig sample = samples[i];
+                cloned[i] = sample == null
+                    ? null
+                    : new XAnimationBlend2DSimpleDirectionalSampleConfig
+                    {
+                        clipKey = sample.clipKey,
+                        positionX = sample.positionX,
+                        positionY = sample.positionY,
+                    };
+            }
+
+            return cloned;
+        }
+
+        private List<string> GetBlendSeedClipKeys(XAnimationStateConfig state)
+        {
+            List<string> seedClipKeys = new(2);
+            if (state == null)
+            {
+                return seedClipKeys;
+            }
+
+            if (state.stateType == XAnimationStateType.Single)
+            {
+                AddOrderedClipKey(seedClipKeys, state.clipKey);
+                return seedClipKeys;
+            }
+
+            if (IsDirectionalBlendStateType(state.stateType))
+            {
+                string idleClipKey = GetIdleDirectionalClipKey(state);
+                AddOrderedClipKey(seedClipKeys, idleClipKey);
+                XAnimationBlend2DSimpleDirectionalSampleConfig[] samples = state.directionalSamples ?? Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+                for (int i = 0; i < samples.Length && seedClipKeys.Count < 2; i++)
+                {
+                    XAnimationBlend2DSimpleDirectionalSampleConfig sample = samples[i];
+                    if (sample == null)
+                    {
+                        continue;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(idleClipKey) &&
+                        Mathf.Approximately(sample.positionX, 0f) &&
+                        Mathf.Approximately(sample.positionY, 0f))
+                    {
+                        continue;
+                    }
+
+                    AddOrderedClipKey(seedClipKeys, sample.clipKey);
+                }
+
+                return seedClipKeys;
+            }
+
+            return seedClipKeys;
+        }
+
+        private List<string> GetDirectionalSeedClipKeys(XAnimationStateConfig state)
+        {
+            List<string> seedClipKeys = new(2);
+            if (state == null)
+            {
+                return seedClipKeys;
+            }
+
+            if (state.stateType == XAnimationStateType.Single)
+            {
+                AddOrderedClipKey(seedClipKeys, state.clipKey);
+                return seedClipKeys;
+            }
+
+            if (state.stateType == XAnimationStateType.Blend1D)
+            {
+                XAnimationBlend1DSampleConfig[] samples = state.samples ?? Array.Empty<XAnimationBlend1DSampleConfig>();
+                if (samples.Length > 0)
+                {
+                    AddOrderedClipKey(seedClipKeys, samples[0]?.clipKey);
+                }
+
+                if (samples.Length > 1)
+                {
+                    AddOrderedClipKey(seedClipKeys, samples[1]?.clipKey);
+                }
+            }
+
+            return seedClipKeys;
+        }
+
+        private static string GetFirstBlendSampleClipKey(XAnimationStateConfig state)
+        {
+            XAnimationBlend1DSampleConfig[] samples = state?.samples ?? Array.Empty<XAnimationBlend1DSampleConfig>();
+            for (int i = 0; i < samples.Length; i++)
+            {
+                if (!string.IsNullOrWhiteSpace(samples[i]?.clipKey))
+                {
+                    return samples[i].clipKey;
+                }
+            }
+
+            return null;
+        }
+
+        private static string GetIdleDirectionalClipKey(XAnimationStateConfig state)
+        {
+            XAnimationBlend2DSimpleDirectionalSampleConfig[] samples = state?.directionalSamples ?? Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+            for (int i = 0; i < samples.Length; i++)
+            {
+                XAnimationBlend2DSimpleDirectionalSampleConfig sample = samples[i];
+                if (sample != null &&
+                    Mathf.Approximately(sample.positionX, 0f) &&
+                    Mathf.Approximately(sample.positionY, 0f) &&
+                    !string.IsNullOrWhiteSpace(sample.clipKey))
+                {
+                    return sample.clipKey;
+                }
+            }
+
+            return null;
+        }
+
+        private static string GetFirstDirectionalClipKey(XAnimationStateConfig state)
+        {
+            XAnimationBlend2DSimpleDirectionalSampleConfig[] samples = state?.directionalSamples ?? Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+            for (int i = 0; i < samples.Length; i++)
+            {
+                if (!string.IsNullOrWhiteSpace(samples[i]?.clipKey))
+                {
+                    return samples[i].clipKey;
+                }
+            }
+
+            return null;
+        }
+
+        private static void AddOrderedClipKey(List<string> clipKeys, string clipKey)
+        {
+            if (!string.IsNullOrWhiteSpace(clipKey))
+            {
+                clipKeys.Add(clipKey);
+            }
+        }
+
+        private static Vector2 FindNextDirectionalBlendSamplePosition(
+            IReadOnlyList<XAnimationBlend2DSimpleDirectionalSampleConfig> samples)
+        {
+            Vector2[] candidates =
+            {
+                new(0f, 1f),
+                new(1f, 0f),
+                new(0f, -1f),
+                new(-1f, 0f),
+                new(0.707f, 0.707f),
+                new(0.707f, -0.707f),
+                new(-0.707f, -0.707f),
+                new(-0.707f, 0.707f),
+            };
+
+            for (int i = 0; i < candidates.Length; i++)
+            {
+                if (!ContainsDirectionalSamplePosition(samples, candidates[i]))
+                {
+                    return candidates[i];
+                }
+            }
+
+            float radius = 2f;
+            while (radius < 1000f)
+            {
+                Vector2 candidate = new(0f, radius);
+                if (!ContainsDirectionalSamplePosition(samples, candidate))
+                {
+                    return candidate;
+                }
+
+                radius += 1f;
+            }
+
+            return new(0f, 1f);
+        }
+
+        private static bool ContainsDirectionalSamplePosition(
+            IReadOnlyList<XAnimationBlend2DSimpleDirectionalSampleConfig> samples,
+            Vector2 position)
+        {
+            if (samples == null)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < samples.Count; i++)
+            {
+                XAnimationBlend2DSimpleDirectionalSampleConfig sample = samples[i];
+                if (sample == null)
+                {
+                    continue;
+                }
+
+                if (Mathf.Approximately(sample.positionX, position.x) &&
+                    Mathf.Approximately(sample.positionY, position.y))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsIdleDirectionalSample(XAnimationBlend2DSimpleDirectionalSampleConfig sample)
+        {
+            return sample != null &&
+                   Mathf.Approximately(sample.positionX, 0f) &&
+                   Mathf.Approximately(sample.positionY, 0f);
+        }
+
+        private static bool IsDirectionalBlendStateType(XAnimationStateType stateType)
+        {
+            return stateType == XAnimationStateType.Blend2DSimpleDirectional ||
+                   stateType == XAnimationStateType.Blend2DFreeformDirectional;
+        }
+
+        private static void RemoveCueReferences(XAnimationAsset asset, HashSet<string> removedClipKeys)
+        {
+            if (asset.cues == null || removedClipKeys == null || removedClipKeys.Count == 0)
+            {
+                return;
+            }
+
+            List<XAnimationCueConfig> cues = new(asset.cues.Length);
+            for (int i = 0; i < asset.cues.Length; i++)
+            {
+                XAnimationCueConfig cue = asset.cues[i];
+                if (cue == null || !removedClipKeys.Contains(cue.clipKey))
+                {
+                    cues.Add(cue);
+                }
+            }
+
+            asset.cues = cues.ToArray();
+        }
+
+        private static void RemoveStateReferences(XAnimationAsset asset, HashSet<string> removedClipKeys)
+        {
+            if (asset.states == null || removedClipKeys == null || removedClipKeys.Count == 0)
+            {
+                return;
+            }
+
+            List<XAnimationStateConfig> states = new(asset.states.Length);
+            for (int i = 0; i < asset.states.Length; i++)
+            {
+                XAnimationStateConfig state = asset.states[i];
+                if (state == null)
+                {
+                    continue;
+                }
+
+                if (state.stateType == XAnimationStateType.Single && removedClipKeys.Contains(state.clipKey))
+                {
+                    continue;
+                }
+
+                if (state.stateType == XAnimationStateType.Blend1D && HasRemovedBlendSample(state, removedClipKeys))
+                {
+                    continue;
+                }
+
+                if (IsDirectionalBlendStateType(state.stateType) && HasRemovedDirectionalBlendSample(state, removedClipKeys))
+                {
+                    continue;
+                }
+
+                states.Add(state);
+            }
+
+            asset.states = states.ToArray();
+        }
+
+        private static void RemoveStatesInChannel(XAnimationAsset asset, string channelName)
+        {
+            if (asset.states == null)
+            {
+                return;
+            }
+
+            List<XAnimationStateConfig> states = new(asset.states.Length);
+            for (int i = 0; i < asset.states.Length; i++)
+            {
+                XAnimationStateConfig state = asset.states[i];
+                if (state == null || string.Equals(state.channelName, channelName, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                states.Add(state);
+            }
+
+            asset.states = states.ToArray();
+        }
+
+        private static bool HasRemovedBlendSample(XAnimationStateConfig state, HashSet<string> removedClipKeys)
+        {
+            XAnimationBlend1DSampleConfig[] samples = state.samples ?? Array.Empty<XAnimationBlend1DSampleConfig>();
+            for (int i = 0; i < samples.Length; i++)
+            {
+                XAnimationBlend1DSampleConfig sample = samples[i];
+                if (sample != null && removedClipKeys.Contains(sample.clipKey))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool HasRemovedDirectionalBlendSample(XAnimationStateConfig state, HashSet<string> removedClipKeys)
+        {
+            XAnimationBlend2DSimpleDirectionalSampleConfig[] samples =
+                state.directionalSamples ?? Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+            for (int i = 0; i < samples.Length; i++)
+            {
+                XAnimationBlend2DSimpleDirectionalSampleConfig sample = samples[i];
+                if (sample != null && removedClipKeys.Contains(sample.clipKey))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static void RenameStateChannelReferences(XAnimationAsset asset, string oldName, string newName)
+        {
+            if (asset.states == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < asset.states.Length; i++)
+            {
+                XAnimationStateConfig state = asset.states[i];
+                if (state != null && string.Equals(state.channelName, oldName, StringComparison.Ordinal))
+                {
+                    state.channelName = newName;
+                }
+            }
+        }
+
+        private static void RenameStateClipReferences(XAnimationAsset asset, string oldKey, string newKey)
+        {
+            if (asset.states == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < asset.states.Length; i++)
+            {
+                XAnimationStateConfig state = asset.states[i];
+                if (state == null)
+                {
+                    continue;
+                }
+
+                if (string.Equals(state.clipKey, oldKey, StringComparison.Ordinal))
+                {
+                    state.clipKey = newKey;
+                }
+
+                XAnimationBlend1DSampleConfig[] samples = state.samples ?? Array.Empty<XAnimationBlend1DSampleConfig>();
+                for (int sampleIndex = 0; sampleIndex < samples.Length; sampleIndex++)
+                {
+                    XAnimationBlend1DSampleConfig sample = samples[sampleIndex];
+                    if (sample != null && string.Equals(sample.clipKey, oldKey, StringComparison.Ordinal))
+                    {
+                        sample.clipKey = newKey;
+                    }
+                }
+
+                XAnimationBlend2DSimpleDirectionalSampleConfig[] directionalSamples =
+                    state.directionalSamples ?? Array.Empty<XAnimationBlend2DSimpleDirectionalSampleConfig>();
+                for (int sampleIndex = 0; sampleIndex < directionalSamples.Length; sampleIndex++)
+                {
+                    XAnimationBlend2DSimpleDirectionalSampleConfig sample = directionalSamples[sampleIndex];
+                    if (sample != null && string.Equals(sample.clipKey, oldKey, StringComparison.Ordinal))
+                    {
+                        sample.clipKey = newKey;
+                    }
+                }
+            }
+        }
+
+        private static void RenameStateParameterReferences(XAnimationAsset asset, string oldName, string newName)
+        {
+            if (asset.states == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < asset.states.Length; i++)
+            {
+                XAnimationStateConfig state = asset.states[i];
+                if (state == null)
+                {
+                    continue;
+                }
+
+                if (string.Equals(state.parameterName, oldName, StringComparison.Ordinal))
+                {
+                    state.parameterName = newName;
+                }
+
+                if (string.Equals(state.parameterXName, oldName, StringComparison.Ordinal))
+                {
+                    state.parameterXName = newName;
+                }
+
+                if (string.Equals(state.parameterYName, oldName, StringComparison.Ordinal))
+                {
+                    state.parameterYName = newName;
+                }
+            }
+        }
+
+        private static bool HasStateParameterReference(XAnimationAsset asset, string parameterName)
+        {
+            if (asset.states == null)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < asset.states.Length; i++)
+            {
+                XAnimationStateConfig state = asset.states[i];
+                if (state == null)
+                {
+                    continue;
+                }
+
+                if (string.Equals(state.parameterName, parameterName, StringComparison.Ordinal) ||
+                    string.Equals(state.parameterXName, parameterName, StringComparison.Ordinal) ||
+                    string.Equals(state.parameterYName, parameterName, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static void RemoveStateParameterReferences(XAnimationAsset asset, string parameterName, string fallbackParameterName)
+        {
+            if (asset.states == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < asset.states.Length; i++)
+            {
+                XAnimationStateConfig state = asset.states[i];
+                if (state == null)
+                {
+                    continue;
+                }
+
+                if (string.Equals(state.parameterName, parameterName, StringComparison.Ordinal))
+                {
+                    state.parameterName = fallbackParameterName ?? string.Empty;
+                }
+
+                if (string.Equals(state.parameterXName, parameterName, StringComparison.Ordinal))
+                {
+                    state.parameterXName = fallbackParameterName ?? string.Empty;
+                }
+
+                if (string.Equals(state.parameterYName, parameterName, StringComparison.Ordinal))
+                {
+                    state.parameterYName = fallbackParameterName ?? string.Empty;
+                }
+            }
+        }
+
+        private static float ConvertParameterDefaultToFloat(object value)
+        {
+            if (value == null)
+            {
+                return 0f;
+            }
+
+            return Convert.ToSingle(value, CultureInfo.InvariantCulture);
+        }
+
+        private static bool ConvertParameterDefaultToBool(object value)
+        {
+            if (value == null)
+            {
+                return false;
+            }
+
+            return Convert.ToBoolean(value, CultureInfo.InvariantCulture);
+        }
+
+        private static int ConvertParameterDefaultToInt(object value)
+        {
+            if (value == null)
+            {
+                return 0;
+            }
+
+            return Convert.ToInt32(value, CultureInfo.InvariantCulture);
+        }
+
+        private void SaveCompiledAsset()
+        {
+            if (m_CompiledAsset?.Asset == null)
+            {
+                return;
+            }
+
+            m_CompiledAsset.Asset.SaveAsset();
+        }
+
+        public void SaveCurrentAsset()
+        {
+            EnsureLoaded();
+            SaveCompiledAsset();
+        }
+
+        public void SetAssetPreload(bool preload, bool save = true)
+        {
+            EnsureLoaded();
+            m_CompiledAsset.Asset.preload = preload;
+            if (preload)
+            {
+                m_Driver.PreloadAll();
+            }
+
+            if (save)
+            {
+                SaveCompiledAsset();
+            }
+        }
+
+        private void RebuildDriverAndSave()
+        {
+            RebuildCompiledAsset();
+            RebuildDriver();
+            SaveCompiledAsset();
+        }
+
+        private void RebuildCompiledAsset()
+        {
+            m_CompiledAsset = m_AssetLoader.Compile(m_CompiledAsset.Asset);
+        }
+
+        private void RebuildDriver()
+        {
+            if (m_Driver != null && m_Animator != null)
+            {
+                m_Driver.CueTriggered -= OnCueTriggered;
+                m_Driver.OnStateEnter -= OnStateEnter;
+                m_Driver.OnStateExit -= OnStateExit;
+                m_Driver.FrameEvaluated -= OnPreviewFrameEvaluated;
+                m_Driver.Dispose();
+                m_Driver = new XAnimationDriver();
+                m_Driver.Initialize(m_CompiledAsset, m_Animator);
+                m_Driver.CueTriggered += OnCueTriggered;
+                m_Driver.OnStateEnter += OnStateEnter;
+                m_Driver.OnStateExit += OnStateExit;
+                m_Driver.FrameEvaluated += OnPreviewFrameEvaluated;
+                m_Driver.SetPaused(false);
+                m_Driver.SetTimeScale(1f);
+                m_Driver.SetRootMotionEnabled(m_RootMotionEnabled);
+                RestorePreviewParameters();
+            }
+        }
+
+        public void SetAutoTransitionNextState(string stateKey, string nextStateKey, bool save = true)
+        {
+            EnsureLoaded();
+            m_CompiledAsset.GetState(stateKey);
+            XAnimationAutoTransitionConfig config = GetOrCreateAutoTransition(m_CompiledAsset.Asset, stateKey);
+            config.nextStateKey = string.IsNullOrWhiteSpace(nextStateKey) ? string.Empty : nextStateKey.Trim();
+            RebuildCompiledAsset();
+            RebuildDriver();
+            if (save)
+            {
+                SaveCompiledAsset();
+            }
+        }
+
+        public void SetAutoTransitionTiming(
+            string stateKey,
+            float exitTime,
+            float transitionDuration,
+            float enterTime,
+            bool save = true)
+        {
+            EnsureLoaded();
+            m_CompiledAsset.GetState(stateKey);
+            XAnimationAutoTransitionConfig config = GetOrCreateAutoTransition(m_CompiledAsset.Asset, stateKey);
+            config.exitTime = Mathf.Clamp01(exitTime);
+            config.transitionDuration = Mathf.Max(0f, transitionDuration);
+            config.enterTime = Mathf.Clamp01(enterTime);
+            RebuildCompiledAsset();
+            RebuildDriver();
+            if (save)
+            {
+                SaveCompiledAsset();
+            }
+        }
+
+        public string AddAutoTransition(string preferredPreStateKey = null)
+        {
+            EnsureBaseAssetEditable();
+            string preStateKey = ResolveAutoTransitionPreStateKey(preferredPreStateKey);
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            if (FindAutoTransition(asset, preStateKey) == null)
+            {
+                List<XAnimationAutoTransitionConfig> transitions = new(asset.autoTransitions ?? Array.Empty<XAnimationAutoTransitionConfig>())
+                {
+                    new XAnimationAutoTransitionConfig
+                    {
+                        preStateKey = preStateKey,
+                        nextStateKey = string.Empty,
+                        exitTime = 1f,
+                        transitionDuration = 0f,
+                        enterTime = 0f,
+                    }
+                };
+                asset.autoTransitions = transitions.ToArray();
+            }
+
+            RebuildDriverAndSave();
+            return preStateKey;
+        }
+
+        public void DeleteAutoTransition(string preStateKey)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationAutoTransitionConfig[] transitions = m_CompiledAsset.Asset.autoTransitions ?? Array.Empty<XAnimationAutoTransitionConfig>();
+            List<XAnimationAutoTransitionConfig> remaining = new(transitions.Length);
+            bool removed = false;
+            for (int i = 0; i < transitions.Length; i++)
+            {
+                XAnimationAutoTransitionConfig transition = transitions[i];
+                if (transition == null)
+                {
+                    continue;
+                }
+
+                if (string.Equals(transition.preStateKey, preStateKey, StringComparison.Ordinal))
+                {
+                    removed = true;
+                    continue;
+                }
+
+                remaining.Add(transition);
+            }
+
+            if (!removed)
+            {
+                throw new XAnimationException($"XAnimation auto transition '{preStateKey}' does not exist.");
+            }
+
+            m_CompiledAsset.Asset.autoTransitions = remaining.ToArray();
+            RebuildDriverAndSave();
+        }
+
+        public void SetAutoTransitionPreState(string currentPreStateKey, string newPreStateKey, bool save = true)
+        {
+            EnsureBaseAssetEditable();
+            newPreStateKey = newPreStateKey?.Trim();
+            if (string.Equals(currentPreStateKey, newPreStateKey, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(newPreStateKey))
+            {
+                throw new XAnimationException("XAnimation auto transition preStateKey cannot be empty.");
+            }
+
+            XAnimationCompiledState newPreState = m_CompiledAsset.GetState(newPreStateKey);
+            if (newPreState.Config.loop)
+            {
+                throw new XAnimationException($"XAnimation state '{newPreStateKey}' is looping and cannot configure auto transition.");
+            }
+
+            XAnimationAutoTransitionConfig transition = FindAutoTransition(m_CompiledAsset.Asset, currentPreStateKey);
+            if (transition == null)
+            {
+                throw new XAnimationException($"XAnimation auto transition '{currentPreStateKey}' does not exist.");
+            }
+
+            if (FindAutoTransition(m_CompiledAsset.Asset, newPreStateKey) != null)
+            {
+                throw new XAnimationException($"XAnimation auto transition preState '{newPreStateKey}' is duplicated.");
+            }
+
+            transition.preStateKey = newPreStateKey;
+            RebuildCompiledAsset();
+            RebuildDriver();
+            if (save)
+            {
+                SaveCompiledAsset();
+            }
+        }
+
+        public bool TryGetAutoTransition(string preStateKey, out XAnimationAutoTransitionConfig config)
+        {
+            EnsureLoaded();
+            config = FindAutoTransition(m_CompiledAsset.Asset, preStateKey);
+            return config != null;
+        }
+
+        public int AddDefaultTransition()
+        {
+            EnsureBaseAssetEditable();
+            XAnimationAsset asset = m_CompiledAsset.Asset;
+            XAnimationTransitionPairConfig pair = CreateDefaultTransitionPair(-1);
+            List<XAnimationDefaultTransitionConfig> transitions = new(asset.defaultTransitions ?? Array.Empty<XAnimationDefaultTransitionConfig>())
+            {
+                new XAnimationDefaultTransitionConfig
+                {
+                    editorName = CreateUniqueDefaultTransitionName("Default Transition"),
+                    pairs = new[] { pair },
+                    fadeIn = 0.15f,
+                    fadeOut = 0.15f,
+                    enterTime = 0f,
+                    priority = 0,
+                    interruptible = true,
+                }
+            };
+
+            asset.defaultTransitions = transitions.ToArray();
+            RebuildDriverAndSave();
+            return asset.defaultTransitions.Length - 1;
+        }
+
+        public void DeleteDefaultTransition(int transitionIndex)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationDefaultTransitionConfig[] transitions = m_CompiledAsset.Asset.defaultTransitions ?? Array.Empty<XAnimationDefaultTransitionConfig>();
+            if (transitionIndex < 0 || transitionIndex >= transitions.Length)
+            {
+                throw new XAnimationException($"XAnimation default transition index '{transitionIndex}' does not exist.");
+            }
+
+            List<XAnimationDefaultTransitionConfig> remaining = new(transitions.Length - 1);
+            for (int i = 0; i < transitions.Length; i++)
+            {
+                if (i != transitionIndex)
+                {
+                    remaining.Add(transitions[i]);
+                }
+            }
+
+            m_CompiledAsset.Asset.defaultTransitions = remaining.ToArray();
+            RebuildDriverAndSave();
+        }
+
+        public void SetDefaultTransitionName(int transitionIndex, string editorName, bool save = true)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationDefaultTransitionConfig transition = GetDefaultTransitionConfig(transitionIndex);
+            transition.editorName = editorName?.Trim() ?? string.Empty;
+            if (save)
+            {
+                SaveCompiledAsset();
+            }
+        }
+
+        public void SetDefaultTransitionOptions(
+            int transitionIndex,
+            float fadeIn,
+            float fadeOut,
+            float enterTime,
+            int priority,
+            bool interruptible,
+            bool save = true)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationDefaultTransitionConfig transition = GetDefaultTransitionConfig(transitionIndex);
+            transition.fadeIn = Mathf.Max(0f, fadeIn);
+            transition.fadeOut = Mathf.Max(0f, fadeOut);
+            transition.enterTime = Mathf.Clamp01(enterTime);
+            transition.priority = priority;
+            transition.interruptible = interruptible;
+            RebuildCompiledAsset();
+            RebuildDriver();
+            if (save)
+            {
+                SaveCompiledAsset();
+            }
+        }
+
+        public int AddDefaultTransitionPair(int transitionIndex)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationDefaultTransitionConfig transition = GetDefaultTransitionConfig(transitionIndex);
+            List<XAnimationTransitionPairConfig> pairs = new(transition.pairs ?? Array.Empty<XAnimationTransitionPairConfig>())
+            {
+                CreateDefaultTransitionPair(transitionIndex)
+            };
+
+            transition.pairs = pairs.ToArray();
+            RebuildDriverAndSave();
+            return transition.pairs.Length - 1;
+        }
+
+        public void DeleteDefaultTransitionPair(int transitionIndex, int pairIndex)
+        {
+            EnsureBaseAssetEditable();
+            XAnimationDefaultTransitionConfig transition = GetDefaultTransitionConfig(transitionIndex);
+            XAnimationTransitionPairConfig[] pairs = transition.pairs ?? Array.Empty<XAnimationTransitionPairConfig>();
+            if (pairs.Length <= 1)
+            {
+                throw new XAnimationException("XAnimation default transition must contain at least one pair.");
+            }
+
+            if (pairIndex < 0 || pairIndex >= pairs.Length)
+            {
+                throw new XAnimationException($"XAnimation default transition pair index '{pairIndex}' does not exist.");
+            }
+
+            List<XAnimationTransitionPairConfig> remaining = new(pairs.Length - 1);
+            for (int i = 0; i < pairs.Length; i++)
+            {
+                if (i != pairIndex)
+                {
+                    remaining.Add(pairs[i]);
+                }
+            }
+
+            transition.pairs = remaining.ToArray();
+            RebuildDriverAndSave();
+        }
+
+        public void SetDefaultTransitionPair(
+            int transitionIndex,
+            int pairIndex,
+            string preStateKey,
+            string nextStateKey,
+            bool save = true)
+        {
+            EnsureBaseAssetEditable();
+            preStateKey = preStateKey?.Trim();
+            nextStateKey = nextStateKey?.Trim();
+            ValidateDefaultTransitionPairChange(transitionIndex, pairIndex, preStateKey, nextStateKey);
+            XAnimationTransitionPairConfig pair = GetDefaultTransitionPairConfig(transitionIndex, pairIndex);
+            pair.preStateKey = preStateKey;
+            pair.nextStateKey = nextStateKey;
+            RebuildCompiledAsset();
+            RebuildDriver();
+            if (save)
+            {
+                SaveCompiledAsset();
+            }
+        }
+
+        private void RestorePreviewParameters()
+        {
+            if (m_Driver == null || m_CompiledAsset == null)
+            {
+                return;
+            }
+
+            HashSet<string> validFloatKeys = new(StringComparer.Ordinal);
+            HashSet<string> validIntKeys = new(StringComparer.Ordinal);
+            HashSet<string> validBoolKeys = new(StringComparer.Ordinal);
+            IReadOnlyList<XAnimationCompiledParameter> parameters = m_CompiledAsset.Parameters;
+            for (int i = 0; i < parameters.Count; i++)
+            {
+                XAnimationCompiledParameter parameter = parameters[i];
+                string parameterName = parameter?.Name;
+                if (string.IsNullOrWhiteSpace(parameterName))
+                {
+                    continue;
+                }
+
+                switch (parameter.Type)
+                {
+                    case XAnimationParameterType.Float:
+                    {
+                        if (!m_PreviewFloatParameters.TryGetValue(parameterName, out float floatValue))
+                        {
+                            floatValue = ConvertParameterDefaultToFloat(parameter.Config.defaultValue);
+                            m_PreviewFloatParameters[parameterName] = floatValue;
+                        }
+
+                        validFloatKeys.Add(parameterName);
+                        m_Driver.SetParameter(parameterName, floatValue);
+                        break;
+                    }
+                    case XAnimationParameterType.Int:
+                    {
+                        if (!m_PreviewIntParameters.TryGetValue(parameterName, out int intValue))
+                        {
+                            intValue = ConvertParameterDefaultToInt(parameter.Config.defaultValue);
+                            m_PreviewIntParameters[parameterName] = intValue;
+                        }
+
+                        validIntKeys.Add(parameterName);
+                        m_Driver.SetParameter(parameterName, intValue);
+                        break;
+                    }
+                    case XAnimationParameterType.Bool:
+                    {
+                        if (!m_PreviewBoolParameters.TryGetValue(parameterName, out bool boolValue))
+                        {
+                            boolValue = ConvertParameterDefaultToBool(parameter.Config.defaultValue);
+                            m_PreviewBoolParameters[parameterName] = boolValue;
+                        }
+
+                        validBoolKeys.Add(parameterName);
+                        m_Driver.SetParameter(parameterName, boolValue);
+                        break;
+                    }
+                }
+            }
+
+            RemoveStalePreviewParameters(m_PreviewFloatParameters, validFloatKeys);
+            RemoveStalePreviewParameters(m_PreviewIntParameters, validIntKeys);
+            RemoveStalePreviewParameters(m_PreviewBoolParameters, validBoolKeys);
+        }
+
+        private static void RemoveStalePreviewParameters<T>(Dictionary<string, T> cache, HashSet<string> validKeys)
+        {
+            if (cache.Count == 0)
+            {
+                return;
+            }
+
+            List<string> removedKeys = null;
+            foreach (string key in cache.Keys)
+            {
+                if (validKeys.Contains(key))
+                {
+                    continue;
+                }
+
+                removedKeys ??= new List<string>();
+                removedKeys.Add(key);
+            }
+
+            if (removedKeys == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < removedKeys.Count; i++)
+            {
+                cache.Remove(removedKeys[i]);
+            }
+        }
+
+        public string GetOriginalClipPath(string clipKey)
+        {
+            if (string.IsNullOrWhiteSpace(clipKey))
+            {
+                return string.Empty;
+            }
+
+            return m_OriginalClipPathByKey.TryGetValue(clipKey, out string clipPath) ? clipPath : string.Empty;
+        }
+
+        public void Dispose()
+        {
+            DisposePreview();
+        }
+
+        private void DisposePreview()
+        {
+            if (m_Driver != null)
+            {
+                m_Driver.CueTriggered -= OnCueTriggered;
+                m_Driver.OnStateEnter -= OnStateEnter;
+                m_Driver.OnStateExit -= OnStateExit;
+                m_Driver.FrameEvaluated -= OnPreviewFrameEvaluated;
+                m_Driver.Dispose();
+                m_Driver = null;
+            }
+
+            DestroyGrid();
+            DestroyLight(ref m_KeyLight);
+            DestroyLight(ref m_FillLight);
+            DestroyLight(ref m_RimLight);
+
+            if (m_PreviewUtility != null)
+            {
+                m_PreviewUtility.Cleanup();
+                m_PreviewUtility = null;
+            }
+
+            if (m_Instance != null)
+            {
+                UnityEngine.Object.DestroyImmediate(m_Instance);
+                m_Instance = null;
+            }
+
+            if (m_RenderTexture != null)
+            {
+                m_RenderTexture.Release();
+                UnityEngine.Object.DestroyImmediate(m_RenderTexture);
+                m_RenderTexture = null;
+            }
+
+            m_Animator = null;
+            m_CompiledAsset = null;
+            m_AssetPath = null;
+            m_IsOverrideAsset = false;
+            m_OverrideAsset = null;
+            m_CueLogs.Clear();
+            m_OriginalClipPathByKey.Clear();
+            m_RenderTextureSize = Vector2Int.zero;
+        }
+
+        private void CacheOriginalClipPaths(string assetPath)
+        {
+            m_OriginalClipPathByKey.Clear();
+            m_IsOverrideAsset = false;
+            m_OverrideAsset = null;
+
+            TextAsset textAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(assetPath);
+            if (textAsset == null)
+            {
+                return;
+            }
+
+            XAnimationOverrideAsset overrideAsset = textAsset.ToXAnimationAsset<XAnimationOverrideAsset>();
+            if (overrideAsset != null && !string.IsNullOrWhiteSpace(overrideAsset.baseAssetPath))
+            {
+                m_IsOverrideAsset = true;
+                m_OverrideAsset = overrideAsset;
+                TextAsset baseTextAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(overrideAsset.baseAssetPath);
+                if (baseTextAsset == null)
+                {
+                    return;
+                }
+
+                CacheOriginalClipPaths(baseTextAsset.ToXAnimationAsset<XAnimationAsset>());
+                return;
+            }
+
+            CacheOriginalClipPaths(textAsset.ToXAnimationAsset<XAnimationAsset>());
+        }
+
+        private void CacheOriginalClipPaths(XAnimationAsset asset)
+        {
+            if (asset?.clips == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < asset.clips.Length; i++)
+            {
+                XAnimationClipConfig clip = asset.clips[i];
+                if (clip == null || string.IsNullOrWhiteSpace(clip.key))
+                {
+                    continue;
+                }
+
+                m_OriginalClipPathByKey[clip.key] = clip.clipPath;
+            }
+        }
+
+        private void EnsureLoaded()
+        {
+            if (!IsLoaded)
+            {
+                throw new XAnimationException("XAnimation preview session is not loaded.");
+            }
+        }
+
+        private void ConfigurePreviewCamera()
+        {
+            Camera camera = m_PreviewUtility.camera;
+            camera.fieldOfView = 30f;
+            camera.nearClipPlane = 0.01f;
+            camera.farClipPlane = PreviewFarClipPlane;
+            camera.allowMSAA = false;
+            camera.allowHDR = false;
+
+            // Use the editor default skybox, matching prefab preview appearance
+            Material skybox = AssetDatabase.GetBuiltinExtraResource<Material>("Default-Skybox.mat");
+            if (skybox != null)
+            {
+                camera.clearFlags = CameraClearFlags.Skybox;
+                Skybox skyboxComponent = camera.gameObject.GetComponent<Skybox>();
+                if (skyboxComponent == null)
+                {
+                    skyboxComponent = camera.gameObject.AddComponent<Skybox>();
+                }
+                skyboxComponent.material = skybox;
+            }
+            else
+            {
+                camera.clearFlags = CameraClearFlags.Color;
+                camera.backgroundColor = new Color(0.22f, 0.22f, 0.24f, 1f);
+            }
+        }
+
+        private void ConfigurePreviewLights()
+        {
+            // Disable built-in PreviewRenderUtility lights (not used by SRP)
+            Light[] builtinLights = m_PreviewUtility.lights;
+            if (builtinLights != null)
+            {
+                for (int i = 0; i < builtinLights.Length; i++)
+                {
+                    if (builtinLights[i] != null)
+                    {
+                        builtinLights[i].intensity = 0f;
+                        builtinLights[i].enabled = false;
+                    }
+                }
+            }
+
+            // Create real directional lights as GameObjects so URP/SRP renders them
+            m_KeyLight = CreateDirectionalLight("__PreviewKeyLight__",
+                Quaternion.Euler(50f, 120f, 0f), new Color(1f, 0.97f, 0.92f), 1.5f);
+            m_PreviewUtility.AddSingleGO(m_KeyLight);
+
+            m_FillLight = CreateDirectionalLight("__PreviewFillLight__",
+                Quaternion.Euler(340f, 300f, 0f), new Color(0.82f, 0.87f, 1f), 0.8f);
+            m_PreviewUtility.AddSingleGO(m_FillLight);
+
+            m_RimLight = CreateDirectionalLight("__PreviewRimLight__",
+                Quaternion.Euler(10f, 220f, 0f), new Color(0.9f, 0.9f, 0.95f), 0.5f);
+            m_PreviewUtility.AddSingleGO(m_RimLight);
+
+            // Set ambient for the preview scene
+            m_PreviewUtility.ambientColor = new Color(0.45f, 0.45f, 0.50f, 1f);
+        }
+
+        private static GameObject CreateDirectionalLight(string name, Quaternion rotation, Color color, float intensity)
+        {
+            GameObject go = new GameObject(name) { hideFlags = HideFlags.HideAndDontSave };
+            go.transform.rotation = rotation;
+            Light light = go.AddComponent<Light>();
+            light.type = LightType.Directional;
+            light.color = color;
+            light.intensity = intensity;
+            light.shadows = LightShadows.None;
+            return go;
+        }
+
+        private void CacheInitialTransform()
+        {
+            m_InitialPosition = m_Instance.transform.position;
+            m_InitialRotation = m_Instance.transform.rotation;
+        }
+
+        private void CacheInitialBounds()
+        {
+            Renderer[] renderers = m_Instance.GetComponentsInChildren<Renderer>(true);
+            if (renderers.Length == 0)
+            {
+                m_InitialBounds = new Bounds(m_Instance.transform.position, Vector3.one);
+            }
+            else
+            {
+                m_InitialBounds = renderers[0].bounds;
+                for (int i = 1; i < renderers.Length; i++)
+                {
+                    m_InitialBounds.Encapsulate(renderers[i].bounds);
+                }
+            }
+
+            m_CameraPivot = m_InitialBounds.center;
+            float extentsMagnitude = Mathf.Max(m_InitialBounds.extents.magnitude, 0.5f);
+            m_CameraDistance = extentsMagnitude * 2.8f;
+        }
+
+        private void EnsureRenderTexture(int width, int height)
+        {
+            if (m_RenderTexture != null && m_RenderTextureSize.x == width && m_RenderTextureSize.y == height)
+            {
+                return;
+            }
+
+            if (m_RenderTexture != null)
+            {
+                m_RenderTexture.Release();
+                UnityEngine.Object.DestroyImmediate(m_RenderTexture);
+            }
+
+            RenderTextureDescriptor descriptor = new(width, height, RenderTextureFormat.ARGB32, 24)
+            {
+                msaaSamples = 1,
+                sRGB = QualitySettings.activeColorSpace == ColorSpace.Linear,
+                useMipMap = false,
+                autoGenerateMips = false,
+            };
+            m_RenderTexture = new RenderTexture(descriptor)
+            {
+                hideFlags = HideFlags.HideAndDontSave,
+                antiAliasing = 1,
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+            };
+            m_RenderTexture.Create();
+            m_RenderTextureSize = new Vector2Int(width, height);
+        }
+
+        private void UpdateCameraTransform()
+        {
+            if (!m_CameraInitialized)
+            {
+                RecalculateCameraPosition();
+                m_CameraInitialized = true;
+            }
+
+            Camera camera = m_PreviewUtility.camera;
+            Quaternion rotation = Quaternion.Euler(m_CameraPitch, m_CameraYaw, 0f);
+            camera.transform.position = m_CameraPosition;
+            camera.transform.rotation = rotation;
+            UpdateGridMaterialForCamera();
+        }
+
+        private void ApplyHideFlags(GameObject root)
+        {
+            if (root == null)
+            {
+                return;
+            }
+
+            Transform[] transforms = root.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < transforms.Length; i++)
+            {
+                transforms[i].gameObject.hideFlags = HideFlags.HideAndDontSave;
+            }
+        }
+
+        private void SanitizePreviewInstance()
+        {
+            if (m_Instance == null)
+            {
+                return;
+            }
+
+            AudioSource[] audioSources = m_Instance.GetComponentsInChildren<AudioSource>(true);
+            for (int i = 0; i < audioSources.Length; i++)
+            {
+                AudioSource audioSource = audioSources[i];
+                audioSource.playOnAwake = false;
+                audioSource.Stop();
+                audioSource.enabled = false;
+            }
+
+            Behaviour[] behaviours = m_Instance.GetComponentsInChildren<Behaviour>(true);
+            for (int i = 0; i < behaviours.Length; i++)
+            {
+                Behaviour behaviour = behaviours[i];
+                if (behaviour == null || behaviour == m_Animator)
+                {
+                    continue;
+                }
+
+                behaviour.enabled = false;
+            }
+
+            Rigidbody[] rigidbodies = m_Instance.GetComponentsInChildren<Rigidbody>(true);
+            for (int i = 0; i < rigidbodies.Length; i++)
+            {
+                Rigidbody rigidbody = rigidbodies[i];
+                rigidbody.isKinematic = true;
+                rigidbody.detectCollisions = false;
+            }
+
+            Collider[] colliders = m_Instance.GetComponentsInChildren<Collider>(true);
+            for (int i = 0; i < colliders.Length; i++)
+            {
+                colliders[i].enabled = false;
+            }
+
+            ParticleSystem[] particleSystems = m_Instance.GetComponentsInChildren<ParticleSystem>(true);
+            for (int i = 0; i < particleSystems.Length; i++)
+            {
+                ParticleSystem particleSystem = particleSystems[i];
+                particleSystem.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                particleSystem.gameObject.SetActive(false);
+            }
+        }
+
+        private void PrepareGrid()
+        {
+            DestroyGrid();
+
+            float modelExtent = Mathf.Max(m_InitialBounds.extents.magnitude, 0.5f);
+            float gridHalf = Mathf.Max(MinGridHalfSize, Mathf.Ceil(modelExtent * 12f));
+            int cellCount = Mathf.RoundToInt(gridHalf / FarGridSpacing);
+            gridHalf = Mathf.Max(FarGridSpacing, cellCount * FarGridSpacing);
+            float gridSize = gridHalf * 2f;
+            m_GridSpacing = CloseGridSpacing;
+
+            // Create material from URP grid shader
+            Shader shader = Shader.Find("Hidden/XFramework/AnimationPreviewGrid");
+            if (shader == null)
+            {
+                Debug.LogWarning("XAnimation preview grid shader not found (Hidden/XFramework/AnimationPreviewGrid).");
+                return;
+            }
+
+            m_GridMaterial = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
+            m_GridMaterial.SetColor("_BGColor", new Color(0.075f, 0.082f, 0.09f, 0.58f));
+            m_GridMaterial.SetColor("_GridColor", new Color(0.58f, 0.64f, 0.68f, 0.22f));
+            m_GridMaterial.SetColor("_MajorGridColor", new Color(0.74f, 0.80f, 0.86f, 0.42f));
+            m_GridMaterial.SetColor("_CenterLineColor", new Color(0.42f, 0.66f, 0.95f, 0.60f));
+            m_GridMaterial.SetFloat("_GridWidth", 0.015f);
+            m_GridMaterial.SetFloat("_MajorGridWidth", 0.035f);
+            m_GridMaterial.SetFloat("_CenterLineWidth", 0.05f);
+            m_GridMaterial.SetFloat("_GridSpacing", m_GridSpacing);
+            m_GridMaterial.SetFloat("_MajorGridInterval", 5f);
+            m_GridMaterial.SetFloat("_GridSize", gridSize);
+
+            // Create a Plane GameObject as the grid surface
+            // Unity built-in Plane is 10x10 units, so scale to match gridSize
+            m_GridPlane = GameObject.CreatePrimitive(PrimitiveType.Plane);
+            m_GridPlane.name = "__PreviewGridPlane__";
+            m_GridPlane.hideFlags = HideFlags.HideAndDontSave;
+
+            // Remove collider (not needed in preview)
+            Collider collider = m_GridPlane.GetComponent<Collider>();
+            if (collider != null)
+            {
+                UnityEngine.Object.DestroyImmediate(collider);
+            }
+
+            MeshRenderer renderer = m_GridPlane.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = m_GridMaterial;
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+
+            float planeScale = gridSize / 10f; // built-in Plane is 10 units wide
+            m_GridPlane.transform.localScale = new Vector3(planeScale, 1f, planeScale);
+            UpdateGridTransform();
+
+            m_GridPlane.SetActive(m_GridVisible);
+            m_PreviewUtility.AddSingleGO(m_GridPlane);
+        }
+
+        private void UpdateGridMaterialForCamera()
+        {
+            if (m_GridMaterial == null)
+            {
+                return;
+            }
+
+            float closeGridCellPixels = GetCloseGridCellPixelSize();
+            float targetSpacing = m_GridSpacing;
+            if (m_GridSpacing < FarGridSpacing && closeGridCellPixels <= SwitchToFarGridCellPixels)
+            {
+                targetSpacing = FarGridSpacing;
+            }
+            else if (m_GridSpacing > CloseGridSpacing && closeGridCellPixels >= SwitchToCloseGridCellPixels)
+            {
+                targetSpacing = CloseGridSpacing;
+            }
+
+            if (Mathf.Approximately(targetSpacing, m_GridSpacing))
+            {
+                return;
+            }
+
+            m_GridSpacing = targetSpacing;
+            float widthScale = Mathf.Sqrt(m_GridSpacing);
+            m_GridMaterial.SetFloat("_GridSpacing", m_GridSpacing);
+            m_GridMaterial.SetFloat("_GridWidth", 0.015f * widthScale);
+            m_GridMaterial.SetFloat("_MajorGridWidth", 0.035f * widthScale);
+            m_GridMaterial.SetFloat("_CenterLineWidth", 0.05f * widthScale);
+        }
+
+        private float GetCloseGridCellPixelSize()
+        {
+            float distance = GetGridViewDistance();
+            int pixelHeight = Mathf.Max(m_RenderTextureSize.y, 1);
+            float fieldOfView = m_PreviewUtility?.camera != null ? m_PreviewUtility.camera.fieldOfView : 30f;
+            float viewHeightMeters = 2f * distance * Mathf.Tan(fieldOfView * 0.5f * Mathf.Deg2Rad);
+            return CloseGridSpacing * pixelHeight / Mathf.Max(viewHeightMeters, 0.0001f);
+        }
+
+        private float GetGridViewDistance()
+        {
+            Quaternion rotation = Quaternion.Euler(m_CameraPitch, m_CameraYaw, 0f);
+            Vector3 forward = rotation * Vector3.forward;
+            float gridY = m_GridPlane != null ? m_GridPlane.transform.position.y : 0f;
+            if (Mathf.Abs(forward.y) > 0.0001f)
+            {
+                float hitDistance = (gridY - m_CameraPosition.y) / forward.y;
+                if (hitDistance > 0f)
+                {
+                    return Mathf.Max(hitDistance, 0.05f);
+                }
+            }
+
+            float heightFromGrid = Mathf.Abs(m_CameraPosition.y - gridY);
+            float pitchRadians = Mathf.Max(Mathf.Abs(m_CameraPitch) * Mathf.Deg2Rad, 5f * Mathf.Deg2Rad);
+            return Mathf.Max(heightFromGrid / Mathf.Sin(pitchRadians), 0.05f);
+        }
+
+        private void DestroyGrid()
+        {
+            if (m_GridPlane != null)
+            {
+                UnityEngine.Object.DestroyImmediate(m_GridPlane);
+                m_GridPlane = null;
+            }
+
+            if (m_GridMaterial != null)
+            {
+                UnityEngine.Object.DestroyImmediate(m_GridMaterial);
+                m_GridMaterial = null;
+            }
+        }
+
+        private void UpdateGridTransform()
+        {
+            if (m_GridPlane == null)
+            {
+                return;
+            }
+
+            m_GridPlane.transform.position = Vector3.zero;
+        }
+
+        private static void DestroyLight(ref GameObject lightGo)
+        {
+            if (lightGo != null)
+            {
+                UnityEngine.Object.DestroyImmediate(lightGo);
+                lightGo = null;
+            }
+        }
+
+        private void OnCueTriggered(XAnimationCueEvent cueEvent)
+        {
+            AppendLog($"Cue [{cueEvent.channelName}] {cueEvent.clipKey} -> {cueEvent.eventKey} @ {cueEvent.normalizedTime:0.00} weight={cueEvent.weight:0.###}");
+        }
+
+        private void OnStateEnter(XAnimationStateEvent stateEvent)
+        {
+            AppendLog($"Enter [{stateEvent.channelName}] {stateEvent.stateKey}{FormatTemporaryStateSuffix(stateEvent.isTemporaryState)}");
+        }
+
+        private void OnStateExit(XAnimationStateEvent stateEvent)
+        {
+            string reason = stateEvent.exitReason?.ToString() ?? "Unknown";
+            AppendLog($"Exit [{stateEvent.channelName}] {stateEvent.stateKey}{FormatTemporaryStateSuffix(stateEvent.isTemporaryState)} ({reason})");
+        }
+
+        private void OnPreviewFrameEvaluated(Animator animator, Vector3 previousPosition, Quaternion previousRotation)
+        {
+            if (!m_RootMotionEnabled ||
+                animator == null ||
+                m_Animator == null ||
+                !ReferenceEquals(animator, m_Animator) ||
+                m_Driver == null ||
+                !m_Driver.ShouldApplyNativeRootMotion())
+            {
+                return;
+            }
+
+            Transform animatorTransform = m_Animator.transform;
+            if (animatorTransform == null)
+            {
+                return;
+            }
+
+            if (animatorTransform.position != previousPosition || animatorTransform.rotation != previousRotation)
+            {
+                return;
+            }
+
+            animatorTransform.SetPositionAndRotation(
+                animatorTransform.position + animator.deltaPosition,
+                animator.deltaRotation * animatorTransform.rotation);
+        }
+
+        private void AppendLog(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                return;
+            }
+
+            m_CueLogs.Add(new PreviewLogEntry(m_NextLogId++, message));
+            m_LogVersion++;
+        }
+
+        private static string FormatTemporaryStateSuffix(bool isTemporaryState)
+        {
+            return isTemporaryState ? " (temp)" : string.Empty;
+        }
+
+        private static XAnimationAutoTransitionConfig FindAutoTransition(XAnimationAsset asset, string preStateKey)
+        {
+            XAnimationAutoTransitionConfig[] transitions = asset?.autoTransitions ?? Array.Empty<XAnimationAutoTransitionConfig>();
+            for (int i = 0; i < transitions.Length; i++)
+            {
+                XAnimationAutoTransitionConfig transition = transitions[i];
+                if (transition != null && string.Equals(transition.preStateKey, preStateKey, StringComparison.Ordinal))
+                {
+                    return transition;
+                }
+            }
+
+            return null;
+        }
+
+        private XAnimationDefaultTransitionConfig GetDefaultTransitionConfig(int transitionIndex)
+        {
+            EnsureLoaded();
+            XAnimationDefaultTransitionConfig[] transitions = m_CompiledAsset.Asset.defaultTransitions ?? Array.Empty<XAnimationDefaultTransitionConfig>();
+            if (transitionIndex < 0 || transitionIndex >= transitions.Length || transitions[transitionIndex] == null)
+            {
+                throw new XAnimationException($"XAnimation default transition index '{transitionIndex}' does not exist.");
+            }
+
+            return transitions[transitionIndex];
+        }
+
+        private XAnimationTransitionPairConfig GetDefaultTransitionPairConfig(int transitionIndex, int pairIndex)
+        {
+            XAnimationDefaultTransitionConfig transition = GetDefaultTransitionConfig(transitionIndex);
+            XAnimationTransitionPairConfig[] pairs = transition.pairs ?? Array.Empty<XAnimationTransitionPairConfig>();
+            if (pairIndex < 0 || pairIndex >= pairs.Length || pairs[pairIndex] == null)
+            {
+                throw new XAnimationException($"XAnimation default transition pair index '{pairIndex}' does not exist.");
+            }
+
+            return pairs[pairIndex];
+        }
+
+        private XAnimationTransitionPairConfig CreateDefaultTransitionPair(int transitionIndex)
+        {
+            IReadOnlyList<XAnimationCompiledState> states = m_CompiledAsset.States;
+            if (states.Count < 2)
+            {
+                throw new XAnimationException("XAnimation default transition requires at least two states.");
+            }
+
+            HashSet<string> occupiedPairs = CollectDefaultTransitionPairKeys();
+            XAnimationDefaultTransitionConfig[] transitions = m_CompiledAsset.Asset.defaultTransitions ?? Array.Empty<XAnimationDefaultTransitionConfig>();
+            if (transitionIndex >= 0 && transitionIndex < transitions.Length)
+            {
+                XAnimationTransitionPairConfig[] existingPairs = transitions[transitionIndex]?.pairs ?? Array.Empty<XAnimationTransitionPairConfig>();
+                for (int i = 0; i < existingPairs.Length; i++)
+                {
+                    XAnimationTransitionPairConfig pair = existingPairs[i];
+                    if (pair != null)
+                    {
+                        occupiedPairs.Add(XAnimationCompiledAsset.BuildTransitionPairKey(pair.preStateKey, pair.nextStateKey));
+                    }
+                }
+            }
+
+            for (int preIndex = 0; preIndex < states.Count; preIndex++)
+            {
+                for (int nextIndex = 0; nextIndex < states.Count; nextIndex++)
+                {
+                    if (preIndex == nextIndex)
+                    {
+                        continue;
+                    }
+
+                    string preStateKey = states[preIndex].Key;
+                    string nextStateKey = states[nextIndex].Key;
+                    string pairKey = XAnimationCompiledAsset.BuildTransitionPairKey(preStateKey, nextStateKey);
+                    if (!occupiedPairs.Contains(pairKey))
+                    {
+                        return new XAnimationTransitionPairConfig
+                        {
+                            preStateKey = preStateKey,
+                            nextStateKey = nextStateKey,
+                        };
+                    }
+                }
+            }
+
+            throw new XAnimationException("所有可用的 Default Transition state pair 都已经配置。");
+        }
+
+        private void ValidateDefaultTransitionPairChange(int transitionIndex, int pairIndex, string preStateKey, string nextStateKey)
+        {
+            if (string.IsNullOrWhiteSpace(preStateKey))
+            {
+                throw new XAnimationException("XAnimation default transition preStateKey cannot be empty.");
+            }
+
+            if (string.IsNullOrWhiteSpace(nextStateKey))
+            {
+                throw new XAnimationException("XAnimation default transition nextStateKey cannot be empty.");
+            }
+
+            if (string.Equals(preStateKey, nextStateKey, StringComparison.Ordinal))
+            {
+                throw new XAnimationException($"XAnimation default transition cannot transition state '{preStateKey}' to itself.");
+            }
+
+            m_CompiledAsset.GetState(preStateKey);
+            m_CompiledAsset.GetState(nextStateKey);
+            XAnimationDefaultTransitionConfig[] transitions = m_CompiledAsset.Asset.defaultTransitions ?? Array.Empty<XAnimationDefaultTransitionConfig>();
+            for (int i = 0; i < transitions.Length; i++)
+            {
+                XAnimationTransitionPairConfig[] pairs = transitions[i]?.pairs ?? Array.Empty<XAnimationTransitionPairConfig>();
+                for (int j = 0; j < pairs.Length; j++)
+                {
+                    if (i == transitionIndex && j == pairIndex)
+                    {
+                        continue;
+                    }
+
+                    XAnimationTransitionPairConfig pair = pairs[j];
+                    if (pair != null &&
+                        string.Equals(pair.preStateKey, preStateKey, StringComparison.Ordinal) &&
+                        string.Equals(pair.nextStateKey, nextStateKey, StringComparison.Ordinal))
+                    {
+                        throw new XAnimationException($"XAnimation default transition pair '{preStateKey}' -> '{nextStateKey}' is duplicated.");
+                    }
+                }
+            }
+        }
+
+        private HashSet<string> CollectDefaultTransitionPairKeys()
+        {
+            HashSet<string> pairKeys = new(StringComparer.Ordinal);
+            XAnimationDefaultTransitionConfig[] transitions = m_CompiledAsset.Asset.defaultTransitions ?? Array.Empty<XAnimationDefaultTransitionConfig>();
+            for (int i = 0; i < transitions.Length; i++)
+            {
+                XAnimationTransitionPairConfig[] pairs = transitions[i]?.pairs ?? Array.Empty<XAnimationTransitionPairConfig>();
+                for (int pairIndex = 0; pairIndex < pairs.Length; pairIndex++)
+                {
+                    XAnimationTransitionPairConfig pair = pairs[pairIndex];
+                    if (pair != null &&
+                        !string.IsNullOrWhiteSpace(pair.preStateKey) &&
+                        !string.IsNullOrWhiteSpace(pair.nextStateKey))
+                    {
+                        pairKeys.Add(XAnimationCompiledAsset.BuildTransitionPairKey(pair.preStateKey, pair.nextStateKey));
+                    }
+                }
+            }
+
+            return pairKeys;
+        }
+
+        private string CreateUniqueDefaultTransitionName(string prefix)
+        {
+            HashSet<string> names = new(StringComparer.Ordinal);
+            XAnimationDefaultTransitionConfig[] transitions = m_CompiledAsset.Asset.defaultTransitions ?? Array.Empty<XAnimationDefaultTransitionConfig>();
+            for (int i = 0; i < transitions.Length; i++)
+            {
+                XAnimationDefaultTransitionConfig transition = transitions[i];
+                if (transition != null && !string.IsNullOrWhiteSpace(transition.editorName))
+                {
+                    names.Add(transition.editorName);
+                }
+            }
+
+            string candidate = prefix;
+            int suffix = 1;
+            while (names.Contains(candidate))
+            {
+                candidate = $"{prefix} {suffix++}";
+            }
+
+            return candidate;
+        }
+
+        private string ResolveAutoTransitionPreStateKey(string preferredPreStateKey)
+        {
+            if (!string.IsNullOrWhiteSpace(preferredPreStateKey) &&
+                m_CompiledAsset.TryGetStateIndex(preferredPreStateKey, out int preferredStateIndex) &&
+                !m_CompiledAsset.States[preferredStateIndex].Config.loop &&
+                FindAutoTransition(m_CompiledAsset.Asset, preferredPreStateKey) == null)
+            {
+                return preferredPreStateKey.Trim();
+            }
+
+            IReadOnlyList<XAnimationCompiledState> states = m_CompiledAsset.States;
+            for (int i = 0; i < states.Count; i++)
+            {
+                string stateKey = states[i].Key;
+                if (!states[i].Config.loop &&
+                    FindAutoTransition(m_CompiledAsset.Asset, stateKey) == null)
+                {
+                    return stateKey;
+                }
+            }
+
+            throw new XAnimationException("所有可用的非循环 state 都已经配置了 Auto Transition。");
+        }
+
+        private static XAnimationAutoTransitionConfig GetOrCreateAutoTransition(XAnimationAsset asset, string preStateKey)
+        {
+            XAnimationAutoTransitionConfig transition = FindAutoTransition(asset, preStateKey);
+            if (transition != null)
+            {
+                return transition;
+            }
+
+            List<XAnimationAutoTransitionConfig> transitions = new(asset?.autoTransitions ?? Array.Empty<XAnimationAutoTransitionConfig>())
+            {
+                new XAnimationAutoTransitionConfig
+                {
+                    preStateKey = preStateKey,
+                    nextStateKey = string.Empty,
+                    exitTime = 1f,
+                    transitionDuration = 0f,
+                    enterTime = 0f,
+                }
+            };
+
+            transition = transitions[transitions.Count - 1];
+            asset.autoTransitions = transitions.ToArray();
+            return transition;
+        }
+
+        private static void RenameAutoTransitionReferences(XAnimationAsset asset, string oldKey, string newKey)
+        {
+            XAnimationAutoTransitionConfig[] transitions = asset?.autoTransitions ?? Array.Empty<XAnimationAutoTransitionConfig>();
+            for (int i = 0; i < transitions.Length; i++)
+            {
+                XAnimationAutoTransitionConfig transition = transitions[i];
+                if (transition == null)
+                {
+                    continue;
+                }
+
+                if (string.Equals(transition.preStateKey, oldKey, StringComparison.Ordinal))
+                {
+                    transition.preStateKey = newKey;
+                }
+
+                if (string.Equals(transition.nextStateKey, oldKey, StringComparison.Ordinal))
+                {
+                    transition.nextStateKey = newKey;
+                }
+            }
+        }
+
+        private static void RenameDefaultTransitionReferences(XAnimationAsset asset, string oldKey, string newKey)
+        {
+            XAnimationDefaultTransitionConfig[] transitions = asset?.defaultTransitions ?? Array.Empty<XAnimationDefaultTransitionConfig>();
+            for (int i = 0; i < transitions.Length; i++)
+            {
+                XAnimationTransitionPairConfig[] pairs = transitions[i]?.pairs ?? Array.Empty<XAnimationTransitionPairConfig>();
+                for (int pairIndex = 0; pairIndex < pairs.Length; pairIndex++)
+                {
+                    XAnimationTransitionPairConfig pair = pairs[pairIndex];
+                    if (pair == null)
+                    {
+                        continue;
+                    }
+
+                    if (string.Equals(pair.preStateKey, oldKey, StringComparison.Ordinal))
+                    {
+                        pair.preStateKey = newKey;
+                    }
+
+                    if (string.Equals(pair.nextStateKey, oldKey, StringComparison.Ordinal))
+                    {
+                        pair.nextStateKey = newKey;
+                    }
+                }
+            }
+        }
+
+        private static void RenameStateGateReferences(XAnimationAsset asset, string oldKey, string newKey)
+        {
+            XAnimationStateConfig[] states = asset?.states ?? Array.Empty<XAnimationStateConfig>();
+            for (int i = 0; i < states.Length; i++)
+            {
+                XAnimationStateConfig state = states[i];
+                if (state == null)
+                {
+                    continue;
+                }
+
+                RenameStateKeyArray(state.allowedNextStateKeys, oldKey, newKey);
+                RenameStateKeyArray(state.allowedPreviousStateKeys, oldKey, newKey);
+            }
+        }
+
+        private static void RenameStateKeyArray(string[] values, string oldKey, string newKey)
+        {
+            if (values == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < values.Length; i++)
+            {
+                if (string.Equals(values[i], oldKey, StringComparison.Ordinal))
+                {
+                    values[i] = newKey;
+                }
+            }
+        }
+
+        private static void ClearAutoTransitionReferences(XAnimationAsset asset, string deletedStateKey)
+        {
+            XAnimationAutoTransitionConfig[] transitions = asset?.autoTransitions ?? Array.Empty<XAnimationAutoTransitionConfig>();
+            if (transitions.Length == 0)
+            {
+                return;
+            }
+
+            List<XAnimationAutoTransitionConfig> remaining = new(transitions.Length);
+            for (int i = 0; i < transitions.Length; i++)
+            {
+                XAnimationAutoTransitionConfig transition = transitions[i];
+                if (transition == null)
+                {
+                    continue;
+                }
+
+                if (string.Equals(transition.preStateKey, deletedStateKey, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (string.Equals(transition.nextStateKey, deletedStateKey, StringComparison.Ordinal))
+                {
+                    transition.nextStateKey = string.Empty;
+                    transition.exitTime = 1f;
+                    transition.transitionDuration = 0f;
+                    transition.enterTime = 0f;
+                }
+
+                remaining.Add(transition);
+            }
+
+            asset.autoTransitions = remaining.ToArray();
+        }
+
+        private static void ClearDefaultTransitionReferences(XAnimationAsset asset, string deletedStateKey)
+        {
+            XAnimationDefaultTransitionConfig[] transitions = asset?.defaultTransitions ?? Array.Empty<XAnimationDefaultTransitionConfig>();
+            if (transitions.Length == 0)
+            {
+                return;
+            }
+
+            List<XAnimationDefaultTransitionConfig> remainingTransitions = new(transitions.Length);
+            for (int i = 0; i < transitions.Length; i++)
+            {
+                XAnimationDefaultTransitionConfig transition = transitions[i];
+                if (transition == null)
+                {
+                    continue;
+                }
+
+                XAnimationTransitionPairConfig[] pairs = transition.pairs ?? Array.Empty<XAnimationTransitionPairConfig>();
+                List<XAnimationTransitionPairConfig> remainingPairs = new(pairs.Length);
+                for (int pairIndex = 0; pairIndex < pairs.Length; pairIndex++)
+                {
+                    XAnimationTransitionPairConfig pair = pairs[pairIndex];
+                    if (pair == null ||
+                        string.Equals(pair.preStateKey, deletedStateKey, StringComparison.Ordinal) ||
+                        string.Equals(pair.nextStateKey, deletedStateKey, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    remainingPairs.Add(pair);
+                }
+
+                if (remainingPairs.Count == 0)
+                {
+                    continue;
+                }
+
+                transition.pairs = remainingPairs.ToArray();
+                remainingTransitions.Add(transition);
+            }
+
+            asset.defaultTransitions = remainingTransitions.ToArray();
+        }
+
+        private static void ClearStateGateReferences(XAnimationAsset asset, string deletedStateKey)
+        {
+            XAnimationStateConfig[] states = asset?.states ?? Array.Empty<XAnimationStateConfig>();
+            for (int i = 0; i < states.Length; i++)
+            {
+                XAnimationStateConfig state = states[i];
+                if (state == null)
+                {
+                    continue;
+                }
+
+                state.allowedNextStateKeys = RemoveStateKeyFromArray(state.allowedNextStateKeys, deletedStateKey);
+                state.allowedPreviousStateKeys = RemoveStateKeyFromArray(state.allowedPreviousStateKeys, deletedStateKey);
+            }
+        }
+
+        private static string[] RemoveStateKeyFromArray(string[] values, string deletedStateKey)
+        {
+            if (values == null || values.Length == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            List<string> remaining = new(values.Length);
+            for (int i = 0; i < values.Length; i++)
+            {
+                string value = values[i];
+                if (!string.IsNullOrWhiteSpace(value) &&
+                    !string.Equals(value, deletedStateKey, StringComparison.Ordinal))
+                {
+                    remaining.Add(value);
+                }
+            }
+
+            return remaining.Count == 0 ? Array.Empty<string>() : remaining.ToArray();
+        }
+
+    }
+}
+#endif

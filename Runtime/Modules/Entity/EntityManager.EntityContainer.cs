@@ -74,6 +74,11 @@ namespace XFramework.Entity
             public int Count => m_Entities.Count;
 
             /// <summary>
+            /// 模板
+            /// </summary>
+            public GameObject Template => m_Template;
+
+            /// <summary>
             /// 实体实例化及初始化
             /// </summary>
             /// <param name="pos">位置</param>

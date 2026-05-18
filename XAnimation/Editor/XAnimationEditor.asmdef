@@ -1,0 +1,18 @@
+{
+    "name": "XAnimationEditor",
+    "rootNamespace": "",
+    "references": [
+        "GUID:c91bc7dd6fe84d7f8a51c7185c14d1ef"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

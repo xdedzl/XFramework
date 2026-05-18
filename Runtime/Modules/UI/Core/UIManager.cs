@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UIElements;
 using XFramework.Entity;
 using XFramework.Resource;
 
@@ -167,7 +169,8 @@ namespace XFramework.UI
             {
                 throw new XFrameworkException($"[UI] The panel info you want is not exist, panel name: {uiName}");
             }
-            GameObject panelGo = DefaultPanelLoader(panelInfo.path);
+            Type panelType = m_PanelName2Type[uiName];
+            GameObject panelGo = DefaultPanelLoader(uiName, panelInfo.path, panelType);
             var panel = AddPanel(uiName, panelGo);
             return panel;
         }
@@ -187,6 +190,7 @@ namespace XFramework.UI
             
             var panel = panelGo.GetComponent<PanelBase>();
             var panelType = m_PanelName2Type[uiName];
+            EnsureRuntimeUIToolkitPanel(uiName, panelGo, panelType);
             if (panel == null)
             {
                 panel = (PanelBase)panelGo.AddComponent(panelType);
@@ -234,6 +238,30 @@ namespace XFramework.UI
             return panel;
         }
 
+        private void EnsureRuntimeUIToolkitPanel(string uiName, GameObject panelGo, Type panelType)
+        {
+            var panelInfo = m_PanelName2Info[uiName];
+            if (!string.IsNullOrEmpty(panelInfo.path) || !typeof(UIToolkitPanelBase).IsAssignableFrom(panelType))
+            {
+                return;
+            }
+
+            if (!panelGo.TryGetComponent<UIDocument>(out var uiDocument))
+            {
+                uiDocument = panelGo.AddComponent<UIDocument>();
+            }
+
+            if (uiDocument.panelSettings ==null)
+            {
+                if (XApplication.Setting.defaultUIToolkitPanelSettings == null)
+                {
+                    throw new XFrameworkException($"[UI] The defaultUIToolkitPanelSettings is not set in XFrameworkSetting, please set it or assign a PanelSettings to {uiName} panel");
+                }
+                
+                uiDocument.panelSettings = XApplication.Setting.defaultUIToolkitPanelSettings;
+            }
+        }
+
         /// <summary>
         /// 关闭某个层级的所有面板
         /// </summary>
@@ -274,7 +302,8 @@ namespace XFramework.UI
                     throw new XFrameworkException($"[{type.Name}] PanelInfoAttribute is missing");
                 }
                 
-                if (path2TypeDict.TryGetValue(panelInfo.path, out Type _type))
+                bool hasPanelPath = !string.IsNullOrEmpty(panelInfo.path);
+                if (hasPanelPath && path2TypeDict.TryGetValue(panelInfo.path, out Type _type))
                 {
                     throw new XFrameworkException($"[UI] The panel path is repeat, type1:{_type}, type2: {type}, path: {panelInfo.path}");
                 }
@@ -287,7 +316,10 @@ namespace XFramework.UI
                 m_PanelName2Info.Add(panelInfo.name, panelInfo);
                 m_PanelName2Type.Add(panelInfo.name, type);
                 m_PanelType2Name.Add(type, panelInfo.name);
-                path2TypeDict.Add(panelInfo.path, type);
+                if (hasPanelPath)
+                {
+                    path2TypeDict.Add(panelInfo.path, type);
+                }
             }
         }
 
@@ -301,8 +333,14 @@ namespace XFramework.UI
             OpenPanel(uiName);
         }
 
-        private GameObject DefaultPanelLoader(string path)
+        private GameObject DefaultPanelLoader(string uiName, string path, Type panelType)
         {
+            if (string.IsNullOrEmpty(path) || IsUIToolkitAssetPath(path, panelType))
+            {
+                var runtimePanelGo = new GameObject(uiName, typeof(RectTransform));
+                return runtimePanelGo;
+            }
+
             var res = ResourceManager.Instance.Load<GameObject>(path);
             if(res == null)
             {
@@ -311,6 +349,18 @@ namespace XFramework.UI
 
             var panelGo = GameObject.Instantiate(res); 
             return panelGo;
+        }
+
+        private static bool IsUIToolkitAssetPath(string path, Type panelType)
+        {
+            if (!typeof(UIToolkitPanelBase).IsAssignableFrom(panelType))
+            {
+                return false;
+            }
+
+            string extension = Path.GetExtension(path);
+            return string.Equals(extension, ".uxml", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(extension, ".uss", StringComparison.OrdinalIgnoreCase);
         }
 
         #region Tips

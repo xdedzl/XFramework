@@ -2,11 +2,13 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 using Object = UnityEngine.Object;
+using XFramework.Data;
 
 namespace XFramework.Editor
 {
@@ -19,8 +21,15 @@ namespace XFramework.Editor
 
         [SerializeField] private TextAsset m_SourceAsset;
         [SerializeField] private string m_SourceAssetGuid;
+        [SerializeField] private bool m_IsUnionMode;
+        [SerializeField] private string m_UnionTableTypeName;
+        [SerializeField] private string m_UnionChildTableTypeName;
         private XDataTableEditorModel m_Model;
         private XDataTableEditorValidationResult m_ValidationResult;
+        private List<XUnionDataTableEditorInfo> m_UnionTables;
+        private XUnionDataTableEditorInfo m_CurrentUnionTable;
+        private XUnionDataTableChildInfo m_CurrentUnionChild;
+        private string m_UnionMessage;
 
         private Label m_IssueLabel;
         private Label m_TableSummaryLabel;
@@ -63,12 +72,42 @@ namespace XFramework.Editor
             window.TryLocateByKeyValue(keyValue);
         }
 
+        private static void ShowNewWindow(TextAsset textAsset)
+        {
+            if (textAsset == null)
+            {
+                return;
+            }
+
+            XDataTableEditorWindow window = CreateDockedWindow();
+            window.minSize = new Vector2(1180f, 620f);
+            window.LoadTextAsset(textAsset);
+            window.Show();
+            window.Focus();
+        }
+
+        internal static void ShowUnionDataTableWindow(Type unionTableType)
+        {
+            XDataTableEditorWindow window = FindOpenUnionWindow(unionTableType) ?? CreateDockedWindow();
+            window.minSize = new Vector2(1180f, 620f);
+            window.LoadUnionMode(unionTableType);
+            window.Show();
+            window.Focus();
+        }
+
         private void OnEnable()
         {
-            RestoreSourceAssetReference();
-            if (m_SourceAsset != null && m_Model == null)
+            if (m_IsUnionMode)
             {
-                LoadTextAsset(m_SourceAsset);
+                RestoreUnionMode();
+            }
+            else
+            {
+                RestoreSourceAssetReference();
+                if (m_SourceAsset != null && m_Model == null)
+                {
+                    LoadTextAsset(m_SourceAsset);
+                }
             }
 
             UpdateWindowTitle();
@@ -85,7 +124,7 @@ namespace XFramework.Editor
 
         public void CreateGUI()
         {
-            if (m_Model != null)
+            if (m_Model != null || m_IsUnionMode)
             {
                 BuildUI();
             }
@@ -96,6 +135,18 @@ namespace XFramework.Editor
         }
 
         private void LoadTextAsset(TextAsset textAsset)
+        {
+            m_IsUnionMode = false;
+            m_UnionTableTypeName = string.Empty;
+            m_UnionChildTableTypeName = string.Empty;
+            m_UnionTables = null;
+            m_CurrentUnionTable = null;
+            m_CurrentUnionChild = null;
+            m_UnionMessage = null;
+            LoadTextAssetInternal(textAsset);
+        }
+
+        private void LoadTextAssetInternal(TextAsset textAsset)
         {
             m_SourceAsset = textAsset;
             m_SourceAssetGuid = ResolveAssetGuid(textAsset);
@@ -124,6 +175,100 @@ namespace XFramework.Editor
             }
 
             UpdateWindowTitle();
+        }
+
+        private void LoadUnionMode(Type unionTableType)
+        {
+            m_IsUnionMode = true;
+            m_SourceAsset = null;
+            m_SourceAssetGuid = string.Empty;
+            m_Model = null;
+            m_CellErrors.Clear();
+            m_SortColumnIndex = -1;
+            m_SortAscending = true;
+            m_IsDirty = false;
+            m_UnionTables = DiscoverUnionDataTables();
+            if (unionTableType != null)
+            {
+                m_UnionTableTypeName = unionTableType.AssemblyQualifiedName;
+                m_UnionChildTableTypeName = string.Empty;
+            }
+
+            m_CurrentUnionTable = ResolveUnionTable(m_UnionTableTypeName) ?? m_UnionTables.FirstOrDefault();
+            if (m_CurrentUnionTable != null)
+            {
+                m_UnionTableTypeName = m_CurrentUnionTable.TableType.AssemblyQualifiedName;
+                m_CurrentUnionChild = ResolveUnionChild(m_CurrentUnionTable, m_UnionChildTableTypeName)
+                    ?? m_CurrentUnionTable.Children.FirstOrDefault();
+                LoadCurrentUnionChild();
+            }
+            else
+            {
+                m_CurrentUnionChild = null;
+                m_UnionChildTableTypeName = string.Empty;
+                m_UnionMessage = "未找到 Union DataTable。";
+            }
+
+            if (rootVisualElement.panel != null)
+            {
+                BuildUI();
+            }
+
+            UpdateWindowTitle();
+        }
+
+        private void RestoreUnionMode()
+        {
+            if (m_UnionTables == null)
+            {
+                m_UnionTables = DiscoverUnionDataTables();
+            }
+
+            m_CurrentUnionTable = ResolveUnionTable(m_UnionTableTypeName) ?? m_UnionTables.FirstOrDefault();
+            if (m_CurrentUnionTable == null)
+            {
+                m_Model = null;
+                m_CurrentUnionChild = null;
+                m_UnionMessage = "未找到 Union DataTable。";
+                return;
+            }
+
+            m_UnionTableTypeName = m_CurrentUnionTable.TableType.AssemblyQualifiedName;
+            m_CurrentUnionChild = ResolveUnionChild(m_CurrentUnionTable, m_UnionChildTableTypeName)
+                ?? m_CurrentUnionTable.Children.FirstOrDefault();
+            LoadCurrentUnionChild();
+        }
+
+        private void LoadCurrentUnionChild()
+        {
+            if (m_CurrentUnionChild == null)
+            {
+                m_Model = null;
+                m_SourceAsset = null;
+                m_SourceAssetGuid = string.Empty;
+                m_UnionChildTableTypeName = string.Empty;
+                m_UnionMessage = "当前 Union DataTable 没有子表。";
+                return;
+            }
+
+            m_UnionChildTableTypeName = m_CurrentUnionChild.TableType.AssemblyQualifiedName;
+            if (!string.IsNullOrEmpty(m_CurrentUnionChild.Error))
+            {
+                m_Model = null;
+                m_SourceAsset = null;
+                m_SourceAssetGuid = string.Empty;
+                m_CellErrors.Clear();
+                m_SelectedRowIndex = -1;
+                m_IsDirty = false;
+                m_UnionMessage = m_CurrentUnionChild.Error;
+                return;
+            }
+
+            m_UnionMessage = null;
+            LoadTextAssetInternal(m_CurrentUnionChild.Asset);
+            m_IsUnionMode = true;
+            m_UnionTableTypeName = m_CurrentUnionTable?.TableType.AssemblyQualifiedName ?? string.Empty;
+            m_UnionChildTableTypeName = m_CurrentUnionChild.TableType.AssemblyQualifiedName;
         }
 
         private void RestoreSourceAssetReference()
@@ -185,6 +330,13 @@ namespace XFramework.Editor
 
             if (m_Model == null)
             {
+                if (m_IsUnionMode)
+                {
+                    root.Add(BuildTopPanel());
+                    RefreshStatus();
+                    return;
+                }
+
                 BuildPlaceholder();
                 return;
             }
@@ -224,6 +376,13 @@ namespace XFramework.Editor
             panel.style.paddingRight = 6f;
             panel.style.paddingTop = 6f;
             panel.style.paddingBottom = 6f;
+
+            if (m_IsUnionMode)
+            {
+                VisualElement unionTableRow = BuildUnionTableRow();
+                unionTableRow.style.marginBottom = 6f;
+                panel.Add(unionTableRow);
+            }
 
             VisualElement toolbar = BuildToolbar();
             toolbar.style.marginBottom = 6f;
@@ -266,6 +425,16 @@ namespace XFramework.Editor
                     flexWrap = Wrap.Wrap
                 }
             };
+
+            if (m_Model == null)
+            {
+                if (m_IsUnionMode)
+                {
+                    toolbar.Add(CreateToolbarButton("重载", ReloadFromDisk));
+                }
+
+                return toolbar;
+            }
 
             toolbar.Add(CreateToolbarButton("保存", SaveCurrentAsset));
             toolbar.Add(CreateToolbarButton("重载", ReloadFromDisk));
@@ -319,6 +488,98 @@ namespace XFramework.Editor
             toolbar.Add(m_ReferenceContainer);
 
             return toolbar;
+        }
+
+        private VisualElement BuildUnionTableRow()
+        {
+            VisualElement container = new();
+            container.style.flexDirection = FlexDirection.Row;
+            container.style.alignItems = Align.Center;
+            container.style.flexWrap = Wrap.Wrap;
+            container.style.minHeight = 28f;
+
+            Label titleLabel = new(m_CurrentUnionTable != null ? $"{m_CurrentUnionTable.DisplayName}:" : "Union DataTable:");
+            titleLabel.style.marginRight = 8f;
+            titleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            titleLabel.style.flexShrink = 0f;
+            container.Add(titleLabel);
+
+            if (m_CurrentUnionTable == null || m_CurrentUnionTable.Children.Count == 0)
+            {
+                Label emptyLabel = new(string.IsNullOrEmpty(m_UnionMessage) ? "未找到可切换的子表。" : m_UnionMessage);
+                emptyLabel.style.color = new Color(0.96f, 0.55f, 0.55f);
+                emptyLabel.style.whiteSpace = WhiteSpace.Normal;
+                container.Add(emptyLabel);
+                return container;
+            }
+
+            foreach (XUnionDataTableChildInfo child in m_CurrentUnionTable.Children)
+            {
+                Button button = CreateUnionChildButton(child);
+                container.Add(button);
+            }
+
+            return container;
+        }
+
+        private Button CreateUnionChildButton(XUnionDataTableChildInfo child)
+        {
+            bool selected = child == m_CurrentUnionChild;
+            Button button = new(() => SelectUnionChild(child))
+            {
+                text = child.DisplayName
+            };
+            button.tooltip = string.IsNullOrEmpty(child.Error)
+                ? $"切换到 {child.TableType.Name}"
+                : child.Error;
+            button.style.marginRight = 6f;
+            button.style.marginBottom = 4f;
+            button.style.height = 24f;
+            button.style.paddingLeft = 10f;
+            button.style.paddingRight = 10f;
+            if (selected)
+            {
+                button.style.unityFontStyleAndWeight = FontStyle.Bold;
+                button.style.backgroundColor = new Color(0.18f, 0.34f, 0.48f, 0.72f);
+            }
+
+            if (!string.IsNullOrEmpty(child.Error))
+            {
+                button.style.color = new Color(1f, 0.68f, 0.68f);
+            }
+
+            button.RegisterCallback<ContextClickEvent>(evt =>
+            {
+                ShowUnionChildContextMenu(child);
+                evt.StopPropagation();
+            });
+            button.RegisterCallback<MouseUpEvent>(evt =>
+            {
+                if (evt.button != 1)
+                {
+                    return;
+                }
+
+                ShowUnionChildContextMenu(child);
+                evt.StopPropagation();
+            });
+
+            return button;
+        }
+
+        private static void ShowUnionChildContextMenu(XUnionDataTableChildInfo child)
+        {
+            GenericMenu menu = new();
+            if (child?.Asset != null)
+            {
+                menu.AddItem(new GUIContent("在新窗口里打开"), false, () => ShowNewWindow(child.Asset));
+            }
+            else
+            {
+                menu.AddDisabledItem(new GUIContent("在新窗口里打开"));
+            }
+
+            menu.ShowAsContext();
         }
 
         private VisualElement BuildReferencePanel()
@@ -861,6 +1122,22 @@ namespace XFramework.Editor
         {
             if (m_Model == null)
             {
+                if (m_IsUnionMode)
+                {
+                    if (m_TableSummaryLabel != null)
+                    {
+                        m_TableSummaryLabel.text = m_CurrentUnionTable != null
+                            ? $"Union: {m_CurrentUnionTable.DisplayName}"
+                            : "Union: 无";
+                    }
+
+                    if (m_IssueLabel != null)
+                    {
+                        m_IssueLabel.text = string.IsNullOrEmpty(m_UnionMessage) ? "请选择可用的子表。" : m_UnionMessage;
+                        m_IssueLabel.style.color = new Color(0.96f, 0.55f, 0.55f);
+                    }
+                }
+
                 return;
             }
 
@@ -876,7 +1153,10 @@ namespace XFramework.Editor
             string sortText = m_SortColumnIndex >= 0
                 ? $" | 排序: {GetColumnTitle(m_Model.Columns[m_SortColumnIndex])} {(m_SortAscending ? "↑" : "↓")}"
                 : string.Empty;
-            m_TableSummaryLabel.text = $"行数: {m_Model.Rows.Count}{sortText}";
+            string unionText = m_IsUnionMode && m_CurrentUnionTable != null
+                ? $"Union: {m_CurrentUnionTable.DisplayName} | 子表: {m_Model.TableType.Name} | "
+                : string.Empty;
+            m_TableSummaryLabel.text = $"{unionText}行数: {m_Model.Rows.Count}{sortText}";
         }
 
         private void RebuildHeader()
@@ -1478,6 +1758,12 @@ namespace XFramework.Editor
 
         private void SaveCurrentAsset()
         {
+            if (m_Model == null)
+            {
+                ShowNotification(new GUIContent(string.IsNullOrEmpty(m_UnionMessage) ? "当前没有可保存的数据表。" : m_UnionMessage));
+                return;
+            }
+
             RefreshValidation();
             if (m_ValidationResult.HasBlockingIssues)
             {
@@ -1509,16 +1795,39 @@ namespace XFramework.Editor
 
         private void ReloadFromDisk()
         {
+            if (m_Model == null)
+            {
+                if (m_IsUnionMode)
+                {
+                    ReloadUnionFromDisk();
+                }
+
+                return;
+            }
+
             if (m_IsDirty && !EditorUtility.DisplayDialog("重载数据", "当前有未保存修改，确认从磁盘重载？", "重载", "取消"))
             {
                 return;
             }
 
-            LoadTextAsset(m_SourceAsset);
+            if (m_IsUnionMode)
+            {
+                ReloadUnionFromDisk();
+            }
+            else
+            {
+                LoadTextAsset(m_SourceAsset);
+            }
         }
 
         private void AddRow()
         {
+            if (m_Model == null)
+            {
+                ShowNotification(new GUIContent(string.IsNullOrEmpty(m_UnionMessage) ? "当前没有可编辑的数据表。" : m_UnionMessage));
+                return;
+            }
+
             m_Model.AddRow();
             m_SelectedRowIndex = m_Model.Rows.Count - 1;
             MarkDirty();
@@ -1739,7 +2048,18 @@ namespace XFramework.Editor
 
         private void UpdateWindowTitle()
         {
-            string title = m_Model == null ? "XDataTable" : $"{m_Model.TableType.Name}{(m_IsDirty ? "*" : string.Empty)}";
+            string title;
+            if (m_Model != null)
+            {
+                title = m_IsUnionMode && m_CurrentUnionTable != null
+                    ? $"{m_CurrentUnionTable.TableType.Name}/{m_Model.TableType.Name}{(m_IsDirty ? "*" : string.Empty)}"
+                    : $"{m_Model.TableType.Name}{(m_IsDirty ? "*" : string.Empty)}";
+            }
+            else
+            {
+                title = m_IsUnionMode ? "Union XDataTable" : "XDataTable";
+            }
+
             titleContent = new GUIContent(title);
         }
 
@@ -1822,6 +2142,161 @@ namespace XFramework.Editor
             return AssetDatabase.LoadAssetAtPath(assetPath, column.AssetType ?? typeof(Object));
         }
 
+        private void SelectUnionChild(XUnionDataTableChildInfo child)
+        {
+            if (child == null || child == m_CurrentUnionChild)
+            {
+                BuildUI();
+                return;
+            }
+
+            if (!ConfirmDiscardOrSaveDirtyChanges())
+            {
+                BuildUI();
+                return;
+            }
+
+            m_CurrentUnionChild = child;
+            LoadCurrentUnionChild();
+            BuildUI();
+        }
+
+        private void ReloadUnionFromDisk()
+        {
+            if (!ConfirmDiscardOrSaveDirtyChanges())
+            {
+                return;
+            }
+
+            LoadUnionMode(null);
+        }
+
+        private bool ConfirmDiscardOrSaveDirtyChanges()
+        {
+            if (!m_IsDirty)
+            {
+                return true;
+            }
+
+            int option = EditorUtility.DisplayDialogComplex(
+                "切换 Union DataTable",
+                "当前数据表有未保存修改，切换前要如何处理？",
+                "保存",
+                "取消",
+                "丢弃");
+
+            switch (option)
+            {
+                case 0:
+                    SaveCurrentAsset();
+                    return !m_IsDirty;
+                case 2:
+                    m_IsDirty = false;
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private XUnionDataTableEditorInfo ResolveUnionTable(string typeName)
+        {
+            if (string.IsNullOrEmpty(typeName) || m_UnionTables == null)
+            {
+                return null;
+            }
+
+            return m_UnionTables.FirstOrDefault(table =>
+                string.Equals(table.TableType.AssemblyQualifiedName, typeName, StringComparison.Ordinal)
+                || string.Equals(table.TableType.FullName, typeName, StringComparison.Ordinal));
+        }
+
+        private static XUnionDataTableChildInfo ResolveUnionChild(XUnionDataTableEditorInfo unionTable, string typeName)
+        {
+            if (unionTable == null || string.IsNullOrEmpty(typeName))
+            {
+                return null;
+            }
+
+            return unionTable.Children.FirstOrDefault(child =>
+                string.Equals(child.TableType.AssemblyQualifiedName, typeName, StringComparison.Ordinal)
+                || string.Equals(child.TableType.FullName, typeName, StringComparison.Ordinal));
+        }
+
+        private static List<XUnionDataTableEditorInfo> DiscoverUnionDataTables()
+        {
+            return Utility.Reflection.GetTypesInAllAssemblies(IsConcreteUnionDataTable)
+                .Select(BuildUnionDataTableInfo)
+                .OrderBy(table => table.DisplayName)
+                .ToList();
+        }
+
+        private static bool IsConcreteUnionDataTable(Type type)
+        {
+            return type != null
+                && type.IsClass
+                && !type.IsAbstract
+                && type.GetCustomAttribute<UnionDataTablesAttribute>(false) != null
+                && IsUnionDataTableType(type);
+        }
+
+        private static bool IsUnionDataTableType(Type type)
+        {
+            return Utility.Reflection.IsSubclassOfGeneric(type, typeof(XUnionDataTable<,>))
+                || Utility.Reflection.IsSubclassOfGeneric(type, typeof(XUnionDataTableHasKey<,,>))
+                || Utility.Reflection.IsSubclassOfGeneric(type, typeof(XUnionDataTableHasAlias<,,>));
+        }
+
+        private static XUnionDataTableEditorInfo BuildUnionDataTableInfo(Type unionTableType)
+        {
+            UnionDataTablesAttribute attribute = unionTableType.GetCustomAttribute<UnionDataTablesAttribute>(false);
+            var children = new List<XUnionDataTableChildInfo>();
+            if (attribute?.tableTypes != null)
+            {
+                foreach (Type childTableType in attribute.tableTypes)
+                {
+                    children.Add(BuildUnionChildInfo(unionTableType, childTableType));
+                }
+            }
+
+            return new XUnionDataTableEditorInfo(unionTableType, children);
+        }
+
+        private static XUnionDataTableChildInfo BuildUnionChildInfo(Type unionTableType, Type childTableType)
+        {
+            if (childTableType == null)
+            {
+                return new XUnionDataTableChildInfo(null, null, "空子表类型");
+            }
+
+            if (!typeof(XDataTable).IsAssignableFrom(childTableType))
+            {
+                return new XUnionDataTableChildInfo(childTableType, null,
+                    $"{childTableType.FullName} 不是 XDataTable。");
+            }
+
+            if (childTableType.GetCustomAttribute<TargetDataType>(false)?.targetType == null)
+            {
+                return new XUnionDataTableChildInfo(childTableType, null,
+                    $"{childTableType.FullName} 缺少 TargetDataType。");
+            }
+
+            DataResourcePath pathAttribute = childTableType.GetCustomAttribute<DataResourcePath>(false);
+            if (pathAttribute == null || string.IsNullOrEmpty(pathAttribute.path))
+            {
+                return new XUnionDataTableChildInfo(childTableType, null,
+                    $"{childTableType.FullName} 缺少 DataResourcePath。");
+            }
+
+            TextAsset asset = AssetDatabase.LoadAssetAtPath<TextAsset>(pathAttribute.path);
+            if (asset == null)
+            {
+                return new XUnionDataTableChildInfo(childTableType, null,
+                    $"{unionTableType.Name} 的子表 {childTableType.Name} 找不到资源: {pathAttribute.path}");
+            }
+
+            return new XUnionDataTableChildInfo(childTableType, asset, null);
+        }
+
         private static XDataTableEditorWindow FindOpenWindow(TextAsset textAsset)
         {
             string assetPath = textAsset != null ? AssetDatabase.GetAssetPath(textAsset) : string.Empty;
@@ -1847,6 +2322,32 @@ namespace XFramework.Editor
             return null;
         }
 
+        private static XDataTableEditorWindow FindOpenUnionWindow(Type unionTableType)
+        {
+            if (unionTableType == null)
+            {
+                return null;
+            }
+
+            string typeName = unionTableType.AssemblyQualifiedName;
+            XDataTableEditorWindow[] windows = Resources.FindObjectsOfTypeAll<XDataTableEditorWindow>();
+            foreach (XDataTableEditorWindow window in windows)
+            {
+                if (window == null || !window.m_IsUnionMode)
+                {
+                    continue;
+                }
+
+                if (string.Equals(window.m_UnionTableTypeName, typeName, StringComparison.Ordinal)
+                    || string.Equals(window.m_CurrentUnionTable?.TableType.AssemblyQualifiedName, typeName, StringComparison.Ordinal))
+                {
+                    return window;
+                }
+            }
+
+            return null;
+        }
+
         private static XDataTableEditorWindow CreateDockedWindow()
         {
             Type gameViewType = typeof(UnityEditor.Editor).Assembly.GetType("UnityEditor.GameView");
@@ -1862,5 +2363,35 @@ namespace XFramework.Editor
         internal int SelectedRowIndex => m_SelectedRowIndex;
         internal bool HasSelectedRow => HasSelection();
         internal string SourceAssetPath => m_SourceAsset != null ? AssetDatabase.GetAssetPath(m_SourceAsset) : string.Empty;
+
+        private sealed class XUnionDataTableEditorInfo
+        {
+            public XUnionDataTableEditorInfo(Type tableType, List<XUnionDataTableChildInfo> children)
+            {
+                TableType = tableType;
+                Children = children ?? new List<XUnionDataTableChildInfo>();
+            }
+
+            public Type TableType { get; }
+            public List<XUnionDataTableChildInfo> Children { get; }
+            public string DisplayName => TableType?.Name ?? "Missing Union";
+        }
+
+        private sealed class XUnionDataTableChildInfo
+        {
+            public XUnionDataTableChildInfo(Type tableType, TextAsset asset, string error)
+            {
+                TableType = tableType;
+                Asset = asset;
+                Error = error;
+            }
+
+            public Type TableType { get; }
+            public TextAsset Asset { get; }
+            public string Error { get; }
+            public string DisplayName => TableType == null
+                ? "Missing Child"
+                : string.IsNullOrEmpty(Error) ? TableType.Name : $"{TableType.Name} (!)";
+        }
     }
 }

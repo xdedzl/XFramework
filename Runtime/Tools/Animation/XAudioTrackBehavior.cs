@@ -11,7 +11,6 @@ namespace XFramework.Animation
     public struct XAudioTrackKeyframe
     {
         public float time;
-        [AssetPath]
         public string clip;
     }
     

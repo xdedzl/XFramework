@@ -17,6 +17,11 @@ namespace XFramework.Entity
         /// </summary>
         public string ContainerName { get; internal set; }
 
+        /// <summary>
+        /// 实体别名
+        /// </summary>
+        public string Alias { get; internal set; }
+
         public Vector3 position
         {
             get => transform.position;

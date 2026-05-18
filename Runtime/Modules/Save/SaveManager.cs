@@ -105,6 +105,7 @@ namespace XFramework.Save
             foreach (var dbType in registeredDbTypes)
             {
                 var db = (SaveDatabase)Activator.CreateInstance(dbType);
+                db.OnAfterCreate();
                 profile.SetDatabase(dbType, db);
             }
 
@@ -173,6 +174,7 @@ namespace XFramework.Save
                 {
                     // 文件不存在，创建默认实例
                     db = (SaveDatabase)Activator.CreateInstance(dbType);
+                    db.OnAfterCreate();
                 }
 
                 profile.SetDatabase(dbType, db);
