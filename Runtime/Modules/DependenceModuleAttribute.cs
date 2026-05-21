@@ -2,6 +2,7 @@
 
 namespace XFramework
 {
+    [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = true)]
     public class DependenceModuleAttribute : Attribute
     {
         public Type moduleType;

@@ -253,20 +253,31 @@ namespace XFramework.Editor
             foreach (Type tableType in tableTypes)
             {
                 DataResourcePath pathAttribute = tableType.GetCustomAttribute<DataResourcePath>(false);
-                if (pathAttribute == null || string.IsNullOrEmpty(pathAttribute.path))
+                if (pathAttribute == null)
                 {
                     continue;
                 }
 
-                TextAsset asset = AssetDatabase.LoadAssetAtPath<TextAsset>(pathAttribute.path);
-                string detail = asset != null ? pathAttribute.path : $"资源缺失: {pathAttribute.path}";
-                yield return new XDataTableBrowserItem(
-                    XDataTableBrowserItemKind.DataTable,
-                    "普通",
-                    tableType.Name,
-                    detail,
-                    tableType,
-                    asset);
+                string[] paths = pathAttribute.GetPaths();
+                for (int i = 0; i < paths.Length; i++)
+                {
+                    string path = paths[i];
+                    if (string.IsNullOrEmpty(path))
+                    {
+                        continue;
+                    }
+
+                    TextAsset asset = AssetDatabase.LoadAssetAtPath<TextAsset>(path);
+                    string displayName = paths.Length > 1 ? $"{tableType.Name} [{i + 1}]" : tableType.Name;
+                    string detail = asset != null ? path : $"资源缺失: {path}";
+                    yield return new XDataTableBrowserItem(
+                        XDataTableBrowserItemKind.DataTable,
+                        "普通",
+                        displayName,
+                        detail,
+                        tableType,
+                        asset);
+                }
             }
         }
 

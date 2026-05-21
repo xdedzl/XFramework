@@ -342,11 +342,14 @@ namespace XFramework.Editor
             if (SupportsKey && m_KeyProperty != null)
             {
                 ValidateDuplicates(m_KeyProperty, Columns.FirstOrDefault(column => column.IsKey), "重复 Key", issues);
+                ValidateCrossAssetDuplicates(m_KeyProperty, Columns.FirstOrDefault(column => column.IsKey), "重复 Key", issues);
             }
 
             if (SupportsAlias && m_AliasProperty != null)
             {
                 ValidateDuplicates(m_AliasProperty, Columns.FirstOrDefault(column => column.IsAlias), "重复 Alias", issues,
+                    value => !string.IsNullOrWhiteSpace(value as string));
+                ValidateCrossAssetDuplicates(m_AliasProperty, Columns.FirstOrDefault(column => column.IsAlias), "重复 Alias", issues,
                     value => !string.IsNullOrWhiteSpace(value as string));
             }
 
@@ -418,9 +421,17 @@ namespace XFramework.Editor
             foreach (Type type in tableTypes)
             {
                 DataResourcePath pathAttribute = type.GetCustomAttribute<DataResourcePath>(false);
-                if (pathAttribute != null && string.Equals(pathAttribute.path, assetPath, StringComparison.OrdinalIgnoreCase))
+                if (pathAttribute == null)
                 {
-                    return type;
+                    continue;
+                }
+
+                foreach (string path in pathAttribute.GetPaths())
+                {
+                    if (string.Equals(path, assetPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return type;
+                    }
                 }
             }
 
@@ -832,6 +843,123 @@ namespace XFramework.Editor
                 {
                     visited.Add(value, rowIndex);
                 }
+            }
+        }
+
+        private void ValidateCrossAssetDuplicates(
+            PropertyInfo property,
+            XDataTableEditorColumn column,
+            string message,
+            ICollection<XDataTableEditorIssue> issues,
+            Func<object, bool> predicate = null)
+        {
+            if (property == null || column == null || SourceAsset == null)
+            {
+                return;
+            }
+
+            string sourceAssetPath = AssetDatabase.GetAssetPath(SourceAsset);
+            if (string.IsNullOrEmpty(sourceAssetPath))
+            {
+                return;
+            }
+
+            var sourceRowsByValue = new Dictionary<object, List<int>>();
+            for (int rowIndex = 0; rowIndex < Rows.Count; rowIndex++)
+            {
+                object value = property.GetValue(Rows[rowIndex]);
+                if (value == null || predicate != null && !predicate(value))
+                {
+                    continue;
+                }
+
+                if (!sourceRowsByValue.TryGetValue(value, out List<int> rowIndexes))
+                {
+                    rowIndexes = new List<int>();
+                    sourceRowsByValue.Add(value, rowIndexes);
+                }
+
+                rowIndexes.Add(rowIndex);
+            }
+
+            if (sourceRowsByValue.Count == 0)
+            {
+                return;
+            }
+
+            foreach (string path in ResolveDataResourcePaths(TableType))
+            {
+                if (string.IsNullOrEmpty(path) || string.Equals(path, sourceAssetPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                TextAsset textAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(path);
+                if (textAsset == null || !TryLoadRows(TableType, textAsset, out IReadOnlyList<object> otherRows))
+                {
+                    continue;
+                }
+
+                for (int otherRowIndex = 0; otherRowIndex < otherRows.Count; otherRowIndex++)
+                {
+                    object otherValue = property.GetValue(otherRows[otherRowIndex]);
+                    if (otherValue == null || predicate != null && !predicate(otherValue))
+                    {
+                        continue;
+                    }
+
+                    if (!sourceRowsByValue.TryGetValue(otherValue, out List<int> rowIndexes))
+                    {
+                        continue;
+                    }
+
+                    string assetName = System.IO.Path.GetFileName(path);
+                    for (int i = 0; i < rowIndexes.Count; i++)
+                    {
+                        int rowIndex = rowIndexes[i];
+                        string issueMessage = $"{message}: {otherValue}，与 {assetName} 第 {otherRowIndex + 1} 行重复";
+                        if (!issues.Any(issue => issue.RowIndex == rowIndex && issue.Column == column && issue.Message == issueMessage))
+                        {
+                            issues.Add(new XDataTableEditorIssue(rowIndex, column, issueMessage, true));
+                        }
+                    }
+                }
+            }
+        }
+
+        private static string[] ResolveDataResourcePaths(Type tableType)
+        {
+            DataResourcePath pathAttribute = tableType.GetCustomAttribute<DataResourcePath>(false);
+            return pathAttribute?.GetPaths() ?? Array.Empty<string>();
+        }
+
+        private static bool TryLoadRows(Type tableType, TextAsset textAsset, out IReadOnlyList<object> rows)
+        {
+            rows = null;
+            try
+            {
+                XJson.SetUnityDefaultSetting();
+                XTextAsset tableAsset = textAsset.ToXTextAsset<XTextAsset>(tableType);
+                FieldInfo itemsField = ResolveItemsField(tableType);
+                Array items = itemsField.GetValue(tableAsset) as Array;
+                var loadedRows = new List<object>();
+                if (items != null)
+                {
+                    foreach (object item in items)
+                    {
+                        if (item != null)
+                        {
+                            loadedRows.Add(item);
+                        }
+                    }
+                }
+
+                rows = loadedRows;
+                return true;
+            }
+            catch
+            {
+                return false;
             }
         }
 

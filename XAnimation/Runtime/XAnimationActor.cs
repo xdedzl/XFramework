@@ -47,7 +47,7 @@ namespace XFramework.Animation
 
         private void Awake()
         {
-            if (m_InitializeOnAwake)
+            if (m_InitializeOnAwake && AnimationAsset)
             {
                 Initialize();
             }
@@ -114,7 +114,7 @@ namespace XFramework.Animation
             m_Driver.OnStateExit += HandleStateExit;
             m_Driver.SetPaused(m_IsPaused);
             m_Driver.SetTimeScale(m_TimeScale);
-            BindRootMotionBridge();
+            RefreshRootMotionBridge();
             m_IsInitialized = true;
         }
 
@@ -279,6 +279,7 @@ namespace XFramework.Animation
         {
             EnsureInitialized();
             m_Driver.SetRootMotionEnabled(enabled);
+            RefreshRootMotionBridge();
         }
 
         public XAnimationChannelState GetChannelState(string channelName)
@@ -435,6 +436,17 @@ namespace XFramework.Animation
             target.rotation = deltaRotation * target.rotation;
         }
 
+        private void RefreshRootMotionBridge()
+        {
+            if (m_Driver.ShouldApplyNativeRootMotion())
+            {
+                BindRootMotionBridge();
+                return;
+            }
+
+            UnbindRootMotionBridge();
+        }
+
         private void BindRootMotionBridge()
         {
             if (m_Animator == null)
@@ -453,12 +465,30 @@ namespace XFramework.Animation
 
         private void UnbindRootMotionBridge()
         {
-            if (m_RootMotionBridge == null)
+            XAnimationRootMotionBridge bridge = m_RootMotionBridge;
+            if (bridge == null && m_Animator != null)
+            {
+                bridge = m_Animator.GetComponent<XAnimationRootMotionBridge>();
+            }
+
+            if (bridge == null)
             {
                 return;
             }
 
-            m_RootMotionBridge.Unbind(this);
+            bridge.Unbind(this);
+            if (!bridge.IsBound)
+            {
+                if (Application.isPlaying)
+                {
+                    Destroy(bridge);
+                }
+                else
+                {
+                    DestroyImmediate(bridge);
+                }
+            }
+
             m_RootMotionBridge = null;
         }
     }
@@ -485,6 +515,8 @@ namespace XFramework.Animation
             m_Actor = null;
             m_Animator = null;
         }
+
+        internal bool IsBound => m_Actor != null;
 
         private void OnAnimatorMove()
         {

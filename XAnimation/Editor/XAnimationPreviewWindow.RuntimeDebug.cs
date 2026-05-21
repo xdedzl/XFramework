@@ -544,6 +544,42 @@ namespace XFramework.Editor
             return true;
         }
 
+        private bool TryGetAssetRootMotion(TextAsset assetText, out bool rootMotion, out bool editable)
+        {
+            rootMotion = false;
+            editable = false;
+            if (assetText == null)
+            {
+                return false;
+            }
+
+            XAnimationOverrideAsset overrideAsset = assetText.ToXAnimationAsset<XAnimationOverrideAsset>();
+            if (overrideAsset != null && !string.IsNullOrWhiteSpace(overrideAsset.baseAssetPath))
+            {
+                TextAsset baseTextAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(overrideAsset.baseAssetPath);
+                if (baseTextAsset == null)
+                {
+                    SetStatus($"Override base asset 不存在：{overrideAsset.baseAssetPath}", true);
+                    return false;
+                }
+
+                XAnimationAsset baseAsset = baseTextAsset.ToXAnimationAsset<XAnimationAsset>();
+                rootMotion = baseAsset != null && baseAsset.rootMotion;
+                editable = false;
+                return baseAsset != null;
+            }
+
+            XAnimationAsset asset = assetText.ToXAnimationAsset<XAnimationAsset>();
+            if (asset == null)
+            {
+                return false;
+            }
+
+            rootMotion = asset.rootMotion;
+            editable = true;
+            return true;
+        }
+
         private void SetSelectedAssetPreload(bool preload)
         {
             TextAsset assetText = m_AssetField?.value as TextAsset;
@@ -583,6 +619,48 @@ namespace XFramework.Editor
             SetStatus(preload ? "已开启 XAnimation 初始化预加载。" : "已关闭 XAnimation 初始化预加载，保持按需懒加载。");
         }
 
+        private void SetSelectedAssetRootMotion(bool rootMotion)
+        {
+            TextAsset assetText = m_AssetField?.value as TextAsset;
+            if (assetText == null)
+            {
+                RefreshAssetRootMotionToggle();
+                SetStatus("请选择一个 XAnimationAsset 后再修改 rootMotion。", true);
+                return;
+            }
+
+            if (!TryGetAssetRootMotion(assetText, out _, out bool editable) || !editable)
+            {
+                RefreshAssetRootMotionToggle();
+                SetStatus("XAnimationOverride 继承 base asset 的 rootMotion 设置，请在 base .xanimation 中修改。", true);
+                return;
+            }
+
+            if (m_Session != null && m_Session.IsLoaded)
+            {
+                m_Session.SetAssetRootMotion(rootMotion);
+                m_PreviewRootMotionEnabled = rootMotion;
+                m_RootMotionToggle?.SetValueWithoutNotify(rootMotion);
+                RenderPreview();
+            }
+            else
+            {
+                XAnimationAsset asset = assetText.ToXAnimationAsset<XAnimationAsset>();
+                if (asset == null)
+                {
+                    RefreshAssetRootMotionToggle();
+                    SetStatus("当前资源不是有效的 XAnimationAsset。", true);
+                    return;
+                }
+
+                asset.rootMotion = rootMotion;
+                asset.SaveAsset();
+            }
+
+            RefreshAssetRootMotionToggle();
+            SetStatus(rootMotion ? "已开启 XAnimation Root Motion 总开关。" : "已关闭 XAnimation Root Motion 总开关。");
+        }
+
         private void RefreshPreloadToggle()
         {
             if (m_PreloadToggle == null)
@@ -597,6 +675,22 @@ namespace XFramework.Editor
             m_PreloadToggle.tooltip = editable
                 ? "开启后，XAnimationDriver 初始化当前资源时会同步 PreloadAll，适合小型或确定常驻的动作集。"
                 : "XAnimationOverride 继承 base asset 的 preload 设置，请打开 base .xanimation 修改。";
+        }
+
+        private void RefreshAssetRootMotionToggle()
+        {
+            if (m_AssetRootMotionToggle == null)
+            {
+                return;
+            }
+
+            TextAsset assetText = m_AssetField?.value as TextAsset;
+            bool hasRootMotion = TryGetAssetRootMotion(assetText, out bool rootMotion, out bool editable);
+            m_AssetRootMotionToggle.SetValueWithoutNotify(hasRootMotion && rootMotion);
+            m_AssetRootMotionToggle.SetEnabled(hasRootMotion && editable);
+            m_AssetRootMotionToggle.tooltip = editable
+                ? "开启后，XAnimation 初始化时会设置 Animator.applyRootMotion，并由 OnAnimatorMove 消费位移。"
+                : "XAnimationOverride 继承 base asset 的 rootMotion 设置，请打开 base .xanimation 修改。";
         }
 
         private void SaveCurrentPrefabAsDefault()
@@ -693,6 +787,7 @@ namespace XFramework.Editor
             m_SaveCurrentPrefabAsDefaultButton.style.display = showDefaultActions ? DisplayStyle.Flex : DisplayStyle.None;
             m_ResetPrefabToDefaultButton.style.display = showDefaultActions && hasDefaultPrefab ? DisplayStyle.Flex : DisplayStyle.None;
             RefreshPreloadToggle();
+            RefreshAssetRootMotionToggle();
         }
 
     }

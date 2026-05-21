@@ -18,35 +18,42 @@ namespace XFramework.Data
             foreach (var tableType in types)
             {
                 var dataResourcePathAttr = tableType.GetCustomAttribute<DataResourcePath>(false);
-                if (dataResourcePathAttr == null || string.IsNullOrEmpty(dataResourcePathAttr.path))
+                if (dataResourcePathAttr == null)
                 {
                     continue;
-                }
-                
-                var path = dataResourcePathAttr.path;
-                var asset = UnityEditor.AssetDatabase.LoadAssetAtPath<TextAsset>(path);
-                if (asset != null)
-                {
-                    continue;
-                }
-                
-                // Create directory if not exists
-                var directory = System.IO.Path.GetDirectoryName(path);
-                if (!string.IsNullOrEmpty(directory) && !System.IO.Directory.Exists(directory))
-                {
-                    System.IO.Directory.CreateDirectory(directory);
-                    UnityEditor.AssetDatabase.Refresh();
                 }
 
-                var instance = (XTextAsset)Activator.CreateInstance(tableType);
-                instance.SetAssetPath(path);
-                var json = instance.Serialize();
-                System.IO.File.WriteAllText(path, json);
-                UnityEditor.AssetDatabase.Refresh();
+                foreach (string path in dataResourcePathAttr.GetPaths())
+                {
+                    if (string.IsNullOrEmpty(path))
+                    {
+                        continue;
+                    }
+                
+                    var asset = UnityEditor.AssetDatabase.LoadAssetAtPath<TextAsset>(path);
+                    if (asset != null)
+                    {
+                        continue;
+                    }
+                
+                    // Create directory if not exists
+                    var directory = System.IO.Path.GetDirectoryName(path);
+                    if (!string.IsNullOrEmpty(directory) && !System.IO.Directory.Exists(directory))
+                    {
+                        System.IO.Directory.CreateDirectory(directory);
+                        UnityEditor.AssetDatabase.Refresh();
+                    }
+
+                    var instance = (XTextAsset)Activator.CreateInstance(tableType);
+                    instance.SetAssetPath(path);
+                    var json = instance.Serialize();
+                    System.IO.File.WriteAllText(path, json);
+                    UnityEditor.AssetDatabase.Refresh();
                         
-                asset = UnityEditor.AssetDatabase.LoadAssetAtPath<TextAsset>(path);
-                Debug.Log($"[DataManager] Created missing JSON asset at {path} for type {tableType.Name}", asset);
-                createdCount++;
+                    asset = UnityEditor.AssetDatabase.LoadAssetAtPath<TextAsset>(path);
+                    Debug.Log($"[DataManager] Created missing JSON asset at {path} for type {tableType.Name}", asset);
+                    createdCount++;
+                }
             }
             
             if (createdCount > 0)

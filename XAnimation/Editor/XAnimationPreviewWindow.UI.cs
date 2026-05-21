@@ -677,7 +677,13 @@ namespace XFramework.Editor
             m_PreloadToggle.RegisterValueChangedCallback(evt => SetSelectedAssetPreload(evt.newValue));
             optionsBox.Add(m_PreloadToggle);
 
-            Label hint = new("关闭时保持懒加载：首次 PlayState / PlayClip 或显式 PreloadState / PreloadAll 时才加载 clip。");
+            m_AssetRootMotionToggle = new Toggle("Root Motion");
+            m_AssetRootMotionToggle.tooltip = "开启后，XAnimation 初始化时会设置 Animator.applyRootMotion，并由 OnAnimatorMove 消费位移。";
+            m_AssetRootMotionToggle.style.marginBottom = 0;
+            m_AssetRootMotionToggle.RegisterValueChangedCallback(evt => SetSelectedAssetRootMotion(evt.newValue));
+            optionsBox.Add(m_AssetRootMotionToggle);
+
+            Label hint = new("Preload 关闭时保持懒加载；Root Motion 是资产级总开关，Override 资源继承 base 设置。");
             hint.style.color = TextMuted;
             hint.style.fontSize = BodyFontSize;
             hint.style.whiteSpace = WhiteSpace.Normal;
@@ -941,7 +947,7 @@ namespace XFramework.Editor
             });
 
             m_RootMotionToggle = new Toggle { value = m_PreviewRootMotionEnabled };
-            m_RootMotionToggle.tooltip = "控制当前预览 session 是否应用 Root Motion。关闭后会将预览实例复位到初始位置。";
+            m_RootMotionToggle.tooltip = "临时覆盖当前预览 session 是否应用 Root Motion，不保存到 XAnimation 资源。关闭后会将预览实例复位到初始位置。";
             m_RootMotionToggle.RegisterValueChangedCallback(evt =>
             {
                 m_PreviewRootMotionEnabled = evt.newValue;
@@ -958,7 +964,7 @@ namespace XFramework.Editor
                 m_RootMotionToggle,
                 PlaybackMainFieldLabelWidth,
                 PlaybackMainFieldValueWidth);
-            channelAndRootMotionRow.tooltip = "channelName 用于 clip 调试播放；rootMotion 仅影响当前预览窗口。";
+            channelAndRootMotionRow.tooltip = "channelName 用于 clip 调试播放；rootMotion 是当前预览窗口的临时覆盖。";
             VisualElement channelAndRootMotionBox = CreateSubBox();
             channelAndRootMotionBox.tooltip = channelAndRootMotionRow.tooltip;
             channelAndRootMotionBox.Add(channelAndRootMotionRow);

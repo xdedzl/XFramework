@@ -50,6 +50,7 @@ namespace XFramework.Editor
                 m_UpdateCoordinator.Reset(now, isPreviewVisible);
                 m_Session.SetPaused(!isPreviewVisible);
                 m_Session.SetTimeScale(1f);
+                m_PreviewRootMotionEnabled = m_Session.GetRootMotionEnabled();
                 m_Session.SetRootMotionEnabled(m_PreviewRootMotionEnabled);
                 MarkEventUiDirty();
                 SetPauseButtonState(false, false);

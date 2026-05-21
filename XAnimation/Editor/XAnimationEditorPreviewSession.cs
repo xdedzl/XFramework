@@ -60,7 +60,7 @@ namespace XFramework.Editor
         private float m_CameraPitch = 18f;
         private Vector3 m_CameraPosition;
         private bool m_CameraInitialized;
-        private bool m_RootMotionEnabled = true;
+        private bool m_RootMotionEnabled;
 
         private bool m_GridVisible = true;
         private GameObject m_GridPlane;
@@ -95,6 +95,7 @@ namespace XFramework.Editor
             m_AssetPath = assetPath;
             CacheOriginalClipPaths(assetPath);
             m_CompiledAsset = m_AssetLoader.Load(assetPath);
+            m_RootMotionEnabled = m_CompiledAsset.RootMotionEnabled;
 
             m_PreviewUtility = new PreviewRenderUtility();
             ConfigurePreviewCamera();
@@ -2669,6 +2670,23 @@ namespace XFramework.Editor
             if (preload)
             {
                 m_Driver.PreloadAll();
+            }
+
+            if (save)
+            {
+                SaveCompiledAsset();
+            }
+        }
+
+        public void SetAssetRootMotion(bool rootMotion, bool save = true)
+        {
+            EnsureLoaded();
+            m_CompiledAsset.Asset.rootMotion = rootMotion;
+            m_RootMotionEnabled = rootMotion;
+            m_Driver.SetRootMotionEnabled(rootMotion);
+            if (!rootMotion)
+            {
+                ResetTransform();
             }
 
             if (save)

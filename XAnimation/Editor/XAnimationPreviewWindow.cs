@@ -273,6 +273,7 @@ namespace XFramework.Editor
         private VisualElement m_ParameterListView;
         private VisualElement m_MainParameterPreviewView;
         private Toggle m_PreloadToggle;
+        private Toggle m_AssetRootMotionToggle;
         private VisualElement m_StateListView;
         private VisualElement m_AutoTransitionEditorView;
         private VisualElement m_DefaultTransitionsEditorView;

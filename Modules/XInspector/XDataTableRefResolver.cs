@@ -23,6 +23,7 @@ namespace XFramework.Editor
             PropertyInfo aliasProperty,
             FieldInfo nameField,
             TextAsset tableAsset,
+            IReadOnlyList<TextAsset> tableAssets,
             IReadOnlyList<object> rows)
         {
             TableType = tableType;
@@ -31,6 +32,7 @@ namespace XFramework.Editor
             AliasProperty = aliasProperty;
             NameField = nameField;
             TableAsset = tableAsset;
+            TableAssets = tableAssets ?? Array.Empty<TextAsset>();
             Rows = rows ?? Array.Empty<object>();
         }
 
@@ -40,6 +42,7 @@ namespace XFramework.Editor
         public PropertyInfo AliasProperty { get; }
         public FieldInfo NameField { get; }
         public TextAsset TableAsset { get; }
+        public IReadOnlyList<TextAsset> TableAssets { get; }
         public IReadOnlyList<object> Rows { get; }
     }
 
@@ -298,14 +301,15 @@ namespace XFramework.Editor
                 return;
             }
 
+            TextAsset targetAsset = ResolveTableAssetForKey(meta, keyValue) ?? meta.TableAsset;
             MethodInfo showAndLocateMethod = windowType.GetMethod("ShowWindowAndLocate", BindingFlags.Public | BindingFlags.Static);
             if (showAndLocateMethod != null)
             {
-                showAndLocateMethod.Invoke(null, new[] { meta.TableAsset, keyValue });
+                showAndLocateMethod.Invoke(null, new object[] { targetAsset, keyValue });
             }
             else
             {
-                AssetDatabase.OpenAsset(meta.TableAsset);
+                AssetDatabase.OpenAsset(targetAsset);
             }
         }
 #endif
@@ -330,40 +334,49 @@ namespace XFramework.Editor
 
             PropertyInfo aliasProperty = dataType.GetProperty("Alias", BindingFlags.Instance | BindingFlags.Public);
             FieldInfo nameField = ResolveNameField(dataType);
-            TextAsset tableAsset = ResolveDataTableTextAsset(tableType);
-            if (tableAsset == null)
+            IReadOnlyList<TextAsset> tableAssets = ResolveDataTableTextAssets(tableType);
+            if (tableAssets.Count == 0)
             {
                 DataResourcePath pathAttribute = tableType.GetCustomAttribute<DataResourcePath>(false);
                 resolveError = pathAttribute == null
                     ? $"{tableType.Name} 缺少 DataResourcePath。"
-                    : $"未找到数据表资源: {pathAttribute.path}";
+                    : $"未找到数据表资源: {string.Join(", ", pathAttribute.GetPaths())}";
                 return null;
             }
 
-            IReadOnlyList<object> rows = LoadRows(tableType, dataType, tableAsset, out resolveError);
+            IReadOnlyList<object> rows = LoadRows(tableType, dataType, tableAssets, out resolveError);
             if (rows == null)
             {
                 return null;
             }
 
-            return new XDataTableRefMeta(tableType, dataType, keyProperty, aliasProperty, nameField, tableAsset, rows);
+            return new XDataTableRefMeta(tableType, dataType, keyProperty, aliasProperty, nameField, tableAssets[0], tableAssets, rows);
         }
 
-        private static IReadOnlyList<object> LoadRows(Type tableType, Type dataType, TextAsset tableAsset, out string resolveError)
+        private static IReadOnlyList<object> LoadRows(Type tableType, Type dataType, IReadOnlyList<TextAsset> tableAssets, out string resolveError)
         {
             resolveError = null;
             try
             {
                 XJson.SetUnityDefaultSetting();
-                XTextAsset typedTableAsset = tableAsset.ToXTextAsset<XTextAsset>(tableType);
                 FieldInfo itemsField = ResolveItemsField(tableType);
-                Array items = itemsField.GetValue(typedTableAsset) as Array;
                 var rows = new List<object>();
-                if (items != null)
+                for (int i = 0; i < tableAssets.Count; i++)
                 {
+                    TextAsset tableAsset = tableAssets[i];
+                    XTextAsset typedTableAsset = tableAsset.ToXTextAsset<XTextAsset>(tableType);
+                    Array items = itemsField.GetValue(typedTableAsset) as Array;
+                    if (items == null)
+                    {
+                        continue;
+                    }
+
                     foreach (object item in items)
                     {
-                        rows.Add(item);
+                        if (item != null)
+                        {
+                            rows.Add(item);
+                        }
                     }
                 }
 
@@ -417,20 +430,95 @@ namespace XFramework.Editor
             throw new InvalidOperationException($"{tableType.FullName} 未找到 items 字段。");
         }
 
-        private static TextAsset ResolveDataTableTextAsset(Type tableType)
+        private static IReadOnlyList<TextAsset> ResolveDataTableTextAssets(Type tableType)
         {
 #if UNITY_EDITOR
             DataResourcePath pathAttribute = tableType.GetCustomAttribute<DataResourcePath>(false);
-            if (pathAttribute == null || string.IsNullOrWhiteSpace(pathAttribute.path))
+            if (pathAttribute == null)
+            {
+                return Array.Empty<TextAsset>();
+            }
+
+            var assets = new List<TextAsset>();
+            foreach (string path in pathAttribute.GetPaths())
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    continue;
+                }
+
+                TextAsset asset = AssetDatabase.LoadAssetAtPath<TextAsset>(path);
+                if (asset != null)
+                {
+                    assets.Add(asset);
+                }
+            }
+
+            return assets;
+#else
+            return Array.Empty<TextAsset>();
+#endif
+        }
+
+#if UNITY_EDITOR
+        private static TextAsset ResolveTableAssetForKey(XDataTableRefMeta meta, object keyValue)
+        {
+            if (meta == null || keyValue == null)
             {
                 return null;
             }
 
-            return AssetDatabase.LoadAssetAtPath<TextAsset>(pathAttribute.path);
-#else
+            for (int i = 0; i < meta.TableAssets.Count; i++)
+            {
+                TextAsset tableAsset = meta.TableAssets[i];
+                if (tableAsset == null || !TryLoadRows(meta.TableType, tableAsset, out IReadOnlyList<object> rows))
+                {
+                    continue;
+                }
+
+                for (int rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+                {
+                    object rowKey = meta.KeyProperty.GetValue(rows[rowIndex]);
+                    if (Equals(rowKey, keyValue))
+                    {
+                        return tableAsset;
+                    }
+                }
+            }
+
             return null;
-#endif
         }
+
+        private static bool TryLoadRows(Type tableType, TextAsset tableAsset, out IReadOnlyList<object> rows)
+        {
+            rows = null;
+            try
+            {
+                XJson.SetUnityDefaultSetting();
+                XTextAsset typedTableAsset = tableAsset.ToXTextAsset<XTextAsset>(tableType);
+                FieldInfo itemsField = ResolveItemsField(tableType);
+                Array items = itemsField.GetValue(typedTableAsset) as Array;
+                var loadedRows = new List<object>();
+                if (items != null)
+                {
+                    foreach (object item in items)
+                    {
+                        if (item != null)
+                        {
+                            loadedRows.Add(item);
+                        }
+                    }
+                }
+
+                rows = loadedRows;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+#endif
 
         private static bool IsSubclassOfGeneric(Type type, Type genericBaseType)
         {

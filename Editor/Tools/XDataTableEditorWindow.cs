@@ -21,6 +21,7 @@ namespace XFramework.Editor
 
         [SerializeField] private TextAsset m_SourceAsset;
         [SerializeField] private string m_SourceAssetGuid;
+        [SerializeField] private string m_DataTableTypeName;
         [SerializeField] private bool m_IsUnionMode;
         [SerializeField] private string m_UnionTableTypeName;
         [SerializeField] private string m_UnionChildTableTypeName;
@@ -29,6 +30,8 @@ namespace XFramework.Editor
         private List<XUnionDataTableEditorInfo> m_UnionTables;
         private XUnionDataTableEditorInfo m_CurrentUnionTable;
         private XUnionDataTableChildInfo m_CurrentUnionChild;
+        private List<XDataTableAssetInfo> m_DataTableAssets;
+        private XDataTableAssetInfo m_CurrentDataTableAsset;
         private string m_UnionMessage;
 
         private Label m_IssueLabel;
@@ -137,6 +140,9 @@ namespace XFramework.Editor
         private void LoadTextAsset(TextAsset textAsset)
         {
             m_IsUnionMode = false;
+            m_DataTableTypeName = string.Empty;
+            m_DataTableAssets = null;
+            m_CurrentDataTableAsset = null;
             m_UnionTableTypeName = string.Empty;
             m_UnionChildTableTypeName = string.Empty;
             m_UnionTables = null;
@@ -158,12 +164,18 @@ namespace XFramework.Editor
             try
             {
                 m_Model = XDataTableEditorModel.Create(textAsset);
+                m_DataTableTypeName = m_Model.TableType.AssemblyQualifiedName;
+                m_DataTableAssets = BuildDataTableAssetInfos(m_Model.TableType);
+                m_CurrentDataTableAsset = ResolveDataTableAsset(m_DataTableAssets, m_SourceAssetGuid);
                 m_SelectedRowIndex = m_Model.Rows.Count > 0 ? 0 : -1;
                 RefreshValidation();
             }
             catch (Exception exception)
             {
                 m_Model = null;
+                m_DataTableTypeName = string.Empty;
+                m_DataTableAssets = null;
+                m_CurrentDataTableAsset = null;
                 m_SelectedRowIndex = -1;
                 Debug.LogError(exception);
                 EditorUtility.DisplayDialog("XDataTable 打开失败", exception.Message, "OK");
@@ -182,6 +194,9 @@ namespace XFramework.Editor
             m_IsUnionMode = true;
             m_SourceAsset = null;
             m_SourceAssetGuid = string.Empty;
+            m_DataTableTypeName = string.Empty;
+            m_DataTableAssets = null;
+            m_CurrentDataTableAsset = null;
             m_Model = null;
             m_CellErrors.Clear();
             m_SortColumnIndex = -1;
@@ -383,6 +398,12 @@ namespace XFramework.Editor
                 unionTableRow.style.marginBottom = 6f;
                 panel.Add(unionTableRow);
             }
+            else if (HasMultipleDataTableAssets())
+            {
+                VisualElement dataTableAssetRow = BuildDataTableAssetRow();
+                dataTableAssetRow.style.marginBottom = 6f;
+                panel.Add(dataTableAssetRow);
+            }
 
             VisualElement toolbar = BuildToolbar();
             toolbar.style.marginBottom = 6f;
@@ -530,7 +551,7 @@ namespace XFramework.Editor
                 text = child.DisplayName
             };
             button.tooltip = string.IsNullOrEmpty(child.Error)
-                ? $"切换到 {child.TableType.Name}"
+                ? string.IsNullOrEmpty(child.Path) ? $"切换到 {child.TableType.Name}" : $"切换到 {child.Path}"
                 : child.Error;
             button.style.marginRight = 6f;
             button.style.marginBottom = 4f;
@@ -573,6 +594,93 @@ namespace XFramework.Editor
             if (child?.Asset != null)
             {
                 menu.AddItem(new GUIContent("在新窗口里打开"), false, () => ShowNewWindow(child.Asset));
+            }
+            else
+            {
+                menu.AddDisabledItem(new GUIContent("在新窗口里打开"));
+            }
+
+            menu.ShowAsContext();
+        }
+
+        private bool HasMultipleDataTableAssets()
+        {
+            return m_DataTableAssets != null && m_DataTableAssets.Count > 1;
+        }
+
+        private VisualElement BuildDataTableAssetRow()
+        {
+            VisualElement container = new();
+            container.style.flexDirection = FlexDirection.Row;
+            container.style.alignItems = Align.Center;
+            container.style.flexWrap = Wrap.Wrap;
+            container.style.minHeight = 28f;
+
+            Label titleLabel = new(m_Model != null ? $"{m_Model.TableType.Name}:" : "DataTable:");
+            titleLabel.style.marginRight = 8f;
+            titleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            titleLabel.style.flexShrink = 0f;
+            container.Add(titleLabel);
+
+            foreach (XDataTableAssetInfo assetInfo in m_DataTableAssets)
+            {
+                container.Add(CreateDataTableAssetButton(assetInfo));
+            }
+
+            return container;
+        }
+
+        private Button CreateDataTableAssetButton(XDataTableAssetInfo assetInfo)
+        {
+            bool selected = assetInfo == m_CurrentDataTableAsset
+                            || string.Equals(assetInfo.Guid, m_SourceAssetGuid, StringComparison.Ordinal);
+            Button button = new(() => SelectDataTableAsset(assetInfo))
+            {
+                text = assetInfo.DisplayName
+            };
+            button.tooltip = assetInfo.Asset != null ? $"切换到 {assetInfo.Path}" : $"资源缺失: {assetInfo.Path}";
+            button.style.marginRight = 6f;
+            button.style.marginBottom = 4f;
+            button.style.height = 24f;
+            button.style.paddingLeft = 10f;
+            button.style.paddingRight = 10f;
+            if (selected)
+            {
+                button.style.unityFontStyleAndWeight = FontStyle.Bold;
+                button.style.backgroundColor = new Color(0.18f, 0.34f, 0.48f, 0.72f);
+            }
+
+            if (assetInfo.Asset == null)
+            {
+                button.style.color = new Color(1f, 0.68f, 0.68f);
+                button.SetEnabled(false);
+            }
+
+            button.RegisterCallback<ContextClickEvent>(evt =>
+            {
+                ShowDataTableAssetContextMenu(assetInfo);
+                evt.StopPropagation();
+            });
+            button.RegisterCallback<MouseUpEvent>(evt =>
+            {
+                if (evt.button != 1)
+                {
+                    return;
+                }
+
+                ShowDataTableAssetContextMenu(assetInfo);
+                evt.StopPropagation();
+            });
+
+            return button;
+        }
+
+        private static void ShowDataTableAssetContextMenu(XDataTableAssetInfo assetInfo)
+        {
+            GenericMenu menu = new();
+            if (assetInfo?.Asset != null)
+            {
+                menu.AddItem(new GUIContent("在新窗口里打开"), false, () => ShowNewWindow(assetInfo.Asset));
             }
             else
             {
@@ -1156,7 +1264,10 @@ namespace XFramework.Editor
             string unionText = m_IsUnionMode && m_CurrentUnionTable != null
                 ? $"Union: {m_CurrentUnionTable.DisplayName} | 子表: {m_Model.TableType.Name} | "
                 : string.Empty;
-            m_TableSummaryLabel.text = $"{unionText}行数: {m_Model.Rows.Count}{sortText}";
+            string assetText = !m_IsUnionMode && m_CurrentDataTableAsset != null
+                ? $"资源: {m_CurrentDataTableAsset.DisplayName} | "
+                : string.Empty;
+            m_TableSummaryLabel.text = $"{unionText}{assetText}行数: {m_Model.Rows.Count}{sortText}";
         }
 
         private void RebuildHeader()
@@ -2161,6 +2272,31 @@ namespace XFramework.Editor
             BuildUI();
         }
 
+        private void SelectDataTableAsset(XDataTableAssetInfo assetInfo)
+        {
+            if (assetInfo == null || assetInfo.Asset == null)
+            {
+                BuildUI();
+                return;
+            }
+
+            if (assetInfo == m_CurrentDataTableAsset
+                || string.Equals(assetInfo.Guid, m_SourceAssetGuid, StringComparison.Ordinal))
+            {
+                BuildUI();
+                return;
+            }
+
+            if (!ConfirmDiscardOrSaveDirtyChanges("切换 DataTable 资源"))
+            {
+                BuildUI();
+                return;
+            }
+
+            LoadTextAssetInternal(assetInfo.Asset);
+            BuildUI();
+        }
+
         private void ReloadUnionFromDisk()
         {
             if (!ConfirmDiscardOrSaveDirtyChanges())
@@ -2171,7 +2307,7 @@ namespace XFramework.Editor
             LoadUnionMode(null);
         }
 
-        private bool ConfirmDiscardOrSaveDirtyChanges()
+        private bool ConfirmDiscardOrSaveDirtyChanges(string title = "切换 Union DataTable")
         {
             if (!m_IsDirty)
             {
@@ -2179,7 +2315,7 @@ namespace XFramework.Editor
             }
 
             int option = EditorUtility.DisplayDialogComplex(
-                "切换 Union DataTable",
+                title,
                 "当前数据表有未保存修改，切换前要如何处理？",
                 "保存",
                 "取消",
@@ -2254,47 +2390,123 @@ namespace XFramework.Editor
             {
                 foreach (Type childTableType in attribute.tableTypes)
                 {
-                    children.Add(BuildUnionChildInfo(unionTableType, childTableType));
+                    children.AddRange(BuildUnionChildInfos(unionTableType, childTableType));
                 }
             }
 
             return new XUnionDataTableEditorInfo(unionTableType, children);
         }
 
-        private static XUnionDataTableChildInfo BuildUnionChildInfo(Type unionTableType, Type childTableType)
+        private static IEnumerable<XUnionDataTableChildInfo> BuildUnionChildInfos(Type unionTableType, Type childTableType)
         {
             if (childTableType == null)
             {
-                return new XUnionDataTableChildInfo(null, null, "空子表类型");
+                yield return new XUnionDataTableChildInfo(null, null, string.Empty, 0, "空子表类型");
+                yield break;
             }
 
             if (!typeof(XDataTable).IsAssignableFrom(childTableType))
             {
-                return new XUnionDataTableChildInfo(childTableType, null,
+                yield return new XUnionDataTableChildInfo(childTableType, null, string.Empty, 0,
                     $"{childTableType.FullName} 不是 XDataTable。");
+                yield break;
             }
 
             if (childTableType.GetCustomAttribute<TargetDataType>(false)?.targetType == null)
             {
-                return new XUnionDataTableChildInfo(childTableType, null,
+                yield return new XUnionDataTableChildInfo(childTableType, null, string.Empty, 0,
                     $"{childTableType.FullName} 缺少 TargetDataType。");
+                yield break;
             }
 
             DataResourcePath pathAttribute = childTableType.GetCustomAttribute<DataResourcePath>(false);
-            if (pathAttribute == null || string.IsNullOrEmpty(pathAttribute.path))
+            string[] childPaths = pathAttribute?.GetPaths()
+                .Where(path => !string.IsNullOrEmpty(path))
+                .ToArray() ?? Array.Empty<string>();
+            if (childPaths.Length == 0)
             {
-                return new XUnionDataTableChildInfo(childTableType, null,
+                yield return new XUnionDataTableChildInfo(childTableType, null, string.Empty, 0,
                     $"{childTableType.FullName} 缺少 DataResourcePath。");
+                yield break;
             }
 
-            TextAsset asset = AssetDatabase.LoadAssetAtPath<TextAsset>(pathAttribute.path);
-            if (asset == null)
+            for (int i = 0; i < childPaths.Length; i++)
             {
-                return new XUnionDataTableChildInfo(childTableType, null,
-                    $"{unionTableType.Name} 的子表 {childTableType.Name} 找不到资源: {pathAttribute.path}");
+                string childPath = childPaths[i];
+                TextAsset asset = AssetDatabase.LoadAssetAtPath<TextAsset>(childPath);
+                if (asset == null)
+                {
+                    yield return new XUnionDataTableChildInfo(childTableType, null, childPath, i,
+                        $"{unionTableType.Name} 的子表 {childTableType.Name} 找不到资源: {childPath}");
+                    continue;
+                }
+
+                yield return new XUnionDataTableChildInfo(childTableType, asset, childPath, i, null);
+            }
+        }
+
+        private static List<XDataTableAssetInfo> BuildDataTableAssetInfos(Type tableType)
+        {
+            var result = new List<XDataTableAssetInfo>();
+            DataResourcePath pathAttribute = tableType?.GetCustomAttribute<DataResourcePath>(false);
+            if (pathAttribute == null)
+            {
+                return result;
             }
 
-            return new XUnionDataTableChildInfo(childTableType, asset, null);
+            string[] paths = pathAttribute.GetPaths();
+            for (int i = 0; i < paths.Length; i++)
+            {
+                string path = paths[i];
+                if (string.IsNullOrEmpty(path))
+                {
+                    continue;
+                }
+
+                TextAsset asset = AssetDatabase.LoadAssetAtPath<TextAsset>(path);
+                result.Add(new XDataTableAssetInfo(tableType, path, asset, i));
+            }
+
+            return result;
+        }
+
+        private static XDataTableAssetInfo ResolveDataTableAsset(IReadOnlyList<XDataTableAssetInfo> assets, string guid)
+        {
+            if (assets == null || string.IsNullOrEmpty(guid))
+            {
+                return null;
+            }
+
+            return assets.FirstOrDefault(asset => string.Equals(asset.Guid, guid, StringComparison.Ordinal));
+        }
+
+        private static Type ResolveDataTableType(TextAsset textAsset)
+        {
+            string assetPath = textAsset != null ? AssetDatabase.GetAssetPath(textAsset) : string.Empty;
+            if (string.IsNullOrEmpty(assetPath))
+            {
+                return null;
+            }
+
+            IEnumerable<Type> tableTypes = Utility.Reflection.GetGenericTypes(typeof(XDataTable<>), 5, "Assembly-CSharp", "XFrameworkRuntime");
+            foreach (Type tableType in tableTypes)
+            {
+                DataResourcePath pathAttribute = tableType.GetCustomAttribute<DataResourcePath>(false);
+                if (pathAttribute == null)
+                {
+                    continue;
+                }
+
+                foreach (string path in pathAttribute.GetPaths())
+                {
+                    if (string.Equals(path, assetPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return tableType;
+                    }
+                }
+            }
+
+            return null;
         }
 
         private static XDataTableEditorWindow FindOpenWindow(TextAsset textAsset)
@@ -2305,6 +2517,8 @@ namespace XFramework.Editor
                 return null;
             }
 
+            Type tableType = ResolveDataTableType(textAsset);
+            string typeName = tableType?.AssemblyQualifiedName;
             XDataTableEditorWindow[] windows = Resources.FindObjectsOfTypeAll<XDataTableEditorWindow>();
             foreach (XDataTableEditorWindow window in windows)
             {
@@ -2314,6 +2528,14 @@ namespace XFramework.Editor
                 }
 
                 if (string.Equals(window.SourceAssetPath, assetPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    return window;
+                }
+
+                if (!window.m_IsUnionMode
+                    && !string.IsNullOrEmpty(typeName)
+                    && (string.Equals(window.m_DataTableTypeName, typeName, StringComparison.Ordinal)
+                        || string.Equals(window.m_Model?.TableType.AssemblyQualifiedName, typeName, StringComparison.Ordinal)))
                 {
                     return window;
                 }
@@ -2379,19 +2601,48 @@ namespace XFramework.Editor
 
         private sealed class XUnionDataTableChildInfo
         {
-            public XUnionDataTableChildInfo(Type tableType, TextAsset asset, string error)
+            public XUnionDataTableChildInfo(Type tableType, TextAsset asset, string path, int pathIndex, string error)
             {
                 TableType = tableType;
                 Asset = asset;
+                Path = path;
+                PathIndex = pathIndex;
                 Error = error;
             }
 
             public Type TableType { get; }
             public TextAsset Asset { get; }
+            public string Path { get; }
+            public int PathIndex { get; }
             public string Error { get; }
             public string DisplayName => TableType == null
                 ? "Missing Child"
-                : string.IsNullOrEmpty(Error) ? TableType.Name : $"{TableType.Name} (!)";
+                : string.IsNullOrEmpty(Path)
+                    ? string.IsNullOrEmpty(Error) ? TableType.Name : $"{TableType.Name} (!)"
+                    : string.IsNullOrEmpty(Error)
+                        ? System.IO.Path.GetFileNameWithoutExtension(Path)
+                        : $"{System.IO.Path.GetFileNameWithoutExtension(Path)} (!)";
+        }
+
+        private sealed class XDataTableAssetInfo
+        {
+            public XDataTableAssetInfo(Type tableType, string path, TextAsset asset, int index)
+            {
+                TableType = tableType;
+                Path = path;
+                Asset = asset;
+                Index = index;
+                Guid = string.IsNullOrEmpty(path) ? string.Empty : AssetDatabase.AssetPathToGUID(path);
+            }
+
+            public Type TableType { get; }
+            public string Path { get; }
+            public TextAsset Asset { get; }
+            public int Index { get; }
+            public string Guid { get; }
+            public string DisplayName => string.IsNullOrEmpty(Path)
+                ? $"Asset {Index + 1}"
+                : System.IO.Path.GetFileNameWithoutExtension(Path);
         }
     }
 }

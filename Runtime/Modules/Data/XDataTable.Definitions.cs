@@ -4,11 +4,16 @@ namespace XFramework.Data
 {
     public class DataResourcePath : Attribute
     {
-        public string path;
+        public string[] paths;
 
-        public DataResourcePath(string path)
+        public DataResourcePath(params string[] paths)
         {
-            this.path = path;
+            this.paths = paths ?? Array.Empty<string>();
+        }
+
+        public string[] GetPaths()
+        {
+            return paths ?? Array.Empty<string>();
         }
     }
 

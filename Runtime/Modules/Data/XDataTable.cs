@@ -89,17 +89,16 @@ namespace XFramework.Data
                 throw new Exception($"Data type {tableType.FullName} missing DataResourcePath attribute");
             }
 
-            var textAsset = ResourceManager.Instance.Load<TextAsset>(dataResourcePathAttr.path);
-            if (textAsset == null)
+            string[] paths = dataResourcePathAttr.GetPaths()
+                .Where(dataPath => !string.IsNullOrWhiteSpace(dataPath))
+                .ToArray();
+            if (paths.Length == 0)
             {
-                throw new Exception($"Data text asset missing at path: {dataResourcePathAttr.path}");
+                throw new Exception($"Data type {tableType.FullName} DataResourcePath has no valid path");
             }
 
-            table = textAsset.ToXTextAsset<XDataTable>(tableType);
-            if (table == null)
-            {
-                throw new Exception($"Data text asset at path {dataResourcePathAttr.path} cannot convert to {tableType.FullName}");
-            }
+            table = LoadAndMergeTable(tableType, paths);
+            ValidateMergedTable(tableType, table);
 
             table.AfterLoad();
             S_DataTableMap[tableType] = table;
@@ -109,6 +108,154 @@ namespace XFramework.Data
         internal static XDataTable LoadTableByType(Type tableType)
         {
             return LoadTable(tableType);
+        }
+
+        private static XDataTable LoadAndMergeTable(Type tableType, IReadOnlyList<string> paths)
+        {
+            XDataTable table = null;
+            FieldInfo itemsField = ResolveItemsField(tableType);
+            Type dataType = itemsField.FieldType.GetElementType();
+            if (dataType == null)
+            {
+                throw new Exception($"Data table type {tableType.FullName} items field is not an array");
+            }
+
+            var mergedItems = new List<object>();
+            for (int i = 0; i < paths.Count; i++)
+            {
+                string dataPath = paths[i];
+                TextAsset textAsset = ResourceManager.Instance.Load<TextAsset>(dataPath);
+                if (textAsset == null)
+                {
+                    throw new Exception($"Data text asset missing at path: {dataPath}");
+                }
+
+                XDataTable loadedTable = textAsset.ToXTextAsset<XDataTable>(tableType);
+                if (loadedTable == null)
+                {
+                    throw new Exception($"Data text asset at path {dataPath} cannot convert to {tableType.FullName}");
+                }
+
+                table ??= loadedTable;
+                if (itemsField.GetValue(loadedTable) is not Array items)
+                {
+                    continue;
+                }
+
+                foreach (object item in items)
+                {
+                    if (item != null)
+                    {
+                        mergedItems.Add(item);
+                    }
+                }
+            }
+
+            if (table == null)
+            {
+                throw new Exception($"Data table type {tableType.FullName} has no loaded assets");
+            }
+
+            if (paths.Count > 1)
+            {
+                Array mergedArray = Array.CreateInstance(dataType, mergedItems.Count);
+                for (int i = 0; i < mergedItems.Count; i++)
+                {
+                    mergedArray.SetValue(mergedItems[i], i);
+                }
+
+                itemsField.SetValue(table, mergedArray);
+            }
+
+            return table;
+        }
+
+        private static FieldInfo ResolveItemsField(Type tableType)
+        {
+            Type currentType = tableType;
+            while (currentType != null && currentType != typeof(object))
+            {
+                FieldInfo field = currentType.GetField(nameof(XDataTable<IData>.items), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (field != null)
+                {
+                    return field;
+                }
+
+                currentType = currentType.BaseType;
+            }
+
+            throw new Exception($"Data table type {tableType.FullName} cannot find items field");
+        }
+
+        private static void ValidateMergedTable(Type tableType, XDataTable table)
+        {
+            FieldInfo itemsField = ResolveItemsField(tableType);
+            if (itemsField.GetValue(table) is not IEnumerable items)
+            {
+                return;
+            }
+
+            Type dataType = itemsField.FieldType.GetElementType();
+            if (dataType == null)
+            {
+                return;
+            }
+
+            ValidateDuplicateKey(tableType, dataType, items);
+            ValidateDuplicateAlias(tableType, dataType, items);
+        }
+
+        private static void ValidateDuplicateKey(Type tableType, Type dataType, IEnumerable items)
+        {
+            if (!Utility.Reflection.IsSubclassOfGeneric(tableType, typeof(XDataTableHasKey<,>)))
+            {
+                return;
+            }
+
+            PropertyInfo keyProperty = dataType.GetProperty(nameof(IDataHasKey<int>.PrimaryKey), BindingFlags.Instance | BindingFlags.Public);
+            if (keyProperty == null)
+            {
+                return;
+            }
+
+            var seenKeys = new HashSet<object>();
+            foreach (object item in items)
+            {
+                object key = keyProperty.GetValue(item);
+                if (!seenKeys.Add(key))
+                {
+                    throw new Exception($"Data table {tableType.FullName} has repeated primary key {key}");
+                }
+            }
+        }
+
+        private static void ValidateDuplicateAlias(Type tableType, Type dataType, IEnumerable items)
+        {
+            if (!Utility.Reflection.IsSubclassOfGeneric(tableType, typeof(XDataTableHasAlias<,>)))
+            {
+                return;
+            }
+
+            PropertyInfo aliasProperty = dataType.GetProperty(nameof(IDataHasAlias.Alias), BindingFlags.Instance | BindingFlags.Public);
+            if (aliasProperty == null)
+            {
+                return;
+            }
+
+            var seenAliases = new HashSet<string>();
+            foreach (object item in items)
+            {
+                string alias = aliasProperty.GetValue(item) as string;
+                if (string.IsNullOrEmpty(alias))
+                {
+                    continue;
+                }
+
+                if (!seenAliases.Add(alias))
+                {
+                    throw new Exception($"Data table {tableType.FullName} has repeated alias {alias}");
+                }
+            }
         }
 
         public static IReadOnlyDictionary<TKey, TValue> LoadDictData<TKey, TValue>() where TValue : IDataHasKey<TKey>

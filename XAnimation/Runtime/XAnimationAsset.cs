@@ -287,6 +287,7 @@ namespace XFramework.Animation
         public string alias;
         public string DefaultPrefabPath;
         public bool preload;
+        public bool rootMotion;
         public XAnimationChannelConfig[] channels = Array.Empty<XAnimationChannelConfig>();
         public XAnimationClipConfig[] clips = Array.Empty<XAnimationClipConfig>();
         public XAnimationStateConfig[] states = Array.Empty<XAnimationStateConfig>();
@@ -734,6 +735,7 @@ namespace XFramework.Animation
         public IReadOnlyList<XAnimationCompiledDefaultTransition> DefaultTransitions { get; }
         public IReadOnlyList<XAnimationCompiledParameter> Parameters { get; }
         public IReadOnlyDictionary<string, List<XAnimationCompiledCue>> CuesByClipKey { get; }
+        public bool RootMotionEnabled => Asset.rootMotion;
 
         public bool TryGetChannelIndex(string channelName, out int channelIndex)
         {

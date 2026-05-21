@@ -18,6 +18,7 @@ namespace XFramework.Editor
         private Label statusLabel;
         private Toggle showPackagesToggle;
         private bool includePackages;
+        private const string WindowTitle = "场景列表";
         
         static SceneListWindow()
         {
@@ -40,15 +41,21 @@ namespace XFramework.Editor
         public static void ShowWindow()
         {
             var wnd = GetWindow<SceneListWindow>();
-            wnd.titleContent = new GUIContent("场景列表");
+            wnd.SetWindowTitle();
             wnd.minSize = new Vector2(500, 200);
         }
 
         private void OnEnable()
         {
+            SetWindowTitle();
             RefreshSceneList();
             CreateUI();
             EditorSceneManager.sceneOpened += OnEditorSceneOpened;
+        }
+
+        private void SetWindowTitle()
+        {
+            titleContent = new GUIContent(WindowTitle);
         }
 
         private void OnDisable()

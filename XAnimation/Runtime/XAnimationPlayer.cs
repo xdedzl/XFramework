@@ -11,7 +11,6 @@ namespace XFramework.Animation
         private readonly List<XAnimationChannel> m_Channels = new();
         private readonly Dictionary<string, XAnimationChannel> m_ChannelMap = new(StringComparer.Ordinal);
         private readonly XAnimationCueDispatcher m_CueDispatcher = new();
-        private readonly XAnimationRootMotionResolver m_RootMotionResolver;
         private const string TemporaryClipStateKeyPrefix = "__xanimation_temp_clip_state:";
         private const string DirectClipKeyPrefix = "__xanimation_direct_clip:";
 
@@ -20,6 +19,7 @@ namespace XFramework.Animation
         private AnimationPlayableOutput m_Output;
         private RuntimeAnimatorController m_OriginalController;
         private bool m_OriginalApplyRootMotion;
+        private bool m_RootMotionEnabled;
         private int m_NextPlaybackId = 1;
         private int m_NextTemporaryStateId = 1;
 
@@ -31,7 +31,6 @@ namespace XFramework.Animation
             CompiledAsset = compiledAsset ?? throw new ArgumentNullException(nameof(compiledAsset));
             Animator = animator ? animator : throw new ArgumentNullException(nameof(animator));
             Context = context ?? throw new ArgumentNullException(nameof(context));
-            m_RootMotionResolver = new XAnimationRootMotionResolver();
             BuildGraph();
         }
 
@@ -418,14 +417,20 @@ namespace XFramework.Animation
         public void SetRootMotionEnabled(bool enabled)
         {
             ThrowIfDisposed();
-            m_RootMotionResolver.SetEnabled(enabled);
-            m_RootMotionResolver.ApplyToAnimator(Animator);
+            if (m_RootMotionEnabled == enabled)
+            {
+                SyncAnimatorRootMotion();
+                return;
+            }
+
+            m_RootMotionEnabled = enabled;
+            SyncAnimatorRootMotion();
         }
 
         internal bool ShouldApplyNativeRootMotion()
         {
             ThrowIfDisposed();
-            return m_RootMotionResolver.ShouldApplyNativeRootMotion;
+            return m_RootMotionEnabled;
         }
 
         public XAnimationChannelState GetChannelState(string channelName)
@@ -524,9 +529,6 @@ namespace XFramework.Animation
                 m_LayerMixer.SetInputWeight(i, channel.HasActivePlayback ? channel.ChannelWeight : 0f);
             }
 
-            m_RootMotionResolver.ResolveSource(m_Channels);
-            m_RootMotionResolver.ApplyToAnimator(Animator);
-
             m_Graph.Evaluate(deltaTime);
 
             for (int i = 0; i < m_Channels.Count; i++)
@@ -536,8 +538,6 @@ namespace XFramework.Animation
 
             ProcessCompletedNonLoopTransitions();
 
-            m_RootMotionResolver.ResolveSource(m_Channels);
-            m_RootMotionResolver.ApplyToAnimator(Animator);
         }
 
         public void Dispose()
@@ -598,8 +598,8 @@ namespace XFramework.Animation
             }
 
             m_Graph.Play();
-            Animator.applyRootMotion = false;
-            m_RootMotionResolver.ApplyToAnimator(Animator);
+            m_RootMotionEnabled = CompiledAsset.RootMotionEnabled;
+            SyncAnimatorRootMotion();
         }
 
         private void DisableAnimatorController()
@@ -612,13 +612,25 @@ namespace XFramework.Animation
 
         private void RestoreAnimatorController()
         {
-            if (Animator == null || m_OriginalController == null || Animator.runtimeAnimatorController != null)
+            if (Animator == null)
             {
                 return;
             }
 
-            Animator.runtimeAnimatorController = m_OriginalController;
+            if (m_OriginalController != null && Animator.runtimeAnimatorController == null)
+            {
+                Animator.runtimeAnimatorController = m_OriginalController;
+            }
+
             Animator.applyRootMotion = m_OriginalApplyRootMotion;
+        }
+
+        private void SyncAnimatorRootMotion()
+        {
+            if (Animator != null && Animator.applyRootMotion != m_RootMotionEnabled)
+            {
+                Animator.applyRootMotion = m_RootMotionEnabled;
+            }
         }
 
         private XAnimationCompiledChannel ResolveClipChannel(XAnimationCompiledClip clip, string channelName)
