@@ -8,7 +8,7 @@ using XFramework.UI;
 namespace XFramework.Editor
 {
     [CustomPropertyDrawer(typeof(DataTableRefAttribute))]
-    public sealed class DataTableRefElement : XInspectorElement
+    public sealed class DataTableRefElement : XInspectorElement, IPropertyAttributeElement
     {
         private DataTableRefAttribute m_Attribute;
         private readonly VisualElement m_ValueField;
@@ -67,6 +67,11 @@ namespace XFramework.Editor
             m_ValueField.RegisterCallback<MouseDownEvent>(OnValueFieldMouseDown, TrickleDown.TrickleDown);
         }
 
+        public void SetPropertyAttribute(PropertyAttribute attribute)
+        {
+            m_Attribute = attribute as DataTableRefAttribute;
+        }
+
         public override void Refresh()
         {
             base.Refresh();
@@ -76,7 +81,7 @@ namespace XFramework.Editor
         protected override void OnBound()
         {
             base.OnBound();
-            m_Attribute = BoundMemberInfo?.GetCustomAttribute<DataTableRefAttribute>();
+            m_Attribute ??= BoundMemberInfo?.GetCustomAttribute<DataTableRefAttribute>();
             UpdateDisplay();
         }
 
@@ -146,7 +151,8 @@ namespace XFramework.Editor
                         UpdateDisplay();
                     }
                 },
-                anchorRect);
+                anchorRect,
+                Value);
         }
     }
 }

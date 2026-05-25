@@ -32,6 +32,27 @@ namespace XFramework.UI
     }
 
     /// <summary>
+    /// 定义数组/List元素使用的PropertyAttribute
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, Inherited = true, AllowMultiple = false)]
+    public class ArrayItemPropertyAttribute : Attribute
+    {
+        public Type propertyAttributeType;
+        public object[] args;
+
+        public ArrayItemPropertyAttribute(Type propertyAttributeType, params object[] args)
+        {
+            if (propertyAttributeType != null && !typeof(UnityEngine.PropertyAttribute).IsAssignableFrom(propertyAttributeType))
+            {
+                throw new Exception($"参数propertyAttributeType必须为{typeof(UnityEngine.PropertyAttribute).Name}的派生类   type{propertyAttributeType.Name}");
+            }
+
+            this.propertyAttributeType = propertyAttributeType;
+            this.args = args;
+        }
+    }
+
+    /// <summary>
     /// 定义变量在UI上的显示名称
     /// </summary>
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, Inherited = true, AllowMultiple = false)]

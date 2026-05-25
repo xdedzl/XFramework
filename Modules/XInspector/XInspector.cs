@@ -178,6 +178,26 @@ namespace XFramework.UI
             return element;
         }
 
+        public XInspectorElement CreateArrayItemPropertyElement(ArrayItemPropertyAttribute arrayItemPropertyAttribute, int depth)
+        {
+            XInspectorElement element = Activator.CreateInstance(typeof(ArrayElement), arrayItemPropertyAttribute) as XInspectorElement;
+            element.XInspector = this;
+            element.Depth = depth;
+            return element;
+        }
+
+        public Type GetDrawerForPropertyAttribute(Type propertyAttributeType)
+        {
+            if (propertyAttributeType == null)
+            {
+                return null;
+            }
+
+            return m_PropertyAttributeToDrawer.TryGetValue(propertyAttributeType, out Type drawerType)
+                ? drawerType
+                : null;
+        }
+
         public Type GetDrawerForPropertyAttribute(MemberInfo member)
         {
             if (member == null)

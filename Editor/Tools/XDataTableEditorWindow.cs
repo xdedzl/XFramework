@@ -1658,7 +1658,7 @@ namespace XFramework.Editor
                 XDataTableRefPickerWindow.ShowWindow(column?.Header, column?.DataTableRefMeta, column?.Field?.FieldType, pickedValue =>
                 {
                     ApplyValueChange(rowIndex, column, pickedValue, scrollSelection);
-                }, position);
+                }, position, keyValue);
             });
             pickerButton.style.height = InlineEditorHeight;
             pickerButton.style.minHeight = InlineEditorHeight;

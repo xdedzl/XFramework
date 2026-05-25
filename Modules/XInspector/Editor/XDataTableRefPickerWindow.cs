@@ -12,30 +12,34 @@ namespace XFramework.Editor
         private XDataTableRefMeta m_Meta;
         private Type m_OwnerFieldType;
         private Action<object> m_OnPick;
+        private object m_SelectedValue;
         private TextField m_SearchField;
         private ScrollView m_OptionsScrollView;
+        private VisualElement m_SelectedOptionElement;
 
         public static void ShowWindow(
             string title,
             XDataTableRefMeta meta,
             Type ownerFieldType,
             Action<object> onPick,
-            Rect? anchorRect = null)
+            Rect? anchorRect = null,
+            object selectedValue = null)
         {
             XDataTableRefPickerWindow window = CreateInstance<XDataTableRefPickerWindow>();
             window.titleContent = new GUIContent("DataTable Ref Picker");
             window.minSize = new Vector2(300f, 420f);
-            window.Init(title, meta, ownerFieldType, onPick, anchorRect);
+            window.Init(title, meta, ownerFieldType, onPick, anchorRect, selectedValue);
             window.ShowUtility();
             window.Focus();
         }
 
-        private void Init(string title, XDataTableRefMeta meta, Type ownerFieldType, Action<object> onPick, Rect? anchorRect)
+        private void Init(string title, XDataTableRefMeta meta, Type ownerFieldType, Action<object> onPick, Rect? anchorRect, object selectedValue)
         {
             m_Title = string.IsNullOrWhiteSpace(title) ? "选择引用" : $"选择 {title}";
             m_Meta = meta;
             m_OwnerFieldType = ownerFieldType;
             m_OnPick = onPick;
+            m_SelectedValue = selectedValue;
             if (anchorRect.HasValue)
             {
                 Rect rect = anchorRect.Value;
@@ -93,6 +97,7 @@ namespace XFramework.Editor
             }
 
             m_OptionsScrollView.Clear();
+            m_SelectedOptionElement = null;
 
             if (m_Meta == null)
             {
@@ -102,22 +107,36 @@ namespace XFramework.Editor
 
             if (XDataTableRefResolver.SupportsEmptyReference(m_OwnerFieldType))
             {
-                m_OptionsScrollView.Add(CreateOptionButton("None", () =>
+                Button noneButton = CreateOptionButton("None", () =>
                 {
                     m_OnPick?.Invoke(XDataTableRefResolver.GetEmptyReferenceValue(m_OwnerFieldType));
                     Close();
-                }));
+                });
+                if (XDataTableRefResolver.IsEmptyReferenceValue(m_SelectedValue, m_OwnerFieldType))
+                {
+                    MarkSelectedOption(noneButton);
+                }
+
+                m_OptionsScrollView.Add(noneButton);
             }
 
             IReadOnlyList<XDataTableRefOption> options = XDataTableRefResolver.GetOptions(m_Meta, m_SearchField?.value);
             foreach (XDataTableRefOption option in options)
             {
-                m_OptionsScrollView.Add(CreateOptionButton(option.DisplayText, () =>
+                Button optionButton = CreateOptionButton(option.DisplayText, () =>
                 {
                     m_OnPick?.Invoke(option.KeyValue);
                     Close();
-                }));
+                });
+                if (IsSelectedOption(option.KeyValue))
+                {
+                    MarkSelectedOption(optionButton);
+                }
+
+                m_OptionsScrollView.Add(optionButton);
             }
+
+            ScheduleScrollToSelectedOption();
         }
 
         private static Button CreateOptionButton(string text, Action onClick)
@@ -130,6 +149,48 @@ namespace XFramework.Editor
             button.style.marginBottom = 4f;
             button.style.whiteSpace = WhiteSpace.Normal;
             return button;
+        }
+
+        private bool IsSelectedOption(object keyValue)
+        {
+            if (XDataTableRefResolver.IsEmptyReferenceValue(m_SelectedValue, m_OwnerFieldType))
+            {
+                return false;
+            }
+
+            if (Equals(keyValue, m_SelectedValue))
+            {
+                return true;
+            }
+
+            return XDataTableRefResolver.TryConvertReferenceValue(m_OwnerFieldType, keyValue, out object convertedKey)
+                   && XDataTableRefResolver.TryConvertReferenceValue(m_OwnerFieldType, m_SelectedValue, out object convertedSelected)
+                   && Equals(convertedKey, convertedSelected);
+        }
+
+        private void MarkSelectedOption(VisualElement optionElement)
+        {
+            m_SelectedOptionElement = optionElement;
+            optionElement.style.unityFontStyleAndWeight = FontStyle.Bold;
+            optionElement.style.backgroundColor = new Color(0.24f, 0.36f, 0.52f, 0.72f);
+            optionElement.style.borderLeftWidth = 3f;
+            optionElement.style.borderLeftColor = new Color(0.45f, 0.7f, 1f, 1f);
+        }
+
+        private void ScheduleScrollToSelectedOption()
+        {
+            if (m_SelectedOptionElement == null || m_OptionsScrollView == null)
+            {
+                return;
+            }
+
+            m_OptionsScrollView.schedule.Execute(() =>
+            {
+                if (m_SelectedOptionElement != null)
+                {
+                    m_OptionsScrollView?.ScrollTo(m_SelectedOptionElement);
+                }
+            });
         }
 
         private void OnRootKeyDown(KeyDownEvent evt)

@@ -69,14 +69,26 @@ namespace XFramework.UI
                     return XInspector.CreateDrawerForType(attribute.type, depth, attribute.args);
             }
 
+            Type variableType = member is FieldInfo ? ((FieldInfo)member).FieldType : ((PropertyInfo)member).PropertyType;
+            ArrayItemPropertyAttribute arrayItemPropertyAttribute = member.GetCustomAttribute<ArrayItemPropertyAttribute>();
+            if (arrayItemPropertyAttribute != null && IsArrayItemPropertyTarget(variableType))
+            {
+                return XInspector.CreateArrayItemPropertyElement(arrayItemPropertyAttribute, depth);
+            }
+
             Type propertyDrawerType = XInspector.GetDrawerForPropertyAttribute(member);
             if (propertyDrawerType != null)
             {
                 return XInspector.CreateDrawerForType(propertyDrawerType, depth);
             }
 
-            Type variableType = member is FieldInfo ? ((FieldInfo)member).FieldType : ((PropertyInfo)member).PropertyType;
             return XInspector.CreateDrawerForMemberType(variableType, depth);
+        }
+
+        private static bool IsArrayItemPropertyTarget(Type type)
+        {
+            return (type.IsArray && type.GetArrayRank() == 1)
+                   || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>));
         }
 
         /// <summary>

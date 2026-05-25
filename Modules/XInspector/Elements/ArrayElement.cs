@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace XFramework.UI
@@ -12,6 +13,7 @@ namespace XFramework.UI
         private bool IsArray => BoundVariableType.IsArray;
 
         private readonly CustomerElementAttribute customerAttribute;
+        private readonly ArrayItemPropertyAttribute itemPropertyAttribute;
 
         private readonly TextField sizeInput;
         private readonly VisualElement listBox;
@@ -135,6 +137,11 @@ namespace XFramework.UI
             customerAttribute = type;
         }
 
+        public ArrayElement(ArrayItemPropertyAttribute type) : this()
+        {
+            itemPropertyAttribute = type;
+        }
+
         protected override void OnBound()
         {
             base.OnBound();
@@ -228,7 +235,39 @@ namespace XFramework.UI
                 return XInspector.CreateDrawerForType(customerAttribute.type, 0, customerAttribute.args);
             }
 
+            if (itemPropertyAttribute?.propertyAttributeType != null)
+            {
+                Type drawerType = XInspector.GetDrawerForPropertyAttribute(itemPropertyAttribute.propertyAttributeType);
+                if (drawerType != null)
+                {
+                    PropertyAttribute propertyAttribute = CreateItemPropertyAttribute();
+                    if (propertyAttribute != null)
+                    {
+                        XInspectorElement element = XInspector.CreateDrawerForType(drawerType, 0);
+                        if (element is IPropertyAttributeElement propertyAttributeElement)
+                        {
+                            propertyAttributeElement.SetPropertyAttribute(propertyAttribute);
+                        }
+
+                        return element;
+                    }
+                }
+            }
+
             return XInspector.CreateDrawerForMemberType(elementType, 0);
+        }
+
+        private PropertyAttribute CreateItemPropertyAttribute()
+        {
+            try
+            {
+                return Activator.CreateInstance(itemPropertyAttribute.propertyAttributeType, itemPropertyAttribute.args) as PropertyAttribute;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"创建数组元素PropertyAttribute失败: {itemPropertyAttribute.propertyAttributeType.Name}. {exception.Message}");
+                return null;
+            }
         }
 
         private void OnSizeChange(ChangeEvent<string> input)

@@ -5,6 +5,11 @@ using UnityEngine.UIElements;
 
 namespace XFramework.UI
 {
+    public interface IPropertyAttributeElement
+    {
+        void SetPropertyAttribute(PropertyAttribute attribute);
+    }
+
     public abstract class XInspectorElement : VisualElement
     {
         public delegate object Getter();
