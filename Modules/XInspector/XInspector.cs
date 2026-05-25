@@ -164,20 +164,6 @@ namespace XFramework.UI
             return element;
         }
 
-        /// <summary>
-        /// 创建一个数组元素自定义的ArrayElement
-        /// </summary>
-        /// <param name="customerAttribute"></param>
-        /// <param name="depth"></param>
-        /// <returns></returns>
-        public XInspectorElement CreateCustomerArrayElement(CustomerElementAttribute customerAttribute, int depth)
-        {
-            XInspectorElement element = Activator.CreateInstance(typeof(ArrayElement), customerAttribute) as XInspectorElement;
-            element.XInspector = this;
-            element.Depth = depth;
-            return element;
-        }
-
         public XInspectorElement CreateArrayItemPropertyElement(ArrayItemPropertyAttribute arrayItemPropertyAttribute, int depth)
         {
             XInspectorElement element = Activator.CreateInstance(typeof(ArrayElement), arrayItemPropertyAttribute) as XInspectorElement;

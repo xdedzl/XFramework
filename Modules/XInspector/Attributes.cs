@@ -1,50 +1,22 @@
 ﻿using System;
+using UnityEngine;
 
 namespace XFramework.UI
 {
-    /// <summary>
-    /// 定义自定义Element类型
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, Inherited = true, AllowMultiple = false)]
-    public class CustomerElementAttribute : Attribute
-    {
-        public Type type;
-        public object[] args;
-
-        public CustomerElementAttribute(Type type, params object[] args)
-        {
-            if (type != null && !type.IsSubclassOf(typeof(XInspectorElement)))
-            {
-                throw new Exception($"参数type必须为{typeof(XInspectorElement).Name}的派生类   type{type.Name}");
-            }
-            this.type = type;
-            this.args = args;
-        }
-    }
-
-    /// <summary>
-    /// 定义自定义Element类型
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, Inherited = true, AllowMultiple = false)]
-    public class ArrayCustomerElementAttribute : CustomerElementAttribute
-    {
-        public ArrayCustomerElementAttribute(Type type, params object[] args) : base(type, args) { }
-    }
-
     /// <summary>
     /// 定义数组/List元素使用的PropertyAttribute
     /// </summary>
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, Inherited = true, AllowMultiple = false)]
     public class ArrayItemPropertyAttribute : Attribute
     {
-        public Type propertyAttributeType;
-        public object[] args;
+        public readonly Type propertyAttributeType;
+        public readonly object[] args;
 
         public ArrayItemPropertyAttribute(Type propertyAttributeType, params object[] args)
         {
-            if (propertyAttributeType != null && !typeof(UnityEngine.PropertyAttribute).IsAssignableFrom(propertyAttributeType))
+            if (propertyAttributeType != null && !typeof(PropertyAttribute).IsAssignableFrom(propertyAttributeType))
             {
-                throw new Exception($"参数propertyAttributeType必须为{typeof(UnityEngine.PropertyAttribute).Name}的派生类   type{propertyAttributeType.Name}");
+                throw new Exception($"参数propertyAttributeType必须为{nameof(PropertyAttribute)}的派生类   type{propertyAttributeType.Name}");
             }
 
             this.propertyAttributeType = propertyAttributeType;
@@ -58,7 +30,7 @@ namespace XFramework.UI
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, Inherited = true, AllowMultiple = false)]
     public class ElementPropertyAttribute : Attribute
     {
-        public string propertyName;
+        public readonly string propertyName;
         public ElementPropertyAttribute(string propertyName)
         {
             this.propertyName = propertyName;
@@ -71,7 +43,7 @@ namespace XFramework.UI
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, Inherited = true, AllowMultiple = false)]
     public class DisplayNameAttribute : Attribute
     {
-        public string displayName;
+        public readonly string displayName;
 
         public DisplayNameAttribute(string displayName)
         {
@@ -83,7 +55,7 @@ namespace XFramework.UI
     /// 忽略该变量
     /// </summary>
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false)]
-    public class ElementIgnoreAttribute : Attribute { }
+    public class XInspectorIgnoreAttribute : Attribute { }
 
     /// <summary>
     /// 定义该Element型支持的类型
@@ -91,7 +63,7 @@ namespace XFramework.UI
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
     public class DefaultSportTypesAttribute : Attribute
     {
-        public Type[] types;
+        public readonly Type[] types;
         public DefaultSportTypesAttribute(params Type[] types)
         {
             this.types = types;
@@ -104,7 +76,7 @@ namespace XFramework.UI
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
     public class SupportHelperAttribute : Attribute
     {
-        public ISupport support;
+        public readonly ISupport support;
         public SupportHelperAttribute(Type supportType)
         {
             this.support = Activator.CreateInstance(supportType) as ISupport;

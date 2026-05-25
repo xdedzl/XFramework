@@ -16,7 +16,7 @@ namespace XFramework.UI
             {
                 if (member.MemberType == MemberTypes.Field || member.MemberType == MemberTypes.Property)
                 {
-                    if (Attribute.IsDefined(member, typeof(ElementIgnoreAttribute)))
+                    if (Attribute.IsDefined(member, typeof(XInspectorIgnoreAttribute)))
                         continue;
 
                     var nameAttribute = member.GetCustomAttribute<ElementPropertyAttribute>();
@@ -55,20 +55,11 @@ namespace XFramework.UI
         /// <returns></returns>
         private XInspectorElement CreateItemForMember(MemberInfo member, int depth)
         {
-            if (Attribute.IsDefined(member, typeof(ElementIgnoreAttribute)))
+            if (Attribute.IsDefined(member, typeof(XInspectorIgnoreAttribute)))
             {
                 return null;
             }
-
-            CustomerElementAttribute attribute = member.GetCustomAttribute<CustomerElementAttribute>();
-            if (attribute != null && attribute.type != null)
-            {
-                if (attribute is ArrayCustomerElementAttribute)
-                    return XInspector.CreateCustomerArrayElement(attribute, depth);
-                else
-                    return XInspector.CreateDrawerForType(attribute.type, depth, attribute.args);
-            }
-
+            
             Type variableType = member is FieldInfo ? ((FieldInfo)member).FieldType : ((PropertyInfo)member).PropertyType;
             ArrayItemPropertyAttribute arrayItemPropertyAttribute = member.GetCustomAttribute<ArrayItemPropertyAttribute>();
             if (arrayItemPropertyAttribute != null && IsArrayItemPropertyTarget(variableType))

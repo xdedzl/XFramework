@@ -11,8 +11,7 @@ namespace XFramework.UI
     {
         private Type elementType;
         private bool IsArray => BoundVariableType.IsArray;
-
-        private readonly CustomerElementAttribute customerAttribute;
+        
         private readonly ArrayItemPropertyAttribute itemPropertyAttribute;
 
         private readonly TextField sizeInput;
@@ -132,11 +131,6 @@ namespace XFramework.UI
             RegisterCallback<DetachFromPanelEvent>(OnDetachFromPanel);
         }
 
-        public ArrayElement(CustomerElementAttribute type) : this()
-        {
-            customerAttribute = type;
-        }
-
         public ArrayElement(ArrayItemPropertyAttribute type) : this()
         {
             itemPropertyAttribute = type;
@@ -230,11 +224,6 @@ namespace XFramework.UI
 
         private XInspectorElement CreateDrawerForMemberType()
         {
-            if(customerAttribute?.type != null)
-            {
-                return XInspector.CreateDrawerForType(customerAttribute.type, 0, customerAttribute.args);
-            }
-
             if (itemPropertyAttribute?.propertyAttributeType != null)
             {
                 Type drawerType = XInspector.GetDrawerForPropertyAttribute(itemPropertyAttribute.propertyAttributeType);

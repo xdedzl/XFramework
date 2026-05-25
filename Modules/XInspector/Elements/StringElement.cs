@@ -1,4 +1,6 @@
 ﻿using System;
+using UnityEditor;
+using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace XFramework.UI
@@ -6,7 +8,7 @@ namespace XFramework.UI
     [DefaultSportTypes(typeof(string))]
     public class StringElement : XInspectorElement
     {
-        protected TextField input;
+        protected readonly TextField input;
 
         public StringElement()
         {
@@ -30,9 +32,10 @@ namespace XFramework.UI
         }
     }
 
-    public class TextArea : StringElement
+    [CustomPropertyDrawer(typeof(TextAreaAttribute))]
+    public class TextAreaElement : StringElement
     {
-        public TextArea() : base()
+        public TextAreaElement()
         {
             input.AddToClassList("text-area-element");
             input.multiline = true;
@@ -40,7 +43,7 @@ namespace XFramework.UI
             input.ElementAt(0).style.unityTextAlign = UnityEngine.TextAnchor.UpperLeft;
         }
 
-        public TextArea(int minHeight) : this()
+        public TextAreaElement(int minHeight) : this()
         {
             if (minHeight > 0)
             {
