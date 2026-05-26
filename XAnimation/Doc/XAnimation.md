@@ -33,10 +33,8 @@ flowchart LR
 
     D --> E["XAnimationDriver"]
     E --> F["XAnimationContext<br/>参数容器"]
-    E --> G["XAnimationPlayer"]
-
-    G --> H["PlayableGraph<br/>Manual Evaluate"]
-    G --> I["Channel 0..N<br/>Base / Override / Additive"]
+    E --> H["PlayableGraph<br/>Manual Evaluate"]
+    E --> I["Channel 0..N<br/>Base / Override / Additive"]
     I --> J["Single / Blend1D / 2D Directional Blend 播放实例"]
 
     F --> J
@@ -55,8 +53,8 @@ flowchart LR
 
 - 资源层：`.xanimation` / `.xanimationoverride` 只描述通道、片段、状态、参数、Cue 和自动切换规则。
 - 编译层：`XAnimationAssetLoader` 负责加载、合并 Override、校验配置，并生成 `XAnimationCompiledAsset`。
-- 驱动层：`XAnimationDriver` 负责对外暴露播放与参数接口，内部持有 `XAnimationContext` 和 `XAnimationPlayer`。
-- 播放层：`XAnimationPlayer` 维护 Unity `PlayableGraph`、多个 `Channel`、Cue 分发和 Root Motion 解析。
+- 驱动层：`XAnimationDriver` 负责对外暴露播放与参数接口，并直接维护 `XAnimationContext`、Unity `PlayableGraph`、多个 `Channel`、Cue 分发和 Root Motion 解析。
+- 播放层：每个 `XAnimationChannel` 负责同一通道内 current / previous state 的淡入淡出，具体 state playback 负责 Single / Blend 的采样与权重。
 
 ### 1.3 一帧是怎么跑的
 
@@ -443,8 +441,7 @@ public sealed class HeroAnimationController : MonoBehaviour
 MonoBehaviour(Update)
   -> XAnimationActor
     -> XAnimationDriver
-      -> XAnimationPlayer
-        -> PlayableGraph / Animator
+      -> PlayableGraph / Animator
 ```
 
 ---

@@ -6,7 +6,7 @@ using UnityEngine.Playables;
 
 namespace XFramework.Animation
 {
-    public sealed class XAnimationPlayer : IDisposable
+    public sealed partial class XAnimationDriver
     {
         private readonly List<XAnimationChannel> m_Channels = new();
         private readonly Dictionary<string, XAnimationChannel> m_ChannelMap = new(StringComparer.Ordinal);
@@ -22,40 +22,16 @@ namespace XFramework.Animation
         private bool m_RootMotionEnabled;
         private int m_NextPlaybackId = 1;
         private int m_NextTemporaryStateId = 1;
+        private float[] m_LastLayerInputWeights;
+        private bool m_UseDirectChannelOutput;
+        private bool m_RuntimeInitialized;
+        private XAnimationContext Context => m_Context;
 
-        public XAnimationPlayer(
-            XAnimationCompiledAsset compiledAsset,
-            Animator animator,
-            XAnimationContext context)
+        private XAnimationDebugGraphSnapshot BuildDebugGraphSnapshot()
         {
-            CompiledAsset = compiledAsset ?? throw new ArgumentNullException(nameof(compiledAsset));
-            Animator = animator ? animator : throw new ArgumentNullException(nameof(animator));
-            Context = context ?? throw new ArgumentNullException(nameof(context));
-            BuildGraph();
-        }
-
-        public event Action<XAnimationCueEvent> CueTriggered
-        {
-            add => m_CueDispatcher.CueTriggered += value;
-            remove => m_CueDispatcher.CueTriggered -= value;
-        }
-
-        public event Action<XAnimationStateEvent> StateEntered;
-        public event Action<XAnimationStateEvent> StateExited;
-
-        public XAnimationCompiledAsset CompiledAsset { get; }
-        public Animator Animator { get; }
-        public XAnimationContext Context { get; }
-        public bool IsDisposed { get; private set; }
-
-        public XAnimationDebugGraphSnapshot GetDebugGraphSnapshot()
-        {
-            if (IsDisposed)
+            if (!m_RuntimeInitialized)
             {
-                return XAnimationDebugGraphSnapshot.Invalid(
-                    "XAnimationPlayer has been disposed.",
-                    m_Graph.IsValid() ? m_Graph.GetEditorName() : string.Empty,
-                    isDisposed: true);
+                return XAnimationDebugGraphSnapshot.Invalid("XAnimationDriver is not initialized.");
             }
 
             if (!m_Graph.IsValid())
@@ -76,25 +52,46 @@ namespace XFramework.Animation
             outputNode.isActive = outputNode.isConnected;
             outputNode.details = Animator != null ? $"Animator: {Animator.name}" : "Animator: <null>";
 
-            XAnimationDebugNodeSnapshot layerMixerNode = builder.CreateNode(outputNode.id, "Layer Mixer", "AnimationLayerMixerPlayable");
-            layerMixerNode.isConnected = m_LayerMixer.IsValid();
-            layerMixerNode.isActive = m_LayerMixer.IsValid();
-            layerMixerNode.inputWeight = 1f;
-            layerMixerNode.effectiveWeight = 1f;
-            layerMixerNode.details = $"Input Count: {(m_LayerMixer.IsValid() ? m_LayerMixer.GetInputCount() : 0)}";
-
             XAnimationDebugChannelSnapshot[] channels = new XAnimationDebugChannelSnapshot[m_Channels.Count];
-            XAnimationDebugNodeSnapshot[] channelNodes = new XAnimationDebugNodeSnapshot[m_Channels.Count];
-            for (int i = 0; i < m_Channels.Count; i++)
+            if (m_UseDirectChannelOutput)
             {
-                XAnimationChannel channel = m_Channels[i];
-                float layerWeight = m_LayerMixer.IsValid() ? m_LayerMixer.GetInputWeight(i) : 0f;
-                channels[i] = channel.BuildDebugChannelSnapshot(layerWeight);
-                channelNodes[i] = channel.BuildDebugNode(builder, layerMixerNode.id, i, layerWeight);
+                XAnimationChannel channel = m_Channels.Count > 0 ? m_Channels[0] : null;
+                float layerWeight = channel != null ? channel.ChannelWeight : 0f;
+                if (channel != null)
+                {
+                    channels[0] = channel.BuildDebugChannelSnapshot(layerWeight);
+                    outputNode.children = new[]
+                    {
+                        channel.BuildDebugNode(builder, outputNode.id, 0, layerWeight),
+                    };
+                }
+                else
+                {
+                    outputNode.children = Array.Empty<XAnimationDebugNodeSnapshot>();
+                }
+            }
+            else
+            {
+                XAnimationDebugNodeSnapshot layerMixerNode = builder.CreateNode(outputNode.id, "Layer Mixer", "AnimationLayerMixerPlayable");
+                layerMixerNode.isConnected = m_LayerMixer.IsValid();
+                layerMixerNode.isActive = m_LayerMixer.IsValid();
+                layerMixerNode.inputWeight = 1f;
+                layerMixerNode.effectiveWeight = 1f;
+                layerMixerNode.details = $"Input Count: {(m_LayerMixer.IsValid() ? m_LayerMixer.GetInputCount() : 0)}";
+
+                XAnimationDebugNodeSnapshot[] channelNodes = new XAnimationDebugNodeSnapshot[m_Channels.Count];
+                for (int i = 0; i < m_Channels.Count; i++)
+                {
+                    XAnimationChannel channel = m_Channels[i];
+                    float layerWeight = m_LayerMixer.IsValid() ? m_LayerMixer.GetInputWeight(i) : 0f;
+                    channels[i] = channel.BuildDebugChannelSnapshot(layerWeight);
+                    channelNodes[i] = channel.BuildDebugNode(builder, layerMixerNode.id, i, layerWeight);
+                }
+
+                layerMixerNode.children = channelNodes;
+                outputNode.children = new[] { layerMixerNode };
             }
 
-            layerMixerNode.children = channelNodes;
-            outputNode.children = new[] { layerMixerNode };
             graphNode.children = new[] { outputNode };
 
             return new XAnimationDebugGraphSnapshot
@@ -110,7 +107,7 @@ namespace XFramework.Animation
             };
         }
 
-        internal XAnimationPlaybackStartInfo PlayClip(string clipKey, string channelName, XAnimationTransitionOptions transition = default)
+        private XAnimationPlaybackStartInfo StartClipPlayback(string clipKey, string channelName, XAnimationTransitionOptions transition = default)
         {
             ThrowIfDisposed();
             if (!CompiledAsset.TryGetClipIndex(clipKey, out int clipIndex))
@@ -134,7 +131,7 @@ namespace XFramework.Animation
             return TryPlayCompiledState(temporaryState, channel, request);
         }
 
-        internal XAnimationPlaybackStartInfo PlayClip(AnimationClip animationClip, string channelName, XAnimationTransitionOptions transition = default)
+        private XAnimationPlaybackStartInfo StartClipPlayback(AnimationClip animationClip, string channelName, XAnimationTransitionOptions transition = default)
         {
             ThrowIfDisposed();
             if (animationClip == null)
@@ -151,6 +148,7 @@ namespace XFramework.Animation
                     clipPath = string.Empty,
                 },
                 animationClip);
+            m_CueDispatcher.RegisterClipCues(clip.Key, clip.AnimationEventCues);
             XAnimationCompiledChannel channel = ResolveClipChannel(clip, channelName);
             if (!CompiledAsset.TryGetChannelIndex(channel.Name, out int channelIndex))
             {
@@ -166,7 +164,7 @@ namespace XFramework.Animation
             return TryPlayCompiledState(temporaryState, channel, request);
         }
 
-        internal XAnimationPlaybackStartInfo PlayState(
+        private XAnimationPlaybackStartInfo StartStatePlayback(
             string stateKey,
             XAnimationTransitionOptions transition = default,
             bool force = false)
@@ -379,14 +377,14 @@ namespace XFramework.Animation
             return Array.Empty<string>();
         }
 
-        public void Stop(string channelName, float fadeOut = 0)
+        private void StopRuntime(string channelName, float fadeOut = 0)
         {
             ThrowIfDisposed();
             XAnimationChannel channel = GetChannel(channelName);
             channel.Stop(fadeOut > 0f ? fadeOut : channel.CompiledChannel.Config.defaultFadeOut, m_CueDispatcher);
         }
 
-        public void StopAll(float fadeOut = 0)
+        private void StopAllRuntime(float fadeOut = 0)
         {
             ThrowIfDisposed();
             foreach (XAnimationChannel channel in m_Channels)
@@ -396,25 +394,25 @@ namespace XFramework.Animation
             }
         }
 
-        public void SetChannelWeight(string channelName, float weight)
+        private void SetChannelWeightRuntime(string channelName, float weight)
         {
             ThrowIfDisposed();
             GetChannel(channelName).SetChannelWeight(weight);
         }
 
-        public void SetChannelTimeScale(string channelName, float timeScale)
+        private void SetChannelTimeScaleRuntime(string channelName, float timeScale)
         {
             ThrowIfDisposed();
             GetChannel(channelName).SetChannelTimeScale(timeScale);
         }
 
-        public bool SeekChannel(string channelName, float normalizedTime)
+        private bool SeekChannelRuntime(string channelName, float normalizedTime)
         {
             ThrowIfDisposed();
             return GetChannel(channelName).SeekCurrent(Mathf.Clamp01(normalizedTime));
         }
 
-        public void SetRootMotionEnabled(bool enabled)
+        private void SetRootMotionEnabledRuntime(bool enabled)
         {
             ThrowIfDisposed();
             if (m_RootMotionEnabled == enabled)
@@ -427,13 +425,13 @@ namespace XFramework.Animation
             SyncAnimatorRootMotion();
         }
 
-        internal bool ShouldApplyNativeRootMotion()
+        private bool ShouldApplyNativeRootMotionRuntime()
         {
             ThrowIfDisposed();
             return m_RootMotionEnabled;
         }
 
-        public XAnimationChannelState GetChannelState(string channelName)
+        private XAnimationChannelState GetChannelStateRuntime(string channelName)
         {
             ThrowIfDisposed();
             XAnimationChannel channel = GetChannel(channelName);
@@ -457,14 +455,14 @@ namespace XFramework.Animation
             return state;
         }
 
-        public bool TryGetCurrentState(string channelName, out XAnimationChannelState state)
+        private bool TryGetCurrentStateRuntime(string channelName, out XAnimationChannelState state)
         {
             ThrowIfDisposed();
-            state = GetChannelState(channelName);
+            state = GetChannelStateRuntime(channelName);
             return state != null;
         }
 
-        public bool IsPlaying(string stateKey, string channelName = null)
+        private bool IsPlayingRuntime(string stateKey, string channelName = null)
         {
             ThrowIfDisposed();
             if (string.IsNullOrWhiteSpace(stateKey))
@@ -474,7 +472,7 @@ namespace XFramework.Animation
 
             if (!string.IsNullOrWhiteSpace(channelName))
             {
-                XAnimationChannelState state = GetChannelState(channelName);
+                XAnimationChannelState state = GetChannelStateRuntime(channelName);
                 return state != null && string.Equals(state.stateKey, stateKey, StringComparison.Ordinal);
             }
 
@@ -490,31 +488,31 @@ namespace XFramework.Animation
             return false;
         }
 
-        public float GetStateDuration(string stateKey)
+        private float GetStateDurationRuntime(string stateKey)
         {
             ThrowIfDisposed();
             return CompiledAsset.GetStateDuration(stateKey);
         }
 
-        public float GetClipDuration(string clipKey)
+        private float GetClipDurationRuntime(string clipKey)
         {
             ThrowIfDisposed();
             return CompiledAsset.GetClipDuration(clipKey);
         }
 
-        public void PreloadAll()
+        private void PreloadAllRuntime()
         {
             ThrowIfDisposed();
             CompiledAsset.PreloadAll();
         }
 
-        public void PreloadState(string stateKey)
+        private void PreloadStateRuntime(string stateKey)
         {
             ThrowIfDisposed();
             CompiledAsset.PreloadState(stateKey);
         }
 
-        public void Update(float deltaTime)
+        private void EvaluateRuntime(float deltaTime)
         {
             ThrowIfDisposed();
             if (deltaTime < 0f)
@@ -525,8 +523,11 @@ namespace XFramework.Animation
             for (int i = 0; i < m_Channels.Count; i++)
             {
                 XAnimationChannel channel = m_Channels[i];
-                channel.PrepareFrame(deltaTime, Context);
-                m_LayerMixer.SetInputWeight(i, channel.HasActivePlayback ? channel.ChannelWeight : 0f);
+                channel.PrepareFrame(deltaTime, Context, m_UseDirectChannelOutput);
+                if (!m_UseDirectChannelOutput)
+                {
+                    SetLayerInputWeight(i, channel.HasActivePlayback ? channel.ChannelWeight : 0f);
+                }
             }
 
             m_Graph.Evaluate(deltaTime);
@@ -540,10 +541,12 @@ namespace XFramework.Animation
 
         }
 
-        public void Dispose()
+        private void DisposeRuntime()
         {
-            if (IsDisposed)
+            m_CueDispatcher.CueTriggered -= RaiseCueTriggered;
+            if (!m_RuntimeInitialized)
             {
+                m_CueDispatcher.Clear();
                 return;
             }
 
@@ -561,8 +564,8 @@ namespace XFramework.Animation
             }
 
             RestoreAnimatorController();
-
-            IsDisposed = true;
+            m_CueDispatcher.Clear();
+            m_RuntimeInitialized = false;
         }
 
         private void BuildGraph()
@@ -570,12 +573,25 @@ namespace XFramework.Animation
             m_CueDispatcher.Register(CompiledAsset.CuesByClipKey);
             DisableAnimatorController();
 
-            m_Graph = PlayableGraph.Create($"XAnimationPlayer_{Animator.name}");
+            m_Graph = PlayableGraph.Create($"XAnimationDriver_{Animator.name}");
             m_Graph.SetTimeUpdateMode(DirectorUpdateMode.Manual);
 
-            m_LayerMixer = AnimationLayerMixerPlayable.Create(m_Graph, CompiledAsset.Channels.Count);
             m_Output = AnimationPlayableOutput.Create(m_Graph, "XAnimationOutput", Animator);
-            m_Output.SetSourcePlayable(m_LayerMixer);
+            m_UseDirectChannelOutput = ShouldUseDirectChannelOutput();
+            if (!m_UseDirectChannelOutput)
+            {
+                m_LayerMixer = AnimationLayerMixerPlayable.Create(m_Graph, CompiledAsset.Channels.Count);
+                m_Output.SetSourcePlayable(m_LayerMixer);
+                m_LastLayerInputWeights = new float[CompiledAsset.Channels.Count];
+                for (int i = 0; i < m_LastLayerInputWeights.Length; i++)
+                {
+                    m_LastLayerInputWeights[i] = float.NaN;
+                }
+            }
+            else
+            {
+                m_LastLayerInputWeights = null;
+            }
 
             for (int i = 0; i < CompiledAsset.Channels.Count; i++)
             {
@@ -588,18 +604,62 @@ namespace XFramework.Animation
                     OnStateExited);
                 m_Channels.Add(channel);
                 m_ChannelMap.Add(channel.Name, channel);
-                m_Graph.Connect(channel.Mixer, 0, m_LayerMixer, i);
-                m_LayerMixer.SetInputWeight(i, compiledChannel.Config.defaultWeight);
-                m_LayerMixer.SetLayerAdditive((uint)i, compiledChannel.Config.layerType == XAnimationChannelLayerType.Additive);
-                if (compiledChannel.Mask != null)
+                if (m_UseDirectChannelOutput)
                 {
-                    m_LayerMixer.SetLayerMaskFromAvatarMask((uint)i, compiledChannel.Mask);
+                    m_Output.SetSourcePlayable(channel.Mixer);
+                }
+                else
+                {
+                    m_Graph.Connect(channel.Mixer, 0, m_LayerMixer, i);
+                    SetLayerInputWeight(i, compiledChannel.Config.defaultWeight, force: true);
+                    m_LayerMixer.SetLayerAdditive((uint)i, compiledChannel.Config.layerType == XAnimationChannelLayerType.Additive);
+                    if (compiledChannel.Mask != null)
+                    {
+                        m_LayerMixer.SetLayerMaskFromAvatarMask((uint)i, compiledChannel.Mask);
+                    }
                 }
             }
 
             m_Graph.Play();
             m_RootMotionEnabled = CompiledAsset.RootMotionEnabled;
             SyncAnimatorRootMotion();
+            m_RuntimeInitialized = true;
+        }
+
+        private bool ShouldUseDirectChannelOutput()
+        {
+            if (CompiledAsset.Channels.Count != 1)
+            {
+                return false;
+            }
+
+            XAnimationCompiledChannel channel = (XAnimationCompiledChannel)CompiledAsset.Channels[0];
+            return channel.Config.layerType == XAnimationChannelLayerType.Base &&
+                   channel.Mask == null;
+        }
+
+        private void SetLayerInputWeight(int inputIndex, float weight, bool force = false)
+        {
+            if (!m_LayerMixer.IsValid())
+            {
+                return;
+            }
+
+            if (m_LastLayerInputWeights == null ||
+                inputIndex < 0 ||
+                inputIndex >= m_LastLayerInputWeights.Length ||
+                force ||
+                float.IsNaN(m_LastLayerInputWeights[inputIndex]) ||
+                Mathf.Abs(m_LastLayerInputWeights[inputIndex] - weight) > 0.00001f)
+            {
+                m_LayerMixer.SetInputWeight(inputIndex, weight);
+                if (m_LastLayerInputWeights != null &&
+                    inputIndex >= 0 &&
+                    inputIndex < m_LastLayerInputWeights.Length)
+                {
+                    m_LastLayerInputWeights[inputIndex] = weight;
+                }
+            }
         }
 
         private void DisableAnimatorController()
@@ -956,12 +1016,12 @@ namespace XFramework.Animation
 
         private void OnStateEntered(XAnimationStatePlaybackInstance playback)
         {
-            StateEntered?.Invoke(BuildStateEvent(playback, null));
+            OnStateEnter?.Invoke(BuildStateEvent(playback, null));
         }
 
         private void OnStateExited(XAnimationStatePlaybackInstance playback, XAnimationStateExitReason reason)
         {
-            StateExited?.Invoke(BuildStateEvent(playback, reason));
+            CompletePlaybackExitAndRaise(BuildStateEvent(playback, reason));
         }
 
         private static XAnimationStateEvent BuildStateEvent(XAnimationStatePlaybackInstance playback, XAnimationStateExitReason? exitReason)
@@ -980,9 +1040,9 @@ namespace XFramework.Animation
 
         private void ThrowIfDisposed()
         {
-            if (IsDisposed)
+            if (!m_RuntimeInitialized)
             {
-                throw new ObjectDisposedException(nameof(XAnimationPlayer));
+                throw new XAnimationException("XAnimationDriver is not initialized.");
             }
         }
     }

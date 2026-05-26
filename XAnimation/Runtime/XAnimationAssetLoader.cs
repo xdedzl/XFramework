@@ -178,13 +178,23 @@ namespace XFramework.Animation
             for (int i = 0; i < asset.cues.Length; i++)
             {
                 XAnimationCueConfig cueConfig = asset.cues[i];
-                if (!cuesByClipKey.TryGetValue(cueConfig.clipKey, out List<XAnimationCompiledCue> compiledCues))
-                {
-                    compiledCues = new List<XAnimationCompiledCue>();
-                    cuesByClipKey.Add(cueConfig.clipKey, compiledCues);
-                }
+                AddCue(cuesByClipKey, cueConfig.clipKey, new XAnimationCompiledCue(cueConfig, i));
+            }
 
-                compiledCues.Add(new XAnimationCompiledCue(cueConfig, i));
+            int animationEventCueIndexOffset = asset.cues.Length;
+            for (int clipIndex = 0; clipIndex < compiledClips.Length; clipIndex++)
+            {
+                XAnimationCompiledClip clip = compiledClips[clipIndex];
+                IReadOnlyList<XAnimationCompiledCue> animationEventCues = clip.AnimationEventCues;
+                for (int cueIndex = 0; cueIndex < animationEventCues.Count; cueIndex++)
+                {
+                    AddCue(
+                        cuesByClipKey,
+                        clip.Key,
+                        new XAnimationCompiledCue(
+                            animationEventCues[cueIndex].Config,
+                            animationEventCueIndexOffset++));
+                }
             }
 
             foreach (List<XAnimationCompiledCue> cueList in cuesByClipKey.Values)
@@ -207,6 +217,20 @@ namespace XFramework.Animation
                 stateIndexByKey,
                 autoTransitionIndexByPreStateKey,
                 defaultTransitionIndexByPairKey);
+        }
+
+        private static void AddCue(
+            Dictionary<string, List<XAnimationCompiledCue>> cuesByClipKey,
+            string clipKey,
+            XAnimationCompiledCue cue)
+        {
+            if (!cuesByClipKey.TryGetValue(clipKey, out List<XAnimationCompiledCue> compiledCues))
+            {
+                compiledCues = new List<XAnimationCompiledCue>();
+                cuesByClipKey.Add(clipKey, compiledCues);
+            }
+
+            compiledCues.Add(cue);
         }
 
         private static XAnimationCompiledBlend1DState CompileBlend1DState(

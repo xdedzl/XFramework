@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace XFramework.Animation
 {
-    public sealed class XAnimationDriver : IDisposable
+    public sealed partial class XAnimationDriver : IDisposable
     {
 #if UNITY_EDITOR
         private const string EditorUpdateRunnerTypeName = "XFramework.Animation.XAnimationEditorUpdateRunner, XAnimationEditor";
@@ -18,7 +18,6 @@ namespace XFramework.Animation
 
         private XAnimationCompiledAsset m_CompiledAsset;
         private XAnimationContext m_Context;
-        private XAnimationPlayer m_Player;
         private bool m_IsPaused;
         private float m_TimeScale = 1f;
         private bool m_IsStepping;
@@ -34,7 +33,7 @@ namespace XFramework.Animation
         public XAnimationCompiledAsset CompiledAsset => m_CompiledAsset;
         public bool IsPaused => m_IsPaused;
         public float TimeScale => m_TimeScale;
-        public bool IsRegisteredForAutomaticUpdate => m_IsRegisteredForAutomaticUpdate && m_Player != null;
+        public bool IsRegisteredForAutomaticUpdate => m_IsRegisteredForAutomaticUpdate && m_RuntimeInitialized;
 
         private sealed class PendingPlaybackExit
         {
@@ -66,7 +65,7 @@ namespace XFramework.Animation
         {
             ValidateAssetPath(assetPath);
             ValidateAnimator(animator);
-            DisposePlayer();
+            DisposeRuntime();
             InitializeLoadedAsset(m_AssetLoader.Load(assetPath), animator);
         }
 
@@ -74,7 +73,7 @@ namespace XFramework.Animation
         {
             ValidateAnimationAsset(animationAsset);
             ValidateAnimator(animator);
-            DisposePlayer();
+            DisposeRuntime();
             InitializeLoadedAsset(m_AssetLoader.Load(animationAsset), animator);
         }
 
@@ -82,7 +81,7 @@ namespace XFramework.Animation
         {
             ValidateCompiledAsset(compiledAsset);
             ValidateAnimator(animator);
-            DisposePlayer();
+            DisposeRuntime();
             InitializeLoadedAsset(compiledAsset, animator);
         }
 
@@ -143,14 +142,14 @@ namespace XFramework.Animation
         public XAnimationPlaybackHandle PlayClip(string clipName, string channelName, XAnimationTransitionOptions transition = null)
         {
             EnsureInitialized();
-            XAnimationPlaybackStartInfo startInfo = m_Player.PlayClip(clipName, channelName, NormalizeTransitionOptions(transition));
+            XAnimationPlaybackStartInfo startInfo = StartClipPlayback(clipName, channelName, NormalizeTransitionOptions(transition));
             return CreatePlaybackHandle(startInfo, string.Empty, clipName);
         }
 
         public XAnimationPlaybackHandle PlayClip(AnimationClip clip, string channelName, XAnimationTransitionOptions transition = null)
         {
             EnsureInitialized();
-            XAnimationPlaybackStartInfo startInfo = m_Player.PlayClip(clip, channelName, NormalizeTransitionOptions(transition));
+            XAnimationPlaybackStartInfo startInfo = StartClipPlayback(clip, channelName, NormalizeTransitionOptions(transition));
             return CreatePlaybackHandle(startInfo, string.Empty, startInfo.ClipKey);
         }
 
@@ -172,44 +171,44 @@ namespace XFramework.Animation
         public XAnimationPlaybackHandle PlayState(string stateName, XAnimationTransitionOptions transition, bool force)
         {
             EnsureInitialized();
-            XAnimationPlaybackStartInfo startInfo = m_Player.PlayState(stateName, NormalizeTransitionOptions(transition), force);
+            XAnimationPlaybackStartInfo startInfo = StartStatePlayback(stateName, NormalizeTransitionOptions(transition), force);
             return CreatePlaybackHandle(startInfo, stateName, string.Empty);
         }
 
         public void Stop(string channelName, float fadeOut = 0)
         {
             EnsureInitialized();
-            m_Player.Stop(channelName, fadeOut);
+            StopRuntime(channelName, fadeOut);
         }
 
         public void StopAll(float fadeOut = 0)
         {
             EnsureInitialized();
-            m_Player.StopAll(fadeOut);
+            StopAllRuntime(fadeOut);
         }
 
         public void SetChannelWeight(string channelName, float weight)
         {
             EnsureInitialized();
-            m_Player.SetChannelWeight(channelName, weight);
+            SetChannelWeightRuntime(channelName, weight);
         }
 
         public void SetChannelTimeScale(string channelName, float timeScale)
         {
             EnsureInitialized();
-            m_Player.SetChannelTimeScale(channelName, timeScale);
+            SetChannelTimeScaleRuntime(channelName, timeScale);
         }
 
         public bool SeekChannel(string channelName, float normalizedTime)
         {
             EnsureInitialized();
-            return m_Player.SeekChannel(channelName, normalizedTime);
+            return SeekChannelRuntime(channelName, normalizedTime);
         }
 
         public void SetRootMotionEnabled(bool enabled)
         {
             EnsureInitialized();
-            m_Player.SetRootMotionEnabled(enabled);
+            SetRootMotionEnabledRuntime(enabled);
         }
 
         public void Pause()
@@ -256,58 +255,58 @@ namespace XFramework.Animation
         public XAnimationChannelState GetChannelState(string channelName)
         {
             EnsureInitialized();
-            return m_Player.GetChannelState(channelName);
+            return GetChannelStateRuntime(channelName);
         }
 
         public bool TryGetCurrentState(string channelName, out XAnimationChannelState state)
         {
             EnsureInitialized();
-            return m_Player.TryGetCurrentState(channelName, out state);
+            return TryGetCurrentStateRuntime(channelName, out state);
         }
 
         public bool IsPlaying(string stateKey, string channelName = null)
         {
             EnsureInitialized();
-            return m_Player.IsPlaying(stateKey, channelName);
+            return IsPlayingRuntime(stateKey, channelName);
         }
 
         public float GetStateDuration(string stateKey)
         {
             EnsureInitialized();
-            return m_Player.GetStateDuration(stateKey);
+            return GetStateDurationRuntime(stateKey);
         }
 
         public float GetClipDuration(string clipKey)
         {
             EnsureInitialized();
-            return m_Player.GetClipDuration(clipKey);
+            return GetClipDurationRuntime(clipKey);
         }
 
         public void PreloadAll()
         {
             EnsureInitialized();
-            m_Player.PreloadAll();
+            PreloadAllRuntime();
         }
 
         public void PreloadState(string stateKey)
         {
             EnsureInitialized();
-            m_Player.PreloadState(stateKey);
+            PreloadStateRuntime(stateKey);
         }
 
         public bool ShouldApplyNativeRootMotion()
         {
-            return m_Player != null && m_Player.ShouldApplyNativeRootMotion();
+            return m_RuntimeInitialized && ShouldApplyNativeRootMotionRuntime();
         }
 
         public XAnimationDebugGraphSnapshot GetDebugGraphSnapshot()
         {
-            if (m_Player == null)
+            if (!m_RuntimeInitialized)
             {
                 return XAnimationDebugGraphSnapshot.Invalid("XAnimationDriver is not initialized.");
             }
 
-            return m_Player.GetDebugGraphSnapshot();
+            return BuildDebugGraphSnapshot();
         }
 
         internal void Update(float deltaTime)
@@ -325,7 +324,7 @@ namespace XFramework.Animation
         public void Dispose()
         {
             UnregisterFromAutomaticUpdate();
-            DisposePlayer();
+            DisposeRuntime();
             m_PendingPlaybackExits.Clear();
             m_Context = null;
             m_CompiledAsset = null;
@@ -335,12 +334,12 @@ namespace XFramework.Animation
         internal bool TryGetPlaybackState(int playbackId, string channelName, out XAnimationChannelState state)
         {
             state = null;
-            if (m_Player == null || playbackId <= 0 || string.IsNullOrWhiteSpace(channelName))
+            if (!m_RuntimeInitialized || playbackId <= 0 || string.IsNullOrWhiteSpace(channelName))
             {
                 return false;
             }
 
-            if (!m_Player.TryGetCurrentState(channelName, out state) || state == null)
+            if (!TryGetCurrentStateRuntime(channelName, out state) || state == null)
             {
                 return false;
             }
@@ -356,7 +355,7 @@ namespace XFramework.Animation
 
         private void EnsureInitialized()
         {
-            if (m_Player == null)
+            if (!m_RuntimeInitialized)
             {
                 throw new XAnimationException("XAnimationDriver is not initialized.");
             }
@@ -400,44 +399,23 @@ namespace XFramework.Animation
             m_PendingPlaybackExits.Clear();
             Animator = animator;
             m_Context = new XAnimationContext(m_CompiledAsset.Parameters);
-            m_Player = new XAnimationPlayer(m_CompiledAsset, animator, m_Context);
-            m_Player.CueTriggered += OnCueTriggered;
-            m_Player.StateEntered += OnPlayerStateEntered;
-            m_Player.StateExited += OnPlayerStateExited;
+            m_CueDispatcher.CueTriggered += RaiseCueTriggered;
+            BuildGraph();
             m_IsPaused = false;
             m_TimeScale = 1f;
             if (m_CompiledAsset.Asset.preload)
             {
-                m_Player.PreloadAll();
+                PreloadAllRuntime();
             }
             RegisterForAutomaticUpdate();
         }
 
-        private void DisposePlayer()
-        {
-            if (m_Player == null)
-            {
-                return;
-            }
-
-            m_Player.Dispose();
-            m_Player.CueTriggered -= OnCueTriggered;
-            m_Player.StateEntered -= OnPlayerStateEntered;
-            m_Player.StateExited -= OnPlayerStateExited;
-            m_Player = null;
-        }
-
-        private void OnCueTriggered(XAnimationCueEvent cueEvent)
+        private void RaiseCueTriggered(XAnimationCueEvent cueEvent)
         {
             CueTriggered?.Invoke(cueEvent);
         }
 
-        private void OnPlayerStateEntered(XAnimationStateEvent stateEvent)
-        {
-            OnStateEnter?.Invoke(stateEvent);
-        }
-
-        private void OnPlayerStateExited(XAnimationStateEvent stateEvent)
+        private void CompletePlaybackExitAndRaise(XAnimationStateEvent stateEvent)
         {
             if (stateEvent != null &&
                 stateEvent.playbackId > 0 &&
@@ -529,7 +507,7 @@ namespace XFramework.Animation
 
         public void TickFromScheduler(float deltaTime)
         {
-            if (m_Player == null || m_IsPaused || m_IsStepping)
+            if (!m_RuntimeInitialized || m_IsPaused || m_IsStepping)
             {
                 return;
             }
@@ -539,7 +517,7 @@ namespace XFramework.Animation
 
         private void UpdateInternal(float deltaTime)
         {
-            if (deltaTime < 0f || m_Player == null)
+            if (deltaTime < 0f || !m_RuntimeInitialized)
             {
                 return;
             }
@@ -547,7 +525,7 @@ namespace XFramework.Animation
             Transform animatorTransform = Animator != null ? Animator.transform : null;
             Vector3 previousPosition = animatorTransform != null ? animatorTransform.position : Vector3.zero;
             Quaternion previousRotation = animatorTransform != null ? animatorTransform.rotation : Quaternion.identity;
-            m_Player.Update(deltaTime);
+            EvaluateRuntime(deltaTime);
             FrameEvaluated?.Invoke(Animator, previousPosition, previousRotation);
         }
 

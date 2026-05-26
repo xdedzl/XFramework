@@ -336,6 +336,7 @@ namespace XFramework.Animation
         private readonly bool m_ClearUnityAnimationEvents;
         private AnimationClip m_Clip;
         private AnimationClip m_PlaybackClip;
+        private XAnimationCompiledCue[] m_AnimationEventCues;
 
         public XAnimationCompiledClip(XAnimationClipConfig config, IXAnimationAssetResolver resolver)
         {
@@ -352,18 +353,21 @@ namespace XFramework.Animation
             Config = config ?? throw new ArgumentNullException(nameof(config));
             m_Clip = clip ? clip : throw new ArgumentNullException(nameof(clip));
             m_PlaybackClip = playbackClip ? playbackClip : m_Clip;
+            m_AnimationEventCues = CompileAnimationEventCues(Key, m_Clip, 0);
             m_ClearUnityAnimationEvents = false;
         }
 
         public XAnimationClipConfig Config { get; }
         public AnimationClip Clip => LoadClip();
         public AnimationClip PlaybackClip => LoadPlaybackClip();
+        internal IReadOnlyList<XAnimationCompiledCue> AnimationEventCues => LoadAnimationEventCues();
         public string Key => Config.key;
         public string ClipPath => Config.clipPath;
 
         public void Preload()
         {
             _ = PlaybackClip;
+            _ = AnimationEventCues;
         }
 
         private AnimationClip LoadClip()
@@ -398,8 +402,23 @@ namespace XFramework.Animation
             }
 
             AnimationClip clip = LoadClip();
+            if (m_AnimationEventCues == null)
+            {
+                m_AnimationEventCues = CompileAnimationEventCues(Key, clip, 0);
+            }
             m_PlaybackClip = m_ClearUnityAnimationEvents ? CreatePlaybackClip(clip) : clip;
             return m_PlaybackClip;
+        }
+
+        private XAnimationCompiledCue[] LoadAnimationEventCues()
+        {
+            if (m_AnimationEventCues != null)
+            {
+                return m_AnimationEventCues;
+            }
+
+            m_AnimationEventCues = CompileAnimationEventCues(Key, Clip, 0);
+            return m_AnimationEventCues;
         }
 
         private static AnimationClip CreatePlaybackClip(AnimationClip clip)
@@ -452,6 +471,77 @@ namespace XFramework.Animation
 #endif
 
             clip.events = Array.Empty<AnimationEvent>();
+        }
+
+        internal static XAnimationCompiledCue[] CompileAnimationEventCues(
+            string clipKey,
+            AnimationClip clip,
+            int cueIndexOffset)
+        {
+            if (clip == null)
+            {
+                return Array.Empty<XAnimationCompiledCue>();
+            }
+
+            AnimationEvent[] events = clip.events;
+            if (events == null || events.Length == 0)
+            {
+                return Array.Empty<XAnimationCompiledCue>();
+            }
+
+            float clipLength = Mathf.Max(clip.length, 0.0001f);
+            List<XAnimationCompiledCue> compiledCues = new(events.Length);
+            for (int i = 0; i < events.Length; i++)
+            {
+                AnimationEvent animationEvent = events[i];
+                if (animationEvent == null || string.IsNullOrWhiteSpace(animationEvent.functionName))
+                {
+                    continue;
+                }
+
+                compiledCues.Add(new XAnimationCompiledCue(
+                    new XAnimationCueConfig
+                    {
+                        clipKey = clipKey ?? string.Empty,
+                        time = Mathf.Clamp01(animationEvent.time / clipLength),
+                        eventKey = animationEvent.functionName,
+                        payload = ResolvePayload(animationEvent),
+                    },
+                    cueIndexOffset + i));
+            }
+
+            compiledCues.Sort((left, right) => left.Config.time.CompareTo(right.Config.time));
+            return compiledCues.ToArray();
+        }
+
+        private static string ResolvePayload(AnimationEvent animationEvent)
+        {
+            if (animationEvent == null)
+            {
+                return string.Empty;
+            }
+
+            if (!string.IsNullOrWhiteSpace(animationEvent.stringParameter))
+            {
+                return animationEvent.stringParameter;
+            }
+
+            if (animationEvent.intParameter != 0)
+            {
+                return animationEvent.intParameter.ToString();
+            }
+
+            if (!Mathf.Approximately(animationEvent.floatParameter, 0f))
+            {
+                return animationEvent.floatParameter.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            if (animationEvent.objectReferenceParameter != null)
+            {
+                return animationEvent.objectReferenceParameter.name ?? string.Empty;
+            }
+
+            return string.Empty;
         }
     }
 

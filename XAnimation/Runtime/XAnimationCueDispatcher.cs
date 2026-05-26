@@ -16,9 +16,16 @@ namespace XFramework.Animation
 
         public event Action<XAnimationCueEvent> CueTriggered;
 
+        public void Clear()
+        {
+            m_CuesByClipKey.Clear();
+            m_PlaybackStates.Clear();
+        }
+
         public void Register(IReadOnlyDictionary<string, List<XAnimationCompiledCue>> cuesByClipKey)
         {
             m_CuesByClipKey.Clear();
+            m_PlaybackStates.Clear();
             if (cuesByClipKey == null)
             {
                 return;
@@ -28,6 +35,23 @@ namespace XFramework.Animation
             {
                 m_CuesByClipKey[pair.Key] = pair.Value;
             }
+        }
+
+        public void RegisterClipCues(string clipKey, IReadOnlyList<XAnimationCompiledCue> cues)
+        {
+            if (string.IsNullOrWhiteSpace(clipKey) || cues == null || cues.Count == 0)
+            {
+                return;
+            }
+
+            List<XAnimationCompiledCue> registeredCues = new(cues.Count);
+            for (int i = 0; i < cues.Count; i++)
+            {
+                registeredCues.Add(cues[i]);
+            }
+
+            registeredCues.Sort((left, right) => left.Config.time.CompareTo(right.Config.time));
+            m_CuesByClipKey[clipKey] = registeredCues;
         }
 
         public void ResetForPlayback(int playbackId)

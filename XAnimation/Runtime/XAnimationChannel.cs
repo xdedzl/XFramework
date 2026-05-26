@@ -46,6 +46,9 @@ namespace XFramework.Animation
 
     public abstract class XAnimationStatePlaybackInstance
     {
+        protected const float PlayableWriteEpsilon = 0.00001f;
+        protected const double PlayableTimeWriteEpsilon = 0.000001d;
+
         private float m_FadeElapsed;
         private bool m_HasExitEventBeenRaised;
 
@@ -202,6 +205,38 @@ namespace XFramework.Animation
             node.drivesRootMotion = DrivesRootMotion;
             node.transitionSource = RequestSource;
         }
+
+        protected static bool ShouldWrite(float previousValue, float value)
+        {
+            return float.IsNaN(previousValue) || Mathf.Abs(previousValue - value) > PlayableWriteEpsilon;
+        }
+
+        protected static bool ShouldWrite(double previousValue, double value)
+        {
+            return double.IsNaN(previousValue) || System.Math.Abs(previousValue - value) > PlayableTimeWriteEpsilon;
+        }
+
+        protected static float[] CreateNaNFloatArray(int length)
+        {
+            float[] values = new float[length];
+            for (int i = 0; i < values.Length; i++)
+            {
+                values[i] = float.NaN;
+            }
+
+            return values;
+        }
+
+        protected static double[] CreateNaNDoubleArray(int length)
+        {
+            double[] values = new double[length];
+            for (int i = 0; i < values.Length; i++)
+            {
+                values[i] = double.NaN;
+            }
+
+            return values;
+        }
     }
 
     public sealed class XAnimationSingleStatePlaybackInstance : XAnimationStatePlaybackInstance
@@ -213,6 +248,8 @@ namespace XFramework.Animation
 
         private float m_TotalNormalizedTime;
         private float m_PreviousTotalNormalizedTime;
+        private double m_LastPlayableSpeed = double.NaN;
+        private double m_LastPlayableTime = double.NaN;
 
         internal XAnimationSingleStatePlaybackInstance(
             int playbackId,
@@ -244,7 +281,7 @@ namespace XFramework.Animation
         protected override void PrepareStateFrame(float deltaTime, float channelTimeScale, XAnimationContext context)
         {
             m_PreviousTotalNormalizedTime = m_TotalNormalizedTime;
-            m_Playable.SetSpeed(Speed * channelTimeScale);
+            SetPlayableSpeed(Speed * channelTimeScale);
             m_TotalNormalizedTime += deltaTime * Speed * channelTimeScale / m_ClipLength;
         }
 
@@ -258,24 +295,17 @@ namespace XFramework.Animation
             double playableTime = m_Playable.GetTime();
             if (!IsLooping && playableTime > m_ClipLength)
             {
-                m_Playable.SetTime(m_ClipLength);
+                SetPlayableTime(m_ClipLength);
             }
             else if (!IsLooping && playableTime < 0d)
             {
-                m_Playable.SetTime(0d);
+                SetPlayableTime(0d);
             }
 
             if (!SuppressCues)
             {
                 float effectiveWeight = CurrentWeight * channelWeight;
                 cueDispatcher?.Update(this, m_Clip.Key, m_PreviousTotalNormalizedTime, m_TotalNormalizedTime, effectiveWeight);
-                XAnimationClipEventInvoker.Dispatch(
-                    m_Clip.Clip,
-                    this,
-                    m_PreviousTotalNormalizedTime,
-                    m_TotalNormalizedTime,
-                    effectiveWeight,
-                    cueEvent => cueDispatcher?.Raise(cueEvent));
             }
         }
 
@@ -348,7 +378,7 @@ namespace XFramework.Animation
             m_PreviousTotalNormalizedTime = m_TotalNormalizedTime;
             if (m_Playable.IsValid())
             {
-                m_Playable.SetTime(GetPlayableTime(m_TotalNormalizedTime));
+                SetPlayableTime(GetPlayableTime(m_TotalNormalizedTime), force: true);
             }
         }
 
@@ -360,6 +390,34 @@ namespace XFramework.Animation
             }
 
             return Mathf.Clamp01(totalNormalizedTime) * m_ClipLength;
+        }
+
+        private void SetPlayableSpeed(double speed, bool force = false)
+        {
+            if (!m_Playable.IsValid())
+            {
+                return;
+            }
+
+            if (force || ShouldWrite(m_LastPlayableSpeed, speed))
+            {
+                m_Playable.SetSpeed(speed);
+                m_LastPlayableSpeed = speed;
+            }
+        }
+
+        private void SetPlayableTime(double time, bool force = false)
+        {
+            if (!m_Playable.IsValid())
+            {
+                return;
+            }
+
+            if (force || ShouldWrite(m_LastPlayableTime, time))
+            {
+                m_Playable.SetTime(time);
+                m_LastPlayableTime = time;
+            }
         }
     }
 
@@ -375,6 +433,10 @@ namespace XFramework.Animation
         private readonly AnimationClipPlayable[] m_Playables;
         private readonly float[] m_ClipLengths;
         private readonly float[] m_SampleWeights;
+        private readonly double[] m_LastPlayableTimes;
+        private readonly float[] m_LastSampleInputWeights;
+        private readonly bool[] m_PlayableSpeedZeroed;
+        private readonly bool[] m_SampleConnections;
 
         private int m_PrimaryClipIndex;
         private float m_BlendParameterValue;
@@ -400,6 +462,10 @@ namespace XFramework.Animation
             m_Playables = new AnimationClipPlayable[m_Clips.Length];
             m_ClipLengths = new float[m_Clips.Length];
             m_SampleWeights = new float[m_Clips.Length];
+            m_LastPlayableTimes = CreateNaNDoubleArray(m_Clips.Length);
+            m_LastSampleInputWeights = CreateNaNFloatArray(m_Clips.Length);
+            m_PlayableSpeedZeroed = new bool[m_Clips.Length];
+            m_SampleConnections = new bool[m_Clips.Length];
 
             float normalizedTime = Mathf.Clamp01(options.NormalizedTime);
             m_TotalNormalizedTime = normalizedTime;
@@ -421,10 +487,9 @@ namespace XFramework.Animation
 
         protected override void PrepareStateFrame(float deltaTime, float channelTimeScale, XAnimationContext context)
         {
-            string parameterName = m_State.Config.parameterName;
-            if (!context.TryGetFloat(parameterName, out var parameterValue))
+            if (!context.TryGetFloat(m_State.ParameterIndex, out var parameterValue))
             {
-                throw new XAnimationException($"XAnimation parameter '{parameterName}' does not exist.");
+                throw new XAnimationException($"XAnimation parameter '{m_State.Config.parameterName}' does not exist.");
             }
 
             ResolveWeights(parameterValue);
@@ -439,9 +504,9 @@ namespace XFramework.Animation
                 EnsureSampleConnection(i, shouldConnect);
                 if (shouldConnect)
                 {
-                    m_Playables[i].SetSpeed(0d);
-                    m_Playables[i].SetTime(GetPlayableTime(i, m_TotalNormalizedTime));
-                    m_Mixer.SetInputWeight(i, m_SampleWeights[i]);
+                    SetPlayableSpeedZero(i);
+                    SetPlayableTime(i, GetPlayableTime(i, m_TotalNormalizedTime));
+                    SetMixerInputWeight(i, m_SampleWeights[i]);
                 }
             }
         }
@@ -465,13 +530,6 @@ namespace XFramework.Animation
                         m_PreviousTotalNormalizedTime,
                         m_TotalNormalizedTime,
                         effectiveWeight);
-                    XAnimationClipEventInvoker.Dispatch(
-                        m_Clips[i].Clip,
-                        this,
-                        m_PreviousTotalNormalizedTime,
-                        m_TotalNormalizedTime,
-                        effectiveWeight,
-                        cueEvent => cueDispatcher?.Raise(cueEvent));
                 }
             }
         }
@@ -571,7 +629,7 @@ namespace XFramework.Animation
             {
                 if (m_Playables[i].IsValid())
                 {
-                    m_Playables[i].SetTime(GetPlayableTime(i, m_TotalNormalizedTime));
+                    SetPlayableTime(i, GetPlayableTime(i, m_TotalNormalizedTime), force: true);
                 }
             }
         }
@@ -616,12 +674,14 @@ namespace XFramework.Animation
 
         private void EnsureSampleConnection(int inputIndex, bool connected)
         {
-            bool isConnected = m_Mixer.GetInput(inputIndex).IsValid();
+            bool isConnected = m_SampleConnections[inputIndex] && m_Mixer.GetInput(inputIndex).IsValid();
             if (connected)
             {
                 if (!isConnected)
                 {
                     m_Graph.Connect(m_Playables[inputIndex], 0, m_Mixer, inputIndex);
+                    m_SampleConnections[inputIndex] = true;
+                    m_LastSampleInputWeights[inputIndex] = float.NaN;
                 }
 
                 return;
@@ -632,7 +692,45 @@ namespace XFramework.Animation
                 m_Graph.Disconnect(m_Mixer, inputIndex);
             }
 
-            m_Mixer.SetInputWeight(inputIndex, 0f);
+            m_SampleConnections[inputIndex] = false;
+            SetMixerInputWeight(inputIndex, 0f, force: true);
+        }
+
+        private void SetPlayableSpeedZero(int inputIndex)
+        {
+            if (!m_PlayableSpeedZeroed[inputIndex] && m_Playables[inputIndex].IsValid())
+            {
+                m_Playables[inputIndex].SetSpeed(0d);
+                m_PlayableSpeedZeroed[inputIndex] = true;
+            }
+        }
+
+        private void SetPlayableTime(int inputIndex, double time, bool force = false)
+        {
+            if (!m_Playables[inputIndex].IsValid())
+            {
+                return;
+            }
+
+            if (force || ShouldWrite(m_LastPlayableTimes[inputIndex], time))
+            {
+                m_Playables[inputIndex].SetTime(time);
+                m_LastPlayableTimes[inputIndex] = time;
+            }
+        }
+
+        private void SetMixerInputWeight(int inputIndex, float weight, bool force = false)
+        {
+            if (!m_Mixer.IsValid())
+            {
+                return;
+            }
+
+            if (force || ShouldWrite(m_LastSampleInputWeights[inputIndex], weight))
+            {
+                m_Mixer.SetInputWeight(inputIndex, weight);
+                m_LastSampleInputWeights[inputIndex] = weight;
+            }
         }
 
         private XAnimationBlendClipState[] BuildBlendClipStates()
@@ -735,6 +833,10 @@ namespace XFramework.Animation
         private readonly float[] m_ClipLengths;
         private readonly float[] m_SampleWeights;
         private readonly Vector2[] m_SamplePositions;
+        private readonly double[] m_LastPlayableTimes;
+        private readonly float[] m_LastSampleInputWeights;
+        private readonly bool[] m_PlayableSpeedZeroed;
+        private readonly bool[] m_SampleConnections;
         private readonly int m_IdleSampleIndex = -1;
 
         private int m_PrimaryClipIndex;
@@ -763,6 +865,10 @@ namespace XFramework.Animation
             m_ClipLengths = new float[m_Clips.Length];
             m_SampleWeights = new float[m_Clips.Length];
             m_SamplePositions = new Vector2[m_Clips.Length];
+            m_LastPlayableTimes = CreateNaNDoubleArray(m_Clips.Length);
+            m_LastSampleInputWeights = CreateNaNFloatArray(m_Clips.Length);
+            m_PlayableSpeedZeroed = new bool[m_Clips.Length];
+            m_SampleConnections = new bool[m_Clips.Length];
 
             float normalizedTime = Mathf.Clamp01(options.NormalizedTime);
             m_TotalNormalizedTime = normalizedTime;
@@ -789,16 +895,14 @@ namespace XFramework.Animation
 
         protected override void PrepareStateFrame(float deltaTime, float channelTimeScale, XAnimationContext context)
         {
-            string parameterXName = m_State.Config.parameterXName;
-            string parameterYName = m_State.Config.parameterYName;
-            if (!context.TryGetFloat(parameterXName, out float parameterXValue))
+            if (!context.TryGetFloat(m_State.ParameterXIndex, out float parameterXValue))
             {
-                throw new XAnimationException($"XAnimation parameter '{parameterXName}' does not exist.");
+                throw new XAnimationException($"XAnimation parameter '{m_State.Config.parameterXName}' does not exist.");
             }
 
-            if (!context.TryGetFloat(parameterYName, out float parameterYValue))
+            if (!context.TryGetFloat(m_State.ParameterYIndex, out float parameterYValue))
             {
-                throw new XAnimationException($"XAnimation parameter '{parameterYName}' does not exist.");
+                throw new XAnimationException($"XAnimation parameter '{m_State.Config.parameterYName}' does not exist.");
             }
 
             m_BlendParameterX = parameterXValue;
@@ -814,9 +918,9 @@ namespace XFramework.Animation
                 EnsureSampleConnection(i, shouldConnect);
                 if (shouldConnect)
                 {
-                    m_Playables[i].SetSpeed(0d);
-                    m_Playables[i].SetTime(GetPlayableTime(i, m_TotalNormalizedTime));
-                    m_Mixer.SetInputWeight(i, m_SampleWeights[i]);
+                    SetPlayableSpeedZero(i);
+                    SetPlayableTime(i, GetPlayableTime(i, m_TotalNormalizedTime));
+                    SetMixerInputWeight(i, m_SampleWeights[i]);
                 }
             }
         }
@@ -840,13 +944,6 @@ namespace XFramework.Animation
                         m_PreviousTotalNormalizedTime,
                         m_TotalNormalizedTime,
                         effectiveWeight);
-                    XAnimationClipEventInvoker.Dispatch(
-                        m_Clips[i].Clip,
-                        this,
-                        m_PreviousTotalNormalizedTime,
-                        m_TotalNormalizedTime,
-                        effectiveWeight,
-                        cueEvent => cueDispatcher?.Raise(cueEvent));
                 }
             }
         }
@@ -949,7 +1046,7 @@ namespace XFramework.Animation
             {
                 if (m_Playables[i].IsValid())
                 {
-                    m_Playables[i].SetTime(GetPlayableTime(i, m_TotalNormalizedTime));
+                    SetPlayableTime(i, GetPlayableTime(i, m_TotalNormalizedTime), force: true);
                 }
             }
         }
@@ -1136,12 +1233,14 @@ namespace XFramework.Animation
 
         private void EnsureSampleConnection(int inputIndex, bool connected)
         {
-            bool isConnected = m_Mixer.GetInput(inputIndex).IsValid();
+            bool isConnected = m_SampleConnections[inputIndex] && m_Mixer.GetInput(inputIndex).IsValid();
             if (connected)
             {
                 if (!isConnected)
                 {
                     m_Graph.Connect(m_Playables[inputIndex], 0, m_Mixer, inputIndex);
+                    m_SampleConnections[inputIndex] = true;
+                    m_LastSampleInputWeights[inputIndex] = float.NaN;
                 }
 
                 return;
@@ -1152,7 +1251,45 @@ namespace XFramework.Animation
                 m_Graph.Disconnect(m_Mixer, inputIndex);
             }
 
-            m_Mixer.SetInputWeight(inputIndex, 0f);
+            m_SampleConnections[inputIndex] = false;
+            SetMixerInputWeight(inputIndex, 0f, force: true);
+        }
+
+        private void SetPlayableSpeedZero(int inputIndex)
+        {
+            if (!m_PlayableSpeedZeroed[inputIndex] && m_Playables[inputIndex].IsValid())
+            {
+                m_Playables[inputIndex].SetSpeed(0d);
+                m_PlayableSpeedZeroed[inputIndex] = true;
+            }
+        }
+
+        private void SetPlayableTime(int inputIndex, double time, bool force = false)
+        {
+            if (!m_Playables[inputIndex].IsValid())
+            {
+                return;
+            }
+
+            if (force || ShouldWrite(m_LastPlayableTimes[inputIndex], time))
+            {
+                m_Playables[inputIndex].SetTime(time);
+                m_LastPlayableTimes[inputIndex] = time;
+            }
+        }
+
+        private void SetMixerInputWeight(int inputIndex, float weight, bool force = false)
+        {
+            if (!m_Mixer.IsValid())
+            {
+                return;
+            }
+
+            if (force || ShouldWrite(m_LastSampleInputWeights[inputIndex], weight))
+            {
+                m_Mixer.SetInputWeight(inputIndex, weight);
+                m_LastSampleInputWeights[inputIndex] = weight;
+            }
         }
 
         private XAnimationBlendClipState[] BuildBlendClipStates()
@@ -1256,6 +1393,10 @@ namespace XFramework.Animation
         private readonly float[] m_ClipLengths;
         private readonly float[] m_SampleWeights;
         private readonly Vector2[] m_SamplePositions;
+        private readonly double[] m_LastPlayableTimes;
+        private readonly float[] m_LastSampleInputWeights;
+        private readonly bool[] m_PlayableSpeedZeroed;
+        private readonly bool[] m_SampleConnections;
         private readonly FreeformDirectionalGroup[] m_DirectionalGroups;
         private readonly int m_IdleSampleIndex = -1;
 
@@ -1285,6 +1426,10 @@ namespace XFramework.Animation
             m_ClipLengths = new float[m_Clips.Length];
             m_SampleWeights = new float[m_Clips.Length];
             m_SamplePositions = new Vector2[m_Clips.Length];
+            m_LastPlayableTimes = CreateNaNDoubleArray(m_Clips.Length);
+            m_LastSampleInputWeights = CreateNaNFloatArray(m_Clips.Length);
+            m_PlayableSpeedZeroed = new bool[m_Clips.Length];
+            m_SampleConnections = new bool[m_Clips.Length];
 
             float normalizedTime = Mathf.Clamp01(options.NormalizedTime);
             m_TotalNormalizedTime = normalizedTime;
@@ -1314,16 +1459,14 @@ namespace XFramework.Animation
 
         protected override void PrepareStateFrame(float deltaTime, float channelTimeScale, XAnimationContext context)
         {
-            string parameterXName = m_State.Config.parameterXName;
-            string parameterYName = m_State.Config.parameterYName;
-            if (!context.TryGetFloat(parameterXName, out float parameterXValue))
+            if (!context.TryGetFloat(m_State.ParameterXIndex, out float parameterXValue))
             {
-                throw new XAnimationException($"XAnimation parameter '{parameterXName}' does not exist.");
+                throw new XAnimationException($"XAnimation parameter '{m_State.Config.parameterXName}' does not exist.");
             }
 
-            if (!context.TryGetFloat(parameterYName, out float parameterYValue))
+            if (!context.TryGetFloat(m_State.ParameterYIndex, out float parameterYValue))
             {
-                throw new XAnimationException($"XAnimation parameter '{parameterYName}' does not exist.");
+                throw new XAnimationException($"XAnimation parameter '{m_State.Config.parameterYName}' does not exist.");
             }
 
             m_BlendParameterX = parameterXValue;
@@ -1339,9 +1482,9 @@ namespace XFramework.Animation
                 EnsureSampleConnection(i, shouldConnect);
                 if (shouldConnect)
                 {
-                    m_Playables[i].SetSpeed(0d);
-                    m_Playables[i].SetTime(GetPlayableTime(i, m_TotalNormalizedTime));
-                    m_Mixer.SetInputWeight(i, m_SampleWeights[i]);
+                    SetPlayableSpeedZero(i);
+                    SetPlayableTime(i, GetPlayableTime(i, m_TotalNormalizedTime));
+                    SetMixerInputWeight(i, m_SampleWeights[i]);
                 }
             }
         }
@@ -1365,13 +1508,6 @@ namespace XFramework.Animation
                         m_PreviousTotalNormalizedTime,
                         m_TotalNormalizedTime,
                         effectiveWeight);
-                    XAnimationClipEventInvoker.Dispatch(
-                        m_Clips[i].Clip,
-                        this,
-                        m_PreviousTotalNormalizedTime,
-                        m_TotalNormalizedTime,
-                        effectiveWeight,
-                        cueEvent => cueDispatcher?.Raise(cueEvent));
                 }
             }
         }
@@ -1474,7 +1610,7 @@ namespace XFramework.Animation
             {
                 if (m_Playables[i].IsValid())
                 {
-                    m_Playables[i].SetTime(GetPlayableTime(i, m_TotalNormalizedTime));
+                    SetPlayableTime(i, GetPlayableTime(i, m_TotalNormalizedTime), force: true);
                 }
             }
         }
@@ -1793,12 +1929,14 @@ namespace XFramework.Animation
 
         private void EnsureSampleConnection(int inputIndex, bool connected)
         {
-            bool isConnected = m_Mixer.GetInput(inputIndex).IsValid();
+            bool isConnected = m_SampleConnections[inputIndex] && m_Mixer.GetInput(inputIndex).IsValid();
             if (connected)
             {
                 if (!isConnected)
                 {
                     m_Graph.Connect(m_Playables[inputIndex], 0, m_Mixer, inputIndex);
+                    m_SampleConnections[inputIndex] = true;
+                    m_LastSampleInputWeights[inputIndex] = float.NaN;
                 }
 
                 return;
@@ -1809,7 +1947,45 @@ namespace XFramework.Animation
                 m_Graph.Disconnect(m_Mixer, inputIndex);
             }
 
-            m_Mixer.SetInputWeight(inputIndex, 0f);
+            m_SampleConnections[inputIndex] = false;
+            SetMixerInputWeight(inputIndex, 0f, force: true);
+        }
+
+        private void SetPlayableSpeedZero(int inputIndex)
+        {
+            if (!m_PlayableSpeedZeroed[inputIndex] && m_Playables[inputIndex].IsValid())
+            {
+                m_Playables[inputIndex].SetSpeed(0d);
+                m_PlayableSpeedZeroed[inputIndex] = true;
+            }
+        }
+
+        private void SetPlayableTime(int inputIndex, double time, bool force = false)
+        {
+            if (!m_Playables[inputIndex].IsValid())
+            {
+                return;
+            }
+
+            if (force || ShouldWrite(m_LastPlayableTimes[inputIndex], time))
+            {
+                m_Playables[inputIndex].SetTime(time);
+                m_LastPlayableTimes[inputIndex] = time;
+            }
+        }
+
+        private void SetMixerInputWeight(int inputIndex, float weight, bool force = false)
+        {
+            if (!m_Mixer.IsValid())
+            {
+                return;
+            }
+
+            if (force || ShouldWrite(m_LastSampleInputWeights[inputIndex], weight))
+            {
+                m_Mixer.SetInputWeight(inputIndex, weight);
+                m_LastSampleInputWeights[inputIndex] = weight;
+            }
         }
 
         private XAnimationBlendClipState[] BuildBlendClipStates()
@@ -1932,6 +2108,7 @@ namespace XFramework.Animation
         private string m_LastRejectedClipKey = string.Empty;
         private int m_LastRejectedPriority;
         private XAnimationTransitionRequestSource m_LastRejectedSource;
+        private readonly float[] m_LastInputWeights = { float.NaN, float.NaN };
 
         public XAnimationChannel(
             PlayableGraph graph,
@@ -2054,26 +2231,27 @@ namespace XFramework.Animation
             DisconnectInput(0);
         }
 
-        public void PrepareFrame(float deltaTime, XAnimationContext context)
+        public void PrepareFrame(float deltaTime, XAnimationContext context, bool applyChannelWeightToInputs)
         {
+            float outputWeightScale = applyChannelWeightToInputs ? m_ChannelWeight : 1f;
             if (m_Current != null)
             {
                 m_Current.PrepareFrame(deltaTime, m_TimeScale, context);
-                Mixer.SetInputWeight(0, m_Current.CurrentWeight);
+                SetMixerInputWeight(0, m_Current.CurrentWeight * outputWeightScale);
             }
             else
             {
-                Mixer.SetInputWeight(0, 0f);
+                SetMixerInputWeight(0, 0f);
             }
 
             if (m_Previous != null)
             {
                 m_Previous.PrepareFrame(deltaTime, m_TimeScale, context);
-                Mixer.SetInputWeight(1, m_Previous.CurrentWeight);
+                SetMixerInputWeight(1, m_Previous.CurrentWeight * outputWeightScale);
             }
             else
             {
-                Mixer.SetInputWeight(1, 0f);
+                SetMixerInputWeight(1, 0f);
             }
         }
 
@@ -2112,7 +2290,7 @@ namespace XFramework.Animation
             }
 
             m_Current.SeekNormalizedTime(normalizedTime);
-            Mixer.SetInputWeight(0, m_Current.CurrentWeight);
+            SetMixerInputWeight(0, m_Current.CurrentWeight, force: true);
             return true;
         }
 
@@ -2303,14 +2481,14 @@ namespace XFramework.Animation
                     if (Mixer.GetInput(i).Equals(playable))
                     {
                         m_Graph.Disconnect(Mixer, i);
-                        Mixer.SetInputWeight(i, 0f);
+                        SetMixerInputWeight(i, 0f, force: true);
                         break;
                     }
                 }
             }
 
             m_Graph.Connect(playable, 0, Mixer, inputIndex);
-            Mixer.SetInputWeight(inputIndex, weight);
+            SetMixerInputWeight(inputIndex, weight, force: true);
         }
 
         private void DisconnectInput(int inputIndex)
@@ -2321,7 +2499,21 @@ namespace XFramework.Animation
             }
 
             m_Graph.Disconnect(Mixer, inputIndex);
-            Mixer.SetInputWeight(inputIndex, 0f);
+            SetMixerInputWeight(inputIndex, 0f, force: true);
+        }
+
+        private void SetMixerInputWeight(int inputIndex, float weight, bool force = false)
+        {
+            if (!Mixer.IsValid())
+            {
+                return;
+            }
+
+            if (force || float.IsNaN(m_LastInputWeights[inputIndex]) || Mathf.Abs(m_LastInputWeights[inputIndex] - weight) > 0.00001f)
+            {
+                Mixer.SetInputWeight(inputIndex, weight);
+                m_LastInputWeights[inputIndex] = weight;
+            }
         }
 
         private void DestroyPlayback(ref XAnimationStatePlaybackInstance playback, XAnimationCueDispatcher cueDispatcher)
