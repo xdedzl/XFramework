@@ -148,6 +148,12 @@ namespace XFramework.Animation
         Additive,
     }
 
+    public enum XAnimationUpdateMode
+    {
+        Manual,
+        GameTime,
+    }
+
     public enum XAnimationParameterType
     {
         Float = 0,
@@ -330,10 +336,7 @@ namespace XFramework.Animation
 
     public sealed class XAnimationCompiledClip
     {
-        private static readonly Dictionary<int, AnimationClip> s_RuntimePlaybackClipCache = new();
-
         private readonly IXAnimationAssetResolver m_Resolver;
-        private readonly bool m_ClearUnityAnimationEvents;
         private AnimationClip m_Clip;
         private AnimationClip m_PlaybackClip;
         private XAnimationCompiledCue[] m_AnimationEventCues;
@@ -342,7 +345,6 @@ namespace XFramework.Animation
         {
             Config = config ?? throw new ArgumentNullException(nameof(config));
             m_Resolver = resolver ?? throw new ArgumentNullException(nameof(resolver));
-            m_ClearUnityAnimationEvents = true;
         }
 
         public XAnimationCompiledClip(
@@ -354,7 +356,6 @@ namespace XFramework.Animation
             m_Clip = clip ? clip : throw new ArgumentNullException(nameof(clip));
             m_PlaybackClip = playbackClip ? playbackClip : m_Clip;
             m_AnimationEventCues = CompileAnimationEventCues(Key, m_Clip, 0);
-            m_ClearUnityAnimationEvents = false;
         }
 
         public XAnimationClipConfig Config { get; }
@@ -406,7 +407,7 @@ namespace XFramework.Animation
             {
                 m_AnimationEventCues = CompileAnimationEventCues(Key, clip, 0);
             }
-            m_PlaybackClip = m_ClearUnityAnimationEvents ? CreatePlaybackClip(clip) : clip;
+            m_PlaybackClip = clip;
             return m_PlaybackClip;
         }
 
@@ -419,58 +420,6 @@ namespace XFramework.Animation
 
             m_AnimationEventCues = CompileAnimationEventCues(Key, Clip, 0);
             return m_AnimationEventCues;
-        }
-
-        private static AnimationClip CreatePlaybackClip(AnimationClip clip)
-        {
-            if (clip == null)
-            {
-                return null;
-            }
-
-            AnimationEvent[] events = clip.events;
-            if (events == null || events.Length == 0)
-            {
-                return clip;
-            }
-
-            int instanceId = clip.GetInstanceID();
-            if (s_RuntimePlaybackClipCache.TryGetValue(instanceId, out AnimationClip cachedClip) && cachedClip != null)
-            {
-                return cachedClip;
-            }
-
-            AnimationClip playbackClip = UnityEngine.Object.Instantiate(clip);
-            playbackClip.name = $"{clip.name}_XAnimationRuntime";
-            ClearAnimationEvents(playbackClip);
-            playbackClip.hideFlags = HideFlags.HideAndDontSave;
-            s_RuntimePlaybackClipCache[instanceId] = playbackClip;
-            return playbackClip;
-        }
-
-        private static void ClearAnimationEvents(AnimationClip clip)
-        {
-            if (clip == null)
-            {
-                return;
-            }
-
-#if UNITY_EDITOR
-            Type animationUtilityType = Type.GetType("UnityEditor.AnimationUtility, UnityEditor");
-            MethodInfo setAnimationEventsMethod = animationUtilityType?.GetMethod(
-                "SetAnimationEvents",
-                BindingFlags.Public | BindingFlags.Static,
-                null,
-                new[] { typeof(AnimationClip), typeof(AnimationEvent[]) },
-                null);
-            if (setAnimationEventsMethod != null)
-            {
-                setAnimationEventsMethod.Invoke(null, new object[] { clip, Array.Empty<AnimationEvent>() });
-                return;
-            }
-#endif
-
-            clip.events = Array.Empty<AnimationEvent>();
         }
 
         internal static XAnimationCompiledCue[] CompileAnimationEventCues(
@@ -1159,15 +1108,6 @@ namespace XFramework.Animation
         public float totalNormalizedTime;
         public float positionX;
         public float positionY;
-    }
-
-    public sealed class XAnimationRootMotionEvent
-    {
-        public string channelName;
-        public int playbackId;
-        public string stateKey;
-        public Vector3 deltaPosition;
-        public Quaternion deltaRotation = Quaternion.identity;
     }
 
     public sealed class XAnimationCueEvent

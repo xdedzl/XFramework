@@ -231,9 +231,7 @@ namespace XFramework.Editor
                 {
                     m_StatusLabel.text = m_TargetActor == null
                         ? "未选择 XAnimationActor"
-                        : m_TargetActor.IsInitialized
-                            ? "Ready"
-                            : "Actor 未初始化";
+                        : "Ready";
                 }
             }
         }

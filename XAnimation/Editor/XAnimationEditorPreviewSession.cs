@@ -130,6 +130,8 @@ namespace XFramework.Editor
 
             m_Driver = new XAnimationDriver();
             m_Driver.Initialize(m_CompiledAsset, m_Animator);
+            m_Driver.SetUpdateMode(XAnimationUpdateMode.Manual);
+            m_Driver.SetUnityAnimationEventsEnabled(false);
             m_Driver.CueTriggered += OnCueTriggered;
             m_Driver.OnStateEnter += OnStateEnter;
             m_Driver.OnStateExit += OnStateExit;
@@ -2718,6 +2720,8 @@ namespace XFramework.Editor
                 m_Driver.Dispose();
                 m_Driver = new XAnimationDriver();
                 m_Driver.Initialize(m_CompiledAsset, m_Animator);
+                m_Driver.SetUpdateMode(XAnimationUpdateMode.Manual);
+                m_Driver.SetUnityAnimationEventsEnabled(false);
                 m_Driver.CueTriggered += OnCueTriggered;
                 m_Driver.OnStateEnter += OnStateEnter;
                 m_Driver.OnStateExit += OnStateExit;

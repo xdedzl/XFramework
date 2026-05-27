@@ -22,6 +22,8 @@ namespace XFramework.Animation
         private float m_TimeScale = 1f;
         private bool m_IsStepping;
         private bool m_IsRegisteredForAutomaticUpdate;
+        private XAnimationUpdateMode m_UpdateMode = XAnimationUpdateMode.Manual;
+        private bool m_UnityAnimationEventsEnabled;
 
         public event Action<XAnimationCueEvent> CueTriggered;
         public event Action<XAnimationStateEvent> OnStateEnter;
@@ -33,8 +35,13 @@ namespace XFramework.Animation
         public XAnimationCompiledAsset CompiledAsset => m_CompiledAsset;
         public bool IsPaused => m_IsPaused;
         public float TimeScale => m_TimeScale;
+        public XAnimationUpdateMode UpdateMode => m_UpdateMode;
+        public bool UnityAnimationEventsEnabled => m_UnityAnimationEventsEnabled;
+        public bool SupportsCue => true;
         public bool IsRegisteredForAutomaticUpdate => m_IsRegisteredForAutomaticUpdate && m_RuntimeInitialized;
-
+        public bool IsRunning => !IsPaused && m_RuntimeInitialized;
+        
+        
         private sealed class PendingPlaybackExit
         {
             public PendingPlaybackExit(
@@ -224,6 +231,7 @@ namespace XFramework.Animation
         public void SetPaused(bool paused)
         {
             m_IsPaused = paused;
+            SyncGraphPlayState();
         }
 
         public void SetTimeScale(float timeScale)
@@ -231,9 +239,22 @@ namespace XFramework.Animation
             m_TimeScale = Mathf.Max(0f, timeScale);
         }
 
+        public void SetUpdateMode(XAnimationUpdateMode updateMode)
+        {
+            m_UpdateMode = updateMode;
+            ApplyGraphTimeUpdateMode();
+        }
+
+        public void SetUnityAnimationEventsEnabled(bool enabled)
+        {
+            m_UnityAnimationEventsEnabled = enabled;
+            SyncAnimatorFireEvents();
+        }
+
         public void Step(float deltaTime)
         {
             EnsureInitialized();
+            EnsureManualUpdateMode(nameof(Step));
             if (deltaTime <= 0f)
             {
                 throw new XAnimationException("XAnimation step deltaTime must be greater than 0.");
@@ -318,6 +339,7 @@ namespace XFramework.Animation
         public void SyncFrame()
         {
             EnsureInitialized();
+            EnsureManualUpdateMode(nameof(SyncFrame));
             UpdateInternal(0f);
         }
 
@@ -400,9 +422,9 @@ namespace XFramework.Animation
             Animator = animator;
             m_Context = new XAnimationContext(m_CompiledAsset.Parameters);
             m_CueDispatcher.CueTriggered += RaiseCueTriggered;
-            BuildGraph();
             m_IsPaused = false;
             m_TimeScale = 1f;
+            BuildGraph();
             if (m_CompiledAsset.Asset.preload)
             {
                 PreloadAllRuntime();
@@ -452,6 +474,14 @@ namespace XFramework.Animation
                 priority = options.priority,
                 interruptible = options.interruptible,
             };
+        }
+
+        private void EnsureManualUpdateMode(string operationName)
+        {
+            if (m_UpdateMode != XAnimationUpdateMode.Manual)
+            {
+                throw new XAnimationException($"XAnimation {operationName} is only supported in Manual update mode.");
+            }
         }
 
         private XAnimationPlaybackHandle CreatePlaybackHandle(
@@ -507,8 +537,10 @@ namespace XFramework.Animation
 
         public void TickFromScheduler(float deltaTime)
         {
+            FlushPendingCues();
             if (!m_RuntimeInitialized || m_IsPaused || m_IsStepping)
             {
+                SyncGraphPlayState();
                 return;
             }
 

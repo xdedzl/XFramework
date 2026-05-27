@@ -132,13 +132,13 @@ namespace XFramework.Animation
             return true;
         }
 
-        public void PrepareFrame(float deltaTime, float channelTimeScale, XAnimationContext context)
+        public void PrepareFrame(float deltaTime, float channelTimeScale, XAnimationContext context, float playableSpeedScale)
         {
-            PrepareStateFrame(deltaTime, channelTimeScale, context);
+            PrepareStateFrame(deltaTime, channelTimeScale, Mathf.Max(0f, playableSpeedScale), context);
             UpdateFade(deltaTime);
         }
 
-        public abstract void FinalizeFrame(XAnimationCueDispatcher cueDispatcher, float channelWeight);
+        public abstract void FinalizeFrame(XAnimationCueDispatcher cueDispatcher, float channelWeight, bool dispatchCues);
         public abstract XAnimationChannelState BuildState(float channelWeight, float channelTimeScale);
         internal abstract XAnimationDebugNodeSnapshot BuildDebugNode(
             XAnimationDebugSnapshotBuilder builder,
@@ -153,6 +153,7 @@ namespace XFramework.Animation
         public abstract float GetNormalizedTime();
         public abstract float GetTotalNormalizedTime();
         public abstract float GetCueWeight(string clipKey);
+        internal abstract void CollectCues(XAnimationCueDispatcher cueDispatcher, float channelWeight, Action<XAnimationCueEvent> sink);
         public abstract void SeekNormalizedTime(float normalizedTime);
 
         public bool HasFinishedFadeOut()
@@ -160,7 +161,7 @@ namespace XFramework.Animation
             return CurrentWeight <= 0.0001f && (!IsFading || FadeTo <= 0f);
         }
 
-        protected abstract void PrepareStateFrame(float deltaTime, float channelTimeScale, XAnimationContext context);
+        protected abstract void PrepareStateFrame(float deltaTime, float channelTimeScale, float playableSpeedScale, XAnimationContext context);
 
         private void UpdateFade(float deltaTime)
         {
@@ -278,14 +279,14 @@ namespace XFramework.Animation
 
         public XAnimationCompiledClip Clip => m_Clip;
 
-        protected override void PrepareStateFrame(float deltaTime, float channelTimeScale, XAnimationContext context)
+        protected override void PrepareStateFrame(float deltaTime, float channelTimeScale, float playableSpeedScale, XAnimationContext context)
         {
             m_PreviousTotalNormalizedTime = m_TotalNormalizedTime;
-            SetPlayableSpeed(Speed * channelTimeScale);
+            SetPlayableSpeed(Speed * channelTimeScale * playableSpeedScale);
             m_TotalNormalizedTime += deltaTime * Speed * channelTimeScale / m_ClipLength;
         }
 
-        public override void FinalizeFrame(XAnimationCueDispatcher cueDispatcher, float channelWeight)
+        public override void FinalizeFrame(XAnimationCueDispatcher cueDispatcher, float channelWeight, bool dispatchCues)
         {
             if (!m_Playable.IsValid())
             {
@@ -302,7 +303,7 @@ namespace XFramework.Animation
                 SetPlayableTime(0d);
             }
 
-            if (!SuppressCues)
+            if (dispatchCues && !SuppressCues)
             {
                 float effectiveWeight = CurrentWeight * channelWeight;
                 cueDispatcher?.Update(this, m_Clip.Key, m_PreviousTotalNormalizedTime, m_TotalNormalizedTime, effectiveWeight);
@@ -370,6 +371,26 @@ namespace XFramework.Animation
         public override float GetCueWeight(string clipKey)
         {
             return CurrentWeight;
+        }
+
+        internal override void CollectCues(XAnimationCueDispatcher cueDispatcher, float channelWeight, Action<XAnimationCueEvent> sink)
+        {
+            if (!m_Playable.IsValid() || SuppressCues)
+            {
+                return;
+            }
+
+            double playableTime = m_Playable.GetTime();
+            float currentTotalNormalizedTime = (float)(playableTime / m_ClipLength);
+            if (!IsLooping)
+            {
+                currentTotalNormalizedTime = Mathf.Clamp01(currentTotalNormalizedTime);
+            }
+
+            float effectiveWeight = CurrentWeight * channelWeight;
+            cueDispatcher?.Collect(this, m_Clip.Key, m_PreviousTotalNormalizedTime, currentTotalNormalizedTime, effectiveWeight, sink);
+            m_PreviousTotalNormalizedTime = currentTotalNormalizedTime;
+            m_TotalNormalizedTime = currentTotalNormalizedTime;
         }
 
         public override void SeekNormalizedTime(float normalizedTime)
@@ -485,7 +506,7 @@ namespace XFramework.Animation
         public override string PrimaryClipKey => m_Clips[m_PrimaryClipIndex].Key;
         public override Playable OutputPlayable => m_Mixer;
 
-        protected override void PrepareStateFrame(float deltaTime, float channelTimeScale, XAnimationContext context)
+        protected override void PrepareStateFrame(float deltaTime, float channelTimeScale, float playableSpeedScale, XAnimationContext context)
         {
             if (!context.TryGetFloat(m_State.ParameterIndex, out var parameterValue))
             {
@@ -511,7 +532,7 @@ namespace XFramework.Animation
             }
         }
 
-        public override void FinalizeFrame(XAnimationCueDispatcher cueDispatcher, float channelWeight)
+        public override void FinalizeFrame(XAnimationCueDispatcher cueDispatcher, float channelWeight, bool dispatchCues)
         {
             for (int i = 0; i < m_Playables.Length; i++)
             {
@@ -521,7 +542,7 @@ namespace XFramework.Animation
                     continue;
                 }
 
-                if (!SuppressCues && m_SampleWeights[i] > ActiveCueWeightThreshold)
+                if (dispatchCues && !SuppressCues && m_SampleWeights[i] > ActiveCueWeightThreshold)
                 {
                     float effectiveWeight = CurrentWeight * channelWeight * m_SampleWeights[i];
                     cueDispatcher?.Update(
@@ -619,6 +640,27 @@ namespace XFramework.Animation
             }
 
             return 0f;
+        }
+
+        internal override void CollectCues(XAnimationCueDispatcher cueDispatcher, float channelWeight, Action<XAnimationCueEvent> sink)
+        {
+            if (SuppressCues)
+            {
+                return;
+            }
+
+            for (int i = 0; i < m_Playables.Length; i++)
+            {
+                if (!m_Playables[i].IsValid() || m_SampleWeights[i] <= ActiveCueWeightThreshold)
+                {
+                    continue;
+                }
+
+                float effectiveWeight = CurrentWeight * channelWeight * m_SampleWeights[i];
+                cueDispatcher?.Collect(this, m_Clips[i].Key, m_PreviousTotalNormalizedTime, m_TotalNormalizedTime, effectiveWeight, sink);
+            }
+
+            m_PreviousTotalNormalizedTime = m_TotalNormalizedTime;
         }
 
         public override void SeekNormalizedTime(float normalizedTime)
@@ -893,7 +935,7 @@ namespace XFramework.Animation
         public override string PrimaryClipKey => m_Clips[m_PrimaryClipIndex].Key;
         public override Playable OutputPlayable => m_Mixer;
 
-        protected override void PrepareStateFrame(float deltaTime, float channelTimeScale, XAnimationContext context)
+        protected override void PrepareStateFrame(float deltaTime, float channelTimeScale, float playableSpeedScale, XAnimationContext context)
         {
             if (!context.TryGetFloat(m_State.ParameterXIndex, out float parameterXValue))
             {
@@ -925,7 +967,7 @@ namespace XFramework.Animation
             }
         }
 
-        public override void FinalizeFrame(XAnimationCueDispatcher cueDispatcher, float channelWeight)
+        public override void FinalizeFrame(XAnimationCueDispatcher cueDispatcher, float channelWeight, bool dispatchCues)
         {
             for (int i = 0; i < m_Playables.Length; i++)
             {
@@ -935,7 +977,7 @@ namespace XFramework.Animation
                     continue;
                 }
 
-                if (!SuppressCues && m_SampleWeights[i] > ActiveCueWeightThreshold)
+                if (dispatchCues && !SuppressCues && m_SampleWeights[i] > ActiveCueWeightThreshold)
                 {
                     float effectiveWeight = CurrentWeight * channelWeight * m_SampleWeights[i];
                     cueDispatcher?.Update(
@@ -1036,6 +1078,27 @@ namespace XFramework.Animation
             }
 
             return 0f;
+        }
+
+        internal override void CollectCues(XAnimationCueDispatcher cueDispatcher, float channelWeight, Action<XAnimationCueEvent> sink)
+        {
+            if (SuppressCues)
+            {
+                return;
+            }
+
+            for (int i = 0; i < m_Playables.Length; i++)
+            {
+                if (!m_Playables[i].IsValid() || m_SampleWeights[i] <= ActiveCueWeightThreshold)
+                {
+                    continue;
+                }
+
+                float effectiveWeight = CurrentWeight * channelWeight * m_SampleWeights[i];
+                cueDispatcher?.Collect(this, m_Clips[i].Key, m_PreviousTotalNormalizedTime, m_TotalNormalizedTime, effectiveWeight, sink);
+            }
+
+            m_PreviousTotalNormalizedTime = m_TotalNormalizedTime;
         }
 
         public override void SeekNormalizedTime(float normalizedTime)
@@ -1457,7 +1520,7 @@ namespace XFramework.Animation
         public override string PrimaryClipKey => m_Clips[m_PrimaryClipIndex].Key;
         public override Playable OutputPlayable => m_Mixer;
 
-        protected override void PrepareStateFrame(float deltaTime, float channelTimeScale, XAnimationContext context)
+        protected override void PrepareStateFrame(float deltaTime, float channelTimeScale, float playableSpeedScale, XAnimationContext context)
         {
             if (!context.TryGetFloat(m_State.ParameterXIndex, out float parameterXValue))
             {
@@ -1489,7 +1552,7 @@ namespace XFramework.Animation
             }
         }
 
-        public override void FinalizeFrame(XAnimationCueDispatcher cueDispatcher, float channelWeight)
+        public override void FinalizeFrame(XAnimationCueDispatcher cueDispatcher, float channelWeight, bool dispatchCues)
         {
             for (int i = 0; i < m_Playables.Length; i++)
             {
@@ -1499,7 +1562,7 @@ namespace XFramework.Animation
                     continue;
                 }
 
-                if (!SuppressCues && m_SampleWeights[i] > ActiveCueWeightThreshold)
+                if (dispatchCues && !SuppressCues && m_SampleWeights[i] > ActiveCueWeightThreshold)
                 {
                     float effectiveWeight = CurrentWeight * channelWeight * m_SampleWeights[i];
                     cueDispatcher?.Update(
@@ -1600,6 +1663,27 @@ namespace XFramework.Animation
             }
 
             return 0f;
+        }
+
+        internal override void CollectCues(XAnimationCueDispatcher cueDispatcher, float channelWeight, Action<XAnimationCueEvent> sink)
+        {
+            if (SuppressCues)
+            {
+                return;
+            }
+
+            for (int i = 0; i < m_Playables.Length; i++)
+            {
+                if (!m_Playables[i].IsValid() || m_SampleWeights[i] <= ActiveCueWeightThreshold)
+                {
+                    continue;
+                }
+
+                float effectiveWeight = CurrentWeight * channelWeight * m_SampleWeights[i];
+                cueDispatcher?.Collect(this, m_Clips[i].Key, m_PreviousTotalNormalizedTime, m_TotalNormalizedTime, effectiveWeight, sink);
+            }
+
+            m_PreviousTotalNormalizedTime = m_TotalNormalizedTime;
         }
 
         public override void SeekNormalizedTime(float normalizedTime)
@@ -2231,12 +2315,12 @@ namespace XFramework.Animation
             DisconnectInput(0);
         }
 
-        public void PrepareFrame(float deltaTime, XAnimationContext context, bool applyChannelWeightToInputs)
+        public void PrepareFrame(float deltaTime, XAnimationContext context, bool applyChannelWeightToInputs, float playableSpeedScale)
         {
             float outputWeightScale = applyChannelWeightToInputs ? m_ChannelWeight : 1f;
             if (m_Current != null)
             {
-                m_Current.PrepareFrame(deltaTime, m_TimeScale, context);
+                m_Current.PrepareFrame(deltaTime, m_TimeScale, context, playableSpeedScale);
                 SetMixerInputWeight(0, m_Current.CurrentWeight * outputWeightScale);
             }
             else
@@ -2246,7 +2330,7 @@ namespace XFramework.Animation
 
             if (m_Previous != null)
             {
-                m_Previous.PrepareFrame(deltaTime, m_TimeScale, context);
+                m_Previous.PrepareFrame(deltaTime, m_TimeScale, context, playableSpeedScale);
                 SetMixerInputWeight(1, m_Previous.CurrentWeight * outputWeightScale);
             }
             else
@@ -2255,21 +2339,27 @@ namespace XFramework.Animation
             }
         }
 
-        public void FinalizeFrame(XAnimationCueDispatcher cueDispatcher)
+        public void FinalizeFrame(XAnimationCueDispatcher cueDispatcher, bool dispatchCues)
         {
             if (m_Current != null)
             {
-                m_Current.FinalizeFrame(cueDispatcher, m_ChannelWeight);
+                m_Current.FinalizeFrame(cueDispatcher, m_ChannelWeight, dispatchCues);
             }
 
             if (m_Previous != null)
             {
-                m_Previous.FinalizeFrame(cueDispatcher, m_ChannelWeight);
+                m_Previous.FinalizeFrame(cueDispatcher, m_ChannelWeight, dispatchCues);
                 if (m_Previous.HasFinishedFadeOut())
                 {
                     DestroyPlayback(ref m_Previous, cueDispatcher);
                 }
             }
+        }
+
+        public void CollectCues(XAnimationCueDispatcher cueDispatcher, Action<XAnimationCueEvent> sink)
+        {
+            m_Current?.CollectCues(cueDispatcher, m_ChannelWeight, sink);
+            m_Previous?.CollectCues(cueDispatcher, m_ChannelWeight, sink);
         }
 
         public void SetChannelWeight(float weight)

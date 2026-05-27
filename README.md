@@ -571,12 +571,12 @@ IReadOnlyList<Transform> spawnPoints = UObjectFinder.FindList<Transform>("NpcSpa
 
 ### 4.6 XAnimation 播放系统
 
-`XAnimation` 是基于 Unity Playables 的轻量动画播放系统，核心代码位于 `XAnimation/Runtime/`，统一命名空间为 `XFramework.Animation`。它用 `.xanimation` / `.xanimationoverride` 文本配置描述动画通道、状态、动画片段、事件点和换装覆盖关系，运行时由 `XAnimationDriver` 手动驱动播放。
+`XAnimation` 是基于 Unity Playables 的轻量动画播放系统，核心代码位于 `XAnimation/Runtime/`，统一命名空间为 `XFramework.Animation`。它用 `.xanimation` / `.xanimationoverride` 文本配置描述动画通道、状态、动画片段、事件点和换装覆盖关系，运行时由 `XAnimationDriver` 驱动播放，并支持默认兼容的 `Manual` 模式和性能优先的 `GameTime` 模式。
 
 - 核心源码目录：[`XAnimation/Runtime/`](./XAnimation/Runtime/)
 - 完整专题文档：[`XAnimation/Doc/XAnimation.md`](./XAnimation/Doc/XAnimation.md)
 
-适合用于代码显式控制动画状态、多通道混合、1D Blend、2D Directional Blend、Cue 事件分发以及 Override Asset 复用。2D Blend 支持 `Blend2DSimpleDirectional` 与 `Blend2DFreeformDirectional`，后者可表达同方向 walk/run 这类方向 + 半径混合。详细的资源结构、运行时示例、播放接口、打断规则和 Root Motion 约定，请直接阅读专题文档。
+适合用于代码显式控制动画状态、多通道混合、1D Blend、2D Directional Blend、Cue 事件分发以及 Override Asset 复用。XAnimation Cue 在 `Manual` 与 `GameTime` 下都由内部 `PlayableBehaviour` 跟随 `PlayableGraph` 采集，`Step` / `SyncFrame` 仍仅支持 `Manual`；Unity 原生 `AnimationEvent` 默认通过 `Animator.fireEvents = false` 关闭，但仍可从 `AnimationClip.events` 派生 XAnimation Cue；编辑器预览窗口始终固定 `Manual`，保证 Seek、单帧步进、Cue Log 和调试显示稳定。2D Blend 支持 `Blend2DSimpleDirectional` 与 `Blend2DFreeformDirectional`，后者可表达同方向 walk/run 这类方向 + 半径混合。详细的资源结构、运行时示例、播放接口、打断规则和 Root Motion 约定，请直接阅读专题文档。
 
 ---
 

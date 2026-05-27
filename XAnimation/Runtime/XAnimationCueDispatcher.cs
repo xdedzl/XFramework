@@ -15,6 +15,7 @@ namespace XFramework.Animation
         private readonly Dictionary<int, PlaybackCueState> m_PlaybackStates = new();
 
         public event Action<XAnimationCueEvent> CueTriggered;
+        public bool HasAnyCues => m_CuesByClipKey.Count > 0;
 
         public void Clear()
         {
@@ -76,6 +77,17 @@ namespace XFramework.Animation
             float currentTotalNormalizedTime,
             float effectiveWeight)
         {
+            Collect(instance, clipKey, previousTotalNormalizedTime, currentTotalNormalizedTime, effectiveWeight, Raise);
+        }
+
+        internal void Collect(
+            XAnimationStatePlaybackInstance instance,
+            string clipKey,
+            float previousTotalNormalizedTime,
+            float currentTotalNormalizedTime,
+            float effectiveWeight,
+            Action<XAnimationCueEvent> sink)
+        {
             if (instance == null || instance.SuppressCues)
             {
                 return;
@@ -126,7 +138,7 @@ namespace XFramework.Animation
                         continue;
                     }
 
-                    CueTriggered?.Invoke(new XAnimationCueEvent
+                    sink?.Invoke(new XAnimationCueEvent
                     {
                         playbackId = instance.PlaybackId,
                         clipKey = clipKey,

@@ -1,6 +1,6 @@
 # XFramework XAnimation 播放系统
 
-> `XAnimation` 是基于 Unity Playables 的轻量动画播放系统，核心代码位于 `XAnimation/Runtime/`，统一命名空间为 `XFramework.Animation`。它用 `.xanimation` / `.xanimationoverride` 文本配置描述动画通道、状态、动画片段、事件点和换装覆盖关系，运行时由 `XAnimationDriver` 手动驱动播放。系统的基础目标是保留 Unity `Animator` 作为骨骼输出与原生 Root Motion 容器，只替换 `Animator Controller` 的运行时动画层。
+> `XAnimation` 是基于 Unity Playables 的轻量动画播放系统，核心代码位于 `XAnimation/Runtime/`，统一命名空间为 `XFramework.Animation`。它用 `.xanimation` / `.xanimationoverride` 文本配置描述动画通道、状态、动画片段、事件点和换装覆盖关系，运行时由 `XAnimationDriver` 驱动播放，并支持 `Manual` 与 `GameTime` 两种更新模式。系统的基础目标是保留 Unity `Animator` 作为骨骼输出与原生 Root Motion 容器，只替换 `Animator Controller` 的运行时动画层。
 
 ---
 
@@ -33,7 +33,7 @@ flowchart LR
 
     D --> E["XAnimationDriver"]
     E --> F["XAnimationContext<br/>参数容器"]
-    E --> H["PlayableGraph<br/>Manual Evaluate"]
+    E --> H["PlayableGraph<br/>Manual / GameTime"]
     E --> I["Channel 0..N<br/>Base / Override / Additive"]
     I --> J["Single / Blend1D / 2D Directional Blend 播放实例"]
 
@@ -66,7 +66,7 @@ flowchart TD
     D --> E["各 Channel PrepareFrame"]
     E --> F["Blend State 从 Context 读取参数"]
     F --> G["RootMotionResolver 选择 Root Motion 来源"]
-    G --> H["PlayableGraph.Evaluate(deltaTime)"]
+    G --> H["Manual: PlayableGraph.Evaluate<br/>GameTime: Unity 自动推进"]
     H --> I["各 Channel FinalizeFrame"]
     I --> J["CueDispatcher 分发 Cue"]
     J --> K["检查非循环 State 的 Auto Transition"]
@@ -79,7 +79,7 @@ flowchart TD
 - `XAnimation` 的核心思路是“状态决策交给代码，动画播放交给资源描述”。
 - 状态切换入口只有两类：业务层显式 `PlayState / PlayClip`，或非循环 state 命中 `autoTransitions` 后自动回落/衔接。
 - `Blend1D` / 2D Directional Blend 不自己决定切换到哪个 state，它们只负责当前 state 内部的样本混合。
-- `Cue` 和 Root Motion 都是在播放层按当前实际输出结果计算，而不是靠 Animator Controller 状态机回调。
+- `Cue` 和 Root Motion 都是在播放层按当前实际输出结果计算，而不是靠 Animator Controller 状态机回调；Unity 原生 `AnimationEvent` 默认通过 `Animator.fireEvents = false` 关闭，避免目标对象缺少接收函数时报错。
 
 ---
 
@@ -90,6 +90,7 @@ flowchart TD
 - 普通资源可编辑 `Channels`、`States`、`Clips`、`Parameters`、`Cues`，并可预览 state 播放；Override 资源只覆盖已有 clip 的 `clipPath`，不会修改 base 资源结构。
 - 预览窗口顶部工具栏的 `Setting` 页用于配置预览 prefab、XAnimation 资源和 `Preload`。`Preload` 写入普通 `.xanimation`；`.xanimationoverride` 会继承 base 资源的设置。
 - 预览窗口会在当前 tab 真正可见时才推进动画和执行渲染；如果窗口被其他 tab 或其他编辑器界面覆盖，会自动暂停后台预览，避免持续占用编辑器 CPU / GPU。
+- 预览窗口始终使用 `Manual` 更新模式，以保证暂停、单帧步进、Seek、Cue Log 和调试图显示都可控且可复现；运行时 `XAnimationActor.UpdateMode` 不会影响预览。
 - 预览窗口的相机渲染默认走稳定优先配置：关闭 HDR 与 MSAA，以降低 Unity 6000 + D3D12 下的预览渲染压力。
 - 调试 UI 采用“局部连续刷新 + 事件驱动刷新”：
   - `Channel` 调试区中的 `normalizedTime / totalNormalizedTime / weight / speed / nextStateKey / Blend` 等连续数值，会在预览可见且动画实际推进时同步更新。
@@ -415,22 +416,23 @@ public sealed class HeroAnimationController : MonoBehaviour
 - `PlayState(string stateKey, XAnimationTransitionOptions transition = default)`：按 state key 播放，始终使用 state 自己配置的 channel，推荐业务层统一使用；`transition` 仅描述过渡参数。
 - `PlayState(string stateKey, bool force)` / `PlayState(string stateKey, XAnimationTransitionOptions transition, bool force)`：`XAnimationActor` / `XAnimationDriver` 提供的强制切换重载；`force = true` 时会忽略门禁、`allowInterrupt`、`interruptible` 与 `priority`。
 - `PlayClip(string clipKey, string channelName, XAnimationTransitionOptions transition = default)`：底层/调试接口，按配置中的 clip key 直接播放；必须显式提供 `channelName`。
-- `PlayClip(AnimationClip clip, string channelName, XAnimationTransitionOptions transition = default)`：直接播放外部传入的 `AnimationClip` 引用，不要求写入 `.xanimation` 配置；它会创建临时 state，使用目标 channel 的默认淡入淡出，不触发 `.xanimation` cue，但仍会触发 clip 自带的 Unity `AnimationEvent`。
+- `PlayClip(AnimationClip clip, string channelName, XAnimationTransitionOptions transition = default)`：直接播放外部传入的 `AnimationClip` 引用，不要求写入 `.xanimation` 配置；它会创建临时 state，使用目标 channel 的默认淡入淡出，不触发 `.xanimation` cue。Clip 自带的 Unity `AnimationEvent` 是否触发由 `UnityAnimationEventsEnabled` 决定，默认不触发。
 - `PreloadState(string stateKey)`：同步预加载指定 state 会用到的 clip，`Single` 加载单个 clip，Blend state 会加载全部采样 clip，适合在角色入场或技能释放前主动预热。
 - `PreloadAll()`：同步预加载当前 XAnimation 资源内的全部 clip，适合小型资源或确定要完整常驻的一组动作。
 - `SetParameter(key, float/int/bool)` / `SetTrigger(key)`：写入运行时参数，`Blend1D` 默认从 Float 参数读取混合值，2D Directional Blend 默认从两个 Float 参数读取二维输入。
 - `Stop(channelName, fadeOut)` / `StopAll(fadeOut)`：停止指定通道或全部通道。
 - `SetChannelWeight(channelName, weight)`：调整通道混合权重。
 - `SetChannelTimeScale(channelName, timeScale)`：调整通道时间缩放，最小值会被限制为 0。
+- `SetUpdateMode(updateMode)`：切换运行时更新模式。默认 `Manual`；`GameTime` 会让 `PlayableGraph` 交给 Unity 自动推进，用于性能优先场景。
+- `SetUnityAnimationEventsEnabled(enabled)`：控制 Unity 原生 `AnimationEvent` 是否通过 `Animator.fireEvents` 触发，默认关闭；关闭后仍可从 `AnimationClip.events` 派生 XAnimation Cue。
 - `SetRootMotionEnabled(enabled)`：全局启停 Root Motion 输出；运行时和 `XAnimation Preview` 都直接切换 Unity 原生 `Animator.applyRootMotion`。
-- `RootMotionMoved`：保留为兼容事件，但不再是可靠的 Root Motion 主链路；真正的位移/旋转应用统一由 Unity 原生 `OnAnimatorMove()` 驱动。
 - `GetChannelState(channelName)`：查询当前播放 clip、归一化时间、权重、速度、优先级，以及当前是否处于 transition、previous state、transition 来源、最近一次拒绝原因等调试信息。
 
 ### 4.1 更省事的组件封装：XAnimationActor
 
 如果业务不想自己维护 `XAnimationDriver` 生命周期，可以直接挂 `XAnimationActor`：
 
-- `XAnimationActor` 会在 `Awake` / `Start` / `Update` 中帮你处理初始化、手动推进和可选的起始 state，并在运行时通过挂到 `Animator` 上的桥接组件接收 Unity 原生 `OnAnimatorMove()`。
+- `XAnimationActor` 会在 `Awake` / `Start` 中帮你处理初始化和可选的起始 state，并通过 `UpdateMode` 选择 `Manual` 或 `GameTime` 更新；如果业务订阅 `NativeRootMotionApplied`，Actor 会按需挂桥接组件接收 Unity 原生 `OnAnimatorMove()`。
 - 它本质上只是 `XAnimationDriver` 的 `MonoBehaviour` 包装层，不会引入额外状态机语义。
 - 适合做角色预制体上的直接挂载；如果你需要更细粒度的接管，仍建议直接持有 `XAnimationDriver`。
 - 如果业务需要自己消费原生 Root Motion，可订阅 `XAnimationActor.NativeRootMotionApplied`，在回调中自行把 `Animator.deltaPosition / deltaRotation` 应用到 `CharacterController`、`NavMeshAgent` 或其他运动系统。
@@ -443,6 +445,20 @@ MonoBehaviour(Update)
     -> XAnimationDriver
       -> PlayableGraph / Animator
 ```
+
+### 4.2 更新模式
+
+- `Manual` 是默认模式，兼容旧行为。XAnimation 每帧推进自身逻辑并调用 `PlayableGraph.Evaluate(deltaTime)`，支持 Cue、`Step(deltaTime)`、`SyncFrame()`、Seek 与预览调试。
+- `GameTime` 是性能优先模式。XAnimation 每帧仍同步状态、淡入淡出、Blend 参数、通道权重和自动转场，但不手动调用 `PlayableGraph.Evaluate(deltaTime)`，图由 Unity 按 `DirectorUpdateMode.GameTime` 推进。
+- XAnimation Cue 在 `Manual` 与 `GameTime` 下都由内部 `PlayableBehaviour` 跟随 `PlayableGraph` 采集；`SupportsCue` 为 `true`。`Step(deltaTime)` 与 `SyncFrame()` 仍只支持 `Manual`，非 Manual 调用会抛出异常。
+- `XAnimation Preview` 永远固定 `Manual`，不会跟随运行时 Actor 的 `UpdateMode`。
+
+### 4.3 Unity AnimationEvent
+
+- XAnimation 默认关闭 Unity 原生 `AnimationEvent`，内部通过 `Animator.fireEvents = false` 实现，不修改也不复制原始 `AnimationClip`。
+- 关闭 Unity 原生 `AnimationEvent` 只影响 Unity 对目标 GameObject 的函数回调，不影响 XAnimation 从 `AnimationClip.events` 读取数据并派生 Cue。
+- 如果业务需要保留 Unity 原生 `AnimationEvent`，可以设置 `XAnimationActor.UnityAnimationEventsEnabled = true` 或调用 `XAnimationDriver.SetUnityAnimationEventsEnabled(true)`。此时若目标对象没有对应函数，Unity 仍会按原生规则报错。
+- `XAnimation Preview` 始终关闭 Unity 原生 `AnimationEvent`，预览事件观察以 Cue Log 为准。
 
 ---
 
@@ -510,7 +526,7 @@ MonoBehaviour(Update)
 - `PlayState` / `PlayClip(string clipKey, ...)` 首次播放到目标 clip 时，会按需同步加载对应 `AnimationClip`，并缓存到当前编译资源生命周期内。
 - `PreloadState(stateKey)` / `PreloadAll()` 可在播放前主动触发同样的加载流程，避免首次播放时产生加载尖峰。
 - `GetStateDuration` / `GetClipDuration` 为了保持精确时长，也会在目标 clip 尚未加载时触发按需加载。
-- 配置里的 clip 如果带 Unity 原生 `AnimationEvent`，运行时会为播放创建一份清理事件后的 `PlaybackClip`，避免和 `.xanimation` cue 重复触发；直接传入 `PlayClip(AnimationClip, ...)` 的外部 clip 不会清理原生事件。
+- 配置里的 clip 如果带 Unity 原生 `AnimationEvent`，XAnimation 会读取这些事件并派生为只读 Cue；是否同时触发 Unity 原生回调由 `UnityAnimationEventsEnabled` 控制，默认关闭。
 
 ### 5.4 系统边界
 
@@ -534,4 +550,4 @@ MonoBehaviour(Update)
 - 增强 `XAnimation Preview` 的调试显示，直接展示 transition、镜像、最终速度、同步状态与拒绝信息。
 
 > [!IMPORTANT]
-> `XAnimationDriver` 创建的是手动更新的 PlayableGraph，必须每帧调用 `Update(deltaTime)`；对象销毁或换资源前必须调用 `Dispose()`，否则 PlayableGraph 不会释放。
+> `XAnimationDriver` 默认创建 `Manual` 模式的 PlayableGraph；切到 `GameTime` 后图由 Unity 自动推进，但 XAnimation 仍需要运行时调度器每帧同步逻辑状态。对象销毁或换资源前必须调用 `Dispose()`，否则 PlayableGraph 不会释放。

@@ -121,6 +121,8 @@ namespace XFramework.Editor
             RebuildStateKeyPopup(startStateKeyContainer, "m_StartStateKey", "Start State Key");
 
             AddProperty(root, "m_TimeScale");
+            AddProperty(root, "m_UpdateMode");
+            AddProperty(root, "m_UnityAnimationEventsEnabled");
             root.Add(BuildRuntimeInspector());
 
             animationAssetField?.RegisterCallback<SerializedPropertyChangeEvent>(_ =>
@@ -666,7 +668,7 @@ namespace XFramework.Editor
         private void RefreshRuntimeParameterValues()
         {
             XAnimationActor actor = target as XAnimationActor;
-            if (actor == null || !Application.isPlaying || !actor.IsInitialized)
+            if (actor == null || !Application.isPlaying)
             {
                 return;
             }
@@ -1017,7 +1019,7 @@ namespace XFramework.Editor
         private void ApplyPlaybackSpeedToPlayingChannels()
         {
             XAnimationActor actor = target as XAnimationActor;
-            if (actor == null || !Application.isPlaying || !actor.IsInitialized)
+            if (actor == null || !Application.isPlaying)
             {
                 return;
             }
@@ -1058,7 +1060,7 @@ namespace XFramework.Editor
             XAnimationActor actor = target as XAnimationActor;
             HashSet<string> playingStateKeys = null;
             Dictionary<string, float> stateProgressByKey = null;
-            if (actor != null && Application.isPlaying && actor.IsInitialized)
+            if (actor != null && Application.isPlaying)
             {
                 XAnimationAsset asset = LoadCurrentAnimationAsset();
                 if (asset?.channels != null)

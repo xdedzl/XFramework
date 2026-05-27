@@ -11,14 +11,18 @@ namespace XFramework.Animation
         private readonly List<XAnimationChannel> m_Channels = new();
         private readonly Dictionary<string, XAnimationChannel> m_ChannelMap = new(StringComparer.Ordinal);
         private readonly XAnimationCueDispatcher m_CueDispatcher = new();
+        private readonly List<XAnimationCueEvent> m_PendingCueEvents = new();
         private const string TemporaryClipStateKeyPrefix = "__xanimation_temp_clip_state:";
         private const string DirectClipKeyPrefix = "__xanimation_direct_clip:";
 
         private PlayableGraph m_Graph;
         private AnimationLayerMixerPlayable m_LayerMixer;
         private AnimationPlayableOutput m_Output;
+        private ScriptPlayable<XAnimationCuePlayableBehaviour> m_CuePlayable;
+        private ScriptPlayableOutput m_CueOutput;
         private RuntimeAnimatorController m_OriginalController;
         private bool m_OriginalApplyRootMotion;
+        private bool m_OriginalFireEvents;
         private bool m_RootMotionEnabled;
         private int m_NextPlaybackId = 1;
         private int m_NextTemporaryStateId = 1;
@@ -149,6 +153,7 @@ namespace XFramework.Animation
                 },
                 animationClip);
             m_CueDispatcher.RegisterClipCues(clip.Key, clip.AnimationEventCues);
+            EnsureCuePlayable();
             XAnimationCompiledChannel channel = ResolveClipChannel(clip, channelName);
             if (!CompiledAsset.TryGetChannelIndex(channel.Name, out int channelIndex))
             {
@@ -523,20 +528,24 @@ namespace XFramework.Animation
             for (int i = 0; i < m_Channels.Count; i++)
             {
                 XAnimationChannel channel = m_Channels[i];
-                channel.PrepareFrame(deltaTime, Context, m_UseDirectChannelOutput);
+                channel.PrepareFrame(deltaTime, Context, m_UseDirectChannelOutput, ResolvePlayableSpeedScale());
                 if (!m_UseDirectChannelOutput)
                 {
                     SetLayerInputWeight(i, channel.HasActivePlayback ? channel.ChannelWeight : 0f);
                 }
             }
 
-            m_Graph.Evaluate(deltaTime);
+            if (m_UpdateMode == XAnimationUpdateMode.Manual)
+            {
+                m_Graph.Evaluate(deltaTime);
+            }
 
             for (int i = 0; i < m_Channels.Count; i++)
             {
-                m_Channels[i].FinalizeFrame(m_CueDispatcher);
+                m_Channels[i].FinalizeFrame(m_CueDispatcher, false);
             }
 
+            FlushPendingCues();
             ProcessCompletedNonLoopTransitions();
 
         }
@@ -557,6 +566,9 @@ namespace XFramework.Animation
 
             m_Channels.Clear();
             m_ChannelMap.Clear();
+            m_CuePlayable = default;
+            m_CueOutput = default;
+            m_PendingCueEvents.Clear();
 
             if (m_Graph.IsValid())
             {
@@ -574,7 +586,7 @@ namespace XFramework.Animation
             DisableAnimatorController();
 
             m_Graph = PlayableGraph.Create($"XAnimationDriver_{Animator.name}");
-            m_Graph.SetTimeUpdateMode(DirectorUpdateMode.Manual);
+            ApplyGraphTimeUpdateMode();
 
             m_Output = AnimationPlayableOutput.Create(m_Graph, "XAnimationOutput", Animator);
             m_UseDirectChannelOutput = ShouldUseDirectChannelOutput();
@@ -620,10 +632,110 @@ namespace XFramework.Animation
                 }
             }
 
+            EnsureCuePlayable();
             m_Graph.Play();
             m_RootMotionEnabled = CompiledAsset.RootMotionEnabled;
             SyncAnimatorRootMotion();
             m_RuntimeInitialized = true;
+            SyncGraphPlayState();
+        }
+
+        private void ApplyGraphTimeUpdateMode()
+        {
+            if (!m_Graph.IsValid())
+            {
+                return;
+            }
+
+            m_Graph.SetTimeUpdateMode(m_UpdateMode switch
+            {
+                XAnimationUpdateMode.GameTime => DirectorUpdateMode.GameTime,
+                _ => DirectorUpdateMode.Manual,
+            });
+            SyncGraphPlayState();
+        }
+
+        private float ResolvePlayableSpeedScale()
+        {
+            return m_UpdateMode == XAnimationUpdateMode.GameTime ? m_TimeScale : 1f;
+        }
+
+        private void SyncGraphPlayState()
+        {
+            if (!m_Graph.IsValid())
+            {
+                return;
+            }
+
+            if (m_UpdateMode == XAnimationUpdateMode.GameTime && m_IsPaused)
+            {
+                if (m_Graph.IsPlaying())
+                {
+                    m_Graph.Stop();
+                }
+
+                return;
+            }
+
+            if (!m_Graph.IsPlaying())
+            {
+                m_Graph.Play();
+            }
+        }
+
+        private void EnsureCuePlayable()
+        {
+            if (!m_Graph.IsValid() || !m_CueDispatcher.HasAnyCues)
+            {
+                return;
+            }
+
+            if (m_CuePlayable.IsValid() && m_CueOutput.IsOutputValid())
+            {
+                return;
+            }
+
+            m_CuePlayable = ScriptPlayable<XAnimationCuePlayableBehaviour>.Create(m_Graph);
+            XAnimationCuePlayableBehaviour behaviour = m_CuePlayable.GetBehaviour();
+            behaviour.Bind(this);
+            m_CueOutput = ScriptPlayableOutput.Create(m_Graph, "XAnimationCueOutput");
+            m_CueOutput.SetSourcePlayable(m_CuePlayable);
+        }
+
+        internal void CollectCuesFromPlayableGraph()
+        {
+            if (!m_RuntimeInitialized || !m_CueDispatcher.HasAnyCues)
+            {
+                return;
+            }
+
+            for (int i = 0; i < m_Channels.Count; i++)
+            {
+                m_Channels[i].CollectCues(m_CueDispatcher, QueueCueEvent);
+            }
+        }
+
+        private void QueueCueEvent(XAnimationCueEvent cueEvent)
+        {
+            if (cueEvent != null)
+            {
+                m_PendingCueEvents.Add(cueEvent);
+            }
+        }
+
+        private void FlushPendingCues()
+        {
+            if (m_PendingCueEvents.Count == 0)
+            {
+                return;
+            }
+
+            for (int i = 0; i < m_PendingCueEvents.Count; i++)
+            {
+                m_CueDispatcher.Raise(m_PendingCueEvents[i]);
+            }
+
+            m_PendingCueEvents.Clear();
         }
 
         private bool ShouldUseDirectChannelOutput()
@@ -666,8 +778,10 @@ namespace XFramework.Animation
         {
             m_OriginalController = Animator.runtimeAnimatorController;
             m_OriginalApplyRootMotion = Animator.applyRootMotion;
+            m_OriginalFireEvents = Animator.fireEvents;
             Animator.runtimeAnimatorController = null;
             Animator.applyRootMotion = false;
+            Animator.fireEvents = m_UnityAnimationEventsEnabled;
         }
 
         private void RestoreAnimatorController()
@@ -683,6 +797,15 @@ namespace XFramework.Animation
             }
 
             Animator.applyRootMotion = m_OriginalApplyRootMotion;
+            Animator.fireEvents = m_OriginalFireEvents;
+        }
+
+        private void SyncAnimatorFireEvents()
+        {
+            if (Animator != null && Animator.fireEvents != m_UnityAnimationEventsEnabled)
+            {
+                Animator.fireEvents = m_UnityAnimationEventsEnabled;
+            }
         }
 
         private void SyncAnimatorRootMotion()
