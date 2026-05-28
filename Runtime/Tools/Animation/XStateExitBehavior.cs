@@ -1,6 +1,6 @@
 ﻿using UnityEngine;
 
-namespace XFramework.Animation
+namespace XAnimationEngine
 {
     public interface IXAnimationStateExitBehavior
     {
