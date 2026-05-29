@@ -18,12 +18,18 @@ namespace XFramework
         /// </summary>
         private ProcedureBase m_CurrentProcedure;
 
+        private ProcedureOverlayBase m_CurrentOverlay;
+
         // UI 面板状态已移至 ProcedureUIProcessor 中管理
 
         /// <summary>
         /// 当前流程
         /// </summary>
         public ProcedureBase CurrentProcedure => m_CurrentProcedure;
+
+        public ProcedureOverlayBase CurrentOverlay => m_CurrentOverlay;
+
+        public bool IsOverlayRunning => m_CurrentOverlay != null;
 
         /// <summary>
         /// 当前的子流程
@@ -47,11 +53,18 @@ namespace XFramework
         {
             ProcedureBase newProcedure = type is null ? null : GetOrCreateProcedure(type);
             if (m_CurrentProcedure == newProcedure)
+            {
+                if (m_CurrentOverlay != null)
+                {
+                    StopOverlay();
+                }
                 return;
+            }
+
+            StopOverlay();
 
             var oldProcedure = m_CurrentProcedure;
             oldProcedure?.OnExit();
-            oldProcedure?.CurrentSubProcedure?.OnExit();
 
             m_CurrentProcedure = newProcedure;
 
@@ -122,9 +135,52 @@ namespace XFramework
             }
         }
 
+        public bool StartOverlay<TOverlay>(params object[] args) where TOverlay : ProcedureOverlayBase, new()
+        {
+            if (m_CurrentOverlay != null)
+            {
+                UnityEngine.Debug.LogWarning($"[Procedure] Cannot start overlay {typeof(TOverlay).Name}. Current overlay is {m_CurrentOverlay.GetType().Name}.");
+                return false;
+            }
+
+            var overlay = new TOverlay();
+            m_CurrentOverlay = overlay;
+            overlay.OnInit();
+            overlay.OnEnter(args);
+            if (m_CurrentOverlay != overlay)
+            {
+                return false;
+            }
+
+            overlay.OnPrepare(() =>
+            {
+                if (m_CurrentOverlay != overlay)
+                {
+                    return;
+                }
+
+                RefreshProcedureState();
+            });
+            return true;
+        }
+
+        public void StopOverlay()
+        {
+            if (m_CurrentOverlay == null)
+            {
+                return;
+            }
+
+            var overlay = m_CurrentOverlay;
+            m_CurrentOverlay = null;
+            overlay.OnExit();
+            RefreshProcedureState();
+        }
+
         public void Update()
         {
             m_CurrentProcedure?.OnUpdate();
+            m_CurrentOverlay?.OnUpdate();
         }
 
         private ProcedureBase GetOrCreateProcedure(Type type)
@@ -186,15 +242,15 @@ namespace XFramework
         /// </summary>
         internal void RefreshProcedureState()
         {
-            if (m_CurrentProcedure != null)
-            {
-                var subContext = m_CurrentProcedure.CurrentSubProcedure != null ? GetContext(m_CurrentProcedure.CurrentSubProcedure.GetType()) : null;
-                var parentContext = GetContext(m_CurrentProcedure.GetType());
+            var subProcedure = m_CurrentProcedure?.CurrentSubProcedure;
+            var parentContext = GetContext(m_CurrentProcedure?.GetType());
+            var subContext = subProcedure != null ? GetContext(subProcedure.GetType()) : null;
+            var overlayContext = m_CurrentOverlay != null ? GetContext(m_CurrentOverlay.GetType()) : null;
+            var context = new ProcedureRefreshContext(m_CurrentProcedure, subProcedure, m_CurrentOverlay, parentContext, subContext, overlayContext);
 
-                foreach (var processor in m_Processors)
-                {
-                    processor.OnRefreshProcedureState(m_CurrentProcedure, subContext, parentContext);
-                }
+            foreach (var processor in m_Processors)
+            {
+                processor.OnRefreshProcedureState(context);
             }
         }
     }

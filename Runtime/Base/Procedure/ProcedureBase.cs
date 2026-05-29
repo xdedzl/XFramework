@@ -56,12 +56,12 @@ namespace XFramework
         {
             m_subProcedureBases ??= new List<SubProcedureBase>();
 
-            m_currentSubProcedure?.OnExit();
             if(typeof(T) == m_currentSubProcedure?.GetType())
             {
                 return;
             }
 
+            m_currentSubProcedure?.OnExit();
             foreach (var item in m_subProcedureBases)
             {
                 if(item.GetType() == typeof(T))
@@ -88,6 +88,7 @@ namespace XFramework
         {
             m_currentSubProcedure?.OnExit();
             m_currentSubProcedure = null;
+            ProcedureManager.Instance.RefreshProcedureState();
         }
     }
 
@@ -107,8 +108,28 @@ namespace XFramework
 
         public override void OnExit()
         {
+            base.OnExit();
             _registerHelper.UnRegister();
         }
+    }
+
+    /// <summary>
+    /// 流程覆盖层基类，用于在当前主流程之上临时叠加短生命周期玩法或交互。
+    /// </summary>
+    public abstract class ProcedureOverlayBase
+    {
+        public virtual void OnInit() { }
+
+        public virtual void OnEnter(params object[] args) { }
+
+        public virtual void OnPrepare(Action onReady)
+        {
+            onReady?.Invoke();
+        }
+
+        public virtual void OnUpdate() { }
+
+        public virtual void OnExit() { }
     }
 
 

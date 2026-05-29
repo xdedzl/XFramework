@@ -9,25 +9,11 @@ namespace XFramework
     /// </summary>
     public class ProcedureModuleProcessor : IProcedureProcessor
     {
-        public void OnRefreshProcedureState(ProcedureBase procedure, ProcedureAttributeContext subContext, ProcedureAttributeContext parentContext)
+        public void OnRefreshProcedureState(ProcedureRefreshContext context)
         {
             var requiredTypes = new HashSet<Type>();
-            var attr = subContext?.ModuleAttr ?? parentContext?.ModuleAttr;
-
-            if (attr != null)
-            {
-                foreach (var moduleType in attr.ModuleTypes)
-                {
-                    var lifecycleAttr = moduleType.GetCustomAttribute<ModuleLifecycleAttribute>();
-                    if (lifecycleAttr == null || lifecycleAttr.Lifecycle != ModuleLifecycle.Procedure)
-                    {
-                        throw new XFrameworkException(
-                            $"[Procedure] Module {moduleType.Name} declared in ProcedureModuleAttribute on {procedure.GetType().Name} " +
-                            $"must have [ModuleLifecycle(ModuleLifecycle.Procedure)] attribute");
-                    }
-                    requiredTypes.Add(moduleType);
-                }
-            }
+            AddRequiredModules(requiredTypes, context.SubContext?.ModuleAttr ?? context.ParentContext?.ModuleAttr);
+            AddRequiredModules(requiredTypes, context.OverlayContext?.ModuleAttr);
 
             var loadedProcedureModules = GameEntry.GetLoadedModuleTypes(ModuleLifecycle.Procedure);
 
@@ -45,6 +31,25 @@ namespace XFramework
                 {
                     GameEntry.AddModule(requiredType);
                 }
+            }
+        }
+
+        private void AddRequiredModules(HashSet<Type> requiredTypes, ProcedureModuleAttribute attr)
+        {
+            if (attr == null)
+            {
+                return;
+            }
+
+            foreach (var moduleType in attr.ModuleTypes)
+            {
+                var lifecycleAttr = moduleType.GetCustomAttribute<ModuleLifecycleAttribute>();
+                if (lifecycleAttr == null || lifecycleAttr.Lifecycle != ModuleLifecycle.Procedure)
+                {
+                    throw new XFrameworkException(
+                        $"[Procedure] Module {moduleType.Name} declared in ProcedureModuleAttribute must have [ModuleLifecycle(ModuleLifecycle.Procedure)] attribute");
+                }
+                requiredTypes.Add(moduleType);
             }
         }
     }

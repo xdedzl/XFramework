@@ -7,13 +7,33 @@ namespace XFramework
     /// </summary>
     public class ProcedureTimeScaleProcessor : IProcedureProcessor
     {
-        public void OnRefreshProcedureState(ProcedureBase procedure, ProcedureAttributeContext subContext, ProcedureAttributeContext parentContext)
+        private bool m_HasOverlaySnapshot;
+        private float m_PreOverlayTimeScale;
+
+        public void OnRefreshProcedureState(ProcedureRefreshContext context)
         {
-            var timeScaleAttr = subContext?.TimeScaleAttr ?? parentContext?.TimeScaleAttr;
+            var overlayAttr = context.OverlayContext?.TimeScaleAttr;
+            var baseAttr = context.SubContext?.TimeScaleAttr ?? context.ParentContext?.TimeScaleAttr;
+            if (overlayAttr != null && !m_HasOverlaySnapshot)
+            {
+                m_PreOverlayTimeScale = Time.timeScale;
+                m_HasOverlaySnapshot = true;
+            }
+
+            var timeScaleAttr = overlayAttr ?? baseAttr;
 
             if (timeScaleAttr != null)
             {
                 Time.timeScale = timeScaleAttr.TimeScale;
+            }
+            else if (m_HasOverlaySnapshot)
+            {
+                Time.timeScale = m_PreOverlayTimeScale;
+            }
+
+            if (overlayAttr == null)
+            {
+                m_HasOverlaySnapshot = false;
             }
         }
     }

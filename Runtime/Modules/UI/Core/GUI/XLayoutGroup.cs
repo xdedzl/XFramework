@@ -63,51 +63,31 @@ namespace XFramework.UI
         /// </summary>
         public void SetItemCount(int targetCount)
         {
-            int currentCount = itemCount;
-            int differ = targetCount - currentCount;
-
-            // 先处理数量变多的情况
-            if (differ > 0)
+            if (targetCount < 0)
             {
-                // 先激活已有的inactive对象（从第2个开始）
-                int activated = 0;
-                for (int i = 1; i < transform.childCount && activated < differ; i++)
-                {
-                    var go = transform.GetChild(i).gameObject;
-                    if (!go.activeSelf)
-                    {
-                        go.SetActive(true);
-                        activated++;
-                    }
-
-                    var item = go.GetComponent<UINode>();
-                    m_OnItemChange.Invoke(i - 1, item);
-                    m_Items.Add(item);
-                }
-                // 不够则创建
-                for (int i = activated; i < differ; i++)
-                {
-                    var go = CreateItem();
-                    go.SetActive(true);
-                    var item = go.GetComponent<UINode>();
-                    m_OnItemChange.Invoke(i, item);
-                    m_Items.Add(item);
-                }
+                targetCount = 0;
             }
-            // 数量变少时，仅将多余的active对象设为false（从后往前，跳过模板）
-            else if (differ < 0)
+
+            while (transform.childCount - 1 < targetCount)
             {
-                int toDisable = -differ;
-                for (int i = transform.childCount - 1; i > 0 && toDisable > 0; i--)
+                CreateItem().SetActive(false);
+            }
+
+            m_Items.Clear();
+            for (int i = 1; i < transform.childCount; i++)
+            {
+                bool shouldActive = m_Items.Count < targetCount;
+                var go = transform.GetChild(i).gameObject;
+                go.SetActive(shouldActive);
+
+                if (!shouldActive)
                 {
-                    var go = transform.GetChild(i).gameObject;
-                    if (go.activeSelf)
-                    {
-                        go.SetActive(false);
-                        toDisable--;
-                    }
-                    m_Items.RemoveAt(m_Items.Count - 1);
+                    continue;
                 }
+
+                var item = go.GetComponent<UINode>();
+                m_OnItemChange.Invoke(m_Items.Count, item);
+                m_Items.Add(item);
             }
         }
         
