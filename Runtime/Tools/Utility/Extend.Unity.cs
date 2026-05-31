@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UObject = UnityEngine.Object;
 
 namespace XFramework
 {
@@ -19,6 +20,25 @@ namespace XFramework
     /// </summary>
     public static partial class Extend
     {
+        #region Object
+
+        public static GameObject GetGameObject(this UObject unityObject)
+        {
+            if (unityObject is GameObject go)
+            {
+                return go;
+            }
+
+            if (unityObject is Component comp)
+            {
+                return comp.gameObject;
+            }
+
+            return null;
+        }
+
+        #endregion
+
         #region Vector相关
 
         public static Vector3 WithX(this Vector3 v, float x)

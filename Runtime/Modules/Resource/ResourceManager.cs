@@ -206,6 +206,7 @@ namespace XFramework.Resource
 
         public override void Shutdown()
         {
+            m_InstantiateHelper.Shutdown();
             m_LoadHelper.ReleaseAll();
         }
 

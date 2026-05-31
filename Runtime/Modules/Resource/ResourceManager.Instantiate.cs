@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using XFramework;
 using XFramework.Tasks;
 using UObject = UnityEngine.Object;
 
@@ -11,17 +12,27 @@ namespace XFramework.Resource
     {
         private class ResourceInstantiateHelper
         {
-            private readonly Dictionary<UObject, UObject> m_InstanceToAsset = new ();
-            private readonly Dictionary<UObject, string> m_InstanceToAssetName = new ();  // 实例到资源名的映射
-            private readonly Dictionary<string, Queue<UObject>> m_FreeInstances = new ();
-            private readonly Dictionary<UObject, float> m_InstanceToFreeTime = new ();
-            private readonly LinkedList<UObject> m_InstanceLruList = new();
-            private readonly Dictionary<UObject, LinkedListNode<UObject>> m_InstanceLruNodes = new();
+            private readonly Dictionary<UObject, UObject> m_InstanceToAsset = new ();                   // 实例到原始资源对象的映射
+            private readonly Dictionary<UObject, string> m_InstanceToAssetName = new ();                // 实例到资源名的映射
+            private readonly Dictionary<GameObject, UObject> m_GameObjectToInstance = new ();           // GameObject到实际实例对象的映射，兼容Component实例
+
+            private readonly HashSet<UObject> m_PooledInstances = new ();                               // 当前由对象池托管的实例集合
+            private readonly Dictionary<string, Queue<UObject>> m_FreeInstances = new ();               // 资源名到空闲实例队列的映射
+            private readonly Dictionary<UObject, float> m_InstanceToFreeTime = new ();                  // 空闲实例进入对象池时的时间
+            private readonly LinkedList<UObject> m_InstanceLruList = new();                             // 空闲实例的LRU链表，头部最早释放
+            private readonly Dictionary<UObject, LinkedListNode<UObject>> m_InstanceLruNodes = new();   // 空闲实例到LRU节点的映射，用于O(1)移除
 
             private const float PooledInstanceExpireTime = 60f;  // 对象池中空闲对象的过期时间（秒）
             private const int MaxCleanupPerFrame = 5;            // 每帧最多清理的过期对象数量
             
             private readonly IResourceLoadHelper m_LoadHelper;
+            private Transform m_NormalInstanceRoot;
+            private Transform m_PooledActiveRoot;
+            private Transform m_PooledFreeRoot;
+
+            private Transform NormalInstanceRoot => m_NormalInstanceRoot ??= CreateRoot("ResourceManager_NormalInstances");
+            private Transform PooledActiveRoot => m_PooledActiveRoot ??= CreateRoot("ResourceManager_PooledActiveInstances");
+            private Transform PooledFreeRoot => m_PooledFreeRoot ??= CreateRoot("ResourceManager_PooledFreeInstances");
             
             public ResourceInstantiateHelper(IResourceLoadHelper loadHelper)
             {
@@ -40,7 +51,8 @@ namespace XFramework.Resource
             public T Instantiate<T>(string assetName, Vector3 position, Quaternion quaternion, Transform parent) where T : UObject
             {
                 T asset = m_LoadHelper.Load<T>(assetName);
-                T obj = UObject.Instantiate<T>(asset, position, quaternion, parent);
+                T obj = UObject.Instantiate<T>(asset, position, quaternion, parent ?? NormalInstanceRoot);
+                RecordInstance(assetName, asset, obj, false);
                 return obj;
             }
 
@@ -59,7 +71,8 @@ namespace XFramework.Resource
                 {
                     if (success)
                     {
-                        T obj = UObject.Instantiate(asset, position, quaternion, parent);
+                        T obj = UObject.Instantiate(asset, position, quaternion, parent ?? NormalInstanceRoot);
+                        RecordInstance(assetName, asset, obj, false);
                         callBack?.Invoke(obj);
                     }
                     else
@@ -107,14 +120,14 @@ namespace XFramework.Resource
                     // 设置位置、旋转和父物体
                     if (instance is GameObject go)
                     {
-                        go.transform.SetParent(parent);
+                        go.transform.SetParent(parent ?? PooledActiveRoot);
                         go.transform.position = position;
                         go.transform.rotation = quaternion;
                         go.SetActive(true);
                     }
                     else if (instance is Component comp)
                     {
-                        comp.transform.SetParent(parent);
+                        comp.transform.SetParent(parent ?? PooledActiveRoot);
                         comp.transform.position = position;
                         comp.transform.rotation = quaternion;
                         comp.gameObject.SetActive(true);
@@ -126,9 +139,8 @@ namespace XFramework.Resource
                 
                 T asset = m_LoadHelper.Load<T>(assetName);
                 
-                T obj = UObject.Instantiate(asset, position, quaternion, parent);
-                m_InstanceToAsset[obj] = asset;
-                m_InstanceToAssetName[obj] = assetName;  // 记录实例到资源名的映射
+                T obj = UObject.Instantiate(asset, position, quaternion, parent ?? PooledActiveRoot);
+                RecordInstance(assetName, asset, obj, true);
                         
                 // 确保有对应的空闲队列
                 if (!m_FreeInstances.ContainsKey(assetName))
@@ -163,14 +175,14 @@ namespace XFramework.Resource
                     // 设置位置、旋转和父物体
                     if (instance is GameObject go)
                     {
-                        go.transform.SetParent(parent);
+                        go.transform.SetParent(parent ?? PooledActiveRoot);
                         go.transform.position = position;
                         go.transform.rotation = quaternion;
                         go.SetActive(true);
                     }
                     else if (instance is Component comp)
                     {
-                        comp.transform.SetParent(parent);
+                        comp.transform.SetParent(parent ?? PooledActiveRoot);
                         comp.transform.position = position;
                         comp.transform.rotation = quaternion;
                         comp.gameObject.SetActive(true);
@@ -185,9 +197,8 @@ namespace XFramework.Resource
                 {
                     if (success)
                     {
-                        T obj = UObject.Instantiate(asset, position, quaternion, parent);
-                        m_InstanceToAsset[obj] = asset;
-                        m_InstanceToAssetName[obj] = assetName;  // 记录实例到资源名的映射
+                        T obj = UObject.Instantiate(asset, position, quaternion, parent ?? PooledActiveRoot);
+                        RecordInstance(assetName, asset, obj, true);
                         
                         // 确保有对应的空闲队列
                         if (!m_FreeInstances.ContainsKey(assetName))
@@ -223,20 +234,38 @@ namespace XFramework.Resource
                 UpdateExpiredPooledInstances();
             }
 
+            public void Shutdown()
+            {
+                DestroyRoot(m_NormalInstanceRoot);
+                DestroyRoot(m_PooledActiveRoot);
+                DestroyRoot(m_PooledFreeRoot);
+            }
+
             public bool Release(UObject unityObject)
             {
-                if (m_InstanceToAssetName.TryGetValue(unityObject, out string assetName))
+                if (!TryResolveInstance(unityObject, out var instance))
+                {
+                    return false;
+                }
+
+                if (!m_PooledInstances.Contains(instance))
+                {
+                    RemoveInstanceRecord(instance);
+                    return false;
+                }
+
+                if (m_InstanceToAssetName.TryGetValue(instance, out string assetName))
                 {
                     // 禁用对象
-                    if (unityObject is GameObject go)
+                    if (instance is GameObject go)
                     {
                         go.SetActive(false);
-                        go.transform.SetParent(null);
+                        go.transform.SetParent(PooledFreeRoot);
                     }
-                    else if (unityObject is Component comp)
+                    else if (instance is Component comp)
                     {
                         comp.gameObject.SetActive(false);
-                        comp.transform.SetParent(null);
+                        comp.transform.SetParent(PooledFreeRoot);
                     }
                 
                     // 池化对象，回收到池中
@@ -245,17 +274,127 @@ namespace XFramework.Resource
                         queue = new Queue<UObject>();
                         m_FreeInstances[assetName] = queue;
                     }
-                    queue.Enqueue(unityObject);
+                    queue.Enqueue(instance);
                 
-                    m_InstanceToFreeTime[unityObject] = Time.time;
-                    var node = m_InstanceLruList.AddLast(unityObject);
-                    m_InstanceLruNodes[unityObject] = node;
+                    m_InstanceToFreeTime[instance] = Time.time;
+                    var node = m_InstanceLruList.AddLast(instance);
+                    m_InstanceLruNodes[instance] = node;
 
                     return true;
                 }
-                else
+
+                return false;
+            }
+
+            public bool TryGetAssetName(UObject unityObject, out string assetName)
+            {
+                assetName = null;
+                return TryResolveInstance(unityObject, out var instance) &&
+                       m_InstanceToAssetName.TryGetValue(instance, out assetName);
+            }
+
+            public bool TryGetAsset(UObject unityObject, out UObject asset)
+            {
+                asset = null;
+                return TryResolveInstance(unityObject, out var instance) &&
+                       m_InstanceToAsset.TryGetValue(instance, out asset);
+            }
+
+            public bool TryGetAsset<T>(UObject unityObject, out T asset) where T : UObject
+            {
+                asset = null;
+                if (!TryGetAsset(unityObject, out var sourceAsset))
                 {
                     return false;
+                }
+
+                asset = sourceAsset as T;
+                return asset != null;
+            }
+
+            private bool TryResolveInstance(UObject unityObject, out UObject instance)
+            {
+                instance = null;
+                if (unityObject == null)
+                {
+                    return false;
+                }
+
+                if (m_InstanceToAssetName.ContainsKey(unityObject))
+                {
+                    instance = unityObject;
+                    return true;
+                }
+
+                GameObject go = unityObject.GetGameObject();
+                return go != null && m_GameObjectToInstance.TryGetValue(go, out instance);
+            }
+
+            private static Transform CreateRoot(string name)
+            {
+                var root = new GameObject(name);
+                if (Application.isPlaying)
+                {
+                    UObject.DontDestroyOnLoad(root);
+                }
+                return root.transform;
+            }
+
+            private static void DestroyRoot(Transform root)
+            {
+                if (root == null)
+                {
+                    return;
+                }
+
+                if (Application.isPlaying)
+                {
+                    UObject.Destroy(root.gameObject);
+                }
+                else
+                {
+                    UObject.DestroyImmediate(root.gameObject);
+                }
+            }
+
+            private void RecordInstance(string assetName, UObject asset, UObject instance, bool pooled)
+            {
+                if (instance == null)
+                {
+                    return;
+                }
+
+                m_InstanceToAsset[instance] = asset;
+                m_InstanceToAssetName[instance] = assetName;
+
+                if (pooled)
+                {
+                    m_PooledInstances.Add(instance);
+                }
+                else
+                {
+                    UnityEngine.Assertions.Assert.IsFalse(
+                        m_PooledInstances.Contains(instance),
+                        "[Resource] Non-pooled instance is already marked as pooled.");
+                }
+
+                var go = instance.GetGameObject();
+                if (go != null)
+                {
+                    m_GameObjectToInstance[go] = instance;
+                }
+            }
+
+            private void RemoveInstanceRecord(UObject instance)
+            {
+                m_InstanceToAsset.Remove(instance);
+                m_InstanceToAssetName.Remove(instance);
+                m_PooledInstances.Remove(instance);
+
+                var go = instance.GetGameObject();
+                if (go != null)
+                {
+                    m_GameObjectToInstance.Remove(go);
                 }
             }
             
@@ -308,8 +447,7 @@ namespace XFramework.Resource
                             m_InstanceLruList.Remove(node);
                             m_InstanceLruNodes.Remove(instance);
                             m_InstanceToFreeTime.Remove(instance);
-                            m_InstanceToAsset.Remove(instance);
-                            m_InstanceToAssetName.Remove(instance);
+                            RemoveInstanceRecord(instance);
                 
                             if (instance is GameObject go)
                             {
@@ -461,6 +599,32 @@ namespace XFramework.Resource
         public XAwaitableTask<T> InstantiateAsyncByPool<T>(string assetName, Vector3 position, Quaternion quaternion, Transform parent) where T : UObject
         {
             return m_InstantiateHelper.InstantiateAsyncByPool<T>(assetName, position, quaternion, parent);
+        }
+        #endregion
+
+        #region Instance Asset Query
+        /// <summary>
+        /// 尝试获取由 ResourceManager 实例化出的对象对应的资源名。
+        /// </summary>
+        public bool TryGetInstanceAssetName(UObject instance, out string assetName)
+        {
+            return m_InstantiateHelper.TryGetAssetName(instance, out assetName);
+        }
+
+        /// <summary>
+        /// 尝试获取由 ResourceManager 实例化出的对象对应的原始资源。
+        /// </summary>
+        public bool TryGetInstanceAsset(UObject instance, out UObject asset)
+        {
+            return m_InstantiateHelper.TryGetAsset(instance, out asset);
+        }
+
+        /// <summary>
+        /// 尝试获取由 ResourceManager 实例化出的对象对应的原始资源。
+        /// </summary>
+        public bool TryGetInstanceAsset<T>(UObject instance, out T asset) where T : UObject
+        {
+            return m_InstantiateHelper.TryGetAsset(instance, out asset);
         }
         #endregion
     }
