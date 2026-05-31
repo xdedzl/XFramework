@@ -3,7 +3,7 @@
 namespace XFramework
 {
 
-    public class UBinaryWriter : BinaryWriter
+    public class UXBinaryWriter : XBinaryWriter
     {
         public void AddVector3(Vector3 v)
         {

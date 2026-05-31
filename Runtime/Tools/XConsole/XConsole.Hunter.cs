@@ -101,23 +101,23 @@ namespace XFramework.Console
 
         private static void SendInitData()
         {
-            BinaryWriter binaryWriter = new BinaryWriter();
-            binaryWriter.AddInt32(-1);
-            binaryWriter.AddInt32(-1);
-            binaryWriter.AddString(GetLocalIP());
+            XBinaryWriter xBinaryWriter = new XBinaryWriter();
+            xBinaryWriter.AddInt32(-1);
+            xBinaryWriter.AddInt32(-1);
+            xBinaryWriter.AddString(GetLocalIP());
 
-            var buffer = binaryWriter.Encode();
+            var buffer = xBinaryWriter.Encode();
             client.Send(buffer, buffer.Length, hunterEndPoint);
         }
 
         private static void OnLogMessageReceived(Message message)
         {
-            BinaryWriter binaryWriter = new BinaryWriter();
-            binaryWriter.AddInt32((int)message.type);
-            binaryWriter.AddInt32((int)MessageSource.XConsole);
-            binaryWriter.AddString(message.text);
+            XBinaryWriter xBinaryWriter = new XBinaryWriter();
+            xBinaryWriter.AddInt32((int)message.type);
+            xBinaryWriter.AddInt32((int)MessageSource.XConsole);
+            xBinaryWriter.AddString(message.text);
 
-            var buffer = binaryWriter.Encode();
+            var buffer = xBinaryWriter.Encode();
             client.Send(buffer, buffer.Length, hunterEndPoint);
         }
 
@@ -125,12 +125,12 @@ namespace XFramework.Console
         {
             var messageType = LogType_To_MessageType[type];
 
-            BinaryWriter binaryWriter = new BinaryWriter();
-            binaryWriter.AddInt32((int)messageType);
-            binaryWriter.AddInt32((int)MessageSource.Unity);
+            XBinaryWriter xBinaryWriter = new XBinaryWriter();
+            xBinaryWriter.AddInt32((int)messageType);
+            xBinaryWriter.AddInt32((int)MessageSource.Unity);
             string message = messageType != MessageType.ERROR ? condition : $"{condition}\n{stackTrace}";
-            binaryWriter.AddString(message);
-            var buffer = binaryWriter.Encode();
+            xBinaryWriter.AddString(message);
+            var buffer = xBinaryWriter.Encode();
             client.Send(buffer, buffer.Length, hunterEndPoint);
         }
 

@@ -15,7 +15,7 @@ namespace XFramework
     }
 
 
-    public class BinaryWriter
+    public class XBinaryWriter
     {
         /// <summary>
         /// 用于编码时
@@ -25,7 +25,7 @@ namespace XFramework
         /// <summary>
         /// 构造成编码器
         /// </summary>
-        public BinaryWriter()
+        public XBinaryWriter()
         {
             bufferList = new List<byte>();
         }

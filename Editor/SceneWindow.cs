@@ -40,9 +40,28 @@ namespace XFramework.Editor
         [MenuItem("XFramework/Scene Viewer")]
         public static void ShowWindow()
         {
-            var wnd = GetWindow<SceneListWindow>();
+            var wnd = FindOpenWindow() ?? CreateDockedWindow();
             wnd.SetWindowTitle();
             wnd.minSize = new Vector2(500, 200);
+            wnd.Show();
+            wnd.Focus();
+        }
+
+        private static SceneListWindow FindOpenWindow()
+        {
+            SceneListWindow[] windows = Resources.FindObjectsOfTypeAll<SceneListWindow>();
+            return windows.FirstOrDefault(window => window != null);
+        }
+
+        private static SceneListWindow CreateDockedWindow()
+        {
+            Type inspectorWindowType = typeof(UnityEditor.Editor).Assembly.GetType("UnityEditor.InspectorWindow");
+            if (inspectorWindowType != null)
+            {
+                return CreateWindow<SceneListWindow>(WindowTitle, inspectorWindowType);
+            }
+
+            return CreateWindow<SceneListWindow>(WindowTitle);
         }
 
         private void OnEnable()
