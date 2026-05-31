@@ -30,17 +30,23 @@ namespace XFramework
             gameObject.SetActive(false);
             xTask?.Stop();
             xTask = null;
+            source.Stop();
+            source.clip = null;
+            source.pitch = 1f;
+            source.spatialBlend = 0f;
         }
 
-        public ITask Play(AudioClip clip, float volume = 1f)
+        public ITask Play(AudioClip clip, float volume = 1f, float pitch = 1f)
         {
             xTask?.Stop();
             xTask = null;
             
             source.volume = volume;
             source.clip = clip;
+            source.pitch = pitch;
+            source.spatialBlend = 0f;
             source.Play();
-            xTask = XTask.Delay(clip.length);
+            xTask = XTask.Delay(ResolveClipDuration(clip, pitch));
             var next = xTask.ContinueWith(() =>
             {
                 xTask = null;
@@ -49,7 +55,7 @@ namespace XFramework
             return next;
         }
         
-        public ITask Play3D(AudioClip clip, Vector3 position, float minDistance, float maxDistance, float volume = 1f)
+        public ITask Play3D(AudioClip clip, Vector3 position, float minDistance, float maxDistance, float volume = 1f, float pitch = 1f)
         {
             xTask?.Stop();
             xTask = null;
@@ -57,18 +63,24 @@ namespace XFramework
             transform.position = position;
             source.clip = clip;
             source.volume = volume;
+            source.pitch = pitch;
             source.spatialBlend = 1f; // 3D 声音
             source.minDistance = minDistance;
             source.maxDistance = maxDistance;
             source.rolloffMode = AudioRolloffMode.Linear;
             source.Play();
-            xTask = XTask.Delay(clip.length);
+            xTask = XTask.Delay(ResolveClipDuration(clip, pitch));
             var next = xTask.ContinueWith(() =>
             {
                 xTask = null;
                 Recycle();
             });
             return next;
+        }
+
+        private static float ResolveClipDuration(AudioClip clip, float pitch)
+        {
+            return clip.length / Mathf.Max(0.01f, Mathf.Abs(pitch));
         }
     }
 
@@ -147,32 +159,13 @@ namespace XFramework
             }
         }
 
-        public void PlaySound(string path, float volume = 1f)
+        public AudioEntity PlaySound(string path, float volume = 1f, float pitch = 1f)
         {
             var clip = GetAudioClip(path);
-            PlaySound(clip, volume);
+            return PlaySound(clip, volume, pitch);
         }
         
-        public void PlaySound(AudioClip clip, float volume = 1f)
-        {
-            if(!clip)
-            {
-                Debug.LogWarning($"sound资源不存在");
-            }
-            else
-            {
-                var audioEntity = EntityManager.Instance.Allocate<AudioEntity>("SoundManager_Audio");
-                audioEntity.Play(clip, volume);
-            }
-        }
-        
-        public AudioEntity PlaySound3D(string path, Vector3 position, float minDistance = 1f, float maxDistance=20f, float volume = 1f)
-        {
-            var clip = GetAudioClip(path);
-            return PlaySound3D(clip, position, minDistance, maxDistance, volume);
-        }
-        
-        public AudioEntity PlaySound3D(AudioClip clip, Vector3 position, float minDistance = 1f, float maxDistance=20f, float volume = 1f)
+        public AudioEntity PlaySound(AudioClip clip, float volume = 1f, float pitch = 1f)
         {
             if(!clip)
             {
@@ -182,7 +175,30 @@ namespace XFramework
             else
             {
                 var audioEntity = EntityManager.Instance.Allocate<AudioEntity>("SoundManager_Audio");
-                audioEntity.Play3D(clip, position, minDistance, maxDistance, volume);
+                audioEntity.Play(clip, volume, pitch);
+                LogPlaySound(clip, volume, pitch);
+                return audioEntity;
+            }
+        }
+        
+        public AudioEntity PlaySound3D(string path, Vector3 position, float minDistance = 1f, float maxDistance=20f, float volume = 1f, float pitch = 1f)
+        {
+            var clip = GetAudioClip(path);
+            return PlaySound3D(clip, position, minDistance, maxDistance, volume, pitch);
+        }
+        
+        public AudioEntity PlaySound3D(AudioClip clip, Vector3 position, float minDistance = 1f, float maxDistance=20f, float volume = 1f, float pitch = 1f)
+        {
+            if(!clip)
+            {
+                Debug.LogWarning($"sound资源不存在");
+                return null;
+            }
+            else
+            {
+                var audioEntity = EntityManager.Instance.Allocate<AudioEntity>("SoundManager_Audio");
+                audioEntity.Play3D(clip, position, minDistance, maxDistance, volume, pitch);
+                LogPlaySound(clip, volume, pitch);
                 return audioEntity;
             }
         }
@@ -209,6 +225,13 @@ namespace XFramework
         public override void Shutdown()
         {
             EntityManager.Instance.RemoveTemplate("SoundManager_Audio");
+        }
+
+        private static void LogPlaySound(AudioClip clip, float volume, float pitch)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.Log($"[SoundManager] Play sound '{clip.name}'. volume={volume}, pitch={pitch}");
+#endif
         }
     }
 }
