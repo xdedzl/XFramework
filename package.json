@@ -6,6 +6,7 @@
     "unity": "2022.3",
     "license": "Apache",
     "dependencies": {
+        "com.unity.inputsystem": "1.19.0",
         "com.unity.textmeshpro": "2.0.1",
         "com.unity.nuget.newtonsoft-json": "3.2.1"
     }
