@@ -463,7 +463,7 @@ actorFsm.Start<IdleState>();
 - `Unregister` 仅取消托管与调试注册，不会自动 `Dispose()` 该 FSM；实例生命周期仍由业务方负责。
 
 #### 4. 调试与观察
-- 菜单 **`XFramework/Tools/FSM Debugger`**：查看当前所有 Global / Instance FSM 的 key、scope、context、当前状态、上一次切换与 payload 摘要。
+- 菜单 **`XFramework/Debug/FSM Debuger`**：查看当前所有 Global / Instance FSM 的 key、scope、context、当前状态、上一次切换与 payload 摘要。
 - 控制台命令 **`fsm_list`**：通过 `XConsole` 输出当前所有活动 FSM 的文本快照。
 
 #### 5. 迁移说明
@@ -554,7 +554,7 @@ IReadOnlyList<Transform> spawnPoints = UObjectFinder.FindList<Transform>("NpcSpa
 - `List` 模式下允许多个对象共享同一个 key，它们会全部归入同一个列表结果。
 
 #### 4. 编辑器辅助工具
-- 可通过菜单 **`XFramework/Tools/UObject Finder`** 打开可视化窗口，浏览当前已加载场景中的全部 `UObjectReference`。
+- 可通过菜单 **`XFramework/Debug/UObjectFinderDebugger`** 打开可视化窗口，浏览当前已加载场景中的全部 `UObjectReference`。
 - 窗口支持搜索、定位、Key/注册模式筛选，以及 `List` 组的展开与收起，适合排查 key 配置与列表归组情况。
 
 > [!TIP]

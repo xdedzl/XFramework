@@ -9,7 +9,7 @@ namespace XFramework.Editor
 {
     public class AudioSplitterWindow : EditorWindow
     {
-        private const string MenuPath = "XFramework/Audio/SplitAudio";
+        private const string MenuPath = "XFramework/Tools/Audio/SplitAudio";
         private static readonly List<string> OutputFormatLabels = new List<string>
         {
             "源格式优先",

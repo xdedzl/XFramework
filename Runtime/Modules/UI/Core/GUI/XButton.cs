@@ -7,8 +7,8 @@ namespace XFramework.UI
     public class XButton : XUIBase
     {
         public UnityEngine.UI.Button button;
-        [AssetPath]
-        public string soundPath;
+        [UIClickSound]
+        public string clickSoundKey;
 
         private void Start()
         {
@@ -27,9 +27,9 @@ namespace XFramework.UI
 
         private void OnClickPlaySound()
         {
-            if(!string.IsNullOrEmpty(soundPath))
+            if(XApplication.Setting.TryGetUIClickSoundPath(clickSoundKey, out string clickSoundPath))
             {
-                SoundManager.Instance.PlaySound(soundPath);
+                SoundManager.Instance.PlaySound(clickSoundPath);
             }
         }
     }

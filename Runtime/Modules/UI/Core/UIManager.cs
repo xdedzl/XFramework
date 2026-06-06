@@ -60,6 +60,7 @@ namespace XFramework.UI
         
         private readonly Dictionary<string, PanelBase> m_PanelDict = new ();
         private readonly Dictionary<int, List<PanelBase>> m_OnDisplayPanelDic = new ();
+        private readonly Dictionary<string, Action> m_PanelCloseCallbacks = new ();
         
         private GameObject m_TipsPrefab;
 
@@ -71,6 +72,16 @@ namespace XFramework.UI
         }
         
         public void OpenPanel(string uiName, params object[] args)
+        {
+            OpenPanelInternal(uiName, null, args);
+        }
+
+        public void OpenPanel(string uiName, Action onClose, params object[] args)
+        {
+            OpenPanelInternal(uiName, onClose, args);
+        }
+
+        private void OpenPanelInternal(string uiName, Action onClose, params object[] args)
         {
             PanelBase panel = GetPanel(uiName);
             if (null ==panel)
@@ -88,6 +99,11 @@ namespace XFramework.UI
                 m_OnDisplayPanelDic.Add(panel.Level, new List<PanelBase>());
             }
             m_OnDisplayPanelDic[panel.Level].Add(panel);
+
+            if (onClose != null)
+            {
+                m_PanelCloseCallbacks[uiName] = onClose;
+            }
             
             // if (m_OnDisplayPanelDic.ContainsKey(panel.Level - 1))
             // {
@@ -116,6 +132,8 @@ namespace XFramework.UI
                 m_OnDisplayPanelDic[panel.Level].Remove(panel);
                 
                 panel.OnAfterClose();
+
+                InvokePanelCloseCallback(uiName);
             }
 
             // int index = panel.Level + 1;
@@ -138,6 +156,16 @@ namespace XFramework.UI
             // {
             //     m_OnDisplayPanelDic[panel.Level - 1].End().OnResume();
             // }
+        }
+
+        private void InvokePanelCloseCallback(string uiName)
+        {
+            if (!m_PanelCloseCallbacks.Remove(uiName, out Action callback))
+            {
+                return;
+            }
+
+            callback?.Invoke();
         }
         
         /// <summary>
@@ -421,6 +449,7 @@ namespace XFramework.UI
             m_PanelDict?.Clear();
             m_PanelName2Info.Clear();
             m_OnDisplayPanelDic.Clear();
+            m_PanelCloseCallbacks.Clear();
             EntityManager.Instance.RemoveTemplate("ui-tip-entity");
         }
 

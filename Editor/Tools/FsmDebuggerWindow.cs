@@ -9,7 +9,7 @@ namespace XFramework.Editor
 {
     public class FsmDebuggerWindow : EditorWindow
     {
-        private const string MenuPath = "XFramework/Tools/FSM Debugger";
+        private const string MenuPath = "XFramework/Debug/FSM Debuger";
 
         private readonly List<XFramework.Fsm.FsmDebugEntry> m_AllEntries = new List<XFramework.Fsm.FsmDebugEntry>();
         private readonly List<XFramework.Fsm.FsmDebugEntry> m_FilteredEntries = new List<XFramework.Fsm.FsmDebugEntry>();
@@ -36,7 +36,7 @@ namespace XFramework.Editor
         public static void ShowWindow()
         {
             var window = GetWindow<FsmDebuggerWindow>();
-            window.titleContent = new GUIContent("FSM Debugger");
+            window.titleContent = new GUIContent("FSM Debuger");
             window.minSize = new Vector2(900f, 480f);
             window.Show();
         }

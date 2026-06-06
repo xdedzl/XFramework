@@ -143,6 +143,11 @@ namespace XFramework.UI
             UIManager.Instance.OpenPanel(PanelName, args);
         }
 
+        public void Open(Action onClose, params object[] args)
+        {
+            UIManager.Instance.OpenPanel(PanelName, onClose, args);
+        }
+
         public void Close()
         {
             UIManager.Instance.ClosePanel(PanelName);

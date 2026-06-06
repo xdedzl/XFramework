@@ -11,6 +11,28 @@ namespace XFramework
     /// </summary>
     public static class GameEntry
     {
+#if UNITY_EDITOR
+        public readonly struct GameModuleDebugSnapshot
+        {
+            public GameModuleDebugSnapshot(Type moduleType, int priority, bool isPersistent, bool isMonoModule, int updateOrder, IReadOnlyList<Type> dependenceTypes)
+            {
+                ModuleType = moduleType;
+                Priority = priority;
+                IsPersistent = isPersistent;
+                IsMonoModule = isMonoModule;
+                UpdateOrder = updateOrder;
+                DependenceTypes = dependenceTypes;
+            }
+
+            public Type ModuleType { get; }
+            public int Priority { get; }
+            public bool IsPersistent { get; }
+            public bool IsMonoModule { get; }
+            public int UpdateOrder { get; }
+            public IReadOnlyList<Type> DependenceTypes { get; }
+        }
+#endif
+
         // 当前已加载的模块
         private static readonly Dictionary<Type, IGameModule> m_GameModules = new Dictionary<Type, IGameModule>();
         private static readonly LinkedList<IMonoGameModule> m_MonoGameModules = new LinkedList<IMonoGameModule>();
@@ -298,6 +320,44 @@ namespace XFramework
             }
             return result;
         }
+
+#if UNITY_EDITOR
+        /// <summary>
+        /// 获取当前已加载模块的只读调试快照，仅供编辑器工具展示。
+        /// </summary>
+        public static List<GameModuleDebugSnapshot> GetDebugModuleSnapshots()
+        {
+            var monoUpdateOrders = new Dictionary<Type, int>();
+            int updateOrder = 0;
+            LinkedListNode<IMonoGameModule> current = m_MonoGameModules.First;
+            while (current != null)
+            {
+                monoUpdateOrders[current.Value.GetType()] = updateOrder;
+                updateOrder++;
+                current = current.Next;
+            }
+
+            var result = new List<GameModuleDebugSnapshot>(m_GameModules.Count);
+            foreach (var kvp in m_GameModules)
+            {
+                Type moduleType = kvp.Key;
+                IGameModule module = kvp.Value;
+                List<Type> dependenceTypes = m_DependenceDic.TryGetValue(moduleType.Name, out var types)
+                    ? new List<Type>(types)
+                    : new List<Type>();
+
+                result.Add(new GameModuleDebugSnapshot(
+                    moduleType,
+                    module.Priority,
+                    module.IsPersistent,
+                    module is IMonoGameModule,
+                    monoUpdateOrders.TryGetValue(moduleType, out int order) ? order : -1,
+                    dependenceTypes));
+            }
+
+            return result;
+        }
+#endif
 
         /// <summary>
         /// 卸载当前已加载的所有模块

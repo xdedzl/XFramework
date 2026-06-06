@@ -12,9 +12,9 @@ using UnityEngine.UIElements;
 
 namespace XFramework.Editor
 {
-    public class UObjectFinderWindow : EditorWindow
+    public class UObjectFinderDebuggerWindow : EditorWindow
     {
-        private const string MenuPath = "XFramework/Tools/UObject Finder";
+        private const string MenuPath = "XFramework/Debug/UObjectFinderDebugger";
         private const float LeftPaneWidth = 780f;
         private const float PathColumnWidth = 280f;
         private const float NameColumnWidth = 150f;
@@ -68,8 +68,8 @@ namespace XFramework.Editor
         [MenuItem(MenuPath)]
         public static void ShowWindow()
         {
-            var window = GetWindow<UObjectFinderWindow>();
-            window.titleContent = new GUIContent("UObject Finder");
+            var window = GetWindow<UObjectFinderDebuggerWindow>();
+            window.titleContent = new GUIContent("UObjectFinderDebugger");
             window.minSize = new Vector2(980f, 520f);
             window.Show();
         }

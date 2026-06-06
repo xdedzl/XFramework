@@ -10,7 +10,7 @@ namespace XFramework.Editor
 {
     public class UIToolkitPanelPreviewWindow : EditorWindow
     {
-        private const string MenuPath = "Tools/XFramework/UI Toolkit Panel Preview";
+        private const string MenuPath = "XFramework/UI/UI Toolkit Panel Preview";
 
         private readonly List<PanelPreviewItem> m_Items = new();
         private ScrollView m_ListView;
