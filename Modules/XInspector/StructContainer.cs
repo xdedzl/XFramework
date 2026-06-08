@@ -2,7 +2,6 @@
 {
     public interface IDataContainer
     {
-        [XInspectorIgnore]
         object Data { get; }
     }
 

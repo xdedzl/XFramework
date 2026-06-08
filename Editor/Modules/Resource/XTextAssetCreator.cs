@@ -9,8 +9,8 @@ namespace XFramework.Data.Editor
     [ScriptedImporter(2, "xasset")]
     public class XTextAssetCreator : ScriptedImporter
     {
-        private const string DefaultIconPath = "Packages/com.xdedzl.xframework/XAnimation/Editor/Assets/xasset-icon.png";
-        private const string DataTableIconPath = "Packages/com.xdedzl.xframework/XAnimation/Editor/Assets/xasset-table-icon.png";
+        private const string DefaultIconPath = "Packages/com.xdedzl.xframework/Editor/Assets/xasset-icon.png";
+        private const string DataTableIconPath = "Packages/com.xdedzl.xframework/Editor/Assets/xasset-table-icon.png";
 
         private const string DataTableAlias = "xframework.data-table";
         private const string DataTableHasKeyAlias = "xframework.data-table-haskey";

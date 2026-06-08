@@ -12,7 +12,7 @@ namespace XFramework.UI
         private Type elementType;
         private bool IsArray => BoundVariableType.IsArray;
         
-        private readonly ArrayItemPropertyAttribute itemPropertyAttribute;
+        private readonly PropertyAttribute itemPropertyAttribute;
 
         private readonly TextField sizeInput;
         private readonly VisualElement listBox;
@@ -131,9 +131,9 @@ namespace XFramework.UI
             RegisterCallback<DetachFromPanelEvent>(OnDetachFromPanel);
         }
 
-        public ArrayElement(ArrayItemPropertyAttribute type) : this()
+        public ArrayElement(PropertyAttribute itemPropertyAttribute) : this()
         {
-            itemPropertyAttribute = type;
+            this.itemPropertyAttribute = itemPropertyAttribute;
         }
 
         protected override void OnBound()
@@ -224,39 +224,22 @@ namespace XFramework.UI
 
         private XInspectorElement CreateDrawerForMemberType()
         {
-            if (itemPropertyAttribute?.propertyAttributeType != null)
+            if (itemPropertyAttribute != null)
             {
-                Type drawerType = XInspector.GetDrawerForPropertyAttribute(itemPropertyAttribute.propertyAttributeType);
+                Type drawerType = XInspector.GetDrawerForPropertyAttribute(itemPropertyAttribute.GetType());
                 if (drawerType != null)
                 {
-                    PropertyAttribute propertyAttribute = CreateItemPropertyAttribute();
-                    if (propertyAttribute != null)
+                    XInspectorElement element = XInspector.CreateDrawerForType(drawerType, 0);
+                    if (element is IPropertyAttributeElement propertyAttributeElement)
                     {
-                        XInspectorElement element = XInspector.CreateDrawerForType(drawerType, 0);
-                        if (element is IPropertyAttributeElement propertyAttributeElement)
-                        {
-                            propertyAttributeElement.SetPropertyAttribute(propertyAttribute);
-                        }
-
-                        return element;
+                        propertyAttributeElement.SetPropertyAttribute(itemPropertyAttribute);
                     }
+
+                    return element;
                 }
             }
 
             return XInspector.CreateDrawerForMemberType(elementType, 0);
-        }
-
-        private PropertyAttribute CreateItemPropertyAttribute()
-        {
-            try
-            {
-                return Activator.CreateInstance(itemPropertyAttribute.propertyAttributeType, itemPropertyAttribute.args) as PropertyAttribute;
-            }
-            catch (Exception exception)
-            {
-                Debug.LogWarning($"创建数组元素PropertyAttribute失败: {itemPropertyAttribute.propertyAttributeType.Name}. {exception.Message}");
-                return null;
-            }
         }
 
         private void OnSizeChange(ChangeEvent<string> input)

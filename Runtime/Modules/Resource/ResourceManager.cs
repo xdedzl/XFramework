@@ -153,6 +153,28 @@ namespace XFramework.Resource
             return m_LoadHelper.LoadAsync<T>(assetName);
         }
 
+        public bool PrepareAsset(string assetName)
+        {
+            if (string.IsNullOrEmpty(assetName))
+            {
+                throw new XFrameworkException("load path is null");
+            }
+
+            assetName = Path2RealPath(assetName);
+            return m_LoadHelper.PrepareAsset(assetName);
+        }
+
+        public XAwaitableTask<bool> PrepareAssetAsync(string assetName)
+        {
+            if (string.IsNullOrEmpty(assetName))
+            {
+                throw new XFrameworkException("load path is null");
+            }
+
+            assetName = Path2RealPath(assetName);
+            return m_LoadHelper.PrepareAssetAsync(assetName);
+        }
+
         /// <summary>
         /// 将传入路径转为Assets路径
         /// </summary>

@@ -290,6 +290,44 @@ namespace XFramework.Resource
             });
             return task;
         }
+
+        public bool PrepareAsset(string assetPath)
+        {
+            if (!IsAssetExist(assetPath))
+            {
+                Debug.LogError($"[AssetBundleLoadHelper] 资源 {assetPath} 不存在");
+                return false;
+            }
+
+            try
+            {
+                string abPath = Asset2Ab(assetPath);
+                return LoadAssetBundle(abPath) != null;
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[AssetBundleLoadHelper] 加载资源 {assetPath} 所在AB失败: {e}");
+                return false;
+            }
+        }
+
+        public XAwaitableTask<bool> PrepareAssetAsync(string assetPath)
+        {
+            var task = new XAwaitableTask<bool>();
+            if (!IsAssetExist(assetPath))
+            {
+                Debug.LogError($"[AssetBundleLoadHelper] 资源 {assetPath} 不存在");
+                task.SetResult(false);
+                return task;
+            }
+
+            string abPath = Asset2Ab(assetPath);
+            LoadAssetBundleAsync(abPath, (success, _) =>
+            {
+                task.SetResult(success);
+            });
+            return task;
+        }
         
         public void Release(UObject obj)
         {

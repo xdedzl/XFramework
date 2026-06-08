@@ -209,7 +209,7 @@ namespace XFramework.UI
 
         private static string GetCustomDisplayName(MemberInfo member)
         {
-            return member?.GetCustomAttribute<DisplayNameAttribute>()?.displayName;
+            return member?.GetCustomAttribute<InspectorNameAttribute>()?.displayName;
         }
 
         private static string FormatDisplayName(string value)

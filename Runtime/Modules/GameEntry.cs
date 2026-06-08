@@ -43,7 +43,6 @@ namespace XFramework
         /// </summary>
         public static void InitializeModules(params ModuleLifecycle[] lifecycles)
         {
-            Debug.Log( $"[XFramework] Initializing modules with lifecycles: {string.Join(", ", lifecycles)}");
             var modules = Utility.Reflection.GetAssignableTypes(typeof(IGameModule), "Assembly-CSharp", "XFrameworkRuntime");
             foreach (var type in modules)
             {
@@ -57,6 +56,14 @@ namespace XFramework
                 
                 AddModule(type);
             }
+
+            string loadedModules = string.Join(", ", m_GameModules.Keys.Select(type =>
+            {
+                var attr = type.GetCustomAttribute<ModuleLifecycleAttribute>();
+                string lifecycle = attr != null ? attr.Lifecycle.ToString() : nameof(ModuleLifecycle.Normal);
+                return $"{type.Name}({lifecycle})";
+            }));
+            Debug.Log($"[XFramework] Initialized modules with lifecycles: {string.Join(", ", lifecycles)}. Loaded modules: {loadedModules}");
         }
 
         // 模块依赖关系 key：模块, Value：依赖的模块

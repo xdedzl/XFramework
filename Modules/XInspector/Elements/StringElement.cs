@@ -32,6 +32,8 @@ namespace XFramework.UI
         }
     }
 
+    
+#if UNITY_EDITOR
     [CustomPropertyDrawer(typeof(TextAreaAttribute))]
     public class TextAreaElement : StringElement
     {
@@ -51,4 +53,5 @@ namespace XFramework.UI
             }
         }
     }
+#endif
 }

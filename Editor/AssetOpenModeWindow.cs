@@ -144,7 +144,7 @@ namespace XFramework.Editor
         }
 
         [MenuItem("XFramework/Asset/OpenMode")]
-        private static void OpenWidown()
+        private static void OpenWidow()
         {
             GetWindow(typeof(AssetOpenModeWindow));
         }

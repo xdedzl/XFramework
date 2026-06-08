@@ -8,6 +8,12 @@ using XFramework.Tasks;
 
 namespace XFramework
 {
+    public interface IAudioPlayback
+    {
+        bool IsValid { get; }
+        void Stop();
+    }
+
     public readonly struct SoundManagerDebugSnapshot
     {
         public SoundManagerDebugSnapshot(
@@ -40,87 +46,96 @@ namespace XFramework
         public int CachedAudioClipCount { get; }
     }
 
-    public class AudioEntity : Entity.Entity
-    {
-        private AudioSource source;
-        private ITask xTask;
-        
-        public bool isPlaying => source.isPlaying;
-
-        public override void OnInit()
-        {
-            source = GetComponent<AudioSource>();
-        }
-
-        public override void OnAllocate(IEntityData entityData)
-        {
-            gameObject.SetActive(true);
-        }
-
-        public override void OnRecycle()
-        {
-            gameObject.SetActive(false);
-            xTask?.Stop();
-            xTask = null;
-            source.Stop();
-            source.clip = null;
-            source.pitch = 1f;
-            source.spatialBlend = 0f;
-        }
-
-        public ITask Play(AudioClip clip, float volume = 1f, float pitch = 1f)
-        {
-            xTask?.Stop();
-            xTask = null;
-            
-            source.volume = volume;
-            source.clip = clip;
-            source.pitch = pitch;
-            source.spatialBlend = 0f;
-            source.Play();
-            xTask = XTask.Delay(ResolveClipDuration(clip, pitch));
-            var next = xTask.ContinueWith(() =>
-            {
-                xTask = null;
-                Recycle();
-            });
-            return next;
-        }
-        
-        public ITask Play3D(AudioClip clip, Vector3 position, float minDistance, float maxDistance, float volume = 1f, float pitch = 1f)
-        {
-            xTask?.Stop();
-            xTask = null;
-            
-            transform.position = position;
-            source.clip = clip;
-            source.volume = volume;
-            source.pitch = pitch;
-            source.spatialBlend = 1f; // 3D 声音
-            source.minDistance = minDistance;
-            source.maxDistance = maxDistance;
-            source.rolloffMode = AudioRolloffMode.Linear;
-            source.Play();
-            xTask = XTask.Delay(ResolveClipDuration(clip, pitch));
-            var next = xTask.ContinueWith(() =>
-            {
-                xTask = null;
-                Recycle();
-            });
-            return next;
-        }
-
-        private static float ResolveClipDuration(AudioClip clip, float pitch)
-        {
-            return clip.length / Mathf.Max(0.01f, Mathf.Abs(pitch));
-        }
-    }
-
     [DependenceModule(typeof(EntityManager))]
+    [DependenceModule(typeof(ResourceManager))]
     [ModuleLifecycle(ModuleLifecycle.RuntimePersistent)]
     public class SoundManager : GameModuleBase<SoundManager>
     {
         private const float DefaultBgmFadeDuration = 0.8f;
+
+        private sealed class AudioEntity : Entity.Entity, IAudioPlayback
+        {
+            private AudioSource source;
+            private ITask xTask;
+        
+            public bool isPlaying => source.isPlaying;
+
+            public override void OnInit()
+            {
+                source = GetComponent<AudioSource>();
+            }
+
+            public override void OnAllocate(IEntityData entityData)
+            {
+                gameObject.SetActive(true);
+            }
+
+            public override void OnRecycle()
+            {
+                gameObject.SetActive(false);
+                xTask?.Stop();
+                xTask = null;
+                source.Stop();
+                source.clip = null;
+                source.pitch = 1f;
+                source.spatialBlend = 0f;
+            }
+
+            public void Stop()
+            {
+                if (IsValid)
+                {
+                    Recycle();
+                }
+            }
+
+            public ITask Play(AudioClip clip, float volume = 1f, float pitch = 1f)
+            {
+                xTask?.Stop();
+                xTask = null;
+            
+                source.volume = volume;
+                source.clip = clip;
+                source.pitch = pitch;
+                source.spatialBlend = 0f;
+                source.Play();
+                xTask = XTask.Delay(ResolveClipDuration(clip, pitch));
+                var next = xTask.ContinueWith(() =>
+                {
+                    xTask = null;
+                    Recycle();
+                });
+                return next;
+            }
+        
+            public ITask Play3D(AudioClip clip, Vector3 position, float minDistance, float maxDistance, float volume = 1f, float pitch = 1f)
+            {
+                xTask?.Stop();
+                xTask = null;
+            
+                transform.position = position;
+                source.clip = clip;
+                source.volume = volume;
+                source.pitch = pitch;
+                source.spatialBlend = 1f; // 3D 声音
+                source.minDistance = minDistance;
+                source.maxDistance = maxDistance;
+                source.rolloffMode = AudioRolloffMode.Linear;
+                source.Play();
+                xTask = XTask.Delay(ResolveClipDuration(clip, pitch));
+                var next = xTask.ContinueWith(() =>
+                {
+                    xTask = null;
+                    Recycle();
+                });
+                return next;
+            }
+
+            private static float ResolveClipDuration(AudioClip clip, float pitch)
+            {
+                return clip.length / Mathf.Max(0.01f, Mathf.Abs(pitch));
+            }
+        }
 
         /// <summary>
         /// 背景音乐
@@ -308,13 +323,13 @@ namespace XFramework
             }
         }
 
-        public AudioEntity PlaySound(string path, float volume = 1f, float pitch = 1f)
+        public IAudioPlayback PlaySound(string path, float volume = 1f, float pitch = 1f)
         {
             var clip = GetAudioClip(path);
             return PlaySound(clip, volume, pitch);
         }
         
-        public AudioEntity PlaySound(AudioClip clip, float volume = 1f, float pitch = 1f)
+        public IAudioPlayback PlaySound(AudioClip clip, float volume = 1f, float pitch = 1f)
         {
             if(!clip)
             {
@@ -330,13 +345,13 @@ namespace XFramework
             }
         }
         
-        public AudioEntity PlaySound3D(string path, Vector3 position, float minDistance = 1f, float maxDistance=20f, float volume = 1f, float pitch = 1f)
+        public IAudioPlayback PlaySound3D(string path, Vector3 position, float minDistance = 1f, float maxDistance=20f, float volume = 1f, float pitch = 1f)
         {
             var clip = GetAudioClip(path);
             return PlaySound3D(clip, position, minDistance, maxDistance, volume, pitch);
         }
         
-        public AudioEntity PlaySound3D(AudioClip clip, Vector3 position, float minDistance = 1f, float maxDistance=20f, float volume = 1f, float pitch = 1f)
+        public IAudioPlayback PlaySound3D(AudioClip clip, Vector3 position, float minDistance = 1f, float maxDistance=20f, float volume = 1f, float pitch = 1f)
         {
             if(!clip)
             {

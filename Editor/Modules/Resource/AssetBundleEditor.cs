@@ -1,7 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.IO;
-using XFramework.Resource;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -17,9 +14,8 @@ namespace XFramework.Editor
         private enum TabMode
         {
             Default,
-            Dependence,
-            Manifest2Json,
             BuildProject,
+            Preview,
         }
 
         [MenuItem("XFramework/Resource/AssetBundleWindow")]
@@ -36,9 +32,8 @@ namespace XFramework.Editor
         public SubWindow[] m_SubWindows = new SubWindow[]
         {
             new DefaultTab(),
-            new DependenceTab(),
-            new Manifest2Json(),
             new BuildTab(),
+            new PreviewTab(),
         };
 
         // Root content container for current tab (UIElements)
@@ -51,7 +46,10 @@ namespace XFramework.Editor
 
         private void OnEnable()
         {
-            m_TabMode = (TabMode)EditorPrefs.GetInt("TabMode", (int)TabMode.BuildProject);
+            int savedTabMode = EditorPrefs.GetInt("TabMode", (int)TabMode.BuildProject);
+            m_TabMode = Enum.IsDefined(typeof(TabMode), savedTabMode) && savedTabMode < m_SubWindows.Length
+                ? (TabMode)savedTabMode
+                : TabMode.BuildProject;
 
             foreach (var item in m_SubWindows)
             {
@@ -80,7 +78,7 @@ namespace XFramework.Editor
                 int tabIndex = i;
                 var button = new ToolbarButton(() => SwitchTab((TabMode)tabIndex))
                 {
-                    text = tabNames[i]
+                    text = GetTabDisplayName((TabMode)tabIndex)
                 };
                 _toolbar.Add(button);
             }
@@ -92,51 +90,29 @@ namespace XFramework.Editor
             _contentRoot.style.flexDirection = FlexDirection.Column;
             rootVisualElement.Add(_contentRoot);
 
-            // Create containers for each tab
+            // Create tab containers lazily so expensive editor tabs do not refresh until selected.
             _imguiContainers = new IMGUIContainer[m_SubWindows.Length];
             _veTabContents = new VisualElement[m_SubWindows.Length];
-            for (int i = 0; i < m_SubWindows.Length; i++)
-            {
-                int idx = i;
-                // Default tab uses UIElements view if available
-                if (idx == (int)TabMode.Default && m_SubWindows[idx] is DefaultTab defaultTab)
-                {
-                    var ve = defaultTab.BuildUI();
-                    ve.style.flexGrow = 1;
-                    ve.style.display = DisplayStyle.None;
-                    _veTabContents[idx] = ve;
-                    _contentRoot.Add(ve);
-                    continue;
-                }
-                
-                if (idx == (int)TabMode.BuildProject && m_SubWindows[idx] is BuildTab buildTab)
-                {
-                    var ve = buildTab.BuildUI();
-                    ve.style.flexGrow = 1;
-                    ve.style.display = DisplayStyle.None;
-                    _veTabContents[idx] = ve;
-                    _contentRoot.Add(ve);
-                    continue;
-                }
-
-                var container = new IMGUIContainer(() =>
-                {
-                    GUILayout.Space(4);
-                    m_SubWindows[idx].OnGUI();
-                });
-                container.style.flexGrow = 1;
-                container.style.display = DisplayStyle.None; // hidden by default
-                _imguiContainers[idx] = container;
-                _contentRoot.Add(container);
-            }
 
             // Show the initially selected tab
             SwitchTab(m_TabMode);
         }
 
+        private static string GetTabDisplayName(TabMode mode)
+        {
+            return mode switch
+            {
+                TabMode.Default => "AB包配置",
+                TabMode.Preview => "AB包预览",
+                _ => mode.ToString()
+            };
+        }
+
         private void SwitchTab(TabMode mode)
         {
             m_TabMode = mode;
+            EnsureTabContent((int)m_TabMode);
+
             // Update visibility of content containers
             for (int i = 0; i < m_SubWindows.Length; i++)
             {
@@ -148,6 +124,35 @@ namespace XFramework.Editor
             }
             // Persist selection
             EditorPrefs.SetInt("TabMode", (int)m_TabMode);
+        }
+
+        private void EnsureTabContent(int index)
+        {
+            if (_veTabContents[index] != null || _imguiContainers[index] != null)
+            {
+                return;
+            }
+
+            var ve = m_SubWindows[index].BuildUI();
+            if (ve != null)
+            {
+                ve.style.flexGrow = 1;
+                ve.style.display = DisplayStyle.None;
+                _veTabContents[index] = ve;
+                _contentRoot.Add(ve);
+                return;
+            }
+
+            var tabIndex = index;
+            var container = new IMGUIContainer(() =>
+            {
+                GUILayout.Space(4);
+                m_SubWindows[tabIndex].OnGUI();
+            });
+            container.style.flexGrow = 1;
+            container.style.display = DisplayStyle.None;
+            _imguiContainers[index] = container;
+            _contentRoot.Add(container);
         }
 
         private void OnDisable()

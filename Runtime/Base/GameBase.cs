@@ -1,5 +1,6 @@
 using System.Reflection;
 using UnityEngine;
+using XAnimationEngine;
 using XFramework.Console;
 using XFramework.Json;
 
@@ -9,6 +10,7 @@ namespace XFramework
     /// 这个类挂在初始场景中,是整个游戏的入口
     /// </summary>
     [DisallowMultipleComponent]
+    [DefaultExecutionOrder(-1)]
     public class GameBase : MonoBehaviour
     {
         // 初始流程
@@ -43,9 +45,8 @@ namespace XFramework
 
         private void OnInit()
         {
-            GameEntry.InitializeModules(ModuleLifecycle.Persistent, ModuleLifecycle.RuntimePersistent);
-
             XJson.SetUnityDefaultSetting();
+            GameEntry.InitializeModules(ModuleLifecycle.Persistent, ModuleLifecycle.RuntimePersistent);
         }
 
         private void EnterFirstProcedure()
@@ -160,5 +161,13 @@ namespace XFramework
             }
         }
     }
-
+    
+    internal static class GameBootstrap
+    {
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void OnGameInit()
+        {
+            
+        }
+    }
 }

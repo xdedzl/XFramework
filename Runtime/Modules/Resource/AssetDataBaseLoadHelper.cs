@@ -100,6 +100,18 @@ namespace XFramework.Resource
             return task;
         }
 
+        public bool PrepareAsset(string assetPath)
+        {
+            return IsAssetExist(assetPath);
+        }
+
+        public XAwaitableTask<bool> PrepareAssetAsync(string assetPath)
+        {
+            var task = new XAwaitableTask<bool>();
+            task.SetResult(PrepareAsset(assetPath));
+            return task;
+        }
+
         /// <summary>
         /// 同步加载一组资源
         /// </summary>

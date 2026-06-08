@@ -10,6 +10,49 @@ using XFramework.Resource;
 
 namespace XFramework.UI
 {
+#if UNITY_EDITOR
+    public readonly struct UIPanelDebugSnapshot
+    {
+        public UIPanelDebugSnapshot(
+            string panelName,
+            Type panelType,
+            string path,
+            int level,
+            bool isCached,
+            bool isOpened,
+            bool isVisible,
+            bool hasCloseCallback,
+            GameObject gameObject,
+            string hierarchyPath,
+            bool isUIToolkitPanel)
+        {
+            PanelName = panelName;
+            PanelType = panelType;
+            Path = path;
+            Level = level;
+            IsCached = isCached;
+            IsOpened = isOpened;
+            IsVisible = isVisible;
+            HasCloseCallback = hasCloseCallback;
+            GameObject = gameObject;
+            HierarchyPath = hierarchyPath;
+            IsUIToolkitPanel = isUIToolkitPanel;
+        }
+
+        public string PanelName { get; }
+        public Type PanelType { get; }
+        public string Path { get; }
+        public int Level { get; }
+        public bool IsCached { get; }
+        public bool IsOpened { get; }
+        public bool IsVisible { get; }
+        public bool HasCloseCallback { get; }
+        public GameObject GameObject { get; }
+        public string HierarchyPath { get; }
+        public bool IsUIToolkitPanel { get; }
+    }
+#endif
+
     /// <summary>
     /// 主界面（所有主界面会放到一个栈中（用于back等操作），主界面不能同时存在多个）
     /// </summary>
@@ -43,10 +86,11 @@ namespace XFramework.UI
             {
                 if (canvasTransform == null)
                 {
-                    var canvas = GameObject.Find("Canvas");
+                    var canvas = GameObject.FindFirstObjectByType<Canvas>();
                     if (canvas == null)
                     {
-                        canvas = new GameObject("Canvas").AddComponent<RectTransform>().gameObject;
+                        throw new XFrameworkException("[UI] Canvas is not exist in the scene, please add a Canvas to the scene or open a panel with a valid path to let UIManager create a Canvas for you");
+                        // canvas = new GameObject("Canvas").AddComponent<RectTransform>();
                     }
                     canvasTransform = canvas.GetComponent<RectTransform>();
                 }
@@ -68,7 +112,6 @@ namespace XFramework.UI
         public UIManager()
         {
             InitPathDic();
-            GameObject.DontDestroyOnLoad(CanvasTransform);
         }
         
         public void OpenPanel(string uiName, params object[] args)
@@ -182,6 +225,66 @@ namespace XFramework.UI
             }
             return false;
         }
+
+#if UNITY_EDITOR
+        public List<UIPanelDebugSnapshot> GetDebugPanelSnapshots()
+        {
+            var openedPanels = new HashSet<PanelBase>();
+            foreach (var list in m_OnDisplayPanelDic.Values)
+            {
+                foreach (var panel in list)
+                {
+                    if (panel != null)
+                    {
+                        openedPanels.Add(panel);
+                    }
+                }
+            }
+
+            var snapshots = new List<UIPanelDebugSnapshot>(m_PanelName2Info.Count);
+            foreach (var pair in m_PanelName2Info)
+            {
+                string panelName = pair.Key;
+                PanelInfoAttribute panelInfo = pair.Value;
+                m_PanelName2Type.TryGetValue(panelName, out Type panelType);
+
+                bool isCached = m_PanelDict.TryGetValue(panelName, out PanelBase panel);
+                GameObject panelGameObject = panel != null ? panel.gameObject : null;
+                snapshots.Add(new UIPanelDebugSnapshot(
+                    panelName,
+                    panelType,
+                    panelInfo.path ?? string.Empty,
+                    panelInfo.level,
+                    isCached,
+                    panel != null && openedPanels.Contains(panel),
+                    panel != null && panel.IsVisible,
+                    m_PanelCloseCallbacks.ContainsKey(panelName),
+                    panelGameObject,
+                    panelGameObject != null ? GetHierarchyPath(panelGameObject.transform) : string.Empty,
+                    panelType != null && typeof(UIToolkitPanelBase).IsAssignableFrom(panelType)));
+            }
+
+            return snapshots;
+        }
+
+        private static string GetHierarchyPath(Transform transform)
+        {
+            if (transform == null)
+            {
+                return string.Empty;
+            }
+
+            string path = transform.name;
+            Transform current = transform.parent;
+            while (current != null)
+            {
+                path = current.name + "/" + path;
+                current = current.parent;
+            }
+
+            return path;
+        }
+#endif
 
         private PanelBase GetPanel(string uiName)
         {

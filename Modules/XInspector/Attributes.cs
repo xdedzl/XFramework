@@ -1,29 +1,7 @@
 ﻿using System;
-using UnityEngine;
 
 namespace XFramework.UI
 {
-    /// <summary>
-    /// 定义数组/List元素使用的PropertyAttribute
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, Inherited = true, AllowMultiple = false)]
-    public class ArrayItemPropertyAttribute : Attribute
-    {
-        public readonly Type propertyAttributeType;
-        public readonly object[] args;
-
-        public ArrayItemPropertyAttribute(Type propertyAttributeType, params object[] args)
-        {
-            if (propertyAttributeType != null && !typeof(PropertyAttribute).IsAssignableFrom(propertyAttributeType))
-            {
-                throw new Exception($"参数propertyAttributeType必须为{nameof(PropertyAttribute)}的派生类   type{propertyAttributeType.Name}");
-            }
-
-            this.propertyAttributeType = propertyAttributeType;
-            this.args = args;
-        }
-    }
-
     /// <summary>
     /// 定义变量在UI上的显示名称
     /// </summary>
@@ -36,26 +14,6 @@ namespace XFramework.UI
             this.propertyName = propertyName;
         }
     }
-
-    /// <summary>
-    /// 定义变量在UI上的覆盖显示名称
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, Inherited = true, AllowMultiple = false)]
-    public class DisplayNameAttribute : Attribute
-    {
-        public readonly string displayName;
-
-        public DisplayNameAttribute(string displayName)
-        {
-            this.displayName = displayName;
-        }
-    }
-
-    /// <summary>
-    /// 忽略该变量
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false)]
-    public class XInspectorIgnoreAttribute : Attribute { }
 
     /// <summary>
     /// 定义该Element型支持的类型

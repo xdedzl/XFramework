@@ -108,6 +108,7 @@ flowchart TB
 | **状态机**         | [Runtime/Modules/FSM/](./Runtime/Modules/FSM/)           | [有限状态机 (`FSM`)](#36-有限状态机-fsm)                                          |
 | **工具库 (Core)**  | [Core/Utility/](./Core/Utility/)                         | [通用工具 (`Utility`)](#51-通用底层-utility)                                      |
 | **工具库 (Unity)** | [Runtime/Tools/](./Runtime/Tools/)                       | [引擎工具 (`UUtility`)](#52-引擎特定高级工具-uutility)                            |
+| **检查面板**       | [Modules/XInspector/](./Modules/XInspector/)             | [XInspector 数据检查面板](#46-xinspector-数据检查面板)                            |
 | **动画工具**       | [XAnimation/Runtime/](./XAnimation/Runtime/)             | [XAnimation 播放系统](./XAnimation/Doc/XAnimation.md)                             |
 | **控制台**         | [Runtime/Tools/XConsole/](./Runtime/Tools/XConsole/)     | [XConsole 运行时控制台](#55-xconsole-运行时控制台)                                |
 
@@ -569,7 +570,32 @@ IReadOnlyList<Transform> spawnPoints = UObjectFinder.FindList<Transform>("NpcSpa
 - 支持添加并使用 GM 指令 (通过 `[XConsoleCommand]` 标记)。
 - **最强特性**: 内置微型 C# 解释器驱动，支持游戏进程中执行动态 C# 代码调整变量。
 
-### 4.6 XAnimation 播放系统
+### 4.6 XInspector 数据检查面板
+
+`XInspector` 是基于 UI Toolkit 的数据检查与编辑面板，核心代码位于 `Modules/XInspector/`。它会反射绑定对象的公开字段/属性，并根据 Unity 原生 `PropertyAttribute` 选择对应绘制器。
+
+常用标记约定：
+- 使用 Unity 原生 `[InspectorName("显示名")]` 覆盖字段在 `XInspector` 中的显示文本。
+- 使用 Unity 原生 `[HideInInspector]` 隐藏字段；自动属性需要隐藏时使用 `[field: HideInInspector]`，让 `XInspector` 读取 backing field 上的标记。
+- `[ElementProperty("成员名")]` 仅用于指定非公开成员或覆盖绑定成员名，不作为显示名替代。
+- `List<T>` 和一维数组上的 Unity `PropertyAttribute` 会作用到集合元素绘制器，例如 `[TextArea]`、`[DataTableRef(...)]`。
+
+```csharp
+using UnityEngine;
+using XFramework;
+
+public class ExampleNode
+{
+    [InspectorName("剧情 Id")]
+    [DataTableRef(typeof(StoryGraphDataTable))]
+    public int storyGraphId;
+
+    [HideInInspector]
+    public string[] nextNodeIds;
+}
+```
+
+### 4.7 XAnimation 播放系统
 
 `XAnimation` 是基于 Unity Playables 的轻量动画播放系统，核心代码位于 `XAnimation/Runtime/`，统一命名空间为 `XFramework.Animation`。它用 `.xanimation` / `.xanimationoverride` 文本配置描述动画通道、状态、动画片段、事件点和换装覆盖关系，运行时由 `XAnimationDriver` 驱动播放，并支持默认兼容的 `Manual` 模式和性能优先的 `GameTime` 模式。
 

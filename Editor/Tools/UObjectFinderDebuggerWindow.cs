@@ -60,6 +60,7 @@ namespace XFramework.Editor
         private Label m_DetailSourceLabel;
         private Label m_DetailMessageLabel;
         private Button m_DetailLocateButton;
+        private Button m_DetailCopyCodeButton;
         private Button m_DetailCopyPathButton;
         private Button m_DetailCopySecondaryButton;
 
@@ -302,6 +303,14 @@ namespace XFramework.Editor
             };
             m_DetailLocateButton.style.width = 88f;
             buttonRow.Add(m_DetailLocateButton);
+
+            m_DetailCopyCodeButton = new Button(() => CopyToClipboard(GetSelectedFindCodeForCopy()))
+            {
+                text = "复制代码"
+            };
+            m_DetailCopyCodeButton.style.width = 90f;
+            m_DetailCopyCodeButton.style.marginLeft = 8f;
+            buttonRow.Add(m_DetailCopyCodeButton);
 
             m_DetailCopyPathButton = new Button(() => CopyToClipboard(GetSelectedPathForCopy()))
             {
@@ -812,6 +821,7 @@ namespace XFramework.Editor
 
                 m_DetailLocateButton.text = "定位对象";
                 m_DetailLocateButton.SetEnabled(selectedEntry.GameObject != null);
+                m_DetailCopyCodeButton.SetEnabled(!string.IsNullOrWhiteSpace(selectedEntry.ResolvedPath));
                 m_DetailCopyPathButton.SetEnabled(true);
                 m_DetailCopySecondaryButton.text = "复制来源";
                 m_DetailCopySecondaryButton.SetEnabled(selectedEntry.MatchedUsages.Count > 0 || !string.IsNullOrEmpty(selectedEntry.HierarchyPath));
@@ -839,6 +849,7 @@ namespace XFramework.Editor
 
                 m_DetailLocateButton.text = "定位";
                 m_DetailLocateButton.SetEnabled(false);
+                m_DetailCopyCodeButton.SetEnabled(!string.IsNullOrWhiteSpace(selectedGroup.Key));
                 m_DetailCopyPathButton.SetEnabled(true);
                 m_DetailCopySecondaryButton.text = "复制来源";
                 m_DetailCopySecondaryButton.SetEnabled(selectedGroup.MatchedUsages.Count > 0);
@@ -868,6 +879,7 @@ namespace XFramework.Editor
 
                 m_DetailLocateButton.text = "定位代码";
                 m_DetailLocateButton.SetEnabled(selectedIssue.Usages.Count > 0);
+                m_DetailCopyCodeButton.SetEnabled(!string.IsNullOrWhiteSpace(selectedIssue.Path));
                 m_DetailCopyPathButton.SetEnabled(true);
                 m_DetailCopySecondaryButton.text = "复制来源";
                 m_DetailCopySecondaryButton.SetEnabled(selectedIssue.Usages.Count > 0);
@@ -891,6 +903,7 @@ namespace XFramework.Editor
             m_DetailMessageLabel.text = "-";
             m_DetailLocateButton.text = "定位";
             m_DetailLocateButton.SetEnabled(false);
+            m_DetailCopyCodeButton.SetEnabled(false);
             m_DetailCopyPathButton.SetEnabled(false);
             m_DetailCopySecondaryButton.text = "复制来源";
             m_DetailCopySecondaryButton.SetEnabled(false);
@@ -1631,6 +1644,47 @@ namespace XFramework.Editor
             }
 
             return GetSelectedMissingTargetIssue()?.Path;
+        }
+
+        private string GetSelectedFindCodeForCopy()
+        {
+            UObjectReferenceEntry entry = GetSelectedEntry();
+            if (entry != null)
+            {
+                return BuildFindCode(entry.Mode == UObjectReference.RegistrationMode.List ? LookupMode.List : LookupMode.Single, entry.ResolvedPath);
+            }
+
+            UObjectFinderListGroup group = GetSelectedGroup();
+            if (group != null)
+            {
+                return BuildFindCode(LookupMode.List, group.Key);
+            }
+
+            UObjectFinderMissingTargetIssue issue = GetSelectedMissingTargetIssue();
+            return issue != null ? BuildFindCode(issue.Mode, issue.Path) : string.Empty;
+        }
+
+        private static string BuildFindCode(LookupMode mode, string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return string.Empty;
+            }
+
+            string escapedPath = EscapeCSharpString(path);
+            return mode == LookupMode.List
+                ? $"var gos = UObjectFinder.FindList(\"{escapedPath}\");"
+                : $"GameObject go = UObjectFinder.Find(\"{escapedPath}\");";
+        }
+
+        private static string EscapeCSharpString(string value)
+        {
+            return value
+                .Replace("\\", "\\\\")
+                .Replace("\"", "\\\"")
+                .Replace("\r", "\\r")
+                .Replace("\n", "\\n")
+                .Replace("\t", "\\t");
         }
 
         private string GetSelectedSecondaryCopyValue()

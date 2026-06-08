@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Reflection;
 using System.Linq;
+using UnityEngine;
 
 namespace XFramework.UI
 {
@@ -11,12 +12,12 @@ namespace XFramework.UI
         {
             base.CreateElements();
 
-            // 共有变量且未添加ItemIgnore特性
+            // 共有变量且未添加HideInInspector特性
             foreach (MemberInfo member in GetMembers(BoundVariableType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.GetField | BindingFlags.GetProperty))
             {
                 if (member.MemberType == MemberTypes.Field || member.MemberType == MemberTypes.Property)
                 {
-                    if (Attribute.IsDefined(member, typeof(XInspectorIgnoreAttribute)))
+                    if (IsHiddenInInspector(member))
                         continue;
 
                     var nameAttribute = member.GetCustomAttribute<ElementPropertyAttribute>();
@@ -33,6 +34,9 @@ namespace XFramework.UI
             {
                 if (member.MemberType == MemberTypes.Field || member.MemberType == MemberTypes.Property)
                 {
+                    if (IsHiddenInInspector(member))
+                        continue;
+
                     var nameAttribute = member.GetCustomAttribute<ElementPropertyAttribute>();
 
                     if (nameAttribute != null)
@@ -55,19 +59,19 @@ namespace XFramework.UI
         /// <returns></returns>
         private XInspectorElement CreateItemForMember(MemberInfo member, int depth)
         {
-            if (Attribute.IsDefined(member, typeof(XInspectorIgnoreAttribute)))
+            if (IsHiddenInInspector(member))
             {
                 return null;
             }
             
             Type variableType = member is FieldInfo ? ((FieldInfo)member).FieldType : ((PropertyInfo)member).PropertyType;
-            ArrayItemPropertyAttribute arrayItemPropertyAttribute = member.GetCustomAttribute<ArrayItemPropertyAttribute>();
-            if (arrayItemPropertyAttribute != null && IsArrayItemPropertyTarget(variableType))
+            PropertyAttribute propertyAttribute = XInspector.GetPropertyAttribute(member);
+            if (propertyAttribute != null && IsArrayPropertyTarget(variableType))
             {
-                return XInspector.CreateArrayItemPropertyElement(arrayItemPropertyAttribute, depth);
+                return XInspector.CreateArrayPropertyElement(propertyAttribute, depth);
             }
 
-            Type propertyDrawerType = XInspector.GetDrawerForPropertyAttribute(member);
+            Type propertyDrawerType = XInspector.GetDrawerForPropertyAttribute(propertyAttribute?.GetType());
             if (propertyDrawerType != null)
             {
                 return XInspector.CreateDrawerForType(propertyDrawerType, depth);
@@ -76,10 +80,30 @@ namespace XFramework.UI
             return XInspector.CreateDrawerForMemberType(variableType, depth);
         }
 
-        private static bool IsArrayItemPropertyTarget(Type type)
+        private static bool IsArrayPropertyTarget(Type type)
         {
             return (type.IsArray && type.GetArrayRank() == 1)
                    || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>));
+        }
+
+        private static bool IsHiddenInInspector(MemberInfo member)
+        {
+            if (Attribute.IsDefined(member, typeof(HideInInspector), true))
+            {
+                return true;
+            }
+
+            if (member is PropertyInfo property)
+            {
+                FieldInfo backingField = property.DeclaringType?.GetField(
+                    $"<{property.Name}>k__BackingField",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+                return backingField != null
+                       && Attribute.IsDefined(backingField, typeof(HideInInspector), true);
+            }
+
+            return false;
         }
 
         /// <summary>

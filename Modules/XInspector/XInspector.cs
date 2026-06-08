@@ -164,9 +164,9 @@ namespace XFramework.UI
             return element;
         }
 
-        public XInspectorElement CreateArrayItemPropertyElement(ArrayItemPropertyAttribute arrayItemPropertyAttribute, int depth)
+        public XInspectorElement CreateArrayPropertyElement(PropertyAttribute itemPropertyAttribute, int depth)
         {
-            XInspectorElement element = Activator.CreateInstance(typeof(ArrayElement), arrayItemPropertyAttribute) as XInspectorElement;
+            XInspectorElement element = Activator.CreateInstance(typeof(ArrayElement), itemPropertyAttribute) as XInspectorElement;
             element.XInspector = this;
             element.Depth = depth;
             return element;
@@ -186,6 +186,12 @@ namespace XFramework.UI
 
         public Type GetDrawerForPropertyAttribute(MemberInfo member)
         {
+            PropertyAttribute propertyAttribute = GetPropertyAttribute(member);
+            return GetDrawerForPropertyAttribute(propertyAttribute?.GetType());
+        }
+
+        public PropertyAttribute GetPropertyAttribute(MemberInfo member)
+        {
             if (member == null)
             {
                 return null;
@@ -195,15 +201,14 @@ namespace XFramework.UI
             object[] attributes = member.GetCustomAttributes(typeof(UnityEngine.PropertyAttribute), true);
             foreach (object attribute in attributes)
             {
-                if (attribute == null)
+                if (attribute is not PropertyAttribute propertyAttribute)
                 {
                     continue;
                 }
 
-                Type attributeType = attribute.GetType();
-                if (m_PropertyAttributeToDrawer.TryGetValue(attributeType, out Type drawerType))
+                if (m_PropertyAttributeToDrawer.ContainsKey(propertyAttribute.GetType()))
                 {
-                    return drawerType;
+                    return propertyAttribute;
                 }
             }
 #endif
