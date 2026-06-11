@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -32,360 +31,292 @@ namespace XFramework.Editor
     public struct GroupAssetConfig
     {
         public string abName;
+        [InspectorName("资源列表")]
+        [PrettyList]
         public AssetConfig[] assetPaths;
     }
     
     [CreateAssetMenu(fileName = "AssetBundleBuildConfig", menuName = "Scriptable Objects/AssetBundleBuildConfig")]
     public class AssetBundleBuildConfig : ScriptableObject
     {
+        [InspectorName("按文件夹打包")]
+        [PrettyList]
         public PathConfig[] pathConfigs;
 
+        [InspectorName("单资源独立打包")]
+        [PrettyList]
         public AssetConfig[] singleAssetConfigs;
 
+        [InspectorName("多资源合并打包")]
+        [PrettyList]
         public GroupAssetConfig[] groupAssetConfigs;
-    }
-    
-#if UNITY_EDITOR
-    [CustomEditor(typeof(AssetBundleBuildConfig))]
-    public class AssetBundleBuildConfigEditor : UnityEditor.Editor
-    {
-        public override VisualElement CreateInspectorGUI()
-        {
-            var root = new VisualElement
-            {
-                style =
-                {
-                    flexDirection = FlexDirection.Column,
-                    marginLeft = -12
-                }
-            };
-
-            var scriptField = new ObjectField("Script")
-            {
-                objectType = typeof(MonoScript),
-                allowSceneObjects = false,
-                value = MonoScript.FromScriptableObject((AssetBundleBuildConfig)target)
-            };
-            scriptField.SetEnabled(false);
-            root.Add(scriptField);
-
-            root.Add(CreateConfigBox("按文件夹打包", serializedObject.FindProperty("pathConfigs"), "文件夹列表"));
-            root.Add(CreateConfigBox("单资源独立打包", serializedObject.FindProperty("singleAssetConfigs"), "资源列表"));
-            root.Add(CreateConfigBox("多资源合并打包", serializedObject.FindProperty("groupAssetConfigs"), "资源组列表"));
-            root.Bind(serializedObject);
-            return root;
-        }
-
-        private static VisualElement CreateConfigBox(string title, SerializedProperty property, string propertyLabel)
-        {
-            var box = new VisualElement
-            {
-                style =
-                {
-                    flexDirection = FlexDirection.Column,
-                    marginTop = 1,
-                    marginBottom = 1,
-                    paddingLeft = 6,
-                    paddingRight = 8,
-                    paddingTop = 7,
-                    paddingBottom = 7,
-                    backgroundColor = new Color(0.12f, 0.12f, 0.12f, 0.95f),
-                    borderLeftWidth = 1,
-                    borderRightWidth = 1,
-                    borderTopWidth = 1,
-                    borderBottomWidth = 1,
-                    borderLeftColor = new Color(0.28f, 0.28f, 0.28f, 1f),
-                    borderRightColor = new Color(0.28f, 0.28f, 0.28f, 1f),
-                    borderTopColor = new Color(0.28f, 0.28f, 0.28f, 1f),
-                    borderBottomColor = new Color(0.28f, 0.28f, 0.28f, 1f)
-                }
-            };
-
-            box.Add(new Label(title)
-            {
-                style =
-                {
-                    unityFontStyleAndWeight = FontStyle.Bold,
-                    color = new Color(0.88f, 0.88f, 0.88f, 1f),
-                    marginBottom = 6
-                }
-            });
-
-            var propertyField = new PropertyField(property, propertyLabel)
-            {
-                style =
-                {
-                    marginTop = 2,
-                    marginLeft = 6
-                }
-            };
-            box.Add(propertyField);
-            return box;
-        }
     }
 
     [CustomPropertyDrawer(typeof(PathConfig))]
     public class PathConfigDrawer : PropertyDrawer
     {
-        public override VisualElement CreatePropertyGUI(SerializedProperty property)
+        private const float ObjectFieldPreferredWidth = 160f;
+        private const float ObjectFieldMinWidth = 110f;
+        private const float BuildTypeWidth = 120f;
+        private const float PathLabelMinWidth = 80f;
+        private const float Spacing = 4f;
+
+        public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
-            var container = new VisualElement
+            SerializedProperty pathProperty = property.FindPropertyRelative(nameof(PathConfig.path));
+            SerializedProperty buildTypeProperty = property.FindPropertyRelative(nameof(PathConfig.buildType));
+            if (pathProperty == null || buildTypeProperty == null)
             {
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    justifyContent = Justify.FlexEnd // 让内容靠右对齐
-                }
-            };
-
-            var pathProperty = property.FindPropertyRelative("path");
-            var buildTypeProperty = property.FindPropertyRelative("buildType");
-
-            var pathField = new ObjectField
-            {
-                objectType = typeof(DefaultAsset),
-                allowSceneObjects = false,
-                value = LoadFolderAsset(pathProperty.stringValue),
-                style =
-                {
-                    width = 180,
-                    minWidth = 120,
-                    flexShrink = 0
-                }
-            };
-            var pathLabel = new Label(GetPathText(pathProperty.stringValue))
-            {
-                tooltip = pathProperty.stringValue,
-                style =
-                {
-                    flexGrow = 1,
-                    flexShrink = 1,
-                    minWidth = 0,
-                    marginLeft = 4,
-                    marginRight = 4,
-                    unityTextAlign = TextAnchor.MiddleLeft,
-                    whiteSpace = WhiteSpace.NoWrap,
-                    overflow = Overflow.Hidden,
-                    textOverflow = TextOverflow.Ellipsis,
-                    color = new Color(0.75f, 0.75f, 0.75f)
-                }
-            };
-            pathField.RegisterValueChangedCallback(evt =>
-            {
-                if (evt.newValue == null)
-                {
-                    SetFolderPath(pathProperty, pathField, pathLabel, string.Empty);
-                    return;
-                }
-
-                string assetPath = AssetDatabase.GetAssetPath(evt.newValue);
-                if (!AssetDatabase.IsValidFolder(assetPath))
-                {
-                    Debug.LogWarning($"[AssetBundleBuildConfig] PathConfig 只支持 Unity 工程内文件夹: {assetPath}");
-                    pathField.SetValueWithoutNotify(evt.previousValue);
-                    return;
-                }
-
-                SetFolderPath(pathProperty, pathField, pathLabel, assetPath);
-            });
-
-            var button = new Button(() =>
-            {
-                string path = EditorUtility.OpenFolderPanel("选择文件夹", "Assets", "");
-                if (!string.IsNullOrEmpty(path))
-                {
-                    if (path.StartsWith(Application.dataPath))
-                        path = "Assets" + path[Application.dataPath.Length..];
-
-                    if (!AssetDatabase.IsValidFolder(path))
-                    {
-                        Debug.LogWarning($"[AssetBundleBuildConfig] PathConfig 只支持 Unity 工程内文件夹: {path}");
-                        return;
-                    }
-
-                    SetFolderPath(pathProperty, pathField, pathLabel, path);
-                }
-            })
-            {
-                text = "📁",
-                style =
-                {
-                    flexShrink = 0
-                }
-            };
-
-            var buildTypeField = new EnumField((PackOption)buildTypeProperty.enumValueIndex)
-            {
-                bindingPath = buildTypeProperty.propertyPath,
-                style =
-                {
-                    marginTop = 4,
-                    minWidth = 100,
-                    flexShrink = 0
-                }
-            };
-            
-            container.Add(pathField);
-            container.Add(pathLabel);
-            container.Add(button);
-            container.Add(buildTypeField);
-
-            return container;
-        }
-
-        private static DefaultAsset LoadFolderAsset(string path)
-        {
-            if (string.IsNullOrEmpty(path) || !AssetDatabase.IsValidFolder(path))
-            {
-                return null;
+                EditorGUI.LabelField(position, label.text, "Invalid PathConfig");
+                return;
             }
 
-            return AssetDatabase.LoadAssetAtPath<DefaultAsset>(path);
+            EditorGUI.BeginProperty(position, label, property);
+
+            Rect lineRect = new Rect(position.x, position.y, position.width, EditorGUIUtility.singleLineHeight);
+            Rect buildTypeRect = new Rect(lineRect.xMax - BuildTypeWidth, lineRect.y, BuildTypeWidth, lineRect.height);
+            float availableBeforeBuildType = Mathf.Max(0f, buildTypeRect.x - lineRect.x - Spacing);
+            float objectFieldWidth = Mathf.Clamp(availableBeforeBuildType - PathLabelMinWidth - Spacing, ObjectFieldMinWidth, ObjectFieldPreferredWidth);
+
+            if (availableBeforeBuildType < ObjectFieldMinWidth + Spacing)
+            {
+                objectFieldWidth = Mathf.Max(0f, availableBeforeBuildType);
+            }
+
+            Rect objectFieldRect = new Rect(lineRect.x, lineRect.y, objectFieldWidth, lineRect.height);
+            Rect pathLabelRect = new Rect(
+                objectFieldRect.xMax + Spacing,
+                lineRect.y,
+                Mathf.Max(0f, buildTypeRect.x - objectFieldRect.xMax - Spacing * 2f),
+                lineRect.height);
+
+            DefaultAsset currentFolder = string.IsNullOrEmpty(pathProperty.stringValue)
+                ? null
+                : AssetDatabase.LoadAssetAtPath<DefaultAsset>(pathProperty.stringValue);
+            DefaultAsset selectedFolder = EditorGUI.ObjectField(objectFieldRect, currentFolder, typeof(DefaultAsset), false) as DefaultAsset;
+            if (selectedFolder != currentFolder)
+            {
+                if (selectedFolder == null)
+                {
+                    pathProperty.stringValue = string.Empty;
+                }
+                else
+                {
+                    string selectedPath = AssetDatabase.GetAssetPath(selectedFolder);
+                    if (AssetDatabase.IsValidFolder(selectedPath))
+                    {
+                        pathProperty.stringValue = selectedPath;
+                    }
+                }
+            }
+
+            AssetBundleBuildConfigDrawerGUI.DrawPathLabel(pathLabelRect, pathProperty.stringValue);
+            EditorGUI.PropertyField(buildTypeRect, buildTypeProperty, GUIContent.none);
+
+            EditorGUI.EndProperty();
         }
 
-        private static void SetFolderPath(SerializedProperty pathProperty, ObjectField pathField, Label pathLabel, string path)
+        public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
-            pathProperty.stringValue = path;
-            pathProperty.serializedObject.ApplyModifiedProperties();
-            pathField.SetValueWithoutNotify(LoadFolderAsset(path));
-            pathLabel.text = GetPathText(path);
-            pathLabel.tooltip = path;
-        }
-
-        private static string GetPathText(string path)
-        {
-            return string.IsNullOrEmpty(path) ? "未选择" : path;
+            return EditorGUIUtility.singleLineHeight;
         }
     }
 
     [CustomPropertyDrawer(typeof(AssetConfig))]
     public class AssetConfigDrawer : PropertyDrawer
     {
-        public override VisualElement CreatePropertyGUI(SerializedProperty property)
+        private const float ObjectFieldPreferredWidth = 180f;
+        private const float ObjectFieldMinWidth = 110f;
+        private const float PathLabelMinWidth = 80f;
+        private const float Spacing = 4f;
+
+        public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
-            var container = new VisualElement
+            SerializedProperty assetPathProperty = property.FindPropertyRelative(nameof(AssetConfig.assetPath));
+            if (assetPathProperty == null)
             {
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    justifyContent = Justify.FlexEnd
-                }
-            };
+                EditorGUI.LabelField(position, label.text, "Invalid AssetConfig");
+                return;
+            }
 
-            var assetPathProperty = property.FindPropertyRelative("assetPath");
-            var assetField = new ObjectField
+            EditorGUI.BeginProperty(position, label, property);
+
+            Rect lineRect = new Rect(position.x, position.y, position.width, EditorGUIUtility.singleLineHeight);
+            float objectFieldWidth = Mathf.Clamp(lineRect.width - PathLabelMinWidth - Spacing, ObjectFieldMinWidth, ObjectFieldPreferredWidth);
+            if (lineRect.width < ObjectFieldMinWidth + Spacing)
             {
-                objectType = typeof(UnityEngine.Object),
-                allowSceneObjects = false,
-                value = LoadAsset(assetPathProperty.stringValue),
-                style =
-                {
-                    width = 180,
-                    minWidth = 120,
-                    flexShrink = 0
-                }
-            };
-            var pathLabel = new Label(GetPathText(assetPathProperty.stringValue))
+                objectFieldWidth = Mathf.Max(0f, lineRect.width);
+            }
+
+            Rect objectFieldRect = new Rect(lineRect.x, lineRect.y, objectFieldWidth, lineRect.height);
+            Rect pathLabelRect = new Rect(
+                objectFieldRect.xMax + Spacing,
+                lineRect.y,
+                Mathf.Max(0f, lineRect.xMax - objectFieldRect.xMax - Spacing),
+                lineRect.height);
+
+            UnityEngine.Object currentAsset = string.IsNullOrEmpty(assetPathProperty.stringValue)
+                ? null
+                : AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(assetPathProperty.stringValue);
+            UnityEngine.Object selectedAsset = EditorGUI.ObjectField(objectFieldRect, currentAsset, typeof(UnityEngine.Object), false);
+            if (selectedAsset != currentAsset)
             {
-                tooltip = assetPathProperty.stringValue,
-                style =
+                if (selectedAsset == null)
                 {
-                    flexGrow = 1,
-                    flexShrink = 1,
-                    minWidth = 0,
-                    marginLeft = 4,
-                    marginRight = 4,
-                    unityTextAlign = TextAnchor.MiddleLeft,
-                    whiteSpace = WhiteSpace.NoWrap,
-                    overflow = Overflow.Hidden,
-                    textOverflow = TextOverflow.Ellipsis,
-                    color = new Color(0.75f, 0.75f, 0.75f)
+                    assetPathProperty.stringValue = string.Empty;
                 }
-            };
-
-            assetField.RegisterValueChangedCallback(evt =>
-            {
-                if (evt.newValue == null)
+                else
                 {
-                    SetAssetPath(assetPathProperty, assetField, pathLabel, string.Empty);
-                    return;
+                    string selectedPath = AssetDatabase.GetAssetPath(selectedAsset);
+                    if (AssetBundleBuildConfigDrawerGUI.IsValidAssetPath(selectedPath))
+                    {
+                        assetPathProperty.stringValue = selectedPath;
+                    }
                 }
+            }
 
-                string assetPath = AssetDatabase.GetAssetPath(evt.newValue);
-                if (!IsValidFileAsset(assetPath))
-                {
-                    Debug.LogWarning($"[AssetBundleBuildConfig] 只支持 Assets 下的文件资源: {assetPath}");
-                    assetField.SetValueWithoutNotify(evt.previousValue);
-                    return;
-                }
+            AssetBundleBuildConfigDrawerGUI.DrawPathLabel(pathLabelRect, assetPathProperty.stringValue);
 
-                SetAssetPath(assetPathProperty, assetField, pathLabel, assetPath);
-            });
-
-            container.Add(assetField);
-            container.Add(pathLabel);
-            return container;
+            EditorGUI.EndProperty();
         }
 
-        private static UnityEngine.Object LoadAsset(string assetPath)
+        public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
-            return IsValidFileAsset(assetPath)
-                ? AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(assetPath)
-                : null;
-        }
-
-        private static bool IsValidFileAsset(string assetPath)
-        {
-            return !string.IsNullOrEmpty(assetPath)
-                && assetPath.Replace("\\", "/").StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)
-                && !AssetDatabase.IsValidFolder(assetPath)
-                && AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(assetPath) != null;
-        }
-
-        private static void SetAssetPath(SerializedProperty assetPathProperty, ObjectField assetField, Label pathLabel, string assetPath)
-        {
-            assetPathProperty.stringValue = assetPath;
-            assetPathProperty.serializedObject.ApplyModifiedProperties();
-            assetField.SetValueWithoutNotify(LoadAsset(assetPath));
-            pathLabel.text = GetPathText(assetPath);
-            pathLabel.tooltip = assetPath;
-        }
-
-        private static string GetPathText(string assetPath)
-        {
-            return string.IsNullOrEmpty(assetPath) ? "未选择" : assetPath;
+            return EditorGUIUtility.singleLineHeight;
         }
     }
 
     [CustomPropertyDrawer(typeof(GroupAssetConfig))]
     public class GroupAssetConfigDrawer : PropertyDrawer
     {
-        public override VisualElement CreatePropertyGUI(SerializedProperty property)
-        {
-            var container = new VisualElement
-            {
-                style =
-                {
-                    flexDirection = FlexDirection.Column
-                }
-            };
+        private const float FoldoutWidth = 14f;
+        private const float CountWidth = 68f;
+        private const float ChildIndent = 16f;
+        private const float Spacing = 4f;
 
-            var abNameProperty = property.FindPropertyRelative("abName");
-            var assetPathsProperty = property.FindPropertyRelative("assetPaths");
-            var abNameField = new TextField("包名")
+        public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
+        {
+            SerializedProperty abNameProperty = property.FindPropertyRelative(nameof(GroupAssetConfig.abName));
+            SerializedProperty assetPathsProperty = property.FindPropertyRelative(nameof(GroupAssetConfig.assetPaths));
+            if (abNameProperty == null || assetPathsProperty == null)
             {
-                bindingPath = abNameProperty.propertyPath,
-                style =
+                EditorGUI.LabelField(position, label.text, "Invalid GroupAssetConfig");
+                return;
+            }
+
+            EditorGUI.BeginProperty(position, label, property);
+
+            Rect lineRect = new Rect(position.x, position.y, position.width, EditorGUIUtility.singleLineHeight);
+            Rect foldoutRect = new Rect(lineRect.x, lineRect.y, FoldoutWidth, lineRect.height);
+            Rect countRect = new Rect(lineRect.xMax - CountWidth, lineRect.y, CountWidth, lineRect.height);
+            Rect abNameRect = new Rect(
+                foldoutRect.xMax + Spacing,
+                lineRect.y,
+                Mathf.Max(0f, countRect.x - foldoutRect.xMax - Spacing * 2f),
+                lineRect.height);
+
+            property.isExpanded = EditorGUI.Foldout(foldoutRect, property.isExpanded, GUIContent.none, true);
+            abNameProperty.stringValue = EditorGUI.TextField(abNameRect, abNameProperty.stringValue);
+            GUI.Label(countRect, AssetBundleBuildConfigDrawerGUI.GetCountText(assetPathsProperty), AssetBundleBuildConfigDrawerGUI.CountLabelStyle);
+
+            if (property.isExpanded)
+            {
+                Rect childRect = new Rect(
+                    position.x + ChildIndent,
+                    lineRect.yMax + Spacing,
+                    Mathf.Max(0f, position.width - ChildIndent),
+                    EditorGUI.GetPropertyHeight(assetPathsProperty, GUIContent.none, true));
+                EditorGUI.PropertyField(childRect, assetPathsProperty, GUIContent.none, true);
+            }
+
+            EditorGUI.EndProperty();
+        }
+
+        public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
+        {
+            float height = EditorGUIUtility.singleLineHeight;
+            if (property.isExpanded)
+            {
+                SerializedProperty assetPathsProperty = property.FindPropertyRelative(nameof(GroupAssetConfig.assetPaths));
+                if (assetPathsProperty != null)
                 {
-                    marginBottom = 4
+                    height += Spacing + EditorGUI.GetPropertyHeight(assetPathsProperty, GUIContent.none, true);
                 }
-            };
-            container.Add(abNameField);
-            container.Add(new PropertyField(assetPathsProperty, "资源列表"));
-            return container;
+            }
+
+            return height;
         }
     }
-#endif
+
+    internal static class AssetBundleBuildConfigDrawerGUI
+    {
+        public static readonly GUIStyle CountLabelStyle = new GUIStyle(EditorStyles.miniLabel)
+        {
+            alignment = TextAnchor.MiddleRight,
+            clipping = TextClipping.Clip
+        };
+
+        private static readonly GUIStyle PathLabelStyle = new GUIStyle(EditorStyles.miniLabel)
+        {
+            alignment = TextAnchor.MiddleLeft,
+            clipping = TextClipping.Clip
+        };
+
+        public static void DrawPathLabel(Rect rect, string path)
+        {
+            GUI.Label(rect, GetEllipsizedText(path, rect.width, PathLabelStyle), PathLabelStyle);
+        }
+
+        public static string GetCountText(SerializedProperty arrayProperty)
+        {
+            return arrayProperty.arraySize == 0 ? "Empty" : $"{arrayProperty.arraySize} items";
+        }
+
+        public static bool IsValidAssetPath(string path)
+        {
+            return !string.IsNullOrEmpty(path)
+                   && path.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)
+                   && !AssetDatabase.IsValidFolder(path)
+                   && AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(path) != null;
+        }
+
+        private static string GetEllipsizedText(string text, float width, GUIStyle style)
+        {
+            if (string.IsNullOrEmpty(text) || width <= 0f)
+            {
+                return string.Empty;
+            }
+
+            if (style.CalcSize(new GUIContent(text)).x <= width)
+            {
+                return text;
+            }
+
+            const string ellipsis = "...";
+            if (style.CalcSize(new GUIContent(ellipsis)).x > width)
+            {
+                return string.Empty;
+            }
+
+            int low = 0;
+            int high = text.Length;
+            while (low < high)
+            {
+                int mid = (low + high + 1) / 2;
+                string candidate = text.Substring(0, mid) + ellipsis;
+                if (style.CalcSize(new GUIContent(candidate)).x <= width)
+                {
+                    low = mid;
+                }
+                else
+                {
+                    high = mid - 1;
+                }
+            }
+
+            return text.Substring(0, low) + ellipsis;
+        }
+    }
 }
 
 

@@ -14,8 +14,8 @@ namespace XFramework
             List,
         }
 
-        [SerializeField, Label("注册模式")] private RegistrationMode registrationMode;
-        [SerializeField, Label("使用自定义Key"), Display(nameof(CheckShowUseKey))] private bool useKey;
+        [SerializeField, InspectorName("注册模式")] private RegistrationMode registrationMode;
+        [SerializeField, InspectorName("使用自定义Key"), Display(nameof(CheckShowUseKey))] private bool useKey;
         [SerializeField, Display(nameof(CheckShowKey))] private string key;
 
         private bool CheckShowUseKey() => registrationMode != RegistrationMode.List;

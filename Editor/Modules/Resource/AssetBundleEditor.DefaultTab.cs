@@ -408,7 +408,7 @@ namespace XFramework.Editor
                     }
                 };
                 _inspectorElement = new InspectorElement(m_AssetBundleBuildConfig);
-                _inspectorElement.style.marginLeft = 0;
+                _inspectorElement.style.marginLeft = -12;
                 scrollView.Add(_inspectorElement);
                 panel.Add(scrollView);
                 return panel;

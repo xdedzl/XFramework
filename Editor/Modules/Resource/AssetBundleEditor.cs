@@ -18,13 +18,25 @@ namespace XFramework.Editor
             Preview,
         }
 
-        [MenuItem("XFramework/Resource/AssetBundleWindow")]
-        static void OpenWindow()
+        [MenuItem("XFramework/Build/单独打AB")]
+        private static void OpenAssetBundleWindow()
         {
-            var window = GetWindow(typeof(AssetBundleEditor)) as AssetBundleEditor;
+            OpenWindow(TabMode.Default);
+        }
+
+        [MenuItem("XFramework/Build/打包项目")]
+        private static void OpenBuildProjectWindow()
+        {
+            OpenWindow(TabMode.BuildProject);
+        }
+
+        private static void OpenWindow(TabMode tabMode)
+        {
+            var window = GetWindow<AssetBundleEditor>();
             window.titleContent = new GUIContent("AssetBundle");
             window.Show();
             window.minSize = new Vector2(400, 100);
+            window.SwitchTabWhenReady(tabMode);
         }
 
         private TabMode m_TabMode;
@@ -124,6 +136,17 @@ namespace XFramework.Editor
             }
             // Persist selection
             EditorPrefs.SetInt("TabMode", (int)m_TabMode);
+        }
+
+        private void SwitchTabWhenReady(TabMode mode)
+        {
+            m_TabMode = mode;
+            EditorPrefs.SetInt("TabMode", (int)m_TabMode);
+
+            if (_contentRoot != null && m_SubWindows != null && (int)mode < m_SubWindows.Length)
+            {
+                SwitchTab(mode);
+            }
         }
 
         private void EnsureTabContent(int index)

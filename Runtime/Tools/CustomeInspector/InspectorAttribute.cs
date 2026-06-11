@@ -13,77 +13,6 @@ namespace XFramework
     }
 
     /// <summary>
-    /// 下拉框检视器
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
-    [Conditional("UNITY_EDITOR")]
-    public sealed class DropdownAttribute : InspectorAttribute
-    {
-        public Type ValueType { get; private set; }
-        public object[] Values { get; private set; }
-        public string[] DisplayOptions { get; private set; }
-
-        public DropdownAttribute(params string[] values)
-        {
-            ValueType = typeof(string);
-            Values = values;
-            DisplayOptions = values;
-        }
-        public DropdownAttribute(params int[] values)
-        {
-            ValueType = typeof(int);
-            Values = new object[values.Length];
-            DisplayOptions = new string[values.Length];
-            for (int i = 0; i < values.Length; i++)
-            {
-                Values[i] = values[i];
-                DisplayOptions[i] = values[i].ToString();
-            }
-        }
-        public DropdownAttribute(params float[] values)
-        {
-            ValueType = typeof(float);
-            Values = new object[values.Length];
-            DisplayOptions = new string[values.Length];
-            for (int i = 0; i < values.Length; i++)
-            {
-                Values[i] = values[i];
-                DisplayOptions[i] = values[i].ToString();
-            }
-        }
-    }
-
-    /// <summary>
-    /// 层级检视器
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
-    [Conditional("UNITY_EDITOR")]
-    public sealed class LayerAttribute : InspectorAttribute
-    {
-
-    }
-
-    /// <summary>
-    /// 可排序列表检视器
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
-    [Conditional("UNITY_EDITOR")]
-    public sealed class ReorderableListAttribute : InspectorAttribute
-    {
-
-    }
-
-    /// <summary>
-    /// 密码检视器
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
-    [Conditional("UNITY_EDITOR")]
-    public sealed class PasswordAttribute : InspectorAttribute
-    {
-
-    }
-
-    /// <summary>
     /// 超链接检视器
     /// </summary>
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
@@ -96,31 +25,6 @@ namespace XFramework
         {
             Name = name;
         }
-    }
-
-    /// <summary>
-    /// 文件路径检视器
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
-    [Conditional("UNITY_EDITOR")]
-    public sealed class FilePathAttribute : InspectorAttribute
-    {
-        public string Extension { get; private set; }
-
-        public FilePathAttribute(string extension = "*.*")
-        {
-            Extension = extension;
-        }
-    }
-
-    /// <summary>
-    /// 文件夹路径检视器
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
-    [Conditional("UNITY_EDITOR")]
-    public sealed class FolderPathAttribute : InspectorAttribute
-    {
-
     }
 
     /// <summary>
@@ -150,21 +54,6 @@ namespace XFramework
         public DisplayAttribute(string condition)
         {
             Condition = condition;
-        }
-    }
-
-    /// <summary>
-    /// 标签检视器
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
-    [Conditional("UNITY_EDITOR")]
-    public sealed class LabelAttribute : InspectorAttribute
-    {
-        public string Name { get; private set; }
-
-        public LabelAttribute(string name)
-        {
-            Name = name;
         }
     }
 
