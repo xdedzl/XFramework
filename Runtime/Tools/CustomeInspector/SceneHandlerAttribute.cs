@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using UnityEngine;
 
 namespace XFramework
 {
@@ -7,7 +8,7 @@ namespace XFramework
     /// 类成员场景处理器特性
     /// </summary>
     [Conditional("UNITY_EDITOR")]
-    public abstract class SceneHandlerAttribute : Attribute
+    public abstract class SceneHandlerAttribute : PropertyAttribute
     {
 
     }

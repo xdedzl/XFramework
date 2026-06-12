@@ -31,332 +31,6 @@ namespace XFramework.Editor
             return new PrettyListElement(property.serializedObject, property.propertyPath);
         }
 
-        public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
-        {
-            if (!IsSupportedList(property))
-            {
-                EditorGUI.HelpBox(position, "[PrettyList] can only be used on List<T> or one-dimensional arrays.", MessageType.Error);
-                return;
-            }
-
-            string key = GetStateKey(property);
-            ListState state = GetState(key);
-            SerializedProperty current = ResolveProperty(property);
-
-            DrawListFrame(position);
-
-            Rect contentRect = new Rect(
-                position.x + BorderWidth,
-                position.y + BorderWidth,
-                position.width - BorderWidth * 2f,
-                position.height - BorderWidth * 2f);
-            Rect headerRect = new Rect(contentRect.x, contentRect.y, contentRect.width, HeaderHeight);
-            DrawHeader(headerRect, current, state);
-
-            if (!current.isExpanded)
-            {
-                return;
-            }
-
-            float y = headerRect.yMax;
-            state.RowRects.Clear();
-
-            if (current.arraySize == 0)
-            {
-                Rect emptyRect = new Rect(contentRect.x, y, contentRect.width, RowMinHeight);
-                EditorGUI.DrawRect(emptyRect, new Color(0.15f, 0.15f, 0.15f, 1f));
-                GUI.Label(emptyRect, "Empty", GetCenteredMiniLabelStyle());
-                return;
-            }
-
-            for (int i = 0; i < current.arraySize; i++)
-            {
-                SerializedProperty element = current.GetArrayElementAtIndex(i);
-                float rowHeight = Mathf.Max(RowMinHeight, EditorGUI.GetPropertyHeight(element, GUIContent.none, true) + 4f);
-                Rect rowRect = new Rect(contentRect.x, y, contentRect.width, rowHeight);
-                state.RowRects.Add(rowRect);
-                DrawRow(rowRect, property, element, state, i);
-                y += rowHeight;
-            }
-
-            HandleDrag(property, state);
-        }
-
-        public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
-        {
-            if (!IsSupportedList(property))
-            {
-                return EditorGUIUtility.singleLineHeight * 2f;
-            }
-
-            SerializedProperty current = ResolveProperty(property);
-            float height = HeaderHeight;
-            if (!current.isExpanded)
-            {
-                return height;
-            }
-
-            if (current.arraySize == 0)
-            {
-                return height + RowMinHeight;
-            }
-
-            for (int i = 0; i < current.arraySize; i++)
-            {
-                SerializedProperty element = current.GetArrayElementAtIndex(i);
-                height += Mathf.Max(RowMinHeight, EditorGUI.GetPropertyHeight(element, GUIContent.none, true) + 4f);
-            }
-
-            return height + BorderWidth * 2f;
-        }
-
-        private static void DrawHeader(Rect rect, SerializedProperty property, ListState state)
-        {
-            UnityEngine.Event evt = UnityEngine.Event.current;
-            EditorGUI.DrawRect(rect, new Color(0.20f, 0.20f, 0.20f, 1f));
-            EditorGUI.DrawRect(new Rect(rect.x, rect.y, rect.width, 1f), new Color(0.28f, 0.28f, 0.28f, 1f));
-            EditorGUI.DrawRect(new Rect(rect.x, rect.yMax - 1f, rect.width, 1f), GetDarkLineColor());
-
-            Rect foldoutRect = new Rect(rect.x + 2f, rect.y + 1f, 16f, rect.height - 2f);
-            Rect addRect = new Rect(rect.xMax - AddButtonWidth, rect.y, AddButtonWidth, rect.height);
-            Rect countRect = new Rect(addRect.x - 72f, rect.y, 68f, rect.height);
-            Rect labelRect = new Rect(foldoutRect.xMax, rect.y + 1f, countRect.x - foldoutRect.xMax - 4f, rect.height - 2f);
-
-            EditorGUI.DrawRect(new Rect(addRect.x - 1f, rect.y, 1f, rect.height), GetDarkLineColor());
-
-            bool expanded = GUI.Toggle(foldoutRect, property.isExpanded, GUIContent.none, EditorStyles.foldout);
-            if (expanded != property.isExpanded)
-            {
-                property.isExpanded = expanded;
-                property.serializedObject.ApplyModifiedProperties();
-                evt.Use();
-            }
-
-            GUI.Label(labelRect, property.displayName, GetHeaderLabelStyle());
-            GUI.Label(countRect, GetCountText(property), GetCountLabelStyle());
-
-            if (GUI.Button(addRect, "+", GetHeaderAddButtonStyle()))
-            {
-                AddElement(property);
-                state.SelectedIndex = property.arraySize - 1;
-                GUI.changed = true;
-            }
-
-            if (evt.type == EventType.MouseDown && evt.button == 0 && rect.Contains(evt.mousePosition) && !addRect.Contains(evt.mousePosition))
-            {
-                property.isExpanded = !property.isExpanded;
-                property.serializedObject.ApplyModifiedProperties();
-                evt.Use();
-            }
-            else if (evt.type == EventType.ContextClick && rect.Contains(evt.mousePosition))
-            {
-                ShowHeaderMenu(property, state);
-                evt.Use();
-            }
-        }
-
-        private static void DrawListFrame(Rect rect)
-        {
-            EditorGUI.DrawRect(rect, GetDarkLineColor());
-        }
-
-        private static void DrawRow(Rect rowRect, SerializedProperty listProperty, SerializedProperty element, ListState state, int index)
-        {
-            UnityEngine.Event evt = UnityEngine.Event.current;
-            Color background = state.SelectedIndex == index
-                ? new Color(0.24f, 0.28f, 0.34f, 1f)
-                : (index % 2 == 0
-                    ? new Color(0.16f, 0.16f, 0.16f, 1f)
-                    : new Color(0.19f, 0.19f, 0.19f, 1f));
-            EditorGUI.DrawRect(rowRect, background);
-
-            if (state.DragSourceIndex >= 0 && state.DropTargetIndex == index)
-            {
-                EditorGUI.DrawRect(new Rect(rowRect.x, rowRect.y, rowRect.width, 2f), new Color(0.25f, 0.55f, 1f, 1f));
-            }
-            else if (state.DragSourceIndex >= 0 && state.DropTargetIndex == state.RowRects.Count && index == state.RowRects.Count - 1)
-            {
-                EditorGUI.DrawRect(new Rect(rowRect.x, rowRect.yMax - 2f, rowRect.width, 2f), new Color(0.25f, 0.55f, 1f, 1f));
-            }
-
-            Rect handleRect = new Rect(rowRect.x, rowRect.y, HandleWidth, rowRect.height);
-            Rect removeRect = new Rect(rowRect.xMax - RemoveButtonWidth - 2f, rowRect.y + 2f, RemoveButtonWidth, Mathf.Min(18f, rowRect.height - 4f));
-            Rect fieldRect = new Rect(handleRect.xMax + FieldLeftPadding, rowRect.y + 2f, removeRect.x - handleRect.xMax - FieldLeftPadding - 2f, rowRect.height - 4f);
-
-            GUI.Label(handleRect, "\u2630", GetDragHandleStyle());
-            int previousIndentLevel = EditorGUI.indentLevel;
-            try
-            {
-                EditorGUI.indentLevel = 0;
-                EditorGUI.PropertyField(fieldRect, element, GUIContent.none, true);
-            }
-            finally
-            {
-                EditorGUI.indentLevel = previousIndentLevel;
-            }
-
-            if (GUI.Button(removeRect, "x", EditorStyles.miniButton))
-            {
-                DeleteElement(listProperty, index);
-                state.SelectedIndex = Mathf.Clamp(index - 1, -1, ResolveProperty(listProperty).arraySize - 1);
-                GUI.changed = true;
-                evt.Use();
-                return;
-            }
-
-            if (evt.type == EventType.MouseDown && evt.button == 0 && rowRect.Contains(evt.mousePosition))
-            {
-                state.SelectedIndex = index;
-                if (handleRect.Contains(evt.mousePosition))
-                {
-                    state.DragSourceIndex = index;
-                    state.DropTargetIndex = index;
-                    GUIUtility.hotControl = GUIUtility.GetControlID(FocusType.Passive);
-                }
-
-                evt.Use();
-            }
-            else if (evt.type == EventType.ContextClick && rowRect.Contains(evt.mousePosition))
-            {
-                state.SelectedIndex = index;
-                ShowElementMenu(listProperty, state, index);
-                evt.Use();
-            }
-        }
-
-        private static void HandleDrag(SerializedProperty property, ListState state)
-        {
-            UnityEngine.Event evt = UnityEngine.Event.current;
-            if (state.DragSourceIndex < 0)
-            {
-                return;
-            }
-
-            if (evt.type == EventType.MouseDrag)
-            {
-                state.DropTargetIndex = GetDropTargetIndex(state, evt.mousePosition.y);
-                evt.Use();
-                GUI.changed = true;
-            }
-            else if (evt.type == EventType.MouseUp)
-            {
-                int from = state.DragSourceIndex;
-                int to = state.DropTargetIndex;
-                state.DragSourceIndex = -1;
-                state.DropTargetIndex = -1;
-                GUIUtility.hotControl = 0;
-
-                if (MoveElement(property, from, to))
-                {
-                    state.SelectedIndex = Mathf.Clamp(to > from ? to - 1 : to, 0, ResolveProperty(property).arraySize - 1);
-                }
-
-                evt.Use();
-                GUI.changed = true;
-            }
-        }
-
-        private static int GetDropTargetIndex(ListState state, float mouseY)
-        {
-            for (int i = 0; i < state.RowRects.Count; i++)
-            {
-                if (mouseY < state.RowRects[i].center.y)
-                {
-                    return i;
-                }
-            }
-
-            return state.RowRects.Count;
-        }
-
-        private static void ShowHeaderMenu(SerializedProperty property, ListState state)
-        {
-            SerializedProperty current = ResolveProperty(property);
-            GenericMenu menu = new GenericMenu();
-            menu.AddItem(new GUIContent("Add"), false, () =>
-            {
-                AddElement(property);
-                state.SelectedIndex = ResolveProperty(property).arraySize - 1;
-            });
-
-            if (current.arraySize > 0)
-            {
-                menu.AddItem(new GUIContent("Clear"), false, () =>
-                {
-                    ClearCollection(property);
-                    state.SelectedIndex = -1;
-                });
-                menu.AddItem(new GUIContent("Copy Collection"), false, () => s_Clipboard = ClipboardData.CaptureCollection(current));
-            }
-            else
-            {
-                menu.AddDisabledItem(new GUIContent("Clear"));
-                menu.AddDisabledItem(new GUIContent("Copy Collection"));
-            }
-
-            if (CanPasteCollection(current))
-            {
-                menu.AddItem(new GUIContent("Paste Collection"), false, () =>
-                {
-                    if (TryPasteCollection(property))
-                    {
-                        state.SelectedIndex = -1;
-                    }
-                });
-            }
-            else
-            {
-                menu.AddDisabledItem(new GUIContent("Paste Collection"));
-            }
-
-            menu.ShowAsContext();
-        }
-
-        private static void ShowElementMenu(SerializedProperty property, ListState state, int index)
-        {
-            SerializedProperty current = ResolveProperty(property);
-            if (index < 0 || index >= current.arraySize)
-            {
-                return;
-            }
-
-            SerializedProperty element = current.GetArrayElementAtIndex(index);
-            GenericMenu menu = new GenericMenu();
-            menu.AddItem(new GUIContent("Copy Element"), false, () => s_Clipboard = ClipboardData.CaptureElement(element));
-
-            if (CanPasteElement(element))
-            {
-                menu.AddItem(new GUIContent("Paste Element"), false, () => TryPasteElement(property, index));
-            }
-            else
-            {
-                menu.AddDisabledItem(new GUIContent("Paste Element"));
-            }
-
-            menu.AddItem(new GUIContent("Duplicate Element"), false, () =>
-            {
-                DuplicateElement(property, index);
-                state.SelectedIndex = index + 1;
-            });
-            menu.AddSeparator(string.Empty);
-            menu.AddItem(new GUIContent("Insert Above"), false, () =>
-            {
-                InsertDefaultElement(property, index);
-                state.SelectedIndex = index;
-            });
-            menu.AddItem(new GUIContent("Insert Below"), false, () =>
-            {
-                InsertDefaultElement(property, index + 1);
-                state.SelectedIndex = index + 1;
-            });
-            menu.AddItem(new GUIContent("Delete Element"), false, () =>
-            {
-                DeleteElement(property, index);
-                state.SelectedIndex = Mathf.Clamp(index - 1, -1, ResolveProperty(property).arraySize - 1);
-            });
-            menu.ShowAsContext();
-        }
-
         private static bool MoveElement(SerializedProperty property, int from, int targetInsertionIndex)
         {
             SerializedProperty current = ResolveProperty(property);
@@ -616,51 +290,6 @@ namespace XFramework.Editor
             return targetId + ":" + property.propertyPath;
         }
 
-        private static GUIStyle GetHeaderLabelStyle()
-        {
-            GUIStyle style = new GUIStyle(EditorStyles.label);
-            style.alignment = TextAnchor.MiddleLeft;
-            style.fontSize = 12;
-            style.fontStyle = FontStyle.Bold;
-            style.normal.textColor = new Color(0.72f, 0.72f, 0.72f, 1f);
-            return style;
-        }
-
-        private static GUIStyle GetCountLabelStyle()
-        {
-            GUIStyle style = new GUIStyle(EditorStyles.miniLabel);
-            style.alignment = TextAnchor.MiddleRight;
-            style.normal.textColor = new Color(0.48f, 0.48f, 0.48f, 1f);
-            return style;
-        }
-
-        private static GUIStyle GetHeaderAddButtonStyle()
-        {
-            GUIStyle style = new GUIStyle(EditorStyles.label);
-            style.alignment = TextAnchor.MiddleCenter;
-            style.fontSize = 18;
-            style.normal.textColor = new Color(0.62f, 0.62f, 0.62f, 1f);
-            style.hover.textColor = new Color(0.82f, 0.82f, 0.82f, 1f);
-            style.active.textColor = Color.white;
-            return style;
-        }
-
-        private static GUIStyle GetCenteredMiniLabelStyle()
-        {
-            GUIStyle style = new GUIStyle(EditorStyles.miniLabel);
-            style.alignment = TextAnchor.MiddleCenter;
-            style.normal.textColor = new Color(0.45f, 0.45f, 0.45f, 1f);
-            return style;
-        }
-
-        private static GUIStyle GetDragHandleStyle()
-        {
-            GUIStyle style = new GUIStyle(EditorStyles.label);
-            style.alignment = TextAnchor.MiddleCenter;
-            style.normal.textColor = new Color(0.42f, 0.42f, 0.42f, 1f);
-            return style;
-        }
-
         private static Color GetDarkLineColor()
         {
             return new Color(0.07f, 0.07f, 0.07f, 1f);
@@ -691,6 +320,7 @@ namespace XFramework.Editor
                 style.borderRightColor = GetDarkLineColor();
                 style.borderTopColor = GetDarkLineColor();
                 style.borderBottomColor = GetDarkLineColor();
+                style.marginTop = -BorderWidth;
 
                 Rebuild();
             }
@@ -753,7 +383,7 @@ namespace XFramework.Editor
                         flexDirection = FlexDirection.Row,
                         alignItems = Align.Center,
                         backgroundColor = new Color(0.20f, 0.20f, 0.20f, 1f),
-                        borderBottomWidth = BorderWidth,
+                        borderBottomWidth = property.isExpanded ? BorderWidth : 0f,
                         borderBottomColor = GetDarkLineColor()
                     }
                 };
@@ -923,8 +553,7 @@ namespace XFramework.Editor
                 handle.RegisterCallback<PointerMoveEvent>(OnDragMove);
                 handle.RegisterCallback<PointerUpEvent>(OnDragEnd);
 
-                IMGUIContainer field = null;
-                field = new IMGUIContainer(() => DrawRowProperty(field, rowIndex))
+                var field = new PropertyField(element.Copy(), string.Empty)
                 {
                     style =
                     {
@@ -936,6 +565,7 @@ namespace XFramework.Editor
                         marginRight = 4
                     }
                 };
+                field.Bind(m_SerializedObject);
 
                 var remove = new Button(() =>
                 {
@@ -965,38 +595,6 @@ namespace XFramework.Editor
                 row.Add(field);
                 row.Add(remove);
                 return row;
-            }
-
-            private void DrawRowProperty(IMGUIContainer container, int rowIndex)
-            {
-                SerializedProperty property = GetProperty();
-                if (!IsSupportedList(property) || rowIndex < 0 || rowIndex >= property.arraySize)
-                {
-                    return;
-                }
-
-                SerializedProperty element = property.GetArrayElementAtIndex(rowIndex);
-                float propertyHeight = Mathf.Max(RowMinHeight - 4f, EditorGUI.GetPropertyHeight(element, GUIContent.none, true));
-                container.style.height = propertyHeight;
-
-                Rect rect = new Rect(0f, 0f, Mathf.Max(0f, container.contentRect.width), propertyHeight);
-                int previousIndentLevel = EditorGUI.indentLevel;
-                EditorGUI.BeginChangeCheck();
-                try
-                {
-                    EditorGUI.indentLevel = 0;
-                    EditorGUI.PropertyField(rect, element, GUIContent.none, true);
-                }
-                finally
-                {
-                    EditorGUI.indentLevel = previousIndentLevel;
-                }
-
-                if (EditorGUI.EndChangeCheck())
-                {
-                    property.serializedObject.ApplyModifiedProperties();
-                    container.MarkDirtyRepaint();
-                }
             }
 
             private void ToggleExpanded()
@@ -1203,7 +801,6 @@ namespace XFramework.Editor
 
         private sealed class ListState
         {
-            public readonly List<Rect> RowRects = new List<Rect>();
             public int SelectedIndex = -1;
             public int DragSourceIndex = -1;
             public int DropTargetIndex = -1;

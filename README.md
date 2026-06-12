@@ -572,28 +572,155 @@ IReadOnlyList<Transform> spawnPoints = UObjectFinder.FindList<Transform>("NpcSpa
 
 ### 4.6 XInspector 数据检查面板
 
-`XInspector` 是基于 UI Toolkit 的数据检查与编辑面板，核心代码位于 `Modules/XInspector/`。它会反射绑定对象的公开字段/属性，并根据 Unity 原生 `PropertyAttribute` 选择对应绘制器。
+`XInspector` 是基于 UI Toolkit 的数据检查与编辑面板，核心代码位于 `Modules/XInspector/`。它和 Unity 默认 Inspector 共享同一套 `PropertyAttribute` 语义：常规 `MonoBehaviour` 字段由 `PropertyDrawer` 绘制；`XInspector` 绑定普通对象、节点数据或工具态数据时，会扫描带 `[CustomPropertyDrawer(typeof(SomeAttribute))]` 的 `XInspectorElement`，把已接入的 Attribute 映射到 UI Toolkit 绘制器。
 
-常用标记约定：
-- 使用 Unity 原生 `[InspectorName("显示名")]` 覆盖字段在 `XInspector` 中的显示文本。
-- 使用 Unity 原生 `[HideInInspector]` 隐藏字段；自动属性需要隐藏时使用 `[field: HideInInspector]`，让 `XInspector` 读取 backing field 上的标记。
-- `[ElementProperty("成员名")]` 仅用于指定非公开成员或覆盖绑定成员名，不作为显示名替代。
-- `List<T>` 和一维数组上的 Unity `PropertyAttribute` 会作用到集合元素绘制器，例如 `[TextArea]`、`[DataTableRef(...)]`。
+这意味着业务侧优先只写字段标记；默认 Inspector 和 `XMonoBehaviourInspector` 走 Unity `PropertyDrawer`，嵌入式 `XInspector` 走对应的 `XInspectorElement` 桥接绘制器。
+
+#### 1. 核心绑定规则
+- `new XInspector().Bind(obj)` 绑定引用类型对象；值类型需要先包一层 `StructContainer`，不能直接绑定。
+- 公开字段和公开可读写属性会自动显示；非公开字段/属性只有添加 `[ElementProperty]` 后才会显示。
+- `[InspectorName("显示名")]` 是显示名来源；未配置时会把字段名简单格式化，例如 `m_value` 显示为 `Value`。
+- `[HideInInspector]` 可隐藏字段；自动属性需要写成 `[field: HideInInspector]`，让标记落到 backing field 上。
+- `[ElementProperty("成员名")]` 用于指定成员名或让属性进入 `XInspector`，不是推荐的显示名方案。
+- `List<T>` 和一维数组上的 `PropertyAttribute` 会作用到集合元素绘制器，例如 `[TextArea]`、`[DataTableRef(...)]`。
 
 ```csharp
 using UnityEngine;
 using XFramework;
 
-public class ExampleNode
+public sealed class ExampleNode
 {
     [InspectorName("剧情 Id")]
     [DataTableRef(typeof(StoryGraphDataTable))]
     public int storyGraphId;
 
+    [TextArea]
+    public string[] choices;
+
     [HideInInspector]
-    public string[] nextNodeIds;
+    public string debugKey;
 }
 ```
+
+#### 2. 内置类型绘制器
+`XInspectorElement` 通过 `[DefaultSportTypes]` 和 `[SupportHelper]` 自动注册，不需要手动配置：
+
+| 类型/场景 | 绘制器能力 |
+| :-------- | :--------- |
+| `bool` | 开关字段 |
+| `string` | 文本字段；带 `[TextArea]` 时使用多行文本 |
+| 整数类型 | `int`、`uint`、`long`、`ulong`、`byte`、`sbyte`、`short`、`ushort`、`char` |
+| 小数类型 | `float`、`double`、`decimal` |
+| `enum` | 普通枚举下拉；`[Flags]` 枚举使用 flags 绘制器 |
+| 数组/`List<T>` | 可折叠列表，元素根据元素类型或字段上的 Attribute 继续选择绘制器 |
+| 普通对象 | 可折叠对象，递归显示其公开字段和标记属性 |
+
+#### 3. PropertyAttribute 与 PropertyDrawer
+通用属性位于 `Runtime/Tools/CustomeInspector/PropertyAttributes/`，默认 Inspector 的绘制器位于 `Editor/Tools/CustomeInspector/InspectorDrawers/`。这些 Attribute 可直接用于普通 `MonoBehaviour` 和 `XMonoBehaviour`；其中提供了 `XInspectorElement` 桥接的 Attribute，也可用于可被 `XInspector` 绑定的数据对象。
+
+| Attribute | 作用 |
+| :-------- | :--- |
+| `[ReadOnly]` | 字段只读显示 |
+| `[Display(nameof(Method))]` | 根据无参 `bool` 方法控制字段是否显示 |
+| `[Enable(nameof(Method))]` | 根据无参 `bool` 方法控制字段是否可编辑 |
+| `[TextDropdown(nameof(Method))]` | `string` 字段下拉；方法返回 `string` 或 `IEnumerable<string>` |
+| `[FilePath("txt")]` / `[FolderPath]` / `[AssetFolderPath]` | `string` 路径选择 |
+| `[AssetPath(typeof(TextAsset))]` | 用资源对象选择器编辑资源路径字符串 |
+| `[DataTableRef(typeof(TableType))]` | 数据表引用选择与定位；在 XInspector 中由 `DataTableRefElement` 提供选择窗口 |
+| `[UIClickSound]` | 从 `XFrameworkSetting` 中选择 UI 点击音效 key，并可定位配置 |
+| `[Layer]` | 将 `int` 或 `string` 字段绘制为 Unity Layer 选择器 |
+| `[Password]` | 密码文本输入 |
+| `[Hyperlink("标题")]` | 链接字段 |
+| `[Color(r, g, b, a)]` | 带颜色提示的字段 |
+| `[PrettyBox]` / `[PrettyList]` | 更紧凑地显示结构体或列表数据 |
+| `[ShowAsFlags]` | 把枚举按位掩码方式显示 |
+| `[ShowInBin32]` / `[ShowInHex(places)]` | 数值的二进制/十六进制辅助显示 |
+| `[ShowInRow(...)]` | 将结构体指定字段横向排布 |
+
+当前已接入 `XInspectorElement` 桥接的 Attribute 包括：
+- Unity 原生 `[TextArea]`：`string` 字段/集合元素多行文本。
+- `[AssetPath(typeof(TAsset))]`：资源路径字符串用 `ObjectField` 编辑；纹理资源支持双击标签展开预览。
+- `[DataTableRef(typeof(TableType))]`：数据表引用显示、定位、双击打开和选择窗口。
+
+```csharp
+using System.Collections.Generic;
+using UnityEngine;
+using XFramework;
+
+public sealed class InspectorExample : XMonoBehaviour
+{
+    [ReadOnly]
+    public int id = 1001;
+
+    [TextDropdown(nameof(GetNames))]
+    public string selectedName;
+
+    [AssetPath(typeof(TextAsset))]
+    public string configPath;
+
+    public bool showAdvanced;
+
+    [Display(nameof(ShouldShowAdvanced))]
+    public string advancedValue;
+
+    private bool ShouldShowAdvanced()
+    {
+        return showAdvanced;
+    }
+
+    private static IEnumerable<string> GetNames()
+    {
+        return new[] { "Alpha", "Beta", "Gamma" };
+    }
+}
+```
+
+#### 4. XMonoBehaviourInspector 额外能力
+继承 `XMonoBehaviour` 的组件会使用 `XMonoBehaviourInspector`。它保留 Unity 默认 Inspector 和全部 `PropertyDrawer` 行为，并额外提供两类编辑器增强：
+
+- **方法按钮**：无参方法添加 `[Button]` 后，会在 Inspector 底部生成按钮；支持多选对象、Undo、场景 dirty 标记，以及按 `Order` 排序。
+- **Scene 视图句柄**：字段添加 `SceneHandlerAttribute` 派生标记后，会在 `OnSceneGUI` 中绘制和编辑对应场景句柄。
+
+`[Button]` 支持 `EnableMode.Always`、`EnableMode.Editor`、`EnableMode.Playmode` 三种启用模式：
+
+```csharp
+using UnityEngine;
+using XFramework;
+
+public sealed class SpawnArea : XMonoBehaviour
+{
+    [MoveHandler("出生点")]
+    public Vector3 spawnPoint;
+
+    [RadiusHandler("警戒半径")]
+    public float alertRadius = 3f;
+
+    [Button("刷新缓存", ButtonAttribute.EnableMode.Editor, order: 10)]
+    private void RefreshCache()
+    {
+        Debug.Log("Refresh editor cache");
+    }
+}
+```
+
+Scene 句柄当前内置：
+
+| Attribute | 支持字段 | 行为 |
+| :-------- | :------- | :--- |
+| `[MoveHandler]` | `Vector3`、`Vector2` | 位置移动手柄 |
+| `[RadiusHandler]` | `float`、`int` | 以组件 Transform 为中心编辑半径 |
+| `[BoundsHandler]` | `Bounds` | 包围盒编辑手柄 |
+| `[DirectionHandler]` | `Vector3`、`Vector2` | 方向辅助显示，可动态闪烁 |
+| `[CircleAreaHandler]` | `float` | 按 X/Y/Z 轴显示圆形区域 |
+
+#### 5. 扩展绘制器
+扩展普通字段类型时，新增 `XInspectorElement` 子类并添加 `[DefaultSportTypes(typeof(MyType))]`；扩展复杂匹配规则时实现 `ISupport` 并添加 `[SupportHelper(typeof(MySupport))]`。
+
+扩展一套可被 Unity 默认 Inspector 和 `XInspector` 共用的 Attribute 时：
+1. 在 Runtime 定义继承 `PropertyAttribute` 的 Attribute。
+2. 如果需要默认 Inspector 支持，编写 `PropertyDrawer`。
+3. 如果需要 `XInspector` 支持，编写继承 `XInspectorElement` 的 UI Toolkit 绘制器，并同样标记 `[CustomPropertyDrawer(typeof(MyAttribute))]`。
+4. 绘制器需要读取 Attribute 参数时，实现 `IPropertyAttributeElement.SetPropertyAttribute(PropertyAttribute attribute)`。
 
 ### 4.7 XAnimation 播放系统
 

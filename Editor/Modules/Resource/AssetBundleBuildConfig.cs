@@ -61,64 +61,117 @@ namespace XFramework.Editor
         private const float PathLabelMinWidth = 80f;
         private const float Spacing = 4f;
 
-        public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
+        public override VisualElement CreatePropertyGUI(SerializedProperty property)
         {
             SerializedProperty pathProperty = property.FindPropertyRelative(nameof(PathConfig.path));
             SerializedProperty buildTypeProperty = property.FindPropertyRelative(nameof(PathConfig.buildType));
             if (pathProperty == null || buildTypeProperty == null)
             {
-                EditorGUI.LabelField(position, label.text, "Invalid PathConfig");
-                return;
+                return new Label("Invalid PathConfig");
             }
 
-            EditorGUI.BeginProperty(position, label, property);
-
-            Rect lineRect = new Rect(position.x, position.y, position.width, EditorGUIUtility.singleLineHeight);
-            Rect buildTypeRect = new Rect(lineRect.xMax - BuildTypeWidth, lineRect.y, BuildTypeWidth, lineRect.height);
-            float availableBeforeBuildType = Mathf.Max(0f, buildTypeRect.x - lineRect.x - Spacing);
-            float objectFieldWidth = Mathf.Clamp(availableBeforeBuildType - PathLabelMinWidth - Spacing, ObjectFieldMinWidth, ObjectFieldPreferredWidth);
-
-            if (availableBeforeBuildType < ObjectFieldMinWidth + Spacing)
+            SerializedProperty pathPropertyCopy = pathProperty.Copy();
+            VisualElement row = new VisualElement
             {
-                objectFieldWidth = Mathf.Max(0f, availableBeforeBuildType);
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    alignItems = Align.Center,
+                    minHeight = 20f
+                }
+            };
+
+            ObjectField folderField = new ObjectField
+            {
+                objectType = typeof(DefaultAsset),
+                allowSceneObjects = false,
+                tooltip = "选择打包文件夹",
+                style =
+                {
+                    width = ObjectFieldPreferredWidth,
+                    minWidth = ObjectFieldMinWidth,
+                    flexShrink = 0f,
+                    marginRight = Spacing
+                }
+            };
+
+            Label pathLabel = new Label
+            {
+                style =
+                {
+                    minWidth = PathLabelMinWidth,
+                    flexGrow = 1f,
+                    flexShrink = 1f,
+                    marginRight = Spacing,
+                    overflow = Overflow.Hidden,
+                    textOverflow = TextOverflow.Ellipsis,
+                    whiteSpace = WhiteSpace.NoWrap,
+                    unityTextAlign = TextAnchor.MiddleLeft
+                }
+            };
+
+            PropertyField buildTypeField = new PropertyField(buildTypeProperty.Copy())
+            {
+                label = string.Empty,
+                style =
+                {
+                    width = BuildTypeWidth,
+                    minWidth = BuildTypeWidth,
+                    flexShrink = 0f
+                }
+            };
+
+            row.Add(folderField);
+            row.Add(pathLabel);
+            row.Add(buildTypeField);
+
+            void RefreshPath()
+            {
+                property.serializedObject.Update();
+                if (pathPropertyCopy.hasMultipleDifferentValues)
+                {
+                    folderField.SetValueWithoutNotify(null);
+                    pathLabel.text = "多个不同路径";
+                    pathLabel.tooltip = "多个对象的路径不同";
+                    return;
+                }
+
+                string path = pathPropertyCopy.stringValue;
+                DefaultAsset currentFolder = string.IsNullOrEmpty(path)
+                    ? null
+                    : AssetDatabase.LoadAssetAtPath<DefaultAsset>(path);
+                folderField.SetValueWithoutNotify(currentFolder);
+                pathLabel.text = path;
+                pathLabel.tooltip = path;
             }
 
-            Rect objectFieldRect = new Rect(lineRect.x, lineRect.y, objectFieldWidth, lineRect.height);
-            Rect pathLabelRect = new Rect(
-                objectFieldRect.xMax + Spacing,
-                lineRect.y,
-                Mathf.Max(0f, buildTypeRect.x - objectFieldRect.xMax - Spacing * 2f),
-                lineRect.height);
-
-            DefaultAsset currentFolder = string.IsNullOrEmpty(pathProperty.stringValue)
-                ? null
-                : AssetDatabase.LoadAssetAtPath<DefaultAsset>(pathProperty.stringValue);
-            DefaultAsset selectedFolder = EditorGUI.ObjectField(objectFieldRect, currentFolder, typeof(DefaultAsset), false) as DefaultAsset;
-            if (selectedFolder != currentFolder)
+            folderField.RegisterValueChangedCallback(evt =>
             {
+                property.serializedObject.Update();
+                DefaultAsset selectedFolder = evt.newValue as DefaultAsset;
                 if (selectedFolder == null)
                 {
-                    pathProperty.stringValue = string.Empty;
+                    pathPropertyCopy.stringValue = string.Empty;
                 }
                 else
                 {
                     string selectedPath = AssetDatabase.GetAssetPath(selectedFolder);
-                    if (AssetDatabase.IsValidFolder(selectedPath))
+                    if (!AssetDatabase.IsValidFolder(selectedPath))
                     {
-                        pathProperty.stringValue = selectedPath;
+                        RefreshPath();
+                        return;
                     }
+
+                    pathPropertyCopy.stringValue = selectedPath;
                 }
-            }
 
-            AssetBundleBuildConfigDrawerGUI.DrawPathLabel(pathLabelRect, pathProperty.stringValue);
-            EditorGUI.PropertyField(buildTypeRect, buildTypeProperty, GUIContent.none);
+                property.serializedObject.ApplyModifiedProperties();
+                RefreshPath();
+            });
 
-            EditorGUI.EndProperty();
-        }
-
-        public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
-        {
-            return EditorGUIUtility.singleLineHeight;
+            row.TrackPropertyValue(pathPropertyCopy, _ => RefreshPath());
+            RefreshPath();
+            return row;
         }
     }
 

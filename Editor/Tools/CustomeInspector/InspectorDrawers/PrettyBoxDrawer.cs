@@ -23,106 +23,11 @@ namespace XFramework.Editor
             return new PrettyBoxElement(property.serializedObject, property.propertyPath);
         }
 
-        public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
-        {
-            if (!IsSupportedObject(property))
-            {
-                EditorGUI.HelpBox(position, "[PrettyBox] can only be used on serializable class or struct fields.", MessageType.Error);
-                return;
-            }
-
-            EditorGUI.BeginProperty(position, label, property);
-            DrawBoxFrame(position);
-
-            Rect contentRect = new Rect(
-                position.x + BorderWidth,
-                position.y + BorderWidth,
-                position.width - BorderWidth * 2f,
-                position.height - BorderWidth * 2f);
-            Rect headerRect = new Rect(contentRect.x, contentRect.y, contentRect.width, HeaderHeight);
-            DrawHeader(headerRect, property, label);
-
-            if (property.isExpanded)
-            {
-                float y = headerRect.yMax + BodyPadding;
-                ForEachDirectChild(property, child =>
-                {
-                    float childHeight = EditorGUI.GetPropertyHeight(child, true);
-                    Rect childRect = new Rect(contentRect.x + BodyPadding, y, contentRect.width - BodyPadding * 2f, childHeight);
-                    EditorGUI.PropertyField(childRect, child, true);
-                    y += childHeight + ChildSpacing;
-                });
-            }
-
-            EditorGUI.EndProperty();
-        }
-
-        public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
-        {
-            if (!IsSupportedObject(property))
-            {
-                return EditorGUIUtility.singleLineHeight * 2f;
-            }
-
-            float height = BorderWidth * 2f + HeaderHeight;
-            if (!property.isExpanded)
-            {
-                return height;
-            }
-
-            float childrenHeight = 0f;
-            int childCount = 0;
-            ForEachDirectChild(property, child =>
-            {
-                childrenHeight += EditorGUI.GetPropertyHeight(child, true);
-                childCount++;
-            });
-
-            if (childCount > 0)
-            {
-                childrenHeight += ChildSpacing * (childCount - 1);
-            }
-
-            return height + BodyPadding * 2f + childrenHeight;
-        }
-
         private static bool IsSupportedObject(SerializedProperty property)
         {
             return property != null
                    && property.propertyType == SerializedPropertyType.Generic
                    && !property.isArray;
-        }
-
-        private static void DrawBoxFrame(Rect rect)
-        {
-            EditorGUI.DrawRect(rect, GetDarkLineColor());
-        }
-
-        private static void DrawHeader(Rect rect, SerializedProperty property, GUIContent label)
-        {
-            UnityEngine.Event evt = UnityEngine.Event.current;
-            EditorGUI.DrawRect(rect, new Color(0.20f, 0.20f, 0.20f, 1f));
-            EditorGUI.DrawRect(new Rect(rect.x, rect.y, rect.width, 1f), new Color(0.28f, 0.28f, 0.28f, 1f));
-            EditorGUI.DrawRect(new Rect(rect.x, rect.yMax - 1f, rect.width, 1f), GetDarkLineColor());
-
-            Rect foldoutRect = new Rect(rect.x + 2f, rect.y + 1f, 16f, rect.height - 2f);
-            Rect labelRect = new Rect(foldoutRect.xMax, rect.y + 1f, rect.width - foldoutRect.width - 4f, rect.height - 2f);
-
-            bool expanded = GUI.Toggle(foldoutRect, property.isExpanded, GUIContent.none, EditorStyles.foldout);
-            if (expanded != property.isExpanded)
-            {
-                property.isExpanded = expanded;
-                property.serializedObject.ApplyModifiedProperties();
-                evt.Use();
-            }
-
-            GUI.Label(labelRect, label, GetHeaderLabelStyle());
-            if (evt.type == EventType.MouseDown && evt.button == 0 && rect.Contains(evt.mousePosition))
-            {
-                property.isExpanded = !property.isExpanded;
-                property.serializedObject.ApplyModifiedProperties();
-                evt.Use();
-            }
         }
 
         private static void ForEachDirectChild(SerializedProperty property, System.Action<SerializedProperty> action)
@@ -142,16 +47,6 @@ namespace XFramework.Editor
 
                 action(iterator.Copy());
             }
-        }
-
-        private static GUIStyle GetHeaderLabelStyle()
-        {
-            GUIStyle style = new GUIStyle(EditorStyles.label);
-            style.alignment = TextAnchor.MiddleLeft;
-            style.fontStyle = FontStyle.Bold;
-            style.fontSize = 12;
-            style.normal.textColor = new Color(0.72f, 0.72f, 0.72f, 1f);
-            return style;
         }
 
         private static Color GetDarkLineColor()
@@ -179,6 +74,7 @@ namespace XFramework.Editor
                 style.borderRightColor = GetDarkLineColor();
                 style.borderTopColor = GetDarkLineColor();
                 style.borderBottomColor = GetDarkLineColor();
+                style.marginTop = -BorderWidth;
 
                 Rebuild();
             }
@@ -245,7 +141,7 @@ namespace XFramework.Editor
                         flexDirection = FlexDirection.Row,
                         alignItems = Align.Center,
                         backgroundColor = new Color(0.20f, 0.20f, 0.20f, 1f),
-                        borderBottomWidth = BorderWidth,
+                        borderBottomWidth = property.isExpanded ? BorderWidth : 0f,
                         borderBottomColor = GetDarkLineColor()
                     }
                 };
