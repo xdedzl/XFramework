@@ -9,6 +9,7 @@ namespace XFramework.UI
     public abstract class ExpandableElement : XInspectorElement
     {
         private readonly Foldout foldout;
+        private bool arrowActive = true;
         
         protected VisualElement title;
         protected VisualElement elementsContent;
@@ -108,6 +109,7 @@ namespace XFramework.UI
 
         public void SetArrowActive(bool value)
         {
+            arrowActive = value;
             if (value && !title.Contains(foldout))
             {
                 title.Insert(0, foldout);
@@ -132,7 +134,7 @@ namespace XFramework.UI
 
         private void OnTitleMouseDown(MouseDownEvent evt)
         {
-            if (evt.button != 0 || evt.target is not VisualElement target)
+            if (!arrowActive || evt.button != 0 || evt.target is not VisualElement target)
                 return;
 
             if (target.GetFirstAncestorOfType<TextField>() != null
@@ -154,6 +156,11 @@ namespace XFramework.UI
 
         private void OnTitleKeyDown(KeyDownEvent evt)
         {
+            if (!arrowActive)
+            {
+                return;
+            }
+
             if (evt.keyCode == KeyCode.LeftArrow)
             {
                 Collapse();

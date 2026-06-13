@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using TMPro;
 using UnityEngine;
@@ -11,6 +12,19 @@ using XFramework.Resource;
 namespace XFramework.UI
 {
 #if UNITY_EDITOR
+    public readonly struct UIPanelTagDebugSnapshot
+    {
+        public UIPanelTagDebugSnapshot(string tag, int activePanelCount)
+        {
+            Tag = tag;
+            ActivePanelCount = activePanelCount;
+        }
+
+        public string Tag { get; }
+        public int ActivePanelCount { get; }
+        public bool IsActive => ActivePanelCount > 0;
+    }
+
     public readonly struct UIPanelDebugSnapshot
     {
         public UIPanelDebugSnapshot(
@@ -24,7 +38,8 @@ namespace XFramework.UI
             bool hasCloseCallback,
             GameObject gameObject,
             string hierarchyPath,
-            bool isUIToolkitPanel)
+            bool isUIToolkitPanel,
+            IReadOnlyList<UIPanelTagDebugSnapshot> tags)
         {
             PanelName = panelName;
             PanelType = panelType;
@@ -37,6 +52,7 @@ namespace XFramework.UI
             GameObject = gameObject;
             HierarchyPath = hierarchyPath;
             IsUIToolkitPanel = isUIToolkitPanel;
+            Tags = tags;
         }
 
         public string PanelName { get; }
@@ -50,6 +66,7 @@ namespace XFramework.UI
         public GameObject GameObject { get; }
         public string HierarchyPath { get; }
         public bool IsUIToolkitPanel { get; }
+        public IReadOnlyList<UIPanelTagDebugSnapshot> Tags { get; }
     }
 #endif
 
@@ -101,10 +118,13 @@ namespace XFramework.UI
         private readonly Dictionary<string, PanelInfoAttribute> m_PanelName2Info = new ();
         private readonly Dictionary<string, Type> m_PanelName2Type = new ();
         private readonly Dictionary<Type, string> m_PanelType2Name = new ();
+        private readonly Dictionary<Type, string[]> m_PanelType2Tags = new ();
         
         private readonly Dictionary<string, PanelBase> m_PanelDict = new ();
         private readonly Dictionary<int, List<PanelBase>> m_OnDisplayPanelDic = new ();
         private readonly Dictionary<string, Action> m_PanelCloseCallbacks = new ();
+        private readonly Dictionary<string, HashSet<PanelBase>> m_Tag2Panels = new (StringComparer.Ordinal);
+        private readonly Dictionary<string, IPanelTagHandler> m_Tag2Handler = new (StringComparer.Ordinal);
         
         private GameObject m_TipsPrefab;
 
@@ -112,6 +132,8 @@ namespace XFramework.UI
         public UIManager()
         {
             InitPathDic();
+            InitTagHandlers();
+            ValidatePanelTagHandlers();
         }
         
         public void OpenPanel(string uiName, params object[] args)
@@ -157,6 +179,7 @@ namespace XFramework.UI
             panel.SetVisible(true);
             panel.transform.SetAsLastSibling();
             
+            AcquirePanelTags(panel);
             panel.OnOpen(args);
             panel.OpenSubPanels();
         }
@@ -173,8 +196,15 @@ namespace XFramework.UI
                 panel.SetVisible(false);
                 
                 m_OnDisplayPanelDic[panel.Level].Remove(panel);
-                
-                panel.OnAfterClose();
+
+                try
+                {
+                    panel.OnAfterClose();
+                }
+                finally
+                {
+                    ReleasePanelTags(panel);
+                }
 
                 InvokePanelCloseCallback(uiName);
             }
@@ -226,6 +256,29 @@ namespace XFramework.UI
             return false;
         }
 
+        /// <summary>
+        /// 检查标签当前是否被至少一个已打开面板持有。
+        /// </summary>
+        public bool IsTagActive(string tag)
+        {
+            return GetTagActivePanelCount(tag) > 0;
+        }
+
+        /// <summary>
+        /// 获取当前持有标签的已打开面板数量。
+        /// </summary>
+        public int GetTagActivePanelCount(string tag)
+        {
+            if (string.IsNullOrWhiteSpace(tag))
+            {
+                return 0;
+            }
+
+            return m_Tag2Panels.TryGetValue(tag, out HashSet<PanelBase> panels)
+                ? panels.Count
+                : 0;
+        }
+
 #if UNITY_EDITOR
         public List<UIPanelDebugSnapshot> GetDebugPanelSnapshots()
         {
@@ -250,6 +303,13 @@ namespace XFramework.UI
 
                 bool isCached = m_PanelDict.TryGetValue(panelName, out PanelBase panel);
                 GameObject panelGameObject = panel != null ? panel.gameObject : null;
+                string[] panelTags = panelType != null ? m_PanelType2Tags[panelType] : Array.Empty<string>();
+                var tagSnapshots = new List<UIPanelTagDebugSnapshot>(panelTags.Length);
+                foreach (string tag in panelTags)
+                {
+                    tagSnapshots.Add(new UIPanelTagDebugSnapshot(tag, GetTagActivePanelCount(tag)));
+                }
+
                 snapshots.Add(new UIPanelDebugSnapshot(
                     panelName,
                     panelType,
@@ -261,7 +321,8 @@ namespace XFramework.UI
                     m_PanelCloseCallbacks.ContainsKey(panelName),
                     panelGameObject,
                     panelGameObject != null ? GetHierarchyPath(panelGameObject.transform) : string.Empty,
-                    panelType != null && typeof(UIToolkitPanelBase).IsAssignableFrom(panelType)));
+                    panelType != null && typeof(UIToolkitPanelBase).IsAssignableFrom(panelType),
+                    tagSnapshots));
             }
 
             return snapshots;
@@ -447,10 +508,156 @@ namespace XFramework.UI
                 m_PanelName2Info.Add(panelInfo.name, panelInfo);
                 m_PanelName2Type.Add(panelInfo.name, type);
                 m_PanelType2Name.Add(type, panelInfo.name);
+                m_PanelType2Tags.Add(type, GetDeclaredTags(type, type.Name));
                 if (hasPanelPath)
                 {
                     path2TypeDict.Add(panelInfo.path, type);
                 }
+            }
+        }
+
+        private void InitTagHandlers()
+        {
+            var handlerTypes = Utility.Reflection
+                .GetAssignableTypes(typeof(IPanelTagHandler), "Assembly-CSharp")
+                .OrderBy(type => type.FullName, StringComparer.Ordinal);
+
+            foreach (Type handlerType in handlerTypes)
+            {
+                IPanelTagHandler handler;
+                try
+                {
+                    handler = (IPanelTagHandler)Activator.CreateInstance(handlerType);
+                }
+                catch (Exception exception)
+                {
+                    throw new XFrameworkException(
+                        $"[UI] Failed to create panel tag handler {handlerType.FullName}. " +
+                        $"A public parameterless constructor is required. {exception.Message}");
+                }
+
+                string tag = NormalizeTag(handler.Tag, handlerType.Name);
+                if (m_Tag2Handler.TryGetValue(tag, out IPanelTagHandler existingHandler))
+                {
+                    throw new XFrameworkException(
+                        $"[UI] Panel tag {tag} has multiple handlers: " +
+                        $"{existingHandler.GetType().FullName}, {handlerType.FullName}.");
+                }
+
+                m_Tag2Handler.Add(tag, handler);
+            }
+        }
+
+        private void ValidatePanelTagHandlers()
+        {
+            foreach (string tag in m_PanelType2Tags.Values.SelectMany(tags => tags).Distinct(StringComparer.Ordinal))
+            {
+                if (!m_Tag2Handler.ContainsKey(tag))
+                {
+                    throw new XFrameworkException($"[UI] Panel tag {tag} does not have a handler.");
+                }
+            }
+        }
+
+        private static string[] GetDeclaredTags(Type panelType, string ownerName)
+        {
+            PanelTagAttribute attribute = panelType.GetCustomAttribute<PanelTagAttribute>();
+            return attribute == null
+                ? Array.Empty<string>()
+                : NormalizeTags(attribute.Tags, ownerName);
+        }
+
+        private static string[] NormalizeTags(IEnumerable<string> tags, string ownerName)
+        {
+            var result = new List<string>();
+            var uniqueTags = new HashSet<string>(StringComparer.Ordinal);
+            foreach (string tag in tags)
+            {
+                if (string.IsNullOrWhiteSpace(tag))
+                {
+                    throw new XFrameworkException($"[UI] Panel tag declared by {ownerName} cannot be null or whitespace.");
+                }
+
+                if (uniqueTags.Add(tag))
+                {
+                    result.Add(tag);
+                }
+            }
+
+            return result.ToArray();
+        }
+
+        private static string NormalizeTag(string tag, string ownerName)
+        {
+            if (string.IsNullOrWhiteSpace(tag))
+            {
+                throw new XFrameworkException($"[UI] Panel tag handler {ownerName} cannot declare a null or whitespace tag.");
+            }
+
+            return tag;
+        }
+
+        private void AcquirePanelTags(PanelBase panel)
+        {
+            foreach (string tag in m_PanelType2Tags[panel.GetType()])
+            {
+                if (!m_Tag2Panels.TryGetValue(tag, out HashSet<PanelBase> panels))
+                {
+                    panels = new HashSet<PanelBase>();
+                    m_Tag2Panels.Add(tag, panels);
+                }
+
+                bool wasInactive = panels.Count == 0;
+                if (panels.Add(panel) && wasInactive)
+                {
+                    NotifyTagStateChanged(tag, true);
+                }
+            }
+        }
+
+        private void ReleasePanelTags(PanelBase panel)
+        {
+            foreach (string tag in m_PanelType2Tags[panel.GetType()])
+            {
+                if (!m_Tag2Panels.TryGetValue(tag, out HashSet<PanelBase> panels) || !panels.Remove(panel))
+                {
+                    continue;
+                }
+
+                if (panels.Count == 0)
+                {
+                    m_Tag2Panels.Remove(tag);
+                    NotifyTagStateChanged(tag, false);
+                }
+            }
+        }
+
+        private void NotifyTagStateChanged(string tag, bool active)
+        {
+            if (!m_Tag2Handler.TryGetValue(tag, out IPanelTagHandler handler))
+            {
+                return;
+            }
+
+            try
+            {
+                handler.OnTagStateChanged(active);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError(
+                    $"[UI] Panel tag handler {handler.GetType().FullName} failed. Tag: {tag}, Active: {active}");
+                Debug.LogException(exception);
+            }
+        }
+
+        private void DeactivateAllTags()
+        {
+            string[] activeTags = m_Tag2Panels.Keys.OrderBy(tag => tag, StringComparer.Ordinal).ToArray();
+            m_Tag2Panels.Clear();
+            foreach (string tag in activeTags)
+            {
+                NotifyTagStateChanged(tag, false);
             }
         }
 
@@ -549,10 +756,15 @@ namespace XFramework.UI
 
         public override void Shutdown()
         {
+            DeactivateAllTags();
             m_PanelDict?.Clear();
             m_PanelName2Info.Clear();
+            m_PanelName2Type.Clear();
+            m_PanelType2Name.Clear();
+            m_PanelType2Tags.Clear();
             m_OnDisplayPanelDic.Clear();
             m_PanelCloseCallbacks.Clear();
+            m_Tag2Handler.Clear();
             EntityManager.Instance.RemoveTemplate("ui-tip-entity");
         }
 

@@ -235,6 +235,25 @@ namespace XFramework.Editor
             return string.IsNullOrEmpty(path) ? string.Empty : path.Replace("\\", "/");
         }
 
+        private static void OpenOutputFolder(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                EditorUtility.DisplayDialog("打开输出目录", "输出路径为空。", "确定");
+                return;
+            }
+
+            string fullPath = Path.IsPathRooted(path)
+                ? path
+                : Path.GetFullPath(Path.Combine(XApplication.projectPath, path));
+            if (!Directory.Exists(fullPath))
+            {
+                Directory.CreateDirectory(fullPath);
+            }
+
+            EditorUtility.RevealInFinder(fullPath);
+        }
+
         private static void BuildAssetBundlesWithManifest(string outputPath, List<AssetBundleBuild> builds, BuildAssetBundleOptions buildAssetBundleOption)
         {
             if (!Directory.Exists(outputPath))
@@ -448,6 +467,14 @@ namespace XFramework.Editor
                 outputFolderBtn.style.width = 34;
                 outputFolderBtn.style.marginLeft = 6;
                 outputRow.Add(outputFolderBtn);
+
+                var openOutputFolderBtn = new Button(() => OpenOutputFolder(m_OutPutPath))
+                {
+                    text = "打开"
+                };
+                openOutputFolderBtn.style.width = 48;
+                openOutputFolderBtn.style.marginLeft = 6;
+                outputRow.Add(openOutputFolderBtn);
                 panel.Add(outputRow);
 
                 var optionRow = CreateSettingsRow();

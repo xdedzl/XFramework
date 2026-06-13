@@ -1,0 +1,18 @@
+{
+    "name": "XInspectorEditor",
+    "rootNamespace": "",
+    "references": [
+        "GUID:38d587c11f390434295cbeadec2ad045"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

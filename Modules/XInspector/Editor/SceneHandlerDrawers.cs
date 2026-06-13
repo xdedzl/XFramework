@@ -63,7 +63,8 @@ namespace XFramework.Editor
             {
                 var attr = attributes[i];
                 Type drawerType = GetSceneHandlerDrawerType(attr.GetType());
-                sceneHandlers.Add(Utility.Reflection.CreateInstance<FieldSceneHandler>(drawerType, attr));
+                var handler = Activator.CreateInstance(drawerType, attr) as FieldSceneHandler;
+                sceneHandlers.Add(handler);
             }
             return sceneHandlers;
         }
@@ -75,7 +76,7 @@ namespace XFramework.Editor
                 return drawerType;
             }
 
-            throw new XFrameworkException($"{type.Name}没有设置对应的scene handler drawer，请补充");
+            throw new Exception($"{type.Name}没有设置对应的scene handler drawer，请补充");
         }
     }
 

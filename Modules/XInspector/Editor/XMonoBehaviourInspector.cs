@@ -25,6 +25,20 @@ namespace XFramework.Editor
 
         private readonly List<SceneField> m_sceneFields = new ();
         private readonly List<MethodInspector> m_methods = new ();
+        
+        public static List<MethodInfo> GetMethods(Type type, Func<MethodInfo, bool> filter)
+        {
+            List<MethodInfo> methods = new List<MethodInfo>();
+            MethodInfo[] infos = type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+            for (int i = 0; i < infos.Length; i++)
+            {
+                if (filter(infos[i]))
+                {
+                    methods.Add(infos[i]);
+                }
+            }
+            return methods;
+        }
 
         private void OnEnable()
         {
@@ -49,7 +63,7 @@ namespace XFramework.Editor
                 }
 
 
-                List<MethodInfo> methods = target.GetType().GetMethods((method) =>
+                List<MethodInfo> methods = GetMethods(target.GetType(), (method) =>
                 {
                     return method.IsDefined(typeof(ButtonAttribute), true) && method.GetParameters().Length == 0;
                 });

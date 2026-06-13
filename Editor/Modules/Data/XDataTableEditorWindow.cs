@@ -380,6 +380,23 @@ namespace XFramework.Editor
             {
                 SaveCurrentAsset();
                 evt.StopImmediatePropagation();
+                return;
+            }
+
+            if (evt.ctrlKey || evt.commandKey || evt.altKey || evt.shiftKey || IsEditingField(evt.target as VisualElement))
+            {
+                return;
+            }
+
+            int direction = evt.keyCode switch
+            {
+                KeyCode.UpArrow => -1,
+                KeyCode.DownArrow => 1,
+                _ => 0
+            };
+            if (direction != 0 && SelectAdjacentRow(direction))
+            {
+                evt.StopImmediatePropagation();
             }
         }
 
@@ -1345,7 +1362,7 @@ namespace XFramework.Editor
             row.style.maxHeight = TableRowHeight;
             row.style.backgroundColor = GetRowBackgroundColor(rowIndex);
 
-            row.RegisterCallback<MouseDownEvent>(_ => SelectRow(rowIndex));
+            row.RegisterCallback<MouseDownEvent>(evt => SelectRowFromPointer(rowIndex, evt));
             row.AddManipulator(new ContextualMenuManipulator(evt =>
             {
                 evt.menu.AppendAction("复制当前行", _ => DuplicateRow(rowIndex));
@@ -1380,7 +1397,7 @@ namespace XFramework.Editor
             container.style.borderRightWidth = 1f;
             container.style.borderRightColor = new Color(0.24f, 0.24f, 0.24f, 0.85f);
             container.style.backgroundColor = GetCellBackgroundColor(rowIndex, column);
-            container.RegisterCallback<MouseDownEvent>(_ => SelectRow(rowIndex));
+            container.RegisterCallback<MouseDownEvent>(evt => SelectRowFromPointer(rowIndex, evt));
 
             string issueMessage = GetCellIssueMessage(rowIndex, column);
             if (!string.IsNullOrEmpty(issueMessage))
@@ -2100,6 +2117,51 @@ namespace XFramework.Editor
             {
                 ScrollToSelectedRow();
             }
+        }
+
+        private void SelectRowFromPointer(int rowIndex, MouseDownEvent evt)
+        {
+            SelectRow(rowIndex);
+            if (!IsEditingField(evt.target as VisualElement))
+            {
+                rootVisualElement.Focus();
+            }
+
+            evt.StopPropagation();
+        }
+
+        private bool SelectAdjacentRow(int direction)
+        {
+            if (m_Model == null || m_Model.Rows.Count == 0)
+            {
+                return false;
+            }
+
+            int rowIndex = HasSelection()
+                ? Mathf.Clamp(m_SelectedRowIndex + direction, 0, m_Model.Rows.Count - 1)
+                : direction < 0 ? m_Model.Rows.Count - 1 : 0;
+            SelectRow(rowIndex, true);
+            return true;
+        }
+
+        private static bool IsEditingField(VisualElement target)
+        {
+            for (VisualElement current = target; current != null; current = current.parent)
+            {
+                if (current is TextField
+                    or IntegerField
+                    or LongField
+                    or FloatField
+                    or DoubleField
+                    or EnumField
+                    or DropdownField
+                    or ObjectField)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void TryLocateByKeyValue(object keyValue)

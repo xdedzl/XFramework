@@ -98,6 +98,17 @@ namespace XFramework.Editor
                     }
                 };
                 pathRow.Add(outFolderBtn);
+
+                var openOutFolderBtn = new Button(() => OpenOutputFolder(outPutPath))
+                {
+                    text = "打开",
+                    style =
+                    {
+                        width = 48,
+                        marginLeft = 6
+                    }
+                };
+                pathRow.Add(openOutFolderBtn);
                 panel.Add(pathRow);
 
                 var optionRow = CreateSettingsRow();

@@ -396,7 +396,7 @@ namespace XFramework
         {
             m_BgmPaused = false;
             m_ManualBgmOverride = false;
-            StopBgmInternal(DefaultBgmFadeDuration);
+            StopBgmInternal(0f);
             m_ActiveBgmVolumes.Clear();
             EntityManager.Instance.RemoveTemplate("SoundManager_Audio");
         }
@@ -476,32 +476,28 @@ namespace XFramework
 
         private void StopBgmInternal(float fadeDuration)
         {
-            if (m_BgmFadeCoroutine != null)
-            {
-                MonoEvent.Instance.StopCoroutine(m_BgmFadeCoroutine);
-                m_BgmFadeCoroutine = null;
-            }
+            bool canRunFade = CancelBgmFade();
 
             m_ActiveBGM = null;
 
             bool hasPlayingSource = (m_BGM != null && m_BGM.isPlaying) || (m_BGMFade != null && m_BGMFade.isPlaying);
-            if (!hasPlayingSource || fadeDuration <= 0f)
+            if (!hasPlayingSource || fadeDuration <= 0f || !canRunFade)
             {
                 StopBgmSource(m_BGM);
                 StopBgmSource(m_BGMFade);
                 return;
             }
 
-            m_BgmFadeCoroutine = MonoEvent.Instance.StartCoroutine(FadeOutBgmSources(m_BGM, m_BGMFade, fadeDuration));
+            if (!TryStartBgmFade(FadeOutBgmSources(m_BGM, m_BGMFade, fadeDuration)))
+            {
+                StopBgmSource(m_BGM);
+                StopBgmSource(m_BGMFade);
+            }
         }
 
         private void StartBgmFade(AudioSource previousSource, AudioSource nextSource, AudioClip clip, float fadeDuration)
         {
-            if (m_BgmFadeCoroutine != null)
-            {
-                MonoEvent.Instance.StopCoroutine(m_BgmFadeCoroutine);
-                m_BgmFadeCoroutine = null;
-            }
+            bool canRunFade = CancelBgmFade();
 
             nextSource.clip = clip;
             nextSource.loop = true;
@@ -509,14 +505,47 @@ namespace XFramework
             nextSource.Play();
             m_ActiveBGM = nextSource;
 
-            if (fadeDuration <= 0f)
+            if (fadeDuration <= 0f || !canRunFade)
             {
                 nextSource.volume = m_BgmVolume;
                 StopBgmSource(previousSource);
                 return;
             }
 
-            m_BgmFadeCoroutine = MonoEvent.Instance.StartCoroutine(FadeBgm(previousSource, nextSource, fadeDuration));
+            if (!TryStartBgmFade(FadeBgm(previousSource, nextSource, fadeDuration)))
+            {
+                nextSource.volume = m_BgmVolume;
+                StopBgmSource(previousSource);
+            }
+        }
+
+        private bool CancelBgmFade()
+        {
+            if (m_BgmFadeCoroutine == null)
+            {
+                return true;
+            }
+
+            bool canRunFade = MonoEvent.IsValid;
+            if (canRunFade)
+            {
+                MonoEvent.Instance.StopCoroutine(m_BgmFadeCoroutine);
+            }
+
+            m_BgmFadeCoroutine = null;
+            return canRunFade;
+        }
+
+        private bool TryStartBgmFade(IEnumerator routine)
+        {
+            MonoEvent monoEvent = MonoEvent.Instance;
+            if (monoEvent == null)
+            {
+                return false;
+            }
+
+            m_BgmFadeCoroutine = monoEvent.StartCoroutine(routine);
+            return m_BgmFadeCoroutine != null;
         }
 
         private IEnumerator FadeBgm(AudioSource previousSource, AudioSource nextSource, float fadeDuration)

@@ -20,6 +20,18 @@ namespace XFramework
     /// <typeparam name="T">组件类型</typeparam>
     public class ComponentFindHelper<T> where T : MonoBehaviour
     {
+        public readonly struct ComponentInfo
+        {
+            public readonly string Key;
+            public readonly T Component;
+
+            public ComponentInfo(string key, T component)
+            {
+                Key = key;
+                Component = component;
+            }
+        }
+
         private readonly Dictionary<string, T> m_componentsDic = new Dictionary<string, T>();
 
         /// <summary>
@@ -28,41 +40,59 @@ namespace XFramework
         /// <param name="root">需要查找的根GameObject</param>
         public ComponentFindHelper(GameObject root)
         {
+            List<ComponentInfo> components = CollectComponents(root);
+            for (int i = 0; i < components.Count; i++)
+            {
+                ComponentInfo component = components[i];
+                if (!m_componentsDic.TryAdd(component.Key, component.Component))
+                {
+                    throw new System.Exception($"{root.name} already have a {typeof(T).Name} component named {component.Key}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// 按运行时查找规则收集组件。遇到 root 以下的 IComponentFindIgnore 边界时跳过该组件，
+        /// 例如 PanelBase 收集时会忽略 UINodeBase 子树中的 XUIBase。
+        /// </summary>
+        public static List<ComponentInfo> CollectComponents(GameObject root)
+        {
+            List<ComponentInfo> result = new List<ComponentInfo>();
             var uis = root.GetComponentsInChildren<T>(true);
             foreach (var ui in uis)
             {
-                // 修改此处：手动向上查找，查到 root 为止
-                IComponentFindIgnore ignore = null;
-                Transform curr = ui.transform;
-                while (curr != null)
-                {
-                    if (curr == root.transform)
-                    {
-                        break;
-                    }
-                    
-                    ignore = curr.GetComponent<IComponentFindIgnore>();
-                    
-                    if (ignore != null)
-                    {
-                        break;
-                    }
-                    curr = curr.parent;
-                }
-
-                // var ignore = ui.GetComponentInParent<IComponentFindIgnore>();
-                if (ignore is MonoBehaviour mb && mb.gameObject != root)
+                if (HasFindIgnoreBoundary(root, ui))
                 {
                     continue;
                 }
 
-                var keyProvider = ui.GetComponent<IComponentKeyProvider>();
-                var key = string.IsNullOrEmpty(keyProvider?.Key) ? ui.name : keyProvider.Key;
-                if (!m_componentsDic.TryAdd(key, ui))
-                {
-                    throw new System.Exception($"{root.name} already have a {typeof(T).Name} component named {key}");
-                }
+                result.Add(new ComponentInfo(GetKey(ui), ui));
             }
+
+            return result;
+        }
+
+        private static bool HasFindIgnoreBoundary(GameObject root, T component)
+        {
+            Transform current = component.transform;
+            while (current != null && current != root.transform)
+            {
+                IComponentFindIgnore ignore = current.GetComponent<IComponentFindIgnore>();
+                if (ignore is MonoBehaviour monoBehaviour && monoBehaviour.gameObject != root)
+                {
+                    return true;
+                }
+
+                current = current.parent;
+            }
+
+            return false;
+        }
+
+        private static string GetKey(T component)
+        {
+            var keyProvider = component.GetComponent<IComponentKeyProvider>();
+            return string.IsNullOrEmpty(keyProvider?.Key) ? component.name : keyProvider.Key;
         }
 
         /// <summary>

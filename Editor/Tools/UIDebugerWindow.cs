@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using UnityEditor;
 using UnityEditor.UIElements;
@@ -107,7 +108,7 @@ namespace XFramework.Editor
             m_SearchField = new TextField("搜索");
             m_SearchField.style.flexGrow = 1f;
             m_SearchField.style.minWidth = 180f;
-            m_SearchField.tooltip = "按面板名、类型名或路径过滤";
+            m_SearchField.tooltip = "按面板名、类型名、路径或标签过滤";
             m_SearchField.RegisterValueChangedCallback(_ => RefreshView(true));
             toolbar.Add(m_SearchField);
 
@@ -479,6 +480,7 @@ namespace XFramework.Editor
             m_DetailPane.Add(CreatePanelAssetActionRow(item));
             m_DetailPane.Add(CreateInfoRow("Level", item.Level.ToString()));
             m_DetailPane.Add(CreateInfoRow("UI Type", item.IsUIToolkitPanel ? UIToolkitOption : UGUIOption));
+            m_DetailPane.Add(CreateInfoRow("Tags", FormatTags(item)));
 
             m_DetailPane.Add(CreateSectionTitle("运行时状态"));
             m_DetailPane.Add(CreateInfoRow("Cached", item.IsCached ? "Yes" : "No"));
@@ -632,7 +634,53 @@ namespace XFramework.Editor
             return item.PanelName.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0 ||
                    item.TypeName.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0 ||
                    item.FullTypeName.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                   item.Path.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0;
+                   item.Path.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   item.Tags.Any(tag => tag.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        private static string FormatTags(PanelDebugItem item)
+        {
+            if (item.Tags.Length == 0)
+            {
+                return "<none>";
+            }
+
+            var values = new List<string>(item.Tags.Length);
+            foreach (string tag in item.Tags)
+            {
+                if (TryGetRuntimeTagSnapshot(item, tag, out UIPanelTagDebugSnapshot runtimeTag))
+                {
+                    string state = runtimeTag.IsActive ? "Active" : "Inactive";
+                    values.Add($"{tag} ({state}, {runtimeTag.ActivePanelCount})");
+                    continue;
+                }
+
+                values.Add(tag);
+            }
+
+            return string.Join(", ", values);
+        }
+
+        private static bool TryGetRuntimeTagSnapshot(
+            PanelDebugItem item,
+            string tag,
+            out UIPanelTagDebugSnapshot result)
+        {
+            IReadOnlyList<UIPanelTagDebugSnapshot> runtimeTags = item.RuntimeSnapshot?.Tags;
+            if (runtimeTags != null)
+            {
+                foreach (UIPanelTagDebugSnapshot runtimeTag in runtimeTags)
+                {
+                    if (runtimeTag.Tag == tag)
+                    {
+                        result = runtimeTag;
+                        return true;
+                    }
+                }
+            }
+
+            result = default;
+            return false;
         }
 
         private static bool IsStatusMatch(PanelDebugItem item, string statusFilter)
@@ -881,6 +929,7 @@ namespace XFramework.Editor
             public int Level;
             public Type PanelType;
             public bool IsUIToolkitPanel;
+            public string[] Tags;
             public UIPanelDebugSnapshot? RuntimeSnapshot;
 
             public bool IsCached => RuntimeSnapshot?.IsCached ?? false;
@@ -892,6 +941,7 @@ namespace XFramework.Editor
 
             public static PanelDebugItem Create(Type type, PanelInfoAttribute panelInfo)
             {
+                PanelTagAttribute panelTag = type.GetCustomAttribute<PanelTagAttribute>();
                 return new PanelDebugItem
                 {
                     PanelName = panelInfo.name,
@@ -900,7 +950,11 @@ namespace XFramework.Editor
                     Path = panelInfo.path ?? string.Empty,
                     Level = panelInfo.level,
                     PanelType = type,
-                    IsUIToolkitPanel = typeof(UIToolkitPanelBase).IsAssignableFrom(type)
+                    IsUIToolkitPanel = typeof(UIToolkitPanelBase).IsAssignableFrom(type),
+                    Tags = panelTag?.Tags?
+                        .Where(tag => !string.IsNullOrWhiteSpace(tag))
+                        .Distinct(StringComparer.Ordinal)
+                        .ToArray() ?? Array.Empty<string>()
                 };
             }
         }

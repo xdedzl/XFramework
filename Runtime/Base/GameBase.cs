@@ -10,7 +10,7 @@ namespace XFramework
     /// 这个类挂在初始场景中,是整个游戏的入口
     /// </summary>
     [DisallowMultipleComponent]
-    [DefaultExecutionOrder(-1)]
+    [DefaultExecutionOrder(XFrameworkConst.GameExecutionOrder)]
     public class GameBase : MonoBehaviour
     {
         // 初始流程

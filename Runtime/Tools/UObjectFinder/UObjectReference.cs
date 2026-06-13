@@ -6,6 +6,7 @@ namespace XFramework
     /// 挂载到GameObject上，注册到UObjectFinder中，方便快速查找
     /// 不填key时，通过name查找；填key时，通过key查找
     /// </summary>
+    [DefaultExecutionOrder(XFrameworkConst.UObjectReferenceExecutionOrder)]
     public class UObjectReference : MonoBehaviour
     {
         public enum RegistrationMode

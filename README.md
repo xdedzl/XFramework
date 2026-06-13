@@ -100,7 +100,7 @@ flowchart TB
 | **驱动核心**       | [Runtime/Base/Procedure/](./Runtime/Base/Procedure/)     | [流程管理 (`ProcedureManager`)](#2-核心驱动游戏流程-core-driver-proceduremanager) |
 | **资源系统**       | [Runtime/Modules/Resource/](./Runtime/Modules/Resource/) | [资源加载 (`ResourceManager`)](#31-资源管理-resourcemanager)                      |
 | **实体系统**       | [Runtime/Modules/Entity/](./Runtime/Modules/Entity/)     | [对象池与实体 (`EntityManager`)](#32-实体与对象池-entitymanager)                  |
-| **UI 系统**        | [Runtime/Modules/UI/](./Runtime/Modules/UI/)             | [自动化界面 (`UIManager`)](#33-ui-界面系统-uimanager)                             |
+| **UI 系统**        | [Runtime/Modules/UI/](./Runtime/Modules/UI/)             | [UI 系统 (`UIManager`)](#33-ui-界面系统-uimanager) / [详细说明与规范](./Doc/UI.md) |
 | **通信系统**       | [Core/Messenger/](./Core/Messenger/)                     | [消息系统 (`MessageManager`)](#34-消息广播系统-messagemanager)                    |
 | **任务系统**       | [Runtime/Modules/Task/](./Runtime/Modules/Task/)         | [异步任务 (`XTask`)](#35-异步与并发处理-xtask)                                    |
 | **持久化**         | [Runtime/Modules/Save/](./Runtime/Modules/Save/)         | [存档系统 (`SaveManager`)](#41-存档持久化-savemanager)                            |
@@ -282,60 +282,11 @@ ResourceManager.Instance.Release(bullet);
   UIManager.Instance.OpenPanel("InventoryPanel", initData);
   UIManager.Instance.ClosePanel("InventoryPanel");
   ```
-#### 3.3.1 UI 面板编写示例 (Usage Example)
-继承 `PanelBase` 即可快速创建一个由框架管理的界面：
-
-```csharp
-using XFramework.UI;
-using XFramework.Event;
-using UnityEngine.UI;
-
-// 1. 定义面板元数据：名称、资源路径、层级
-[PanelInfo("HomePanel", "Assets/Art/UI/HomePanel.prefab", PanelLevel.Medium)]
-public class HomePanel : PanelBase
-{
-    private Button m_StartBtn;
-    private Text m_TitleText;
-
-    // 2. 初始化：只会在面板首次加载时调用一次
-    protected override void OnInit()
-    {
-        // 使用索引器快速查找组件（内部会自动缓存，比 transform.Find 高效且安全）
-        m_StartBtn = this["Start_Btn"].As<Button>(); 
-        m_TitleText = this["Title_Txt"].As<Text>();
-
-        // 绑定按钮点击
-        m_StartBtn.onClick.AddListener(() => {
-            UIManager.Instance.OpenPanel("InventoryPanel");
-        });
-    }
-
-    // 3. 打开界面：每次调用 OpenPanel 时触发，args 为传入参数
-    public override void OnOpen(params object[] args)
-    {
-        base.OnOpen(args); // 必须调用，会自动注册 [EventListener]
-        
-        string userName = args.Length > 0 ? (string)args[0] : "Player";
-        m_TitleText.text = $"Welcome, {userName}!";
-    }
-
-    // 4. 事件监听：自动注册/卸载，无需手动管理
-    [EventListener("OnGoldChange")]
-    private void UpdateGold(int amount)
-    {
-        // 处理金币变更显示...
-    }
-
-    public override void OnClose()
-    {
-        // 自动卸载 [EventListener]，此处可处理其他自定义清理
-        base.OnClose();
-    }
-}
-```
-
-> [!TIP]
-> **关于组件查找**：`this["Name"]` 依赖于 Prefab 中挂载了 `GUComponent` 的节点。这种方式解耦了层级路径，即使策划修改了 UI 节点的父子关系，只要名称不变，代码依然有效。
+- **核心约定**：
+  - 面板继承 `PanelBase`，并使用 `[PanelInfo]` 声明面板名、Prefab 路径和层级。
+  - 通过 `UIManager.Instance.OpenPanel(...)` / `ClosePanel(...)` 控制界面显隐。
+  - 面板内通过 `Find<T>("NodeName")` 或 `this["NodeName"]` 查找挂有 `XUIBase` 派生组件的节点。
+  - 具体系统说明、面板写法、节点绑定、Prefab 结构和直接生成要求见 [UI 系统详细说明](./Doc/UI.md)。
 
 ### 3.4 消息广播系统 (MessageManager)
 基于字符串事件名的全局消息中心，实现模块间的极致解耦。框架极度推崇使用 **"自动化特性绑定"** 以替代繁琐的手动注册。
@@ -639,7 +590,7 @@ public sealed class ExampleNode
 
 当前已接入 `XInspectorElement` 桥接的 Attribute 包括：
 - Unity 原生 `[TextArea]`：`string` 字段/集合元素多行文本。
-- `[AssetPath(typeof(TAsset))]`：资源路径字符串用 `ObjectField` 编辑；纹理资源支持双击标签展开预览。
+- `[AssetPath(typeof(TAsset))]`：资源路径字符串用 `ObjectField` 编辑；当前资源为 `Texture`、`Texture2D` 或 `Sprite` 时显示折叠箭头，并默认展开字段下方的图片预览。
 - `[DataTableRef(typeof(TableType))]`：数据表引用显示、定位、双击打开和选择窗口。
 
 ```csharp
