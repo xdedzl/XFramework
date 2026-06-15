@@ -29,8 +29,10 @@ namespace XFramework.UI
         }
 
         public virtual void Reg() { }
-        public virtual void OnOpen() { }
-        public virtual void OnClose() { }
+        public virtual void OnBeforeOpen() { }
+        public virtual void OnOpened() { }
+        public virtual void OnBeforeClose() { }
+        public virtual void OnClosed() { }
 
         public T FindNode<T>(string path) where T : UINodeBase, new()
         {

@@ -7,7 +7,9 @@
 - 面板脚本继承 `PanelBase`，并使用 `[PanelInfo]` 声明面板名、Prefab 路径和层级。
 - 面板脚本中不要用 `[SerializeField]` 暴露 `Text`、`Button`、`Image` 等节点引用给 Inspector 手动拖拽。
 - 需要被代码访问的 UI 节点必须挂载 XFramework 封装组件，例如 `XText`、`XTMPText`、`XButton`、`XImage`、`XLayoutGroup`、`XTMPInputField`。
-- 在 `OnInit()` 中通过 `this["NodeName"] as XButton` 或 `Find<XButton>("NodeName")` 查找并缓存节点。
+- 推荐使用 `[UIRef]` 自动填充面板字段；也可以在 `OnInit()` 中通过 `this["NodeName"] as XButton` 或 `Find<XButton>("NodeName")` 手动查找并缓存节点。
+- `[UIRef]` 只表示 UI 节点引用填充，不做数据绑定，也不负责文本刷新、按钮命令或 ViewState 同步。
+- 业务代码推荐使用 `UIManager.Instance.OpenPanel<TPanel>()` 或 `UIManager.Instance.OpenPanel<TPanel>(request)` 打开面板；动态面板名可使用 `UIManager.Instance.OpenPanel(uiName)` 或 `UIManager.Instance.OpenPanel(uiName, in request)`。
 - 查找 key 默认使用 GameObject 名称；如需稳定别名，可在 `XUIBase` 的 `searchKey` 中填写自定义 key。
 - 节点命名要稳定、语义清楚，避免依赖层级路径。调整父子层级时，只要节点名或 `searchKey` 不变，脚本不需要修改。
 - 使用框架组件提供的方法注册事件，例如 `XButton.AddListener`、`XTMPInputField.AddOnValueChanged`。
@@ -20,26 +22,55 @@
 using UnityEngine;
 using XFramework.UI;
 
-[PanelInfo("Letter", "Assets/ABRes/Panels/LetterPanel.prefab", 20)]
-public class LetterPanel : PanelBase
+public readonly struct LetterPanelRequest : IPanelOpenRequest
 {
-    private XText m_TitleText;
-    private XText m_ContentText;
-    private XButton m_CloseButton;
+    public LetterPanelRequest(string title)
+    {
+        Title = title;
+    }
+
+    public string Title { get; }
+}
+
+[PanelInfo("Letter", "Assets/ABRes/Panels/LetterPanel.prefab", 20)]
+public class LetterPanel : PanelBase<LetterPanelRequest>
+{
+    [UIRef] private XText m_TitleText;
+    [UIRef] private XText m_ContentText;
+    [UIRef] private XButton m_CloseButton;
 
     protected override void OnInit()
     {
-        m_TitleText = Find<XText>("TitleText");
-        m_ContentText = Find<XText>("ContentText");
-        m_CloseButton = Find<XButton>("CloseButton");
         m_CloseButton.AddListener(Close);
     }
 
-    public override void OnOpen(params object[] args)
+    protected override void OnBeforeOpen(in LetterPanelRequest request)
     {
-
+        m_TitleText.text.text = request.Title;
     }
 }
+```
+
+`PanelBase<TRequest>` 会在内部完成原有事件自动注册流程，并校验参数类型；派生类只需要重写 `protected override void OnBeforeOpen(in TRequest request)`，不需要调用 `base.OnBeforeOpen()`。request 类型推荐使用 `readonly struct + 构造函数 + get-only 属性`，并实现 `IPanelOpenRequest` 标记接口：
+
+```csharp
+UIManager.Instance.OpenPanel<LetterPanel>(new LetterPanelRequest("新的信件"));
+UIManager.Instance.OpenPanel<InventoryPanel>();
+```
+
+字符串 API 不再接收 `params object[]`。`UIManager.Instance.OpenPanel("MainGameUI")` 适合 `ProcedureUIProcessor` 这类来自配置表或属性声明的无参打开路径；如果动态面板名也需要传参，应先构造具体 request，再调用：
+
+```csharp
+var request = new LetterPanelRequest("新的信件");
+UIManager.Instance.OpenPanel("Letter", in request);
+```
+
+已知 Panel 类型时可以继续使用 `OpenPanel<TPanel>(request)`，写法更短；由于该重载的参数类型是 `IPanelOpenRequest`，struct request 会发生一次 interface boxing。动态 `uiName + in request` 路径直接按 `PanelBase<TRequest>` 分发，不创建 `object[]`。
+
+`[UIRef]` 未填写 key 时会从字段名推导：`m_CloseButton` 对应 `CloseButton`，`_titleText` 对应 `TitleText`。字段名无法对应 UI key 时，可以显式填写：
+
+```csharp
+[UIRef("TitleText")] private XText m_Title;
 ```
 
 不推荐写法：
@@ -59,9 +90,10 @@ public class BadPanel : PanelBase
 ## 3. 生命周期约定
 
 - `OnInit()` 只在面板首次加载时调用一次，适合查找组件、绑定按钮事件、初始化绑定关系。
-- `OnOpen(params object[] args)` 每次打开面板都会调用，适合接收参数、刷新显示、注册业务状态。
-- `OnClose()` 适合解绑当前面板打开期间注册的外部事件；重写时要调用 `base.OnClose()`，以保证 `[EventListener]` 自动注销。
-- `OnAfterClose()` 适合关闭动画之后或面板真正关闭后的业务回调，例如恢复输入锁、发送已读通知。
+- `OnBeforeOpen()` 或 `OnBeforeOpen(in TRequest request)` 每次打开面板时、`OnOpened()` 之前调用，适合刷新显示、注册业务状态；有参数面板必须使用 request，不再使用 `object[]` 参数顺序。
+- `OnOpened()` 在面板和子面板的打开前逻辑完成后调用，适合依赖完整打开状态的后置处理。
+- `OnBeforeClose()` 适合解绑当前面板打开期间注册的外部事件；重写时要调用 `base.OnBeforeClose()`，以保证 `[EventListener]` 自动注销。
+- `OnClosed()` 适合关闭动画之后或面板真正关闭后的业务回调，例如恢复输入锁、发送已读通知。
 - `OnUpdate()` 只写必要的轻量逻辑；不要在每帧做 UI 节点查找。
 
 ## 4. 面板标签

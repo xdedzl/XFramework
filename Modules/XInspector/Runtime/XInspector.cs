@@ -114,16 +114,24 @@ namespace XFramework.UI
 
         public void ExpandFirstLevelElements()
         {
-            var rootElement = Children().OfType<ExpandableElement>().FirstOrDefault();
+            var rootElement = Children().OfType<IExpandableElement>().FirstOrDefault();
             if (rootElement == null)
             {
                 return;
             }
 
-            rootElement.Expand();
-            foreach (var child in rootElement.GetChildElements().OfType<ExpandableElement>())
+            ExpandElementTree(rootElement);
+        }
+
+        private static void ExpandElementTree(IExpandableElement element)
+        {
+            element.Expand();
+            foreach (VisualElement child in element.GetChildElements())
             {
-                child.Expand();
+                if (child is IExpandableElement childExpandable)
+                {
+                    ExpandElementTree(childExpandable);
+                }
             }
         }
 
@@ -161,6 +169,7 @@ namespace XFramework.UI
             XInspectorElement element = Activator.CreateInstance(elementType, args) as XInspectorElement;
             element.XInspector = this;
             element.Depth = depth;
+            ApplyDefaultLayout(element);
             return element;
         }
 
@@ -169,6 +178,7 @@ namespace XFramework.UI
             XInspectorElement element = Activator.CreateInstance(typeof(ArrayElement), itemPropertyAttribute) as XInspectorElement;
             element.XInspector = this;
             element.Depth = depth;
+            ApplyDefaultLayout(element);
             return element;
         }
 
@@ -274,6 +284,45 @@ namespace XFramework.UI
             }
 #endif
             return null;
+        }
+
+        private static void ApplyDefaultLayout(VisualElement root)
+        {
+            if (root == null)
+            {
+                return;
+            }
+
+            ApplyDefaultLayoutToElement(root);
+            foreach (VisualElement element in root.Query<VisualElement>().ToList())
+            {
+                ApplyDefaultLayoutToElement(element);
+            }
+        }
+
+        private static void ApplyDefaultLayoutToElement(VisualElement element)
+        {
+            if (element.ClassListContains("inspector-element"))
+            {
+                element.style.width = Length.Percent(100);
+                element.style.alignSelf = Align.Stretch;
+            }
+
+            if (element.ClassListContains("inspector-label"))
+            {
+                element.style.width = Length.Percent(40);
+                element.style.minWidth = 120f;
+                element.style.flexShrink = 0f;
+                element.style.whiteSpace = WhiteSpace.NoWrap;
+                element.style.paddingLeft = 5f;
+            }
+
+            if (element.ClassListContains("inspector-input"))
+            {
+                element.style.width = Length.Percent(60);
+                element.style.minWidth = 160f;
+                element.style.flexGrow = 1f;
+            }
         }
     }
 }

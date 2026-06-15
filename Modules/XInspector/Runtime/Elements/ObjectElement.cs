@@ -1,70 +1,285 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Linq;
+using System.Reflection;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace XFramework.UI
 {
-    public class ObjectElement : ExpandableElement
+    public class ObjectElement : XInspectorElement, IExpandableElement
     {
-        protected override void CreateElements()
+        private const float HeaderHeight = 26f;
+        private const float BorderWidth = 1f;
+        private const float BodyPadding = 4f;
+        private const float ChildSpacing = 2f;
+        private const float GroupHeaderHeight = 24f;
+        private const float GroupBodyPadding = 4f;
+
+        private readonly VisualElement header;
+        private readonly VisualElement elementsContent;
+        private readonly Label foldoutLabel;
+        private bool arrowActive = true;
+
+        public ObjectElement()
         {
-            base.CreateElements();
+            Remove(variableNameText);
+            variableNameText.RemoveFromClassList("inspector-label");
+            variableNameText.style.flexGrow = 1;
+            variableNameText.style.height = HeaderHeight - 2;
+            variableNameText.style.minHeight = HeaderHeight - 2;
+            variableNameText.style.marginTop = 1;
+            variableNameText.style.unityTextAlign = TextAnchor.MiddleLeft;
+            variableNameText.style.unityFontStyleAndWeight = FontStyle.Bold;
+            variableNameText.style.fontSize = 12;
+            variableNameText.style.color = new Color(0.72f, 0.72f, 0.72f, 1f);
 
-            // 共有变量且未添加HideInInspector特性
-            foreach (MemberInfo member in GetMembers(BoundVariableType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.GetField | BindingFlags.GetProperty))
+            foldoutLabel = new Label
             {
-                if (member.MemberType == MemberTypes.Field || member.MemberType == MemberTypes.Property)
+                style =
                 {
-                    if (IsHiddenInInspector(member))
-                        continue;
-
-                    var nameAttribute = member.GetCustomAttribute<ElementPropertyAttribute>();
-                    string propertyName = nameAttribute != null && !string.IsNullOrEmpty(nameAttribute.propertyName) ? nameAttribute.propertyName : member.Name;
-                    var element = CreateItemForMember(member, Depth + 1);
-                    element.BindTo(this, member, propertyName);
-                    element.Refresh();
-                    elementsContent.Add(element);
+                    width = 18,
+                    minWidth = 18,
+                    height = HeaderHeight,
+                    unityTextAlign = TextAnchor.MiddleCenter,
+                    fontSize = 17,
+                    color = new Color(0.62f, 0.62f, 0.62f, 1f)
                 }
+            };
+
+            header = new VisualElement
+            {
+                style =
+                {
+                    height = HeaderHeight,
+                    minHeight = HeaderHeight,
+                    maxHeight = HeaderHeight,
+                    flexDirection = FlexDirection.Row,
+                    alignItems = Align.Center,
+                    backgroundColor = new Color(0.20f, 0.20f, 0.20f, 1f)
+                },
+                focusable = true,
+                tabIndex = 0
+            };
+            header.RegisterCallback<PointerDownEvent>(OnHeaderPointerDown);
+            header.Add(foldoutLabel);
+            header.Add(variableNameText);
+
+            elementsContent = new VisualElement
+            {
+                style =
+                {
+                    flexDirection = FlexDirection.Column,
+                    paddingLeft = BodyPadding,
+                    paddingRight = BodyPadding,
+                    paddingTop = BodyPadding,
+                    paddingBottom = BodyPadding
+                }
+            };
+            elementsContent.RegisterCallback<AttachToPanelEvent>(_ => UpdateHeaderState());
+            elementsContent.RegisterCallback<DetachFromPanelEvent>(_ => UpdateHeaderState());
+
+            style.flexDirection = FlexDirection.Column;
+            style.borderLeftWidth = BorderWidth;
+            style.borderRightWidth = BorderWidth;
+            style.borderTopWidth = BorderWidth;
+            style.borderBottomWidth = BorderWidth;
+            style.borderLeftColor = GetDarkLineColor();
+            style.borderRightColor = GetDarkLineColor();
+            style.borderTopColor = GetDarkLineColor();
+            style.borderBottomColor = GetDarkLineColor();
+            style.marginTop = -BorderWidth;
+
+            Add(header);
+        }
+
+        public void Expand()
+        {
+            if (elementsContent.parent != this)
+            {
+                Add(elementsContent);
             }
 
-            // 非公有变量添加ItemProperty特性
-            foreach (MemberInfo member in GetMembers(BoundVariableType, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.GetField | BindingFlags.GetProperty))
+            UpdateHeaderState();
+        }
+
+        public void Collapse()
+        {
+            if (elementsContent.parent == this)
             {
-                if (member.MemberType == MemberTypes.Field || member.MemberType == MemberTypes.Property)
+                Remove(elementsContent);
+            }
+
+            UpdateHeaderState();
+        }
+
+        public void SetArrowActive(bool value)
+        {
+            arrowActive = value;
+            if (!value)
+            {
+                if (header.parent == this)
                 {
-                    if (IsHiddenInInspector(member))
-                        continue;
+                    Remove(header);
+                }
 
-                    var nameAttribute = member.GetCustomAttribute<ElementPropertyAttribute>();
+                Expand();
+                return;
+            }
 
-                    if (nameAttribute != null)
+            if (header.parent != this)
+            {
+                Insert(0, header);
+            }
+
+            UpdateHeaderState();
+        }
+
+        public IEnumerable<VisualElement> GetChildElements()
+        {
+            return elementsContent.Children();
+        }
+
+        public override void Refresh()
+        {
+            ClearElements();
+            CreateElements();
+            UpdateHeaderState();
+        }
+
+        protected override void OnDepthChange(int depth)
+        {
+            style.marginLeft = XInspector.TabSize * Math.Max(depth, 0);
+            variableNameText.style.translate = Vector2.zero;
+        }
+
+        private void CreateElements()
+        {
+            List<MemberEntry> members = new();
+            CollectMembers(members, BindingFlags.Instance | BindingFlags.Public | BindingFlags.GetField | BindingFlags.GetProperty, false);
+            CollectMembers(members, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.GetField | BindingFlags.GetProperty, true);
+
+            Dictionary<string, PrettyGroupElement> groups = new();
+            for (int i = 0; i < members.Count; i++)
+            {
+                MemberEntry entry = members[i];
+                XInspectorElement element = CreateElementForEntry(entry);
+                if (element == null)
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(entry.GroupTitle))
+                {
+                    if (!groups.TryGetValue(entry.GroupTitle, out PrettyGroupElement groupElement))
                     {
-                        string propertyName = !string.IsNullOrEmpty(nameAttribute.propertyName) ? nameAttribute.propertyName : member.Name;
-                        var element = CreateItemForMember(member, Depth + 1);
-                        element.BindTo(this, member, propertyName);
-                        element.Refresh();
-                        elementsContent.Add(element);
+                        groupElement = new PrettyGroupElement(entry.GroupTitle);
+                        groups[entry.GroupTitle] = groupElement;
+                        elementsContent.Add(groupElement);
                     }
+
+                    groupElement.AddChild(element);
+                    continue;
                 }
+
+                element.style.marginBottom = ChildSpacing;
+                elementsContent.Add(element);
             }
+        }
+
+        private void ClearElements()
+        {
+            elementsContent.Clear();
+        }
+
+        private void CollectMembers(List<MemberEntry> entries, BindingFlags bindingFlags, bool onlyElementProperty)
+        {
+            foreach (MemberInfo member in GetMembers(BoundVariableType, bindingFlags))
+            {
+                if (member.MemberType != MemberTypes.Field && member.MemberType != MemberTypes.Property)
+                {
+                    continue;
+                }
+
+                if (IsHiddenInInspector(member))
+                {
+                    continue;
+                }
+
+                ElementPropertyAttribute nameAttribute = member.GetCustomAttribute<ElementPropertyAttribute>();
+                if (onlyElementProperty && nameAttribute == null)
+                {
+                    continue;
+                }
+
+                string propertyName = nameAttribute != null && !string.IsNullOrEmpty(nameAttribute.propertyName)
+                    ? nameAttribute.propertyName
+                    : member.Name;
+                PrettyGroupAttribute groupAttribute = member.GetCustomAttribute<PrettyGroupAttribute>(true);
+                entries.Add(new MemberEntry(member, propertyName, groupAttribute?.Title));
+            }
+        }
+
+        private XInspectorElement CreateElementForEntry(MemberEntry entry)
+        {
+            XInspectorElement element = CreateItemForMember(entry.Member, Depth + 1);
+            if (element == null)
+            {
+                return null;
+            }
+
+            element.BindTo(this, entry.Member, entry.PropertyName);
+            element.Refresh();
+            return element;
+        }
+
+        private void OnHeaderPointerDown(PointerDownEvent evt)
+        {
+            if (!arrowActive || evt.button != 0)
+            {
+                return;
+            }
+
+            ToggleExpanded();
+            evt.StopPropagation();
+        }
+
+        private void ToggleExpanded()
+        {
+            if (elementsContent.parent == this)
+            {
+                Collapse();
+            }
+            else
+            {
+                Expand();
+            }
+        }
+
+        private void UpdateHeaderState()
+        {
+            bool isExpanded = elementsContent.parent == this;
+            foldoutLabel.text = isExpanded ? "▾" : "▸";
+            header.style.borderBottomWidth = isExpanded ? BorderWidth : 0f;
+            header.style.borderBottomColor = GetDarkLineColor();
+        }
+
+        private static Color GetDarkLineColor()
+        {
+            return new Color(0.07f, 0.07f, 0.07f, 1f);
         }
 
         /// <summary>
         /// 通过成员变量信息获取UIItem
         /// </summary>
-        /// <param name="member"></param>
-        /// <param name="parentElement"></param>
-        /// <returns></returns>
         private XInspectorElement CreateItemForMember(MemberInfo member, int depth)
         {
             if (IsHiddenInInspector(member))
             {
                 return null;
             }
-            
-            Type variableType = member is FieldInfo ? ((FieldInfo)member).FieldType : ((PropertyInfo)member).PropertyType;
+
+            Type variableType = member is FieldInfo fieldInfo ? fieldInfo.FieldType : ((PropertyInfo)member).PropertyType;
             PropertyAttribute propertyAttribute = XInspector.GetPropertyAttribute(member);
             if (propertyAttribute != null && IsArrayPropertyTarget(variableType))
             {
@@ -109,8 +324,6 @@ namespace XFramework.UI
         /// <summary>
         /// 对获得FieldInfos排序
         /// </summary>
-        /// <param name="type"></param>
-        /// <returns></returns>
         private List<MemberInfo> GetMembers(Type type, BindingFlags bindingFlags)
         {
             List<MemberInfo> result = new List<MemberInfo>();
@@ -142,6 +355,164 @@ namespace XFramework.UI
             }
 
             return aa;
+        }
+
+        private readonly struct MemberEntry
+        {
+            public readonly MemberInfo Member;
+            public readonly string PropertyName;
+            public readonly string GroupTitle;
+
+            public MemberEntry(MemberInfo member, string propertyName, string groupTitle)
+            {
+                Member = member;
+                PropertyName = propertyName;
+                GroupTitle = groupTitle;
+            }
+        }
+
+        private sealed class PrettyGroupElement : VisualElement, IExpandableElement
+        {
+            private readonly string title;
+            private readonly VisualElement header;
+            private readonly VisualElement content;
+            private readonly Label foldoutLabel;
+
+            public PrettyGroupElement(string title)
+            {
+                this.title = title;
+                style.flexDirection = FlexDirection.Column;
+                style.borderLeftWidth = BorderWidth;
+                style.borderRightWidth = BorderWidth;
+                style.borderTopWidth = BorderWidth;
+                style.borderBottomWidth = BorderWidth;
+                style.borderLeftColor = GetDarkLineColor();
+                style.borderRightColor = GetDarkLineColor();
+                style.borderTopColor = GetDarkLineColor();
+                style.borderBottomColor = GetDarkLineColor();
+                style.marginTop = -BorderWidth;
+                style.marginBottom = 2f;
+
+                foldoutLabel = new Label("▾")
+                {
+                    style =
+                    {
+                        width = 18,
+                        minWidth = 18,
+                        height = GroupHeaderHeight,
+                        unityTextAlign = TextAnchor.MiddleCenter,
+                        fontSize = 17,
+                        color = new Color(0.62f, 0.62f, 0.62f, 1f)
+                    }
+                };
+
+                Label titleLabel = new Label(title)
+                {
+                    style =
+                    {
+                        flexGrow = 1,
+                        height = GroupHeaderHeight - 2,
+                        minHeight = GroupHeaderHeight - 2,
+                        marginTop = 1,
+                        unityTextAlign = TextAnchor.MiddleLeft,
+                        unityFontStyleAndWeight = FontStyle.Bold,
+                        fontSize = 12,
+                        color = new Color(0.72f, 0.72f, 0.72f, 1f)
+                    }
+                };
+
+                header = new VisualElement
+                {
+                    style =
+                    {
+                        height = GroupHeaderHeight,
+                        minHeight = GroupHeaderHeight,
+                        maxHeight = GroupHeaderHeight,
+                        flexDirection = FlexDirection.Row,
+                        alignItems = Align.Center,
+                        backgroundColor = new Color(0.20f, 0.20f, 0.20f, 1f),
+                        borderBottomWidth = BorderWidth,
+                        borderBottomColor = GetDarkLineColor()
+                    }
+                };
+                header.RegisterCallback<PointerDownEvent>(OnHeaderPointerDown);
+                header.Add(foldoutLabel);
+                header.Add(titleLabel);
+
+                content = new VisualElement
+                {
+                    style =
+                    {
+                        flexDirection = FlexDirection.Column,
+                        paddingLeft = GroupBodyPadding,
+                        paddingRight = GroupBodyPadding,
+                        paddingTop = GroupBodyPadding,
+                        paddingBottom = GroupBodyPadding
+                    }
+                };
+
+                Add(header);
+                Add(content);
+            }
+
+            public void AddChild(XInspectorElement element)
+            {
+                element.style.marginBottom = ChildSpacing;
+                content.Add(element);
+            }
+
+            public void Expand()
+            {
+                if (content.parent != this)
+                {
+                    Add(content);
+                }
+
+                UpdateHeaderState();
+            }
+
+            public void Collapse()
+            {
+                if (content.parent == this)
+                {
+                    Remove(content);
+                }
+
+                UpdateHeaderState();
+            }
+
+            public IEnumerable<VisualElement> GetChildElements()
+            {
+                return content.Children();
+            }
+
+            private void OnHeaderPointerDown(PointerDownEvent evt)
+            {
+                if (evt.button != 0)
+                {
+                    return;
+                }
+
+                if (content.parent == this)
+                {
+                    Collapse();
+                }
+                else
+                {
+                    Expand();
+                }
+
+                evt.StopPropagation();
+            }
+
+            private void UpdateHeaderState()
+            {
+                bool isExpanded = content.parent == this;
+                foldoutLabel.text = isExpanded ? "▾" : "▸";
+                header.style.borderBottomWidth = isExpanded ? BorderWidth : 0f;
+                header.style.borderBottomColor = GetDarkLineColor();
+                tooltip = title;
+            }
         }
     }
 }

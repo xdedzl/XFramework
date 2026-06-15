@@ -6,6 +6,35 @@ using System.Reflection;
 
 namespace XFramework.UI
 {
+    public interface IPanelOpenRequest
+    {
+    }
+
+    public interface PanelBaseWithRequest
+    {
+        Type RequestType { get; }
+        void OpenRequestObject(object request);
+    }
+
+    /// <summary>
+    /// Marks a PanelBase field to be filled from the panel's XUIBase lookup table.
+    /// This is a UI object reference helper, not a data binding attribute.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Field, Inherited = true, AllowMultiple = false)]
+    public sealed class UIRefAttribute : Attribute
+    {
+        public UIRefAttribute()
+        {
+        }
+
+        public UIRefAttribute(string key)
+        {
+            Key = key;
+        }
+
+        public string Key { get; }
+    }
+
     /// <summary>
     /// 面板基类
     /// </summary>
@@ -59,7 +88,105 @@ namespace XFramework.UI
             Vector3 rectSize = rect.localScale;
             rect.localScale = rectSize;
 
+            InjectUIRefs();
             OnInit();
+        }
+
+        private void InjectUIRefs()
+        {
+            Type panelType = GetType();
+            for (Type type = panelType; type != null && type != typeof(PanelBase); type = type.BaseType)
+            {
+                FieldInfo[] fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                foreach (FieldInfo field in fields)
+                {
+                    UIRefAttribute attribute = field.GetCustomAttribute<UIRefAttribute>();
+                    if (attribute == null)
+                    {
+                        continue;
+                    }
+
+                    InjectUIRefField(panelType, field, attribute);
+                }
+            }
+        }
+
+        private void InjectUIRefField(Type panelType, FieldInfo field, UIRefAttribute attribute)
+        {
+            if (field.IsStatic || field.IsInitOnly)
+            {
+                throw new XFrameworkException(
+                    $"[UIRef] {panelType.Name}.{field.Name} cannot be static or readonly.");
+            }
+
+            string key = GetUIRefKey(field, attribute);
+            XUIBase uiRef = GetUIRefComponent(panelType, field, key);
+            object value = GetUIRefValue(panelType, field, key, uiRef);
+            field.SetValue(this, value);
+        }
+
+        private XUIBase GetUIRefComponent(Type panelType, FieldInfo field, string key)
+        {
+            try
+            {
+                return m_ComponentFindHelper[key];
+            }
+            catch (Exception exception)
+            {
+                throw new XFrameworkException(
+                    $"[UIRef] Failed to find UI reference. Panel: {panelType.Name}, Field: {field.Name}, Key: {key}, Expected: {field.FieldType.Name}. {exception.Message}");
+            }
+        }
+
+        private static object GetUIRefValue(Type panelType, FieldInfo field, string key, XUIBase uiRef)
+        {
+            Type fieldType = field.FieldType;
+            if (fieldType.IsAssignableFrom(uiRef.GetType()))
+            {
+                return uiRef;
+            }
+
+            if (fieldType == typeof(GameObject))
+            {
+                return uiRef.gameObject;
+            }
+
+            if (typeof(Component).IsAssignableFrom(fieldType))
+            {
+                Component component = uiRef.GetComponent(fieldType);
+                if (component != null)
+                {
+                    return component;
+                }
+            }
+
+            throw new XFrameworkException(
+                $"[UIRef] UI reference type mismatch. Panel: {panelType.Name}, Field: {field.Name}, Key: {key}, Expected: {fieldType.Name}, Actual: {uiRef.GetType().Name}.");
+        }
+
+        private static string GetUIRefKey(FieldInfo field, UIRefAttribute attribute)
+        {
+            if (!string.IsNullOrWhiteSpace(attribute.Key))
+            {
+                return attribute.Key;
+            }
+
+            string key = field.Name;
+            if (key.StartsWith("m_", StringComparison.Ordinal))
+            {
+                key = key.Substring(2);
+            }
+            else if (key.StartsWith("_", StringComparison.Ordinal))
+            {
+                key = key.Substring(1);
+            }
+
+            if (string.IsNullOrEmpty(key))
+            {
+                throw new XFrameworkException($"[UIRef] Cannot infer UI reference key from field {field.Name}.");
+            }
+
+            return char.ToUpperInvariant(key[0]) + key.Substring(1);
         }
 
         /// <summary>
@@ -71,20 +198,38 @@ namespace XFramework.UI
         }
 
         /// <summary>
-        /// 界面显示
+        /// 界面打开前
         /// </summary>
-        public virtual void OnOpen(params object[] args)
+        public virtual void OnBeforeOpen()
         {
             _registerHelper?.Register();
         }
 
-        internal void OpenSubPanels()
+        internal void OnBeforeOpenSubPanels()
         {
             if (m_SubPanels != null)
             {
                 foreach (var item in m_SubPanels)
                 {
-                    item.OnOpen();
+                    item.OnBeforeOpen();
+                }
+            }
+        }
+
+        /// <summary>
+        /// 界面打开后
+        /// </summary>
+        public virtual void OnOpened()
+        {
+        }
+
+        internal void OnOpenedSubPanels()
+        {
+            if (m_SubPanels != null)
+            {
+                foreach (var item in m_SubPanels)
+                {
+                    item.OnOpened();
                 }
             }
         }
@@ -114,44 +259,55 @@ namespace XFramework.UI
         }
 
         /// <summary>
-        /// 退出界面，界面被关闭
+        /// 界面关闭前
         /// </summary>
-        public virtual void OnClose()
+        public virtual void OnBeforeClose()
         {
             _registerHelper?.UnRegister();
         }
 
-        public virtual void OnAfterClose()
+        public virtual void OnClosed()
         {
             
         }
 
-        internal void CloseSubPanels()
+        internal void OnBeforeCloseSubPanels()
         {
             if (m_SubPanels != null)
             {
                 foreach (var item in m_SubPanels)
                 {
-                    item.OnClose();
+                    item.OnBeforeClose();
+                }
+            }
+        }
+
+        internal void OnClosedSubPanels()
+        {
+            if (m_SubPanels != null)
+            {
+                foreach (var item in m_SubPanels)
+                {
+                    item.OnClosed();
                 }
             }
         }
 
 
-        public void Open(params object[] args)
+        public void Open()
         {
-            UIManager.Instance.OpenPanel(PanelName, args);
+            UIManager.Instance.OpenPanel(PanelName);
         }
 
-        public void Open(Action onClose, params object[] args)
+        public void Open(Action onClose)
         {
-            UIManager.Instance.OpenPanel(PanelName, onClose, args);
+            UIManager.Instance.OpenPanel(PanelName, onClose);
         }
 
         public void Close()
         {
             UIManager.Instance.ClosePanel(PanelName);
-        }
+        } 
         
         
         /// <summary>
@@ -190,6 +346,36 @@ namespace XFramework.UI
         {
             return FindNode<UINode>(path);
         }
+    }
+
+    public abstract class PanelBase<TRequest> : PanelBase, PanelBaseWithRequest where TRequest : struct
+    {
+        Type PanelBaseWithRequest.RequestType => typeof(TRequest);
+
+        public sealed override void OnBeforeOpen()
+        {
+            throw new XFrameworkException(
+                $"[UI] Invalid open request for {GetType().Name}. Expected: {typeof(TRequest).Name}.");
+        }
+
+        internal void OpenRequest(in TRequest request)
+        {
+            base.OnBeforeOpen();
+            OnBeforeOpen(in request);
+        }
+
+        void PanelBaseWithRequest.OpenRequestObject(object request)
+        {
+            if (request is not TRequest typedRequest)
+            {
+                throw new XFrameworkException(
+                    $"[UI] Invalid open request for {GetType().Name}. Expected: {typeof(TRequest).Name}.");
+            }
+
+            OpenRequest(in typedRequest);
+        }
+
+        protected abstract void OnBeforeOpen(in TRequest request);
     }
 
 }

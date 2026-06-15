@@ -1,38 +1,51 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace XFramework.UI
 {
     [SupportHelper(typeof(ArraySupport))]
-    public class ArrayElement : ExpandableElement
+    public class ArrayElement : XInspectorElement, IExpandableElement
     {
+        private const float HeaderHeight = 26f;
+        private const float RowMinHeight = 22f;
+        private const float HandleWidth = 16f;
+        private const float FieldLeftPadding = 0f;
+        private const float RemoveButtonWidth = 18f;
+        private const float AddButtonWidth = 22f;
+        private const float BorderWidth = 1f;
+
+        private static ClipboardData s_Clipboard;
+
         private Type elementType;
         private bool IsArray => BoundVariableType.IsArray;
-        
-        private readonly PropertyAttribute itemPropertyAttribute;
 
-        private readonly TextField sizeInput;
-        private readonly VisualElement listBox;
-        private readonly VisualElement listContainer;
-        private readonly VisualElement footerContainer;
-        private readonly VisualElement buttonBox;
-        private readonly Button addButton;
-        private readonly Button removeButton;
-        private VisualElement selectedRow;
+        private readonly PropertyAttribute itemPropertyAttribute;
+        private readonly VisualElement title;
+        private readonly VisualElement elementsContent;
+        private readonly Label foldoutLabel;
+        private readonly Label countLabel;
+        private readonly Label addLabel;
+        private readonly List<VisualElement> rowElements = new();
+        private readonly List<XInspectorElement> elementDrawers = new();
+        private VisualElement capturedDragHandle;
         private int selectedIndex = -1;
-        
+        private int dragSourceIndex = -1;
+        private int dropTargetIndex = -1;
+
         private int Length
         {
             get
             {
                 if (Value == null)
                     return 0;
-                else if (Value is Array array)
+                if (Value is Array array)
                     return array.Length;
-                else if (Value is IList list)
+                if (Value is IList list)
                     return list.Count;
 
                 throw new Exception("类型错误");
@@ -41,94 +54,108 @@ namespace XFramework.UI
 
         public ArrayElement()
         {
-            sizeInput = new TextField();
-            listBox = new VisualElement();
-            listContainer = new VisualElement();
-            footerContainer = new VisualElement();
-            buttonBox = new VisualElement();
-            addButton = new Button(OnAddButtonClick);
-            removeButton = new Button(OnRemoveButtonClick);
-
-            title.Add(sizeInput);
-
-            sizeInput.RegisterValueChangedCallback(OnSizeChange);
-
-            this.AddToClassList("array-element");
-            sizeInput.AddToClassList("inspector-input");
+            Remove(variableNameText);
+            variableNameText.RemoveFromClassList("inspector-label");
             variableNameText.style.flexGrow = 1;
-            sizeInput.style.width = 80;
-            sizeInput.style.flexShrink = 0;
-            sizeInput.style.marginLeft = 8;
+            variableNameText.style.height = HeaderHeight - 2;
+            variableNameText.style.minHeight = HeaderHeight - 2;
+            variableNameText.style.marginTop = 1;
+            variableNameText.style.marginRight = 4;
+            variableNameText.style.unityTextAlign = TextAnchor.MiddleLeft;
+            variableNameText.style.unityFontStyleAndWeight = FontStyle.Bold;
+            variableNameText.style.fontSize = 12;
+            variableNameText.style.color = new Color(0.72f, 0.72f, 0.72f, 1f);
 
-            title.RegisterCallback<MouseEnterEvent>(OnTitleMouseEnter);
-            title.RegisterCallback<MouseLeaveEvent>(OnTitleMouseLeave);
+            foldoutLabel = new Label
+            {
+                style =
+                {
+                    width = 18,
+                    minWidth = 18,
+                    height = HeaderHeight,
+                    minHeight = HeaderHeight,
+                    maxHeight = HeaderHeight,
+                    marginLeft = 0,
+                    marginRight = 0,
+                    paddingLeft = 0,
+                    paddingRight = 0,
+                    unityTextAlign = TextAnchor.MiddleCenter,
+                    fontSize = 17,
+                    color = new Color(0.62f, 0.62f, 0.62f, 1f)
+                }
+            };
+            foldoutLabel.RegisterCallback<PointerDownEvent>(OnTogglePointerDown);
 
-            elementsContent = new VisualElement();
-            elementsContent.style.flexDirection = FlexDirection.Column;
-            elementsContent.style.marginTop = 4;
+            countLabel = new Label
+            {
+                style =
+                {
+                    width = 68,
+                    unityTextAlign = TextAnchor.MiddleRight,
+                    color = new Color(0.48f, 0.48f, 0.48f, 1f)
+                }
+            };
+            countLabel.RegisterCallback<PointerDownEvent>(OnTogglePointerDown);
 
-            listBox.style.paddingTop = 4;
-            listBox.style.paddingRight = 6;
-            listBox.style.paddingBottom = 4;
-            listBox.style.paddingLeft = 6;
-            listBox.style.borderTopWidth = 1;
-            listBox.style.borderRightWidth = 1;
-            listBox.style.borderBottomWidth = 1;
-            listBox.style.borderLeftWidth = 1;
-            listBox.style.borderTopColor = new StyleColor(new UnityEngine.Color(0.24f, 0.24f, 0.24f));
-            listBox.style.borderRightColor = new StyleColor(new UnityEngine.Color(0.24f, 0.24f, 0.24f));
-            listBox.style.borderBottomColor = new StyleColor(new UnityEngine.Color(0.24f, 0.24f, 0.24f));
-            listBox.style.borderLeftColor = new StyleColor(new UnityEngine.Color(0.24f, 0.24f, 0.24f));
-            listBox.style.borderTopLeftRadius = 4;
-            listBox.style.borderTopRightRadius = 4;
-            listBox.style.borderBottomLeftRadius = 4;
-            listBox.style.borderBottomRightRadius = 4;
-            listBox.style.backgroundColor = new StyleColor(new UnityEngine.Color(0.20f, 0.20f, 0.20f));
+            addLabel = new Label("+")
+            {
+                style =
+                {
+                    width = AddButtonWidth,
+                    height = HeaderHeight,
+                    unityTextAlign = TextAnchor.MiddleCenter,
+                    fontSize = 18,
+                    color = new Color(0.62f, 0.62f, 0.62f, 1f),
+                    borderLeftWidth = BorderWidth,
+                    borderLeftColor = GetDarkLineColor()
+                }
+            };
+            addLabel.RegisterCallback<PointerDownEvent>(OnAddPointerDown);
 
-            listContainer.style.flexDirection = FlexDirection.Column;
+            title = new VisualElement
+            {
+                style =
+                {
+                    height = HeaderHeight,
+                    minHeight = HeaderHeight,
+                    maxHeight = HeaderHeight,
+                    flexDirection = FlexDirection.Row,
+                    alignItems = Align.Center,
+                    backgroundColor = new Color(0.20f, 0.20f, 0.20f, 1f)
+                },
+                focusable = true,
+                tabIndex = 0
+            };
+            title.AddManipulator(new ContextualMenuManipulator(BuildHeaderContextMenu));
+            variableNameText.RegisterCallback<PointerDownEvent>(OnTogglePointerDown);
+            title.Add(foldoutLabel);
+            title.Add(variableNameText);
+            title.Add(countLabel);
+            title.Add(addLabel);
 
-            footerContainer.style.flexDirection = FlexDirection.Row;
-            footerContainer.style.justifyContent = Justify.FlexEnd;
-            footerContainer.style.marginTop = -1;
-            footerContainer.style.marginRight = 18;
+            elementsContent = new VisualElement
+            {
+                style =
+                {
+                    flexDirection = FlexDirection.Column
+                }
+            };
+            elementsContent.RegisterCallback<AttachToPanelEvent>(_ => UpdateHeaderState());
+            elementsContent.RegisterCallback<DetachFromPanelEvent>(_ => UpdateHeaderState());
 
-            buttonBox.style.flexDirection = FlexDirection.Row;
-            buttonBox.style.paddingTop = 2;
-            buttonBox.style.paddingRight = 4;
-            buttonBox.style.paddingBottom = 2;
-            buttonBox.style.paddingLeft = 4;
-            buttonBox.style.borderTopWidth = 1;
-            buttonBox.style.borderRightWidth = 1;
-            buttonBox.style.borderBottomWidth = 1;
-            buttonBox.style.borderLeftWidth = 1;
-            buttonBox.style.borderTopColor = new StyleColor(new UnityEngine.Color(0.24f, 0.24f, 0.24f));
-            buttonBox.style.borderRightColor = new StyleColor(new UnityEngine.Color(0.24f, 0.24f, 0.24f));
-            buttonBox.style.borderBottomColor = new StyleColor(new UnityEngine.Color(0.24f, 0.24f, 0.24f));
-            buttonBox.style.borderLeftColor = new StyleColor(new UnityEngine.Color(0.24f, 0.24f, 0.24f));
-            buttonBox.style.borderTopLeftRadius = 4;
-            buttonBox.style.borderTopRightRadius = 4;
-            buttonBox.style.borderBottomLeftRadius = 4;
-            buttonBox.style.borderBottomRightRadius = 4;
-            buttonBox.style.backgroundColor = new StyleColor(new UnityEngine.Color(0.20f, 0.20f, 0.20f));
+            style.flexDirection = FlexDirection.Column;
+            style.borderLeftWidth = BorderWidth;
+            style.borderRightWidth = BorderWidth;
+            style.borderTopWidth = BorderWidth;
+            style.borderBottomWidth = BorderWidth;
+            style.borderLeftColor = GetDarkLineColor();
+            style.borderRightColor = GetDarkLineColor();
+            style.borderTopColor = GetDarkLineColor();
+            style.borderBottomColor = GetDarkLineColor();
+            style.marginTop = -BorderWidth;
 
-            addButton.text = "+";
-            addButton.style.width = 24;
-            addButton.style.marginRight = 4;
-
-            removeButton.text = "-";
-            removeButton.style.width = 24;
-
-            buttonBox.Add(addButton);
-            buttonBox.Add(removeButton);
-
-            listBox.Add(listContainer);
-            footerContainer.Add(buttonBox);
-
-            elementsContent.Add(listBox);
-            elementsContent.Add(footerContainer);
-
-            RegisterCallback<AttachToPanelEvent>(OnAttachToPanel);
-            RegisterCallback<DetachFromPanelEvent>(OnDetachFromPanel);
+            AddToClassList("array-element");
+            Add(title);
         }
 
         public ArrayElement(PropertyAttribute itemPropertyAttribute) : this()
@@ -136,90 +163,191 @@ namespace XFramework.UI
             this.itemPropertyAttribute = itemPropertyAttribute;
         }
 
+        public void Expand()
+        {
+            if (elementsContent.parent != this)
+            {
+                Add(elementsContent);
+            }
+
+            UpdateHeaderState();
+        }
+
+        public void Collapse()
+        {
+            if (elementsContent.parent == this)
+            {
+                Remove(elementsContent);
+            }
+
+            UpdateHeaderState();
+        }
+
+        public IEnumerable<VisualElement> GetChildElements()
+        {
+            return elementDrawers;
+        }
+
+        public override void Refresh()
+        {
+            ClearElements();
+            CreateElements();
+            UpdateHeaderState();
+        }
+
         protected override void OnBound()
         {
             base.OnBound();
             elementType = IsArray ? BoundVariableType.GetElementType() : BoundVariableType.GetGenericArguments()[0];
-            sizeInput.value = Length.ToString();
+            UpdateHeaderState();
         }
 
         protected override void OnDepthChange(int depth)
         {
-            base.OnDepthChange(depth);
-            listBox.style.marginLeft = XInspector.TabSize * (Depth);
+            style.marginLeft = XInspector.TabSize * Math.Max(depth, 0);
+            variableNameText.style.translate = Vector2.zero;
         }
 
-        protected override void CreateElements()
+        private void CreateElements()
         {
+            rowElements.Clear();
+            elementDrawers.Clear();
+            if (selectedIndex >= Length)
+            {
+                selectedIndex = Length - 1;
+            }
+
             if (Value == null || Length <= 0)
             {
-                AddEmptyState();
+                selectedIndex = -1;
+                elementsContent.Add(CreateEmptyRow());
                 return;
             }
 
-            if (IsArray)
+            for (int i = 0; i < Length; i++)
             {
-                Array array = (Array)Value;
-                for (int i = 0; i < array.Length; i++)
+                VisualElement row = CreateRow(i);
+                if (row != null)
                 {
-                    XInspectorElement elementDrawer = CreateDrawerForMemberType();
-                    if (elementDrawer == null)
-                        break;
-
-                    int index = i;
-                    elementDrawer.BindTo(elementType, "Element " + i, () => ((Array)Value).GetValue(index), (value) =>
-                    {
-                        Array _array = (Array)Value;
-                        _array.SetValue(value, index);
-                        Value = _array;
-                    });
-                    elementDrawer.Refresh();
-
-                    AddElementRow(index, elementDrawer);
-                }
-            }
-            else
-            {
-                IList list = (IList)Value;
-                for (int i = 0; i < list.Count; i++)
-                {
-                    XInspectorElement elementDrawer = CreateDrawerForMemberType();
-                    if (elementDrawer == null)
-                        break;
-
-                    int j = i;
-                    elementDrawer.BindTo(elementType, "Element " + i, () => ((IList)Value)[j], (value) =>
-                    {
-                        IList _list = (IList)Value;
-                        _list[j] = value;
-                        Value = _list;
-                    });
-                    elementDrawer.Refresh();
-
-                    AddElementRow(j, elementDrawer);
+                    elementsContent.Add(row);
                 }
             }
 
-            if (selectedIndex >= Length)
+            UpdateRowStyles();
+        }
+
+        private void ClearElements()
+        {
+            elementsContent.Clear();
+            rowElements.Clear();
+            elementDrawers.Clear();
+        }
+
+        private VisualElement CreateEmptyRow()
+        {
+            return new Label("Empty")
             {
-                ClearSelection();
+                style =
+                {
+                    height = RowMinHeight,
+                    minHeight = RowMinHeight,
+                    unityTextAlign = TextAnchor.MiddleCenter,
+                    backgroundColor = new Color(0.15f, 0.15f, 0.15f, 1f),
+                    color = new Color(0.45f, 0.45f, 0.45f, 1f)
+                }
+            };
+        }
+
+        private VisualElement CreateRow(int index)
+        {
+            XInspectorElement elementDrawer = CreateDrawerForMemberType();
+            if (elementDrawer == null)
+            {
+                return null;
             }
-        }
 
-        protected override void ClearElements()
-        {
-            listContainer.Clear();
-            selectedRow = null;
-        }
+            int rowIndex = index;
+            elementDrawer.BindTo(elementType, "Element " + index, () => GetElementValue(rowIndex), value => SetElementValue(rowIndex, value));
+            elementDrawer.Refresh();
+            elementDrawer.style.flexGrow = 1;
+            elementDrawer.style.minWidth = 0;
+            elementDrawers.Add(elementDrawer);
 
-        private void AddEmptyState()
-        {
-            Label emptyLabel = new Label("List Is Empty");
-            emptyLabel.style.unityTextAlign = UnityEngine.TextAnchor.MiddleLeft;
-            emptyLabel.style.color = new StyleColor(new UnityEngine.Color(0.7f, 0.7f, 0.7f));
-            emptyLabel.style.marginTop = 6;
-            emptyLabel.style.marginBottom = 6;
-            listContainer.Add(emptyLabel);
+            var row = new VisualElement
+            {
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    minHeight = RowMinHeight
+                }
+            };
+            rowElements.Add(row);
+            row.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button != 0)
+                {
+                    return;
+                }
+
+                selectedIndex = rowIndex;
+                UpdateRowStyles();
+            }, TrickleDown.TrickleDown);
+            row.AddManipulator(new ContextualMenuManipulator(evt => BuildElementContextMenu(evt, rowIndex)));
+
+            var handle = new Label("☰")
+            {
+                style =
+                {
+                    width = HandleWidth,
+                    minWidth = HandleWidth,
+                    unityTextAlign = TextAnchor.MiddleCenter,
+                    color = new Color(0.42f, 0.42f, 0.42f, 1f)
+                }
+            };
+            handle.RegisterCallback<PointerDownEvent>(evt => BeginDrag(evt, handle, rowIndex));
+            handle.RegisterCallback<PointerMoveEvent>(OnDragMove);
+            handle.RegisterCallback<PointerUpEvent>(OnDragEnd);
+
+            var field = new VisualElement
+            {
+                style =
+                {
+                    flexGrow = 1,
+                    minWidth = 0,
+                    marginTop = 2,
+                    marginBottom = 2,
+                    marginLeft = FieldLeftPadding,
+                    marginRight = 4
+                }
+            };
+            field.Add(elementDrawer);
+
+            var remove = new Button(() =>
+            {
+                DeleteElement(rowIndex);
+                selectedIndex = ClampSelection(rowIndex - 1);
+                Refresh();
+            })
+            {
+                text = "x",
+                style =
+                {
+                    width = RemoveButtonWidth,
+                    height = 18,
+                    minWidth = RemoveButtonWidth,
+                    marginTop = 2,
+                    marginBottom = 2,
+                    marginRight = 2,
+                    paddingLeft = 0,
+                    paddingRight = 0,
+                    unityTextAlign = TextAnchor.MiddleCenter
+                }
+            };
+
+            row.Add(handle);
+            row.Add(field);
+            row.Add(remove);
+            return row;
         }
 
         private XInspectorElement CreateDrawerForMemberType()
@@ -242,262 +370,595 @@ namespace XFramework.UI
             return XInspector.CreateDrawerForMemberType(elementType, 0);
         }
 
-        private void OnSizeChange(ChangeEvent<string> input)
+        private void OnTogglePointerDown(PointerDownEvent evt)
         {
-            if (int.TryParse(input.newValue, out int size))
+            if (evt.button != 0)
             {
-                if(size > 100)
-                {
-                    UnityEngine.Debug.LogWarning("输入的数组长度过大");
-                    sizeInput.value = input.previousValue;
-                    return;
-                }
-
-                if (size != Length && size >= 0)
-                {
-                    int currLength = Length;
-                    if (IsArray)
-                    {
-                        Array array = (Array)Value;
-                        Array newArray = Array.CreateInstance(BoundVariableType.GetElementType(), size);
-                        if (size > currLength)
-                        {
-                            if (array != null)
-                                Array.ConstrainedCopy(array, 0, newArray, 0, currLength);
-                        }
-                        else
-                            Array.ConstrainedCopy(array, 0, newArray, 0, size);
-
-                        Value = newArray;
-                    }
-                    else
-                    {
-                        IList list = (IList)Value;
-
-                        int differLength = size - currLength;
-                        if (differLength > 0)
-                        {
-                            if (list == null)
-                                list = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(BoundVariableType.GetGenericArguments()[0]));
-
-                            for (int i = 0; i < differLength; i++)
-                                list.Add(CreateDefaultElementValue());
-                        }
-                        else
-                        {
-                            for (int i = 0; i > differLength; i--)
-                                list.RemoveAt(list.Count - 1);
-                        }
-
-                        Value = list;
-                    }
-
-                    Refresh();
-                }
+                return;
             }
-            else if(string.IsNullOrEmpty(input.newValue))
+
+            ToggleExpanded();
+            evt.StopPropagation();
+        }
+
+        private void OnAddPointerDown(PointerDownEvent evt)
+        {
+            if (evt.button != 0)
             {
-                sizeInput.value = "0";
+                return;
+            }
+
+            AddElement();
+            selectedIndex = Length - 1;
+            Refresh();
+            evt.StopPropagation();
+        }
+
+        private void ToggleExpanded()
+        {
+            if (IsExpanded())
+            {
+                Collapse();
             }
             else
             {
-                sizeInput.value = input.previousValue;
+                Expand();
             }
+        }
+
+        private bool IsExpanded()
+        {
+            return elementsContent.parent == this;
+        }
+
+        private void UpdateHeaderState()
+        {
+            bool isExpanded = IsExpanded();
+            foldoutLabel.text = isExpanded ? "▾" : "▸";
+            countLabel.text = GetCountText();
+            title.style.borderBottomWidth = isExpanded ? BorderWidth : 0f;
+            title.style.borderBottomColor = GetDarkLineColor();
+        }
+
+        private string GetCountText()
+        {
+            return Length == 0 ? "Empty" : Length + " items";
+        }
+
+        private static Color GetDarkLineColor()
+        {
+            return new Color(0.07f, 0.07f, 0.07f, 1f);
+        }
+
+        private object GetElementValue(int index)
+        {
+            if (Value is Array array)
+            {
+                return array.GetValue(index);
+            }
+
+            return ((IList)Value)[index];
+        }
+
+        private void SetElementValue(int index, object value)
+        {
+            if (IsArray)
+            {
+                Array array = (Array)Value;
+                array.SetValue(value, index);
+                Value = array;
+                return;
+            }
+
+            IList list = (IList)Value;
+            list[index] = value;
+            Value = list;
+        }
+
+        private void AddElement()
+        {
+            InsertDefaultElement(Length);
+        }
+
+        private void InsertDefaultElement(int index)
+        {
+            InsertElement(index, CreateDefaultElementValue());
+        }
+
+        private void InsertElement(int index, object elementValue)
+        {
+            int length = Length;
+            index = Mathf.Clamp(index, 0, length);
+
+            if (IsArray)
+            {
+                Array source = Value as Array;
+                Array target = Array.CreateInstance(elementType, length + 1);
+                if (source != null && index > 0)
+                {
+                    Array.ConstrainedCopy(source, 0, target, 0, index);
+                }
+
+                target.SetValue(elementValue, index);
+                if (source != null && index < length)
+                {
+                    Array.ConstrainedCopy(source, index, target, index + 1, length - index);
+                }
+
+                Value = target;
+                return;
+            }
+
+            IList list = Value as IList ?? CreateListInstance();
+            list.Insert(index, elementValue);
+            Value = list;
+        }
+
+        private void DuplicateElement(int index)
+        {
+            if (index < 0 || index >= Length)
+            {
+                return;
+            }
+
+            InsertElement(index + 1, CloneElementValue(GetElementValue(index)));
+        }
+
+        private void DeleteElement(int index)
+        {
+            if (index < 0 || index >= Length)
+            {
+                return;
+            }
+
+            if (IsArray)
+            {
+                Array source = Value as Array;
+                int length = Length;
+                Array target = Array.CreateInstance(elementType, length - 1);
+                if (source != null && index > 0)
+                {
+                    Array.ConstrainedCopy(source, 0, target, 0, index);
+                }
+
+                if (source != null && index < length - 1)
+                {
+                    Array.ConstrainedCopy(source, index + 1, target, index, length - index - 1);
+                }
+
+                Value = target;
+                return;
+            }
+
+            IList list = (IList)Value;
+            list.RemoveAt(index);
+            Value = list;
+        }
+
+        private void ClearCollection()
+        {
+            if (IsArray)
+            {
+                Value = Array.CreateInstance(elementType, 0);
+                return;
+            }
+
+            IList list = Value as IList ?? CreateListInstance();
+            list.Clear();
+            Value = list;
+        }
+
+        private bool MoveElement(int from, int targetInsertionIndex)
+        {
+            if (from < 0 || from >= Length || targetInsertionIndex < 0 || targetInsertionIndex > Length)
+            {
+                return false;
+            }
+
+            if (targetInsertionIndex == from || targetInsertionIndex == from + 1)
+            {
+                return false;
+            }
+
+            int to = targetInsertionIndex > from ? targetInsertionIndex - 1 : targetInsertionIndex;
+            if (IsArray)
+            {
+                List<object> values = new();
+                for (int i = 0; i < Length; i++)
+                {
+                    values.Add(GetElementValue(i));
+                }
+
+                object movingValue = values[from];
+                values.RemoveAt(from);
+                values.Insert(to, movingValue);
+
+                Array target = Array.CreateInstance(elementType, values.Count);
+                for (int i = 0; i < values.Count; i++)
+                {
+                    target.SetValue(values[i], i);
+                }
+
+                Value = target;
+                return true;
+            }
+
+            IList list = (IList)Value;
+            object value = list[from];
+            list.RemoveAt(from);
+            list.Insert(to, value);
+            Value = list;
+            return true;
         }
 
         private object CreateDefaultElementValue()
         {
+            if (elementType == typeof(string))
+            {
+                return string.Empty;
+            }
+
             return elementType != null && elementType.IsValueType
                 ? Activator.CreateInstance(elementType)
                 : null;
         }
 
-        private void AddElementRow(int index, XInspectorElement elementDrawer)
+        private IList CreateListInstance()
         {
-            VisualElement row = new VisualElement();
-            row.style.flexDirection = FlexDirection.Column;
-            row.style.borderTopLeftRadius = 3;
-            row.style.borderTopRightRadius = 3;
-            row.style.borderBottomLeftRadius = 3;
-            row.style.borderBottomRightRadius = 3;
-            row.style.marginBottom = 2;
-
-            row.Add(elementDrawer);
-            row.RegisterCallback<MouseDownEvent>((evt) =>
-            {
-                if (evt.button == 0)
-                {
-                    SelectRow(row, index);
-                }
-            });
-
-            listContainer.Add(row);
-
-            if (selectedIndex == index)
-            {
-                ApplyRowSelection(row, true);
-                selectedRow = row;
-            }
+            return (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(elementType));
         }
 
-        private void SelectRow(VisualElement row, int index)
+        private int ClampSelection(int value)
         {
-            if (selectedRow == row && selectedIndex == index)
-                return;
+            if (Length <= 0)
+            {
+                return -1;
+            }
 
-            ApplyRowSelection(selectedRow, false);
-            selectedRow = row;
+            return Mathf.Clamp(value, 0, Length - 1);
+        }
+
+        private static object CloneElementValue(object value)
+        {
+            if (value == null)
+            {
+                return null;
+            }
+
+            Type valueType = value.GetType();
+            if (valueType.IsValueType
+                || valueType == typeof(string)
+                || typeof(UnityEngine.Object).IsAssignableFrom(valueType))
+            {
+                return value;
+            }
+
+            if (value is Array sourceArray)
+            {
+                Type arrayElementType = valueType.GetElementType();
+                Array targetArray = Array.CreateInstance(arrayElementType, sourceArray.Length);
+                for (int i = 0; i < sourceArray.Length; i++)
+                {
+                    targetArray.SetValue(CloneElementValue(sourceArray.GetValue(i)), i);
+                }
+
+                return targetArray;
+            }
+
+            if (value is IList sourceList && valueType.IsGenericType)
+            {
+                if (valueType.GetConstructor(Type.EmptyTypes) == null)
+                {
+                    return value;
+                }
+
+                IList targetList = (IList)Activator.CreateInstance(valueType);
+                foreach (object item in sourceList)
+                {
+                    targetList.Add(CloneElementValue(item));
+                }
+
+                return targetList;
+            }
+
+            if (valueType.GetConstructor(Type.EmptyTypes) == null)
+            {
+                return value;
+            }
+
+            object clone = Activator.CreateInstance(valueType);
+            foreach (FieldInfo field in valueType.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+            {
+                if (field.IsInitOnly || field.IsLiteral)
+                {
+                    continue;
+                }
+
+                field.SetValue(clone, CloneElementValue(field.GetValue(value)));
+            }
+
+            foreach (PropertyInfo property in valueType.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+            {
+                if (!property.CanRead || !property.CanWrite || property.GetIndexParameters().Length > 0)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    property.SetValue(clone, CloneElementValue(property.GetValue(value)));
+                }
+                catch
+                {
+                    // Ignore properties whose accessors are not safe for editor-side snapshots.
+                }
+            }
+
+            return clone;
+        }
+
+        private void BeginDrag(PointerDownEvent evt, VisualElement handle, int index)
+        {
+            if (evt.button != 0)
+            {
+                return;
+            }
+
             selectedIndex = index;
-            ApplyRowSelection(selectedRow, true);
+            dragSourceIndex = index;
+            dropTargetIndex = index;
+            capturedDragHandle = handle;
+            handle.CapturePointer(evt.pointerId);
+            UpdateRowStyles();
+            evt.StopPropagation();
         }
 
-        private void ClearSelection()
+        private void OnDragMove(PointerMoveEvent evt)
         {
-            ApplyRowSelection(selectedRow, false);
-            selectedRow = null;
-            selectedIndex = -1;
-        }
-
-        private void ApplyRowSelection(VisualElement row, bool selected)
-        {
-            if (row == null)
+            if (dragSourceIndex < 0)
+            {
                 return;
-
-            TextElement titleLabel = row.Q<TextElement>(className: "inspector-label");
-
-            if (selected)
-            {
-                row.style.backgroundColor = new StyleColor(new UnityEngine.Color(1f, 1f, 1f, 0.06f));
-                if (titleLabel != null)
-                {
-                    titleLabel.style.color = new StyleColor(new UnityEngine.Color(0.35f, 0.65f, 1f));
-                }
             }
-            else
+
+            dropTargetIndex = GetDropTargetIndex(evt.position.y);
+            UpdateRowStyles();
+            evt.StopPropagation();
+        }
+
+        private void OnDragEnd(PointerUpEvent evt)
+        {
+            if (dragSourceIndex < 0)
             {
-                row.style.backgroundColor = new StyleColor(StyleKeyword.Null);
-                if (titleLabel != null)
-                {
-                    titleLabel.style.color = new StyleColor(StyleKeyword.Null);
-                }
-            }
-        }
-
-        private void OnAttachToPanel(AttachToPanelEvent evt)
-        {
-            evt.destinationPanel?.visualTree.RegisterCallback<MouseDownEvent>(OnPanelMouseDown, TrickleDown.TrickleDown);
-        }
-
-        private void OnDetachFromPanel(DetachFromPanelEvent evt)
-        {
-            evt.originPanel?.visualTree.UnregisterCallback<MouseDownEvent>(OnPanelMouseDown, TrickleDown.TrickleDown);
-        }
-
-        private void OnPanelMouseDown(MouseDownEvent evt)
-        {
-            if (selectedRow == null || evt.target is not VisualElement target)
                 return;
-
-            if (selectedRow.Contains(target) || buttonBox.Contains(target))
-                return;
-
-            ClearSelection();
-        }
-
-        private void OnAddButtonClick()
-        {
-            int newIndex = Length;
-
-            if (IsArray)
-            {
-                Array array = Value as Array;
-                Array newArray = Array.CreateInstance(BoundVariableType.GetElementType(), newIndex + 1);
-                if (array != null && newIndex > 0)
-                {
-                    Array.ConstrainedCopy(array, 0, newArray, 0, newIndex);
-                }
-
-                newArray.SetValue(CreateDefaultElementValue(), newIndex);
-                Value = newArray;
-            }
-            else
-            {
-                IList list = Value as IList;
-                if (list == null)
-                {
-                    list = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(BoundVariableType.GetGenericArguments()[0]));
-                }
-
-                list.Add(CreateDefaultElementValue());
-                Value = list;
             }
 
-            selectedIndex = newIndex;
-            Refresh();
-        }
+            int from = dragSourceIndex;
+            int to = dropTargetIndex;
+            dragSourceIndex = -1;
+            dropTargetIndex = -1;
+            capturedDragHandle?.ReleasePointer(evt.pointerId);
+            capturedDragHandle = null;
 
-        private void OnRemoveButtonClick()
-        {
-            if (selectedIndex < 0 || selectedIndex >= Length)
-                return;
-
-            int removedIndex = selectedIndex;
-
-            if (IsArray)
+            if (MoveElement(from, to))
             {
-                Array array = Value as Array;
-                if (array == null || array.Length == 0)
-                    return;
-
-                int newLength = array.Length - 1;
-                Array newArray = Array.CreateInstance(BoundVariableType.GetElementType(), newLength);
-
-                if (selectedIndex > 0)
-                {
-                    Array.ConstrainedCopy(array, 0, newArray, 0, selectedIndex);
-                }
-
-                if (selectedIndex < newLength)
-                {
-                    Array.ConstrainedCopy(array, selectedIndex + 1, newArray, selectedIndex, newLength - selectedIndex);
-                }
-
-                Value = newArray;
-            }
-            else
-            {
-                IList list = Value as IList;
-                if (list == null || selectedIndex >= list.Count)
-                    return;
-
-                list.RemoveAt(selectedIndex);
-                Value = list;
-            }
-
-            int remainingLength = Length;
-            if (remainingLength <= 0)
-            {
-                ClearSelection();
-            }
-            else
-            {
-                selectedIndex = Math.Max(0, removedIndex - 1);
-                selectedRow = null;
+                selectedIndex = ClampSelection(to > from ? to - 1 : to);
             }
 
             Refresh();
+            evt.StopPropagation();
         }
 
-        private void OnTitleMouseEnter(MouseEnterEvent evt)
+        private int GetDropTargetIndex(float panelY)
         {
-            title.style.backgroundColor = new StyleColor(new UnityEngine.Color(1f, 1f, 1f, 0.06f));
-            variableNameText.style.color = new StyleColor(new UnityEngine.Color(0.35f, 0.65f, 1f));
+            for (int i = 0; i < rowElements.Count; i++)
+            {
+                if (panelY < rowElements[i].worldBound.center.y)
+                {
+                    return i;
+                }
+            }
+
+            return rowElements.Count;
         }
 
-        private void OnTitleMouseLeave(MouseLeaveEvent evt)
+        private void UpdateRowStyles()
         {
-            title.style.backgroundColor = new StyleColor(StyleKeyword.Null);
-            variableNameText.style.color = new StyleColor(StyleKeyword.Null);
+            for (int i = 0; i < rowElements.Count; i++)
+            {
+                VisualElement row = rowElements[i];
+                Color background = selectedIndex == i
+                    ? new Color(0.24f, 0.28f, 0.34f, 1f)
+                    : (i % 2 == 0
+                        ? new Color(0.16f, 0.16f, 0.16f, 1f)
+                        : new Color(0.19f, 0.19f, 0.19f, 1f));
+                row.style.backgroundColor = background;
+                row.style.borderTopWidth = 0;
+                row.style.borderBottomWidth = 0;
+                row.style.borderTopColor = new Color(0.25f, 0.55f, 1f, 1f);
+                row.style.borderBottomColor = new Color(0.25f, 0.55f, 1f, 1f);
+
+                if (dragSourceIndex >= 0 && dropTargetIndex == i)
+                {
+                    row.style.borderTopWidth = 2;
+                }
+                else if (dragSourceIndex >= 0 && dropTargetIndex == rowElements.Count && i == rowElements.Count - 1)
+                {
+                    row.style.borderBottomWidth = 2;
+                }
+            }
+        }
+
+        private void BuildHeaderContextMenu(ContextualMenuPopulateEvent evt)
+        {
+            evt.menu.AppendAction("Add", _ =>
+            {
+                AddElement();
+                selectedIndex = Length - 1;
+                Refresh();
+            });
+            evt.menu.AppendAction(
+                "Clear",
+                _ =>
+                {
+                    ClearCollection();
+                    selectedIndex = -1;
+                    Refresh();
+                },
+                _ => Length > 0 ? DropdownMenuAction.Status.Normal : DropdownMenuAction.Status.Disabled);
+            evt.menu.AppendAction(
+                "Copy Collection",
+                _ => s_Clipboard = ClipboardData.CaptureCollection(this),
+                _ => Length > 0 ? DropdownMenuAction.Status.Normal : DropdownMenuAction.Status.Disabled);
+            evt.menu.AppendAction(
+                "Paste Collection",
+                _ =>
+                {
+                    if (TryPasteCollection())
+                    {
+                        selectedIndex = -1;
+                        Refresh();
+                    }
+                },
+                _ => CanPasteCollection() ? DropdownMenuAction.Status.Normal : DropdownMenuAction.Status.Disabled);
+        }
+
+        private void BuildElementContextMenu(ContextualMenuPopulateEvent evt, int index)
+        {
+            if (index < 0 || index >= Length)
+            {
+                return;
+            }
+
+            evt.menu.AppendAction("Copy Element", _ => s_Clipboard = ClipboardData.CaptureElement(this, index));
+            evt.menu.AppendAction(
+                "Paste Element",
+                _ =>
+                {
+                    if (TryPasteElement(index))
+                    {
+                        Refresh();
+                    }
+                },
+                _ => CanPasteElement() ? DropdownMenuAction.Status.Normal : DropdownMenuAction.Status.Disabled);
+            evt.menu.AppendAction("Duplicate Element", _ =>
+            {
+                DuplicateElement(index);
+                selectedIndex = index + 1;
+                Refresh();
+            });
+            evt.menu.AppendSeparator(string.Empty);
+            evt.menu.AppendAction("Insert Above", _ =>
+            {
+                InsertDefaultElement(index);
+                selectedIndex = index;
+                Refresh();
+            });
+            evt.menu.AppendAction("Insert Below", _ =>
+            {
+                InsertDefaultElement(index + 1);
+                selectedIndex = index + 1;
+                Refresh();
+            });
+            evt.menu.AppendAction("Delete Element", _ =>
+            {
+                DeleteElement(index);
+                selectedIndex = ClampSelection(index - 1);
+                Refresh();
+            });
+        }
+
+        private bool CanPasteElement()
+        {
+            return s_Clipboard != null
+                   && s_Clipboard.IsElement
+                   && IsCompatibleClipboardType(s_Clipboard.CollectionElementType);
+        }
+
+        private bool TryPasteElement(int index)
+        {
+            if (!CanPasteElement() || index < 0 || index >= Length)
+            {
+                return false;
+            }
+
+            SetElementValue(index, CloneElementValue(s_Clipboard.Element));
+            return true;
+        }
+
+        private bool CanPasteCollection()
+        {
+            return s_Clipboard != null
+                   && !s_Clipboard.IsElement
+                   && IsCompatibleClipboardType(s_Clipboard.CollectionElementType);
+        }
+
+        private bool TryPasteCollection()
+        {
+            if (!CanPasteCollection())
+            {
+                return false;
+            }
+
+            if (IsArray)
+            {
+                Array target = Array.CreateInstance(elementType, s_Clipboard.Elements.Count);
+                for (int i = 0; i < s_Clipboard.Elements.Count; i++)
+                {
+                    target.SetValue(CloneElementValue(s_Clipboard.Elements[i]), i);
+                }
+
+                Value = target;
+                return true;
+            }
+
+            IList list = CreateListInstance();
+            for (int i = 0; i < s_Clipboard.Elements.Count; i++)
+            {
+                list.Add(CloneElementValue(s_Clipboard.Elements[i]));
+            }
+
+            Value = list;
+            return true;
+        }
+
+        private bool IsCompatibleClipboardType(Type clipboardElementType)
+        {
+            return clipboardElementType == elementType
+                   || clipboardElementType != null && elementType.IsAssignableFrom(clipboardElementType);
+        }
+
+        private sealed class ClipboardData
+        {
+            public bool IsElement;
+            public Type CollectionElementType;
+            public object Element;
+            public List<object> Elements;
+
+            public static ClipboardData CaptureElement(ArrayElement owner, int index)
+            {
+                return new ClipboardData
+                {
+                    IsElement = true,
+                    CollectionElementType = owner.elementType,
+                    Element = CloneElementValue(owner.GetElementValue(index))
+                };
+            }
+
+            public static ClipboardData CaptureCollection(ArrayElement owner)
+            {
+                List<object> elements = new();
+                for (int i = 0; i < owner.Length; i++)
+                {
+                    elements.Add(CloneElementValue(owner.GetElementValue(i)));
+                }
+
+                return new ClipboardData
+                {
+                    IsElement = false,
+                    CollectionElementType = owner.elementType,
+                    Elements = elements
+                };
+            }
         }
 
         private struct ArraySupport : ISupport

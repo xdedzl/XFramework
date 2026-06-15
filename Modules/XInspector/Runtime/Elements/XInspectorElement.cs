@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -8,6 +9,13 @@ namespace XFramework.UI
     public interface IPropertyAttributeElement
     {
         void SetPropertyAttribute(PropertyAttribute attribute);
+    }
+
+    public interface IExpandableElement
+    {
+        void Expand();
+        void Collapse();
+        IEnumerable<VisualElement> GetChildElements();
     }
 
     public abstract class XInspectorElement : VisualElement

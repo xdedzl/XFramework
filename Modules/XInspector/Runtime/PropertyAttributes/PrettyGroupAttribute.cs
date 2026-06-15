@@ -3,9 +3,9 @@ using System;
 namespace XFramework
 {
     /// <summary>
-    /// Groups multiple top-level serialized fields in XMonoBehaviourInspector.
+    /// Groups multiple top-level members in XInspector.
     /// </summary>
-    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
     public sealed class PrettyGroupAttribute : Attribute
     {
         public string Title { get; }

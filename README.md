@@ -307,7 +307,7 @@ private void HandlePlayerDead(string playerName, int score)
 #### 2. 底层原理与生命周期管理
 `EventRegisterHelper` 会在内部扫描目标类的所有方法，并将其包装为高效的 `Delegate`。
 - **框架基类支持**：
-  - `PanelBase`：在 `OnOpen` 时注册，`OnClose` 时注销。
+  - `PanelBase`：在 `OnBeforeOpen` 时注册，`OnBeforeClose` 时注销。
   - `ProcedureWithEvent`：进入流程时注册，离开时注销。
   - `GameModuleWithEvent`：模块初始化时注册，销毁时注销。
 - **如果你在普通类中使用**：

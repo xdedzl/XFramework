@@ -8,14 +8,17 @@ using XFramework.UI;
 namespace XFramework.Editor
 {
     [CustomPropertyDrawer(typeof(AssetPathAttribute))]
-    public class AssetPathElement : ExpandableElement
+    public class AssetPathElement : XInspectorElement
     {
         private const float MinPreviewHeight = 48f;
         private const float MaxPreviewHeight = 320f;
 
+        private readonly VisualElement m_Title;
+        private readonly VisualElement m_PreviewContent;
         private readonly UnityEditor.UIElements.ObjectField m_ObjectField;
         private readonly Image m_Preview;
         private AssetPathAttribute m_Attribute;
+        private bool m_CanTogglePreview;
         private bool m_PreviewStateInitialized;
         private float m_PreviewAspectRatio = 1f;
 
@@ -25,6 +28,19 @@ namespace XFramework.Editor
             style.flexDirection = FlexDirection.Column;
             style.alignItems = Align.Stretch;
 
+            Remove(variableNameText);
+
+            m_Title = new VisualElement
+            {
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    alignItems = Align.Center
+                },
+                focusable = true,
+                tabIndex = 0
+            };
+
             m_ObjectField = new UnityEditor.UIElements.ObjectField();
             m_ObjectField.AddToClassList("inspector-input");
             m_ObjectField.style.flexGrow = 1f;
@@ -33,6 +49,8 @@ namespace XFramework.Editor
             m_ObjectField.RegisterCallback<MouseDownEvent>(OnObjectFieldMouseDown);
             m_ObjectField.RegisterCallback<KeyDownEvent>(OnObjectFieldKeyDown);
 
+            m_PreviewContent = new VisualElement();
+
             m_Preview = new Image();
             m_Preview.scaleMode = ScaleMode.ScaleToFit;
             m_Preview.style.width = Length.Percent(100f);
@@ -40,9 +58,14 @@ namespace XFramework.Editor
             m_Preview.style.maxHeight = MaxPreviewHeight;
             m_Preview.RegisterCallback<GeometryChangedEvent>(OnPreviewGeometryChanged);
 
-            title.Add(m_ObjectField);
-            elementsContent.Add(m_Preview);
-            SetArrowActive(false);
+            m_Title.RegisterCallback<MouseDownEvent>(OnTitleMouseDown);
+            m_Title.RegisterCallback<KeyDownEvent>(OnTitleKeyDown);
+            m_Title.Add(variableNameText);
+            m_Title.Add(m_ObjectField);
+            m_PreviewContent.Add(m_Preview);
+
+            Add(m_Title);
+            SetPreviewToggleActive(false);
         }
 
         protected override void OnBound()
@@ -90,14 +113,14 @@ namespace XFramework.Editor
             if (previewAsset == null)
             {
                 m_PreviewStateInitialized = false;
-                SetArrowActive(false);
+                SetPreviewToggleActive(false);
                 Collapse();
                 ClearPreview();
                 return;
             }
 
             SetPreviewAsset(previewAsset);
-            SetArrowActive(true);
+            SetPreviewToggleActive(true);
             if (!m_PreviewStateInitialized)
             {
                 m_PreviewStateInitialized = true;
@@ -105,6 +128,76 @@ namespace XFramework.Editor
             }
 
             UpdatePreviewHeight();
+        }
+
+        private void Expand()
+        {
+            if (m_PreviewContent.parent != this)
+            {
+                Add(m_PreviewContent);
+            }
+        }
+
+        private void Collapse()
+        {
+            if (m_PreviewContent.parent == this)
+            {
+                Remove(m_PreviewContent);
+            }
+        }
+
+        private void SetPreviewToggleActive(bool value)
+        {
+            m_CanTogglePreview = value;
+        }
+
+        private void OnTitleMouseDown(MouseDownEvent evt)
+        {
+            if (evt.button != 0 || !m_CanTogglePreview || evt.target is not VisualElement target)
+            {
+                return;
+            }
+
+            if (target.GetFirstAncestorOfType<UnityEditor.UIElements.ObjectField>() != null
+                || target.GetFirstAncestorOfType<Button>() != null)
+            {
+                return;
+            }
+
+            m_Title.Focus();
+            TogglePreview();
+            evt.StopPropagation();
+        }
+
+        private void OnTitleKeyDown(KeyDownEvent evt)
+        {
+            if (!m_CanTogglePreview)
+            {
+                return;
+            }
+
+            if (evt.keyCode == KeyCode.LeftArrow)
+            {
+                Collapse();
+                evt.StopPropagation();
+            }
+            else if (evt.keyCode == KeyCode.RightArrow)
+            {
+                Expand();
+                evt.StopPropagation();
+            }
+        }
+
+        private void TogglePreview()
+        {
+            if (m_PreviewContent.parent == this)
+            {
+                Collapse();
+            }
+            else
+            {
+                Expand();
+            }
         }
 
         private static void OnObjectFieldMouseDown(MouseDownEvent evt)
@@ -147,7 +240,7 @@ namespace XFramework.Editor
 
         private void OnPreviewGeometryChanged(GeometryChangedEvent evt)
         {
-            if (elementsContent.parent == this && !Mathf.Approximately(evt.oldRect.width, evt.newRect.width))
+            if (m_PreviewContent.parent == this && !Mathf.Approximately(evt.oldRect.width, evt.newRect.width))
             {
                 UpdatePreviewHeight();
             }

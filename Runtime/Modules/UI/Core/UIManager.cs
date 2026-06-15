@@ -125,6 +125,7 @@ namespace XFramework.UI
         private readonly Dictionary<string, Action> m_PanelCloseCallbacks = new ();
         private readonly Dictionary<string, HashSet<PanelBase>> m_Tag2Panels = new (StringComparer.Ordinal);
         private readonly Dictionary<string, IPanelTagHandler> m_Tag2Handler = new (StringComparer.Ordinal);
+        private readonly List<PanelBase> m_UpdatePanelSnapshot = new ();
         
         private GameObject m_TipsPrefab;
 
@@ -135,28 +136,116 @@ namespace XFramework.UI
             InitTagHandlers();
             ValidatePanelTagHandlers();
         }
+
+        public void OpenPanel<TPanel>() where TPanel : PanelBase
+        {
+            OpenPanelInternal(GetPanelName<TPanel>(), null);
+        }
+
+        public void OpenPanel<TPanel>(Action onClose) where TPanel : PanelBase
+        {
+            OpenPanelInternal(GetPanelName<TPanel>(), onClose);
+        }
+
+        public void OpenPanel<TPanel>(IPanelOpenRequest request) where TPanel : PanelBase
+        {
+            OpenPanelInternal(GetPanelName<TPanel>(), null, request);
+        }
+
+        public void OpenPanel<TPanel>(IPanelOpenRequest request, Action onClose) where TPanel : PanelBase
+        {
+            OpenPanelInternal(GetPanelName<TPanel>(), onClose, request);
+        }
         
-        public void OpenPanel(string uiName, params object[] args)
+        public void OpenPanel(string uiName)
         {
-            OpenPanelInternal(uiName, null, args);
+            OpenPanelInternal(uiName, null);
         }
 
-        public void OpenPanel(string uiName, Action onClose, params object[] args)
+        public void OpenPanel(string uiName, Action onClose)
         {
-            OpenPanelInternal(uiName, onClose, args);
+            OpenPanelInternal(uiName, onClose);
         }
 
-        private void OpenPanelInternal(string uiName, Action onClose, params object[] args)
+        public void OpenPanel<TRequest>(string uiName, in TRequest request) where TRequest : struct
         {
-            PanelBase panel = GetPanel(uiName);
-            if (null ==panel)
+            OpenPanelInternal(uiName, null, in request);
+        }
+
+        public void OpenPanel<TRequest>(string uiName, in TRequest request, Action onClose) where TRequest : struct
+        {
+            OpenPanelInternal(uiName, onClose, in request);
+        }
+
+        private void OpenPanelInternal(string uiName, Action onClose)
+        {
+            if (!TryPrepareOpenPanel(uiName, onClose, out PanelBase panel))
+            {
                 return;
+            }
+
+            panel.OnBeforeOpen();
+            panel.OnBeforeOpenSubPanels();
+            panel.OnOpenedSubPanels();
+            panel.OnOpened();
+        }
+
+        private void OpenPanelInternal(string uiName, Action onClose, IPanelOpenRequest request)
+        {
+            ValidatePanelOpenRequest(uiName, request?.GetType());
+
+            if (!TryPrepareOpenPanel(uiName, onClose, out PanelBase panel))
+            {
+                return;
+            }
+
+            if (panel is not PanelBaseWithRequest requestPanel)
+            {
+                throw new XFrameworkException(
+                    $"[UI] Invalid open request for {panel.GetType().Name}. Expected panel derived from PanelBase<TRequest>.");
+            }
+
+            requestPanel.OpenRequestObject(request);
+            panel.OnBeforeOpenSubPanels();
+            panel.OnOpenedSubPanels();
+            panel.OnOpened();
+        }
+
+        private void OpenPanelInternal<TRequest>(string uiName, Action onClose, in TRequest request)
+            where TRequest : struct
+        {
+            ValidatePanelOpenRequest(uiName, typeof(TRequest));
+
+            if (!TryPrepareOpenPanel(uiName, onClose, out PanelBase panel))
+            {
+                return;
+            }
+
+            if (panel is not PanelBase<TRequest> typedPanel)
+            {
+                throw new XFrameworkException(
+                    $"[UI] Invalid open request for {panel.GetType().Name}. Expected: {typeof(TRequest).Name}.");
+            }
+
+            typedPanel.OpenRequest(in request);
+            panel.OnBeforeOpenSubPanels();
+            panel.OnOpenedSubPanels();
+            panel.OnOpened();
+        }
+
+        private bool TryPrepareOpenPanel(string uiName, Action onClose, out PanelBase panel)
+        {
+            panel = GetPanel(uiName);
+            if (panel == null)
+            {
+                return false;
+            }
 
             if (m_OnDisplayPanelDic.TryGetValue(panel.Level, out var value))
             {
                 if (value.Contains(panel))
                 {
-                    return;
+                    return false;
                 }
             }
             else
@@ -169,45 +258,94 @@ namespace XFramework.UI
             {
                 m_PanelCloseCallbacks[uiName] = onClose;
             }
-            
+
             // if (m_OnDisplayPanelDic.ContainsKey(panel.Level - 1))
             // {
             //     m_OnDisplayPanelDic[panel.Level - 1].End().OnPause();
             // }
             
-            // todo 应该放到OnBeforeOpen的时候
             panel.SetVisible(true);
             panel.transform.SetAsLastSibling();
-            
+
             AcquirePanelTags(panel);
-            panel.OnOpen(args);
-            panel.OpenSubPanels();
+            return true;
+        }
+
+        private void ValidatePanelOpenRequest(string uiName, Type requestType)
+        {
+            if (requestType == null)
+            {
+                throw new XFrameworkException(
+                    $"[UI] Invalid open request. Panel: {uiName}, Request is null.");
+            }
+
+            Type expectedRequestType = GetPanelRequestType(uiName, out Type panelType);
+            if (expectedRequestType == null)
+            {
+                throw new XFrameworkException(
+                    $"[UI] Invalid open request for {panelType.Name}. Expected panel derived from PanelBase<TRequest>.");
+            }
+
+            if (expectedRequestType != requestType)
+            {
+                throw new XFrameworkException(
+                    $"[UI] Invalid open request for {panelType.Name}. Expected: {expectedRequestType.Name}, Actual: {requestType.Name}.");
+            }
+        }
+
+        private Type GetPanelRequestType(string uiName, out Type panelType)
+        {
+            if (!m_PanelName2Type.TryGetValue(uiName, out panelType))
+            {
+                throw new XFrameworkException($"[UI] The panel info you want is not exist, panel name: {uiName}");
+            }
+
+            for (Type type = panelType; type != null && type != typeof(PanelBase); type = type.BaseType)
+            {
+                if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(PanelBase<>))
+                {
+                    return type.GetGenericArguments()[0];
+                }
+            }
+
+            return null;
         }
         
         public void ClosePanel(string uiName)
         {
-            PanelBase panel = GetPanel(uiName);
-            if (m_OnDisplayPanelDic.ContainsKey(panel.Level) && m_OnDisplayPanelDic[panel.Level].Contains(panel))
+            if (!TryGetCachedPanel(uiName, out PanelBase panel))
             {
-                panel.OnClose();
-                panel.CloseSubPanels();
-                
-                // todo 应该放到OnClose的时候
-                panel.SetVisible(false);
-                
-                m_OnDisplayPanelDic[panel.Level].Remove(panel);
-
-                try
-                {
-                    panel.OnAfterClose();
-                }
-                finally
-                {
-                    ReleasePanelTags(panel);
-                }
-
-                InvokePanelCloseCallback(uiName);
+                return;
             }
+
+            if (!m_OnDisplayPanelDic.TryGetValue(panel.Level, out List<PanelBase> panels) || !panels.Contains(panel))
+            {
+                return;
+            }
+
+            panel.OnBeforeClose();
+            panel.OnBeforeCloseSubPanels();
+
+            // todo 应该放到OnBeforeClose的时候
+            panel.SetVisible(false);
+
+            panels.Remove(panel);
+            if (panels.Count == 0)
+            {
+                m_OnDisplayPanelDic.Remove(panel.Level);
+            }
+
+            try
+            {
+                panel.OnClosedSubPanels();
+                panel.OnClosed();
+            }
+            finally
+            {
+                ReleasePanelTags(panel);
+            }
+
+            InvokePanelCloseCallback(uiName);
 
             // int index = panel.Level + 1;
             // while (m_OnDisplayPanelDic.ContainsKey(index))
@@ -215,8 +353,8 @@ namespace XFramework.UI
             //     var temp = m_OnDisplayPanelDic[index];
             //     if (temp.Count > 0)
             //     {
-            //         temp.End().OnClose();
-            //         temp.End().CloseSubPanels();
+            //         temp.End().OnBeforeClose();
+            //         temp.End().OnBeforeCloseSubPanels();
             //
             //         temp.RemoveAt(temp.Count - 1);
             //     }
@@ -254,6 +392,13 @@ namespace XFramework.UI
                 }
             }
             return false;
+        }
+
+        private bool IsPanelOpened(PanelBase panel)
+        {
+            return panel != null &&
+                   m_OnDisplayPanelDic.TryGetValue(panel.Level, out List<PanelBase> panels) &&
+                   panels.Contains(panel);
         }
 
         /// <summary>
@@ -366,11 +511,42 @@ namespace XFramework.UI
             var panel = AddPanel(uiName, panelGo);
             return panel;
         }
+
+        private bool TryGetCachedPanel(string uiName, out PanelBase panel)
+        {
+            if (!m_PanelName2Info.ContainsKey(uiName))
+            {
+                throw new XFrameworkException($"[UI] The panel info you want is not exist, panel name: {uiName}");
+            }
+
+            if (!m_PanelDict.TryGetValue(uiName, out panel))
+            {
+                return false;
+            }
+
+            if (panel == null)
+            {
+                throw new XFrameworkException("[UI] The panel you want has been unloaded");
+            }
+
+            return true;
+        }
         
         public T GetPanel<T>() where T : PanelBase
         {
-            string uiName = m_PanelType2Name[typeof(T)];
+            string uiName = GetPanelName<T>();
             return GetPanel(uiName) as T;
+        }
+
+        private string GetPanelName<TPanel>() where TPanel : PanelBase
+        {
+            Type panelType = typeof(TPanel);
+            if (!m_PanelType2Name.TryGetValue(panelType, out string uiName))
+            {
+                throw new XFrameworkException($"[UI] The panel type is not registered, type: {panelType.FullName}");
+            }
+
+            return uiName;
         }
 
         private PanelBase AddPanel(string uiName, GameObject panelGo)
@@ -407,7 +583,7 @@ namespace XFramework.UI
                 for (int i = 0, length = CanvasTransform.childCount; i < length; i++)
                 {
                     string levelName = CanvasTransform.GetChild(i).name;
-                    if (int.TryParse(levelName[^1].ToString(), out int level))
+                    if (TryParseLevelGroupName(levelName, out int level))
                     {
                         if (panel.Level < level)
                         {
@@ -428,6 +604,19 @@ namespace XFramework.UI
             }
             panel.transform.SetParent(uiGroup, false);
             return panel;
+        }
+
+        private static bool TryParseLevelGroupName(string levelName, out int level)
+        {
+            const string prefix = "Level";
+            level = 0;
+
+            if (string.IsNullOrEmpty(levelName) || !levelName.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            return int.TryParse(levelName.Substring(prefix.Length), out level);
         }
 
         private void EnsureRuntimeUIToolkitPanel(string uiName, GameObject panelGo, Type panelType)
@@ -745,13 +934,30 @@ namespace XFramework.UI
 
         public override void Update()
         {
-            foreach (var item in m_OnDisplayPanelDic.Values)
+            m_UpdatePanelSnapshot.Clear();
+
+            foreach (var panels in m_OnDisplayPanelDic.Values)
             {
-                for (int i = 0, length = item.Count; i < length; i++)
+                for (int i = 0, length = panels.Count; i < length; i++)
                 {
-                    item[i].OnUpdate();
+                    PanelBase panel = panels[i];
+                    if (panel != null)
+                    {
+                        m_UpdatePanelSnapshot.Add(panel);
+                    }
                 }
             }
+
+            for (int i = 0, length = m_UpdatePanelSnapshot.Count; i < length; i++)
+            {
+                PanelBase panel = m_UpdatePanelSnapshot[i];
+                if (IsPanelOpened(panel))
+                {
+                    panel.OnUpdate();
+                }
+            }
+
+            m_UpdatePanelSnapshot.Clear();
         }
 
         public override void Shutdown()

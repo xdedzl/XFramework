@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -14,8 +15,10 @@ namespace XFramework.Editor
         private Action<object> m_OnPick;
         private object m_SelectedValue;
         private TextField m_SearchField;
+        private VisualElement m_TableTabsContainer;
         private ScrollView m_OptionsScrollView;
         private VisualElement m_SelectedOptionElement;
+        private Type m_SelectedSourceTableType;
 
         public static void ShowWindow(
             string title,
@@ -40,6 +43,7 @@ namespace XFramework.Editor
             m_OwnerFieldType = ownerFieldType;
             m_OnPick = onPick;
             m_SelectedValue = selectedValue;
+            m_SelectedSourceTableType = null;
             if (anchorRect.HasValue)
             {
                 Rect rect = anchorRect.Value;
@@ -76,6 +80,25 @@ namespace XFramework.Editor
             m_SearchField.RegisterValueChangedCallback(_ => RebuildOptions());
             root.Add(m_SearchField);
 
+            if (ShouldShowTableTabs())
+            {
+                ScrollView tabsScrollView = new(ScrollViewMode.Horizontal);
+                tabsScrollView.style.height = 34f;
+                tabsScrollView.style.marginTop = 8f;
+                tabsScrollView.style.marginBottom = 0f;
+                tabsScrollView.verticalScrollerVisibility = ScrollerVisibility.Hidden;
+                tabsScrollView.horizontalScrollerVisibility = ScrollerVisibility.Auto;
+                m_TableTabsContainer = tabsScrollView.contentContainer;
+                m_TableTabsContainer.style.flexDirection = FlexDirection.Row;
+                root.Add(tabsScrollView);
+                RebuildTableTabs();
+            }
+            else
+            {
+                m_TableTabsContainer = null;
+                m_SelectedSourceTableType = null;
+            }
+
             m_OptionsScrollView = new ScrollView();
             m_OptionsScrollView.style.flexGrow = 1f;
             m_OptionsScrollView.style.marginTop = 8f;
@@ -87,6 +110,22 @@ namespace XFramework.Editor
                 m_SearchField?.Focus();
                 root.Focus();
             });
+        }
+
+        private void RebuildTableTabs()
+        {
+            if (m_TableTabsContainer == null)
+            {
+                return;
+            }
+
+            m_TableTabsContainer.Clear();
+            m_TableTabsContainer.Add(CreateTableTabButton("ALL", null));
+
+            foreach (Type sourceTableType in GetSourceTableTypes())
+            {
+                m_TableTabsContainer.Add(CreateTableTabButton(sourceTableType.Name, sourceTableType));
+            }
         }
 
         private void RebuildOptions()
@@ -123,6 +162,11 @@ namespace XFramework.Editor
             IReadOnlyList<XDataTableRefOption> options = XDataTableRefResolver.GetOptions(m_Meta, m_SearchField?.value);
             foreach (XDataTableRefOption option in options)
             {
+                if (m_SelectedSourceTableType != null && option.SourceTableType != m_SelectedSourceTableType)
+                {
+                    continue;
+                }
+
                 Button optionButton = CreateOptionButton(option.DisplayText, () =>
                 {
                     m_OnPick?.Invoke(option.KeyValue);
@@ -137,6 +181,52 @@ namespace XFramework.Editor
             }
 
             ScheduleScrollToSelectedOption();
+        }
+
+        private bool ShouldShowTableTabs()
+        {
+            return m_Meta != null && m_Meta.IsUnionTable && GetSourceTableTypes().Count > 0;
+        }
+
+        private List<Type> GetSourceTableTypes()
+        {
+            if (m_Meta?.TableAssetTypes == null)
+            {
+                return new List<Type>();
+            }
+
+            return m_Meta.TableAssetTypes
+                .Where(type => type != null)
+                .Distinct()
+                .ToList();
+        }
+
+        private Button CreateTableTabButton(string text, Type sourceTableType)
+        {
+            bool selected = m_SelectedSourceTableType == sourceTableType;
+            Button button = new(() =>
+            {
+                m_SelectedSourceTableType = sourceTableType;
+                RebuildTableTabs();
+                RebuildOptions();
+            })
+            {
+                text = text
+            };
+            button.tooltip = sourceTableType == null ? "显示全部子表" : $"只显示 {sourceTableType.Name}";
+            button.style.height = 26f;
+            button.style.minWidth = 58f;
+            button.style.marginRight = 4f;
+            button.style.paddingLeft = 10f;
+            button.style.paddingRight = 10f;
+            button.style.unityTextAlign = TextAnchor.MiddleCenter;
+            button.style.unityFontStyleAndWeight = selected ? FontStyle.Bold : FontStyle.Normal;
+            button.style.backgroundColor = selected
+                ? new Color(0.24f, 0.36f, 0.52f, 0.92f)
+                : new Color(0.19f, 0.19f, 0.19f, 1f);
+            button.style.borderBottomWidth = selected ? 2f : 0f;
+            button.style.borderBottomColor = new Color(0.45f, 0.7f, 1f, 1f);
+            return button;
         }
 
         private static Button CreateOptionButton(string text, Action onClick)

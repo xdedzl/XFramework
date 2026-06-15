@@ -25,36 +25,67 @@ namespace XFramework.Editor
             TextAsset tableAsset,
             IReadOnlyList<TextAsset> tableAssets,
             IReadOnlyList<object> rows)
+            : this(tableType, dataType, keyProperty, aliasProperty, null, nameField, tableAsset, tableAssets, rows)
+        {
+        }
+
+        public XDataTableRefMeta(
+            Type tableType,
+            Type dataType,
+            PropertyInfo keyProperty,
+            PropertyInfo aliasProperty,
+            PropertyInfo nameProperty,
+            FieldInfo nameField,
+            TextAsset tableAsset,
+            IReadOnlyList<TextAsset> tableAssets,
+            IReadOnlyList<object> rows,
+            IReadOnlyList<Type> rowTableTypes = null,
+            IReadOnlyList<Type> tableAssetTypes = null,
+            bool isUnionTable = false)
         {
             TableType = tableType;
             DataType = dataType;
             KeyProperty = keyProperty;
             AliasProperty = aliasProperty;
+            NameProperty = nameProperty;
             NameField = nameField;
             TableAsset = tableAsset;
             TableAssets = tableAssets ?? Array.Empty<TextAsset>();
             Rows = rows ?? Array.Empty<object>();
+            RowTableTypes = rowTableTypes ?? Enumerable.Repeat(tableType, Rows.Count).ToArray();
+            TableAssetTypes = tableAssetTypes ?? Enumerable.Repeat(tableType, TableAssets.Count).ToArray();
+            IsUnionTable = isUnionTable;
         }
 
         public Type TableType { get; }
         public Type DataType { get; }
         public PropertyInfo KeyProperty { get; }
         public PropertyInfo AliasProperty { get; }
+        public PropertyInfo NameProperty { get; }
         public FieldInfo NameField { get; }
         public TextAsset TableAsset { get; }
         public IReadOnlyList<TextAsset> TableAssets { get; }
+        public IReadOnlyList<Type> RowTableTypes { get; }
+        public IReadOnlyList<Type> TableAssetTypes { get; }
         public IReadOnlyList<object> Rows { get; }
+        public bool IsUnionTable { get; }
     }
 
     public readonly struct XDataTableRefOption
     {
         public XDataTableRefOption(int rowIndex, object keyValue, string alias, string name, string displayText)
+            : this(rowIndex, keyValue, alias, name, displayText, null)
+        {
+        }
+
+        public XDataTableRefOption(int rowIndex, object keyValue, string alias, string name, string displayText, Type sourceTableType)
         {
             RowIndex = rowIndex;
             KeyValue = keyValue;
             Alias = alias;
             Name = name;
             DisplayText = displayText;
+            SourceTableType = sourceTableType;
         }
 
         public int RowIndex { get; }
@@ -62,6 +93,7 @@ namespace XFramework.Editor
         public string Alias { get; }
         public string Name { get; }
         public string DisplayText { get; }
+        public Type SourceTableType { get; }
     }
 
     public static class XDataTableRefResolver
@@ -88,9 +120,9 @@ namespace XFramework.Editor
                 return null;
             }
 
-            if (!IsSubclassOfGeneric(tableType, typeof(XDataTableHasKey<,>)))
+            if (!IsDataTableRefTargetType(tableType))
             {
-                resolveError = $"{tableType.Name} 必须继承 XDataTableHasKey<,>。";
+                resolveError = $"{tableType.Name} 必须继承 XDataTableHasKey<,> 或 XUnionDataTableHasKey<,,>。";
                 return null;
             }
 
@@ -183,7 +215,7 @@ namespace XFramework.Editor
                 return BuildReferenceDisplayText(
                     meta.KeyProperty.GetValue(row),
                     meta.AliasProperty?.GetValue(row) as string,
-                    meta.NameField?.GetValue(row) as string);
+                    GetNameValue(meta, row));
             }
 
             return $"{keyValue} | Missing";
@@ -204,7 +236,7 @@ namespace XFramework.Editor
                 object row = meta.Rows[i];
                 object keyValue = meta.KeyProperty.GetValue(row);
                 string alias = meta.AliasProperty?.GetValue(row) as string;
-                string name = meta.NameField?.GetValue(row) as string;
+                string name = GetNameValue(meta, row);
                 string displayText = BuildReferenceDisplayText(keyValue, alias, name);
 
                 if (hasSearch)
@@ -219,7 +251,7 @@ namespace XFramework.Editor
                     }
                 }
 
-                options.Add(new XDataTableRefOption(i, keyValue, alias, name, displayText));
+                options.Add(new XDataTableRefOption(i, keyValue, alias, name, displayText, GetRowTableType(meta, i)));
             }
 
             return options;
@@ -296,6 +328,15 @@ namespace XFramework.Editor
 
             if (keyValue == null || IsEmptyReferenceValue(keyValue, ownerFieldType))
             {
+                if (meta.IsUnionTable)
+                {
+                    MethodInfo showUnionWindowMethod = windowType.GetMethod(
+                        "ShowUnionDataTableWindow",
+                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+                    showUnionWindowMethod?.Invoke(null, new object[] { meta.TableType });
+                    return;
+                }
+
                 MethodInfo showWindowMethod = windowType.GetMethod("ShowWindow", BindingFlags.Public | BindingFlags.Static);
                 showWindowMethod?.Invoke(null, new object[] { meta.TableAsset });
                 return;
@@ -325,46 +366,66 @@ namespace XFramework.Editor
                 return null;
             }
 
-            PropertyInfo keyProperty = dataType.GetProperty("PrimaryKey", BindingFlags.Instance | BindingFlags.Public);
+            PropertyInfo keyProperty = ResolvePublicProperty(dataType, "PrimaryKey");
             if (keyProperty == null)
             {
                 resolveError = $"{dataType.Name} 缺少 PrimaryKey 属性。";
                 return null;
             }
 
-            PropertyInfo aliasProperty = dataType.GetProperty("Alias", BindingFlags.Instance | BindingFlags.Public);
+            PropertyInfo aliasProperty = ResolvePublicProperty(dataType, "Alias");
+            PropertyInfo nameProperty = ResolvePublicProperty(dataType, "Name");
             FieldInfo nameField = ResolveNameField(dataType);
-            IReadOnlyList<TextAsset> tableAssets = ResolveDataTableTextAssets(tableType);
+            bool isUnionTable = IsUnionDataTableType(tableType);
+            IReadOnlyList<TextAsset> tableAssets = ResolveDataTableTextAssets(tableType, dataType, out IReadOnlyList<Type> tableAssetTypes, out resolveError);
             if (tableAssets.Count == 0)
             {
-                DataResourcePath pathAttribute = tableType.GetCustomAttribute<DataResourcePath>(false);
-                resolveError = pathAttribute == null
-                    ? $"{tableType.Name} 缺少 DataResourcePath。"
-                    : $"未找到数据表资源: {string.Join(", ", pathAttribute.GetPaths())}";
+                resolveError ??= $"{tableType.Name} 未找到可用的数据表资源。";
                 return null;
             }
 
-            IReadOnlyList<object> rows = LoadRows(tableType, dataType, tableAssets, out resolveError);
+            IReadOnlyList<object> rows = LoadRows(tableType, dataType, tableAssets, tableAssetTypes, out IReadOnlyList<Type> rowTableTypes, out resolveError);
             if (rows == null)
             {
                 return null;
             }
 
-            return new XDataTableRefMeta(tableType, dataType, keyProperty, aliasProperty, nameField, tableAssets[0], tableAssets, rows);
+            return new XDataTableRefMeta(
+                tableType,
+                dataType,
+                keyProperty,
+                aliasProperty,
+                nameProperty,
+                nameField,
+                tableAssets[0],
+                tableAssets,
+                rows,
+                rowTableTypes,
+                tableAssetTypes,
+                isUnionTable);
         }
 
-        private static IReadOnlyList<object> LoadRows(Type tableType, Type dataType, IReadOnlyList<TextAsset> tableAssets, out string resolveError)
+        private static IReadOnlyList<object> LoadRows(
+            Type tableType,
+            Type dataType,
+            IReadOnlyList<TextAsset> tableAssets,
+            IReadOnlyList<Type> tableAssetTypes,
+            out IReadOnlyList<Type> rowTableTypes,
+            out string resolveError)
         {
+            rowTableTypes = null;
             resolveError = null;
             try
             {
                 XJson.SetUnityDefaultSetting();
-                FieldInfo itemsField = ResolveItemsField(tableType);
                 var rows = new List<object>();
+                var rowTypes = new List<Type>();
                 for (int i = 0; i < tableAssets.Count; i++)
                 {
                     TextAsset tableAsset = tableAssets[i];
-                    XTextAsset typedTableAsset = tableAsset.ToXTextAsset<XTextAsset>(tableType);
+                    Type sourceTableType = ResolveSourceTableType(tableType, tableAssetTypes, i);
+                    FieldInfo itemsField = ResolveItemsField(sourceTableType);
+                    XTextAsset typedTableAsset = tableAsset.ToXTextAsset<XTextAsset>(sourceTableType);
                     Array items = itemsField.GetValue(typedTableAsset) as Array;
                     if (items == null)
                     {
@@ -373,13 +434,24 @@ namespace XFramework.Editor
 
                     foreach (object item in items)
                     {
-                        if (item != null)
+                        if (item == null)
                         {
-                            rows.Add(item);
+                            continue;
                         }
+
+                        Type itemType = item.GetType();
+                        if (!dataType.IsAssignableFrom(itemType))
+                        {
+                            resolveError = $"{sourceTableType.Name} 的数据 {itemType.Name} 无法作为 {dataType.Name} 使用。";
+                            return null;
+                        }
+
+                        rows.Add(item);
+                        rowTypes.Add(sourceTableType);
                     }
                 }
 
+                rowTableTypes = rowTypes;
                 return rows;
             }
             catch (Exception exception)
@@ -430,16 +502,90 @@ namespace XFramework.Editor
             throw new InvalidOperationException($"{tableType.FullName} 未找到 items 字段。");
         }
 
-        private static IReadOnlyList<TextAsset> ResolveDataTableTextAssets(Type tableType)
+        private static IReadOnlyList<TextAsset> ResolveDataTableTextAssets(
+            Type tableType,
+            Type dataType,
+            out IReadOnlyList<Type> tableAssetTypes,
+            out string resolveError)
         {
 #if UNITY_EDITOR
+            resolveError = null;
+            var assets = new List<TextAsset>();
+            var assetTypes = new List<Type>();
+
+            if (IsUnionDataTableType(tableType))
+            {
+                UnionDataTablesAttribute unionAttribute = tableType.GetCustomAttribute<UnionDataTablesAttribute>(false);
+                if (unionAttribute?.tableTypes == null || unionAttribute.tableTypes.Length == 0)
+                {
+                    resolveError = $"{tableType.Name} 缺少 UnionDataTables。";
+                    tableAssetTypes = assetTypes;
+                    return assets;
+                }
+
+                foreach (Type childTableType in unionAttribute.tableTypes)
+                {
+                    if (childTableType == null)
+                    {
+                        resolveError = $"{tableType.Name} 包含空子表类型。";
+                        tableAssetTypes = assetTypes;
+                        return assets;
+                    }
+
+                    if (!typeof(XDataTable).IsAssignableFrom(childTableType))
+                    {
+                        resolveError = $"{tableType.Name} 的子表 {childTableType.Name} 不是合法的 XDataTable 类型。";
+                        tableAssetTypes = assetTypes;
+                        return assets;
+                    }
+
+                    Type childDataType = ResolveDataType(childTableType);
+                    if (childDataType == null || !dataType.IsAssignableFrom(childDataType))
+                    {
+                        resolveError = $"{tableType.Name} 的子表 {childTableType.Name} 数据类型不能作为 {dataType.Name} 使用。";
+                        tableAssetTypes = assetTypes;
+                        return assets;
+                    }
+
+                    AppendDataTableAssets(childTableType, assets, assetTypes);
+                }
+
+                tableAssetTypes = assetTypes;
+                if (assets.Count == 0)
+                {
+                    resolveError = $"{tableType.Name} 的 UnionDataTables 未找到可用子表资源。";
+                }
+
+                return assets;
+            }
+
+            AppendDataTableAssets(tableType, assets, assetTypes);
+            tableAssetTypes = assetTypes;
+            if (assets.Count == 0)
+            {
+                DataResourcePath pathAttribute = tableType.GetCustomAttribute<DataResourcePath>(false);
+                resolveError = pathAttribute == null
+                    ? $"{tableType.Name} 缺少 DataResourcePath。"
+                    : $"未找到数据表资源: {string.Join(", ", pathAttribute.GetPaths())}";
+            }
+
+            return assets;
+#else
+            tableAssetTypes = Array.Empty<Type>();
+            resolveError = null;
+            return Array.Empty<TextAsset>();
+#endif
+        }
+
+#if UNITY_EDITOR
+        private static void AppendDataTableAssets(Type tableType, ICollection<TextAsset> assets, ICollection<Type> assetTypes)
+        {
             DataResourcePath pathAttribute = tableType.GetCustomAttribute<DataResourcePath>(false);
             if (pathAttribute == null)
             {
-                return Array.Empty<TextAsset>();
+                return;
             }
 
-            var assets = new List<TextAsset>();
             foreach (string path in pathAttribute.GetPaths())
             {
                 if (string.IsNullOrWhiteSpace(path))
@@ -448,17 +594,16 @@ namespace XFramework.Editor
                 }
 
                 TextAsset asset = AssetDatabase.LoadAssetAtPath<TextAsset>(path);
-                if (asset != null)
+                if (asset == null)
                 {
-                    assets.Add(asset);
+                    continue;
                 }
-            }
 
-            return assets;
-#else
-            return Array.Empty<TextAsset>();
-#endif
+                assets.Add(asset);
+                assetTypes.Add(tableType);
+            }
         }
+#endif
 
 #if UNITY_EDITOR
         private static TextAsset ResolveTableAssetForKey(XDataTableRefMeta meta, object keyValue)
@@ -471,7 +616,8 @@ namespace XFramework.Editor
             for (int i = 0; i < meta.TableAssets.Count; i++)
             {
                 TextAsset tableAsset = meta.TableAssets[i];
-                if (tableAsset == null || !TryLoadRows(meta.TableType, tableAsset, out IReadOnlyList<object> rows))
+                Type sourceTableType = ResolveSourceTableType(meta.TableType, meta.TableAssetTypes, i);
+                if (tableAsset == null || !TryLoadRows(sourceTableType, tableAsset, out IReadOnlyList<object> rows))
                 {
                     continue;
                 }
@@ -541,6 +687,19 @@ namespace XFramework.Editor
             return false;
         }
 
+        private static bool IsDataTableRefTargetType(Type tableType)
+        {
+            return IsSubclassOfGeneric(tableType, typeof(XDataTableHasKey<,>))
+                   || IsSubclassOfGeneric(tableType, typeof(XUnionDataTableHasKey<,,>));
+        }
+
+        private static bool IsUnionDataTableType(Type tableType)
+        {
+            return IsSubclassOfGeneric(tableType, typeof(XUnionDataTable<,>))
+                   || IsSubclassOfGeneric(tableType, typeof(XUnionDataTableHasKey<,,>))
+                   || IsSubclassOfGeneric(tableType, typeof(XUnionDataTableHasAlias<,,>));
+        }
+
         private static Type ResolveDataType(Type tableType)
         {
             Type currentType = tableType;
@@ -558,9 +717,63 @@ namespace XFramework.Editor
                     {
                         return currentType.GetGenericArguments()[1];
                     }
+
+                    if (genericTypeDefinition == typeof(XUnionDataTable<,>))
+                    {
+                        return currentType.GetGenericArguments()[1];
+                    }
+
+                    if (genericTypeDefinition == typeof(XUnionDataTableHasKey<,,>) || genericTypeDefinition == typeof(XUnionDataTableHasAlias<,,>))
+                    {
+                        return currentType.GetGenericArguments()[2];
+                    }
                 }
 
                 currentType = currentType.BaseType;
+            }
+
+            return null;
+        }
+
+        private static Type ResolveSourceTableType(Type fallbackTableType, IReadOnlyList<Type> tableAssetTypes, int index)
+        {
+            return tableAssetTypes != null && index >= 0 && index < tableAssetTypes.Count && tableAssetTypes[index] != null
+                ? tableAssetTypes[index]
+                : fallbackTableType;
+        }
+
+        private static Type GetRowTableType(XDataTableRefMeta meta, int rowIndex)
+        {
+            return meta?.RowTableTypes != null && rowIndex >= 0 && rowIndex < meta.RowTableTypes.Count
+                ? meta.RowTableTypes[rowIndex]
+                : null;
+        }
+
+        private static PropertyInfo ResolvePublicProperty(Type type, string propertyName)
+        {
+            if (type == null || string.IsNullOrWhiteSpace(propertyName))
+            {
+                return null;
+            }
+
+            PropertyInfo property = type.GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
+            if (property != null)
+            {
+                return property;
+            }
+
+            if (!type.IsInterface)
+            {
+                return null;
+            }
+
+            foreach (Type interfaceType in type.GetInterfaces())
+            {
+                property = interfaceType.GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
+                if (property != null)
+                {
+                    return property;
+                }
             }
 
             return null;
@@ -571,6 +784,12 @@ namespace XFramework.Editor
             return dataType.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
                 .FirstOrDefault(field => string.Equals(field.Name, "name", StringComparison.OrdinalIgnoreCase)
                                          && field.FieldType == typeof(string));
+        }
+
+        private static string GetNameValue(XDataTableRefMeta meta, object row)
+        {
+            return meta?.NameProperty?.GetValue(row) as string
+                   ?? meta?.NameField?.GetValue(row) as string;
         }
 
         private static string BuildReferenceDisplayText(object keyValue, string alias, string name)
