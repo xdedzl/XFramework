@@ -152,7 +152,9 @@ namespace XFramework.Editor
         [OnOpenAsset(1)]
         public static bool OpenAsset(int instanceID, int line)
         {
+#pragma warning disable CS0618 // Type or member is obsolete
             string fileFullPath = System.IO.Directory.GetParent(Application.dataPath) + "/" + AssetDatabase.GetAssetPath(EditorUtility.InstanceIDToObject(instanceID));
+#pragma warning restore CS0618 // Type or member is obsolete
 
             var strs = fileFullPath.Split('.');
 

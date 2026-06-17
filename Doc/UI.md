@@ -9,10 +9,11 @@
 - 需要被代码访问的 UI 节点必须挂载 XFramework 封装组件，例如 `XText`、`XTMPText`、`XButton`、`XImage`、`XLayoutGroup`、`XTMPInputField`。
 - 推荐使用 `[UIRef]` 自动填充面板字段；也可以在 `OnInit()` 中通过 `this["NodeName"] as XButton` 或 `Find<XButton>("NodeName")` 手动查找并缓存节点。
 - `[UIRef]` 只表示 UI 节点引用填充，不做数据绑定，也不负责文本刷新、按钮命令或 ViewState 同步。
+- 推荐使用 `[UIListener]` 自动绑定面板内的 UI 事件；复杂动态场景仍可手动调用框架组件的 `AddListener`。
 - 业务代码推荐使用 `UIManager.Instance.OpenPanel<TPanel>()` 或 `UIManager.Instance.OpenPanel<TPanel>(request)` 打开面板；动态面板名可使用 `UIManager.Instance.OpenPanel(uiName)` 或 `UIManager.Instance.OpenPanel(uiName, in request)`。
 - 查找 key 默认使用 GameObject 名称；如需稳定别名，可在 `XUIBase` 的 `searchKey` 中填写自定义 key。
 - 节点命名要稳定、语义清楚，避免依赖层级路径。调整父子层级时，只要节点名或 `searchKey` 不变，脚本不需要修改。
-- 使用框架组件提供的方法注册事件，例如 `XButton.AddListener`、`XTMPInputField.AddOnValueChanged`。
+- 手动注册事件时使用框架组件提供的方法，例如 `XButton.AddListener`、`XTMPInputField.AddOnValueChanged`。
 
 ## 2. 面板脚本写法
 
@@ -39,9 +40,10 @@ public class LetterPanel : PanelBase<LetterPanelRequest>
     [UIRef] private XText m_ContentText;
     [UIRef] private XButton m_CloseButton;
 
-    protected override void OnInit()
+    [UIListener("CloseButton")]
+    private void OnCloseButtonClick()
     {
-        m_CloseButton.AddListener(Close);
+        Close();
     }
 
     protected override void OnBeforeOpen(in LetterPanelRequest request)
@@ -73,6 +75,60 @@ UIManager.Instance.OpenPanel("Letter", in request);
 [UIRef("TitleText")] private XText m_Title;
 ```
 
+`[UIListener]` 未填写 key 时会从方法名推导：`OnCloseButtonClick` 对应 `CloseButton`，`OnMusicToggleChanged` 对应 `MusicToggle`。目标 UI 组件必须支持事件源接口；当前常用控件支持以下默认事件：
+
+| XFramework 组件 | 绑定事件 | 方法签名 |
+| :--- | :--- | :--- |
+| `XButton` | `Button.onClick` | `void Method()` |
+| `XToggle` | `Toggle.onValueChanged` | `void Method(bool value)` |
+| `XSlider` / `XScrollbar` / `XProgressBar` | 值变化事件 | `void Method(float value)` |
+| `XDropdown` / `XTMPDropdown` | `onValueChanged` | `void Method(int index)` |
+| `XInputField` / `XTMPInputField` | `onValueChanged` | `void Method(string value)` |
+| `XScrollRect` | `ScrollRect.onValueChanged` | `void Method(Vector2 value)` |
+
+部分组件支持多个可自动绑定事件。事件名由组件自己的 `Events` 嵌套类维护；`[UIListener]` 只在第二个参数中引用对应组件的事件名，不使用全局事件名表。
+
+`XInputField` / `XTMPInputField` 的 `[UIListener]` 默认绑定值变化，也可显式绑定编辑结束或输入校验：
+
+| XFramework 组件 | 事件名 | 绑定事件 | 方法签名 |
+| :--- | :--- | :--- | :--- |
+| `XInputField` / `XTMPInputField` | `Events.ValueChanged` | `onValueChanged` | `void Method(string value)` |
+| `XInputField` / `XTMPInputField` | `Events.EndEdit` | `onEndEdit` | `void Method(string value)` |
+| `XInputField` | `Events.ValidateInput` | `onValidateInput` | `char Method(string text, int charIndex, char addedChar)` |
+| `XTMPInputField` | `Events.ValidateInput` | `onValidateInput` | `char Method(string text, int charIndex, char addedChar)` |
+
+复杂动态场景仍可在 `OnInit()` 中手写 `AddOnValueChanged`、`AddOnEditorEnd` 或 `AddOnValidateInput`。
+
+后续优化 TODO：
+
+- 可以为 `[UIRef]` / `[UIListener]` 增加 `PanelBindingMeta` 静态缓存：首次遇到某个 `PanelBase` 派生类型时扫描字段和方法，缓存需要绑定的 `FieldInfo` / `MethodInfo` 与 key；后续同类型面板初始化时直接复用缓存，避免重复反射扫描。当前反射只发生在 `PanelBase.Init()` 阶段，暂时没有必要实现该优化；如果后续面板实例化更频繁，或继续增加 `[UIBind]` 等属性绑定能力，再统一接入更合适。
+
+```csharp
+[UIListener]
+private void OnConfirmButtonClick()
+{
+    Submit();
+}
+
+[UIListener("MusicToggle")]
+private void OnMusicToggleChanged(bool value)
+{
+    SetMusicEnabled(value);
+}
+
+[UIListener("NameInput", XTMPInputField.Events.EndEdit)]
+private void OnNameInputEndEdit(string value)
+{
+    SaveName(value);
+}
+
+[UIListener("CountInput", XTMPInputField.Events.ValidateInput)]
+private char ValidateCountInput(string text, int charIndex, char addedChar)
+{
+    return char.IsDigit(addedChar) ? addedChar : '\0';
+}
+```
+
 不推荐写法：
 
 ```csharp
@@ -89,7 +145,7 @@ public class BadPanel : PanelBase
 
 ## 3. 生命周期约定
 
-- `OnInit()` 只在面板首次加载时调用一次，适合查找组件、绑定按钮事件、初始化绑定关系。
+- `OnInit()` 只在面板首次加载时调用一次，适合查找组件、补充复杂事件绑定、初始化绑定关系；`[UIListener]` 会在 `OnInit()` 之前完成自动绑定。
 - `OnBeforeOpen()` 或 `OnBeforeOpen(in TRequest request)` 每次打开面板时、`OnOpened()` 之前调用，适合刷新显示、注册业务状态；有参数面板必须使用 request，不再使用 `object[]` 参数顺序。
 - `OnOpened()` 在面板和子面板的打开前逻辑完成后调用，适合依赖完整打开状态的后置处理。
 - `OnBeforeClose()` 适合解绑当前面板打开期间注册的外部事件；重写时要调用 `base.OnBeforeClose()`，以保证 `[EventListener]` 自动注销。
@@ -190,6 +246,6 @@ LabelRoot
 
 - `there is no ui component named 'xxx'`：目标节点未挂 XFramework 组件，或节点名、`searchKey` 与代码不一致。
 - `already have a XUIBase component named xxx`：同一个面板查找范围内有重复 key。改名或填写唯一 `searchKey`。
-- 按钮点击没有响应：确认节点挂了 `XButton`，`XButton.button` 已引用同节点 `Button`，并在 `OnInit()` 中调用了 `AddListener`。
+- UI 事件没有响应：确认节点挂了对应 XFramework 组件，原生组件字段已引用同节点组件，并使用 `[UIListener]` 或在 `OnInit()` 中手动调用了 `AddListener`。
 - 文本不刷新：确认使用的是 `XText.text.text` 或 `XTMPText.text.text`，不是直接把字符串赋给 XFramework 组件字段。
 - 子列表查找串到外层面板：列表项逻辑应继承 `UINode`，让 `ComponentFindHelper` 的忽略边界隔离子节点查找。

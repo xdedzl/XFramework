@@ -11,5 +11,13 @@ namespace XFramework.UI
         {
             text = transform.GetComponent<Text>();
         }
+
+        public void SetText(string value)
+        {
+            if (text != null)
+            {
+                text.text = value;
+            }
+        }
     }
 }

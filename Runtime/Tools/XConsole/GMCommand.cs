@@ -70,7 +70,7 @@ namespace XFramework.Console
                         return ExecuteCmd(args[0], args[1], out result);
                     }
                 }
-                catch (Exception _)
+                catch
                 {
                     // LogError($"{e.Message}\n{e.StackTrace}");
                     return false;

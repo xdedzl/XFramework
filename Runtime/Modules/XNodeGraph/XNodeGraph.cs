@@ -9,7 +9,10 @@ namespace XFramework.NodeKit
     public interface IXNodeGraph
     {
         string Id { get; }
+        bool HasResult { get; }
+        object Result { get; }
         IXNode GetNode(string nodeId);
+        void SetResult(object result);
         void FinishNode(IXNode node, params object[] args);
         T GetNode<T>(string nodeId) where T : IXNode;
     }
@@ -23,6 +26,9 @@ namespace XFramework.NodeKit
         
         public string id { get; private set; }
         public string Id => id;
+        public bool HasResult { get; private set; }
+        public object Result { get; private set; }
+        public bool IsCompleted { get; private set; }
 
         public XNodeGraph(XNodeManager manager, XNodeGraphAsset asset)
         {
@@ -68,6 +74,12 @@ namespace XFramework.NodeKit
             
         }
 
+        public void SetResult(object result)
+        {
+            Result = result;
+            HasResult = true;
+        }
+
         public void StartNode(string nodeId)
         {
             if (m_NodeDict.TryGetValue(nodeId, out var node))
@@ -93,7 +105,9 @@ namespace XFramework.NodeKit
             if(m_RunningNodes.Remove(nodeId, out var node))
             {
                 var nextNodeIds = node.GetNextNodeIds(this, args);
-                var nodeIds = nextNodeIds as string[] ?? nextNodeIds.ToArray();
+                var nodeIds = nextNodeIds == null
+                    ? Array.Empty<string>()
+                    : nextNodeIds as string[] ?? nextNodeIds.ToArray();
                 // Debug.Log($"[XNodeGraph] Node {nodeId} finished in StoryGraph {id}. Next nodes: {string.Join(", ", nodeIds)}");
                 
                 foreach (var nextNodeId in nodeIds)
@@ -104,6 +118,7 @@ namespace XFramework.NodeKit
                 // 如果没有新节点启动，且当前图中已无运行中的节点，则通知管理模块本剧情已自然结束
                 if (m_RunningNodes.Count == 0 && nodeIds.Length == 0)
                 {
+                    IsCompleted = true;
                     m_Manager.StopGraph(this.id, true);
                 }
             }

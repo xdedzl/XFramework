@@ -12,9 +12,17 @@ namespace XFramework.UI
             text = GetComponent<TextMeshProUGUI>();
         }
 
+        public void SetText(string value)
+        {
+            if (text != null)
+            {
+                text.text = value;
+            }
+        }
+
         public void OnBind(IBindableDataCell<string> bindableData)
         {
-            text.text = bindableData.Value;
+            SetText(bindableData.Value);
         }
     }
 }

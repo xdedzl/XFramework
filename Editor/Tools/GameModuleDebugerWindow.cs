@@ -166,7 +166,9 @@ namespace XFramework.Editor
             m_ListView.style.marginTop = 4;
             m_ListView.makeItem = MakeListItem;
             m_ListView.bindItem = BindListItem;
+#pragma warning disable CS0618 // Type or member is obsolete
             m_ListView.onSelectionChange += OnSelectionChanged;
+#pragma warning restore CS0618 // Type or member is obsolete
             pane.Add(m_ListView);
 
             return pane;

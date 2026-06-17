@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using JetBrains.Annotations;
 
 namespace XFramework.Event
 {
+    [MeansImplicitUse(ImplicitUseKindFlags.Access, ImplicitUseTargetFlags.Itself)]
+    [AttributeUsage(AttributeTargets.Method, Inherited = true, AllowMultiple = false)]
     public class EventListenerAttribute : Attribute
     {
         public string eventName;

@@ -4,6 +4,7 @@ using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
+#pragma warning disable CS0618 // Type or member is obsolete
 
 namespace XFramework.Editor
 {

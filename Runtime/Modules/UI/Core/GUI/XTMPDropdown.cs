@@ -4,9 +4,11 @@ using TMPro;
 namespace XFramework.UI
 {
     [UnityEngine.RequireComponent(typeof(TMP_Dropdown))]
-    public class XTMPDropdown : XUIBase
+    public class XTMPDropdown : XUIBase, IUIEventSource
     {
         public TMP_Dropdown dropdown;
+
+        public System.Type ListenerType => typeof(UnityEngine.Events.UnityAction<int>);
 
         public int Value
         {
@@ -55,6 +57,11 @@ namespace XFramework.UI
         public void AddListener(UnityEngine.Events.UnityAction<int> call)
         {
             dropdown.onValueChanged.AddListener(call);
+        }
+
+        void IUIEventSource.AddListener(System.Delegate listener)
+        {
+            AddListener((UnityEngine.Events.UnityAction<int>)listener);
         }
 
         /// <summary>

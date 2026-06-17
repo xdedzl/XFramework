@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
 using Object = UnityEngine.Object;
+#pragma warning disable CS0618 // Type or member is obsolete
 
 namespace XFramework.Editor
 {

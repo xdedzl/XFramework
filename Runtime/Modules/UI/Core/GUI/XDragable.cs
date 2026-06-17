@@ -4,7 +4,7 @@ using UnityEngine.EventSystems;
 namespace XFramework.UI
 {
     [UnityEngine.RequireComponent(typeof(Draggable))]
-    [UnityEngine.AddComponentMenu("XFramework/GUDraggable")]
+    [UnityEngine.AddComponentMenu("XFramework/XDraggable")]
     public class XDragable : XUIBase
     {
         public Draggable draggable;

@@ -1,19 +1,32 @@
 ﻿
+using System;
+using UnityEngine;
+using UnityEngine.Events;
+using UnityEngine.UI;
+
 namespace XFramework.UI
 {
-    [UnityEngine.RequireComponent(typeof(UnityEngine.UI.Dropdown))]
-    [UnityEngine.AddComponentMenu("XFramework/GUDropdown")]
-    public class XDropdown : XUIBase
+    [RequireComponent(typeof(Dropdown))]
+    [AddComponentMenu("XFramework/XDropdown")]
+    public class XDropdown : XUIBase, IUIEventSource
     {
-        public UnityEngine.UI.Dropdown dropdown;
+        public Dropdown dropdown;
+
+        public Type ListenerType => typeof(UnityAction<int>);
+
         private void Reset()
         {
-            dropdown = transform.GetComponent<UnityEngine.UI.Dropdown>();
+            dropdown = transform.GetComponent<Dropdown>();
         }
 
-        public void AddListener(UnityEngine.Events.UnityAction<int> call)
+        public void AddListener(UnityAction<int> call)
         {
             dropdown.onValueChanged.AddListener(call);
+        }
+
+        void IUIEventSource.AddListener(Delegate listener)
+        {
+            AddListener((UnityAction<int>)listener);
         }
     }
 }

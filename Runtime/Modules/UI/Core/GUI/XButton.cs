@@ -1,14 +1,20 @@
 ﻿using UnityEngine;
 
+using System;
+using UnityEngine.Events;
+using UnityEngine.UI;
+
 namespace XFramework.UI
 {
-    [UnityEngine.RequireComponent(typeof(UnityEngine.UI.Button))]
-    [UnityEngine.AddComponentMenu("XFramework/XButton")]
-    public class XButton : XUIBase
+    [RequireComponent(typeof(Button))]
+    [AddComponentMenu("XFramework/XButton")]
+    public class XButton : XUIBase, IUIEventSource
     {
-        public UnityEngine.UI.Button button;
+        public Button button;
         [UIClickSound]
         public string clickSoundKey;
+
+        public Type ListenerType => typeof(UnityAction);
 
         private void Start()
         {
@@ -17,12 +23,17 @@ namespace XFramework.UI
 
         private void Reset()
         {
-            button = transform.GetComponent<UnityEngine.UI.Button>();
+            button = transform.GetComponent<Button>();
         }
 
-        public void AddListener(UnityEngine.Events.UnityAction call)
+        public void AddListener(UnityAction call)
         {
             button.onClick.AddListener(call);
+        }
+
+        void IUIEventSource.AddListener(Delegate listener)
+        {
+            AddListener((UnityAction)listener);
         }
 
         private void OnClickPlaySound()

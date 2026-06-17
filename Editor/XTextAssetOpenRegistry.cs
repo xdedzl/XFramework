@@ -65,7 +65,9 @@ namespace XFramework.Editor
         [OnOpenAsset(0)]
         public static bool OnOpenAsset(int instanceId, int line)
         {
+#pragma warning disable CS0618 // Type or member is obsolete
             UnityEngine.Object target = EditorUtility.InstanceIDToObject(instanceId);
+#pragma warning restore CS0618 // Type or member is obsolete
             if (target is not TextAsset textAsset)
             {
                 return false;

@@ -38,6 +38,67 @@ namespace XFramework.NodeKit
             return storyGraph.id;
         }
 
+        public bool TryEvaluate<T>(XNodeGraphAsset asset, out T result)
+        {
+            result = default;
+            if (asset == null)
+            {
+                Debug.LogError($"[XNodeManager] Evaluate failed: asset is null, resultType={typeof(T).Name}.");
+                return false;
+            }
+
+            var graph = new XNodeGraph(this, asset);
+            graph.Start();
+
+            if (!graph.IsCompleted)
+            {
+                Debug.LogError(
+                    $"[XNodeManager] Evaluate failed: graph did not complete synchronously, graphId={graph.id}, resultType={typeof(T).Name}.");
+                return false;
+            }
+
+            if (!graph.HasResult)
+            {
+                Debug.LogError(
+                    $"[XNodeManager] Evaluate failed: graph completed without result, graphId={graph.id}, resultType={typeof(T).Name}.");
+                return false;
+            }
+
+            if (graph.Result == null)
+            {
+                if (typeof(T).IsValueType && Nullable.GetUnderlyingType(typeof(T)) == null)
+                {
+                    Debug.LogError(
+                        $"[XNodeManager] Evaluate failed: result is null but target type is non-nullable value type, graphId={graph.id}, resultType={typeof(T).Name}.");
+                    return false;
+                }
+
+                result = default;
+                return true;
+            }
+
+            if (graph.Result is T typedResult)
+            {
+                result = typedResult;
+                return true;
+            }
+
+            Debug.LogError(
+                $"[XNodeManager] Evaluate failed: result type mismatch, graphId={graph.id}, actualType={graph.Result.GetType().Name}, expectedType={typeof(T).Name}.");
+            return false;
+        }
+
+        public T Evaluate<T>(XNodeGraphAsset asset)
+        {
+            if (TryEvaluate(asset, out T result))
+            {
+                return result;
+            }
+
+            throw new InvalidOperationException(
+                $"XNodeGraph evaluate failed or result type is not {typeof(T).Name}.");
+        }
+
         public bool IsGraphRunning(string id)
         {
             return m_RunningGraphs.ContainsKey(id);

@@ -9,6 +9,7 @@ using UnityEngine;
 using UnityEngine.UIElements;
 using XFramework.UI;
 using UIToolkitListView = UnityEngine.UIElements.ListView;
+#pragma warning disable CS0618 // Type or member is obsolete
 
 namespace XFramework.Editor
 {
@@ -108,7 +109,7 @@ namespace XFramework.Editor
             m_SearchField = new TextField("搜索");
             m_SearchField.style.flexGrow = 1f;
             m_SearchField.style.minWidth = 180f;
-            m_SearchField.tooltip = "按面板名、类型名、路径或标签过滤";
+            m_SearchField.tooltip = "按显示名、面板名、类型名、路径或标签过滤";
             m_SearchField.RegisterValueChangedCallback(_ => RefreshView(true));
             toolbar.Add(m_SearchField);
 
@@ -212,6 +213,7 @@ namespace XFramework.Editor
             VisualElement header = CreateRow(new Color(0.20f, 0.20f, 0.20f), 22f);
             header.Add(CreateHeaderLabel("状态", 54f));
             header.Add(CreateHeaderLabel("面板", 150f));
+            header.Add(CreateHeaderLabel("显示名", 120f));
             header.Add(CreateHeaderLabel("类型", 150f));
             header.Add(CreateHeaderLabel("Lv", 36f));
             header.Add(CreateHeaderLabel("UI", 82f));
@@ -241,6 +243,7 @@ namespace XFramework.Editor
             row.RegisterCallback<MouseDownEvent>(OnListItemMouseDown);
             row.Add(CreateCellLabel(54f));
             row.Add(CreateCellLabel(150f, true));
+            row.Add(CreateCellLabel(120f));
             row.Add(CreateCellLabel(150f));
             row.Add(CreateCellLabel(36f));
             row.Add(CreateCellLabel(82f));
@@ -259,10 +262,11 @@ namespace XFramework.Editor
             labels[0].text = GetRuntimeStatusText(item);
             labels[0].style.color = GetRuntimeStatusColor(item);
             labels[1].text = item.PanelName;
-            labels[2].text = item.TypeName;
-            labels[3].text = item.Level.ToString();
-            labels[4].text = item.IsUIToolkitPanel ? UIToolkitOption : UGUIOption;
-            labels[5].text = string.IsNullOrEmpty(item.Path) ? "<empty>" : item.Path;
+            labels[2].text = item.ShowName;
+            labels[3].text = item.TypeName;
+            labels[4].text = item.Level.ToString();
+            labels[5].text = item.IsUIToolkitPanel ? UIToolkitOption : UGUIOption;
+            labels[6].text = string.IsNullOrEmpty(item.Path) ? "<empty>" : item.Path;
             element.tooltip = item.FullTypeName;
             element.style.backgroundColor = index % 2 == 0
                 ? new Color(0.24f, 0.24f, 0.24f, 0.10f)
@@ -468,13 +472,15 @@ namespace XFramework.Editor
             }
 
             PanelDebugItem item = m_SelectedItem;
-            Label title = new(item.PanelName);
+            Label title = new(item.ShowName == item.PanelName ? item.PanelName : $"{item.ShowName} ({item.PanelName})");
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             title.style.fontSize = 18f;
             title.style.marginBottom = 8f;
             m_DetailPane.Add(title);
 
             m_DetailPane.Add(CreateSectionTitle("注册信息"));
+            m_DetailPane.Add(CreateInfoRow("Show Name", item.ShowName));
+            m_DetailPane.Add(CreateInfoRow("Panel Name", item.PanelName));
             m_DetailPane.Add(CreateInfoRow("Type", item.FullTypeName));
             m_DetailPane.Add(CreateInfoRow("Path", string.IsNullOrEmpty(item.Path) ? "<empty>" : item.Path));
             m_DetailPane.Add(CreatePanelAssetActionRow(item));
@@ -631,7 +637,8 @@ namespace XFramework.Editor
 
         private static bool IsSearchMatch(PanelDebugItem item, string search)
         {
-            return item.PanelName.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0 ||
+            return item.ShowName.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   item.PanelName.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0 ||
                    item.TypeName.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0 ||
                    item.FullTypeName.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0 ||
                    item.Path.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -923,6 +930,7 @@ namespace XFramework.Editor
         private sealed class PanelDebugItem
         {
             public string PanelName;
+            public string ShowName;
             public string TypeName;
             public string FullTypeName;
             public string Path;
@@ -945,6 +953,7 @@ namespace XFramework.Editor
                 return new PanelDebugItem
                 {
                     PanelName = panelInfo.name,
+                    ShowName = panelInfo.showName,
                     TypeName = type.Name,
                     FullTypeName = type.FullName,
                     Path = panelInfo.path ?? string.Empty,

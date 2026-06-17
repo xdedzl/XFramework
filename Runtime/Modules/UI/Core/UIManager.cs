@@ -29,6 +29,7 @@ namespace XFramework.UI
     {
         public UIPanelDebugSnapshot(
             string panelName,
+            string showName,
             Type panelType,
             string path,
             int level,
@@ -42,6 +43,7 @@ namespace XFramework.UI
             IReadOnlyList<UIPanelTagDebugSnapshot> tags)
         {
             PanelName = panelName;
+            ShowName = showName;
             PanelType = panelType;
             Path = path;
             Level = level;
@@ -56,6 +58,7 @@ namespace XFramework.UI
         }
 
         public string PanelName { get; }
+        public string ShowName { get; }
         public Type PanelType { get; }
         public string Path { get; }
         public int Level { get; }
@@ -81,12 +84,14 @@ namespace XFramework.UI
     public class PanelInfoAttribute : Attribute
     {
         public string name;
+        public string showName;
         public string path;
         public int level;
         
-        public PanelInfoAttribute(string name, string path, int level = 0)
+        public PanelInfoAttribute(string name, string path, int level = 0, string showName = null)
         {
             this.name = name;
+            this.showName = string.IsNullOrWhiteSpace(showName) ? name : showName;
             this.path = path;
             this.level = level;
         }
@@ -457,6 +462,7 @@ namespace XFramework.UI
 
                 snapshots.Add(new UIPanelDebugSnapshot(
                     panelName,
+                    panelInfo.showName,
                     panelType,
                     panelInfo.path ?? string.Empty,
                     panelInfo.level,
