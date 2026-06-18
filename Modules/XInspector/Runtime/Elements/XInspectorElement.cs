@@ -177,6 +177,18 @@ namespace XFramework.UI
 
         }
 
+        internal void SetVariableNameTextRowHeight(float height)
+        {
+            variableNameText.style.height = height;
+            variableNameText.style.minHeight = height;
+            variableNameText.style.alignSelf = Align.Center;
+            variableNameText.style.marginTop = 0f;
+            variableNameText.style.marginBottom = 0f;
+            variableNameText.style.paddingTop = 0f;
+            variableNameText.style.paddingBottom = 0f;
+            variableNameText.style.unityTextAlign = TextAnchor.MiddleLeft;
+        }
+
         /// <summary>
         /// 数据绑定时调用
         /// </summary>

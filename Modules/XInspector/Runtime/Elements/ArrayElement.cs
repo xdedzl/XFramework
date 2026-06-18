@@ -268,6 +268,7 @@ namespace XFramework.UI
 
             int rowIndex = index;
             elementDrawer.BindTo(elementType, "Element " + index, () => GetElementValue(rowIndex), value => SetElementValue(rowIndex, value));
+            elementDrawer.SetVariableNameTextRowHeight(RowMinHeight - 4f);
             elementDrawer.Refresh();
             elementDrawer.style.flexGrow = 1;
             elementDrawer.style.minWidth = 0;
