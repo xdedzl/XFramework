@@ -332,7 +332,6 @@ namespace XFramework.Resource
         public void Release(UObject obj)
         {
             // todo 资源卸载逻辑， 待实现
-            GameObject.Destroy(obj);
         }
         
         private void UpdateLoadingAsset()

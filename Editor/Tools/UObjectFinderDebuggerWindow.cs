@@ -15,7 +15,6 @@ namespace XFramework.Editor
     public class UObjectFinderDebuggerWindow : EditorWindow
     {
         private const string MenuPath = "XFramework/Debug/UObjectFinderDebugger";
-        private const float LeftPaneWidth = 780f;
         private const float PathColumnWidth = 280f;
         private const float NameColumnWidth = 150f;
         private const float SceneColumnWidth = 120f;
@@ -48,21 +47,6 @@ namespace XFramework.Editor
         private DropdownField m_ModeFilterField;
         private ListView m_ListView;
         private Label m_SummaryLabel;
-        private Label m_DetailTitleLabel;
-        private Label m_DetailStatusLabel;
-        private ObjectField m_DetailObjectField;
-        private Label m_DetailSceneLabel;
-        private Label m_DetailHierarchyLabel;
-        private Label m_DetailActiveLabel;
-        private Label m_DetailModeLabel;
-        private Label m_DetailPathLabel;
-        private Label m_DetailExpectedComponentLabel;
-        private Label m_DetailSourceLabel;
-        private Label m_DetailMessageLabel;
-        private Button m_DetailLocateButton;
-        private Button m_DetailCopyCodeButton;
-        private Button m_DetailCopyPathButton;
-        private Button m_DetailCopySecondaryButton;
 
         private UObjectFinderDisplayRow m_SelectedRow;
 
@@ -97,6 +81,7 @@ namespace XFramework.Editor
             EditorSceneManager.activeSceneChangedInEditMode -= OnActiveSceneChanged;
             EditorSceneManager.newSceneCreated -= OnNewSceneCreated;
             Undo.undoRedoPerformed -= OnTrackedEditorStateChanged;
+            XFrameworkInspectorWindow.ClearIfOwner(this);
         }
 
         public void CreateGUI()
@@ -124,12 +109,7 @@ namespace XFramework.Editor
             m_SummaryLabel.style.color = new Color(0.75f, 0.75f, 0.75f);
             root.Add(m_SummaryLabel);
 
-            var splitView = new TwoPaneSplitView(0, LeftPaneWidth, TwoPaneSplitViewOrientation.Horizontal);
-            splitView.style.flexGrow = 1f;
-            root.Add(splitView);
-
-            splitView.Add(BuildListPane());
-            splitView.Add(BuildDetailPane());
+            root.Add(BuildListPane());
         }
 
         private VisualElement BuildToolbar()
@@ -209,7 +189,6 @@ namespace XFramework.Editor
             pane.style.paddingRight = 4f;
             pane.style.paddingTop = 4f;
             pane.style.paddingBottom = 4f;
-            pane.style.marginRight = 4f;
 
             pane.Add(BuildListHeader());
 
@@ -249,86 +228,6 @@ namespace XFramework.Editor
             header.Add(statusLabel);
 
             return header;
-        }
-
-        private VisualElement BuildDetailPane()
-        {
-            var pane = new XBox();
-            pane.style.flexGrow = 1f;
-            pane.style.paddingLeft = 10f;
-            pane.style.paddingRight = 10f;
-            pane.style.paddingTop = 10f;
-            pane.style.paddingBottom = 10f;
-            pane.style.marginLeft = 4f;
-
-            var scrollView = new ScrollView();
-            scrollView.style.flexGrow = 1f;
-            pane.Add(scrollView);
-
-            m_DetailTitleLabel = new Label("未选择条目");
-            m_DetailTitleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            m_DetailTitleLabel.style.fontSize = 14;
-            m_DetailTitleLabel.style.marginBottom = 8;
-            scrollView.Add(m_DetailTitleLabel);
-
-            m_DetailStatusLabel = new Label("从左侧选择一个条目查看详情。");
-            m_DetailStatusLabel.style.whiteSpace = WhiteSpace.Normal;
-            m_DetailStatusLabel.style.marginBottom = 10f;
-            scrollView.Add(m_DetailStatusLabel);
-
-            m_DetailObjectField = new ObjectField("对象")
-            {
-                objectType = typeof(GameObject)
-            };
-            m_DetailObjectField.SetEnabled(false);
-            scrollView.Add(m_DetailObjectField);
-
-            m_DetailSceneLabel = AddDetailRow(scrollView, "场景");
-            m_DetailHierarchyLabel = AddDetailRow(scrollView, "层级路径", true);
-            m_DetailActiveLabel = AddDetailRow(scrollView, "激活状态");
-            m_DetailModeLabel = AddDetailRow(scrollView, "查询/注册模式");
-            m_DetailPathLabel = AddDetailRow(scrollView, "解析路径");
-            m_DetailExpectedComponentLabel = AddDetailRow(scrollView, "组件需求", true);
-            m_DetailSourceLabel = AddDetailRow(scrollView, "代码来源", true);
-            m_DetailMessageLabel = AddDetailRow(scrollView, "说明", true);
-
-            var buttonRow = new VisualElement();
-            buttonRow.style.flexDirection = FlexDirection.Row;
-            buttonRow.style.marginTop = 12f;
-            scrollView.Add(buttonRow);
-
-            m_DetailLocateButton = new Button(LocateSelectedItem)
-            {
-                text = "定位"
-            };
-            m_DetailLocateButton.style.width = 88f;
-            buttonRow.Add(m_DetailLocateButton);
-
-            m_DetailCopyCodeButton = new Button(() => CopyToClipboard(GetSelectedFindCodeForCopy()))
-            {
-                text = "复制代码"
-            };
-            m_DetailCopyCodeButton.style.width = 90f;
-            m_DetailCopyCodeButton.style.marginLeft = 8f;
-            buttonRow.Add(m_DetailCopyCodeButton);
-
-            m_DetailCopyPathButton = new Button(() => CopyToClipboard(GetSelectedPathForCopy()))
-            {
-                text = "复制路径"
-            };
-            m_DetailCopyPathButton.style.width = 90f;
-            m_DetailCopyPathButton.style.marginLeft = 8f;
-            buttonRow.Add(m_DetailCopyPathButton);
-
-            m_DetailCopySecondaryButton = new Button(() => CopyToClipboard(GetSelectedSecondaryCopyValue()))
-            {
-                text = "复制来源"
-            };
-            m_DetailCopySecondaryButton.style.width = 110f;
-            m_DetailCopySecondaryButton.style.marginLeft = 8f;
-            buttonRow.Add(m_DetailCopySecondaryButton);
-
-            return pane;
         }
 
         private static Label CreateHeaderLabel(string text, float width)
@@ -726,7 +625,7 @@ namespace XFramework.Editor
             }
 
             UpdateSummary();
-            RefreshDetailPane();
+            RefreshInspectorDetail(false);
         }
 
         private void RestoreSelectionInView(int selectedReferenceId, string selectedGroupKey, string selectedIssueId)
@@ -787,126 +686,231 @@ namespace XFramework.Editor
                 $"已显示 {displayedCount} 项 | 问题: {problemCount} | Missing Target: {missingTargetCount} | Missing Component: {missingComponentCount} | Duplicate: {duplicateCount} | Invalid Path: {invalidPathCount} | Inactive: {inactiveCount} | List组: {listGroupCount}";
         }
 
-        private void RefreshDetailPane()
+        private void RefreshInspectorDetail(bool openInspector)
         {
-            if (m_DetailTitleLabel == null)
+            if (m_SelectedRow == null)
             {
+                XFrameworkInspectorWindow.ClearIfOwner(this);
                 return;
             }
 
+            if (openInspector)
+            {
+                XFrameworkInspectorWindow.InspectCustom(
+                    this,
+                    GetInspectorTitle(),
+                    BuildInspectorContent,
+                    GetInspectorSubtitle());
+                return;
+            }
+
+            XFrameworkInspectorWindow.RefreshIfOwner(this);
+        }
+
+        private void BuildInspectorContent(VisualElement parent)
+        {
             UObjectReferenceEntry selectedEntry = GetSelectedEntry();
             UObjectFinderListGroup selectedGroup = GetSelectedGroup();
             UObjectFinderMissingTargetIssue selectedIssue = GetSelectedMissingTargetIssue();
 
             if (selectedEntry != null)
             {
-                m_DetailTitleLabel.text = selectedEntry.GameObjectName;
-                m_DetailStatusLabel.text = GetDisplayStatus(selectedEntry);
-                m_DetailStatusLabel.style.color = GetStatusColor(selectedEntry.Issues);
-
-                m_DetailObjectField.value = selectedEntry.GameObject;
-                m_DetailSceneLabel.text = selectedEntry.SceneName;
-                m_DetailHierarchyLabel.text = selectedEntry.HierarchyPath;
-                m_DetailHierarchyLabel.tooltip = selectedEntry.HierarchyPath;
-                m_DetailActiveLabel.text = selectedEntry.Issues.HasFlag(IssueFlags.Inactive)
-                    ? "Inactive In Hierarchy"
-                    : "Active In Hierarchy";
-                m_DetailModeLabel.text = GetEntryModeDisplay(selectedEntry);
-                m_DetailPathLabel.text = GetPathDisplay(selectedEntry);
-                m_DetailPathLabel.tooltip = GetPathDisplay(selectedEntry);
-                m_DetailExpectedComponentLabel.text = GetExpectedComponentDisplay(selectedEntry.ExpectedComponentNames, selectedEntry.MissingExpectedComponentNames);
-                m_DetailSourceLabel.text = BuildUsageDisplayText(selectedEntry.MatchedUsages);
-                m_DetailSourceLabel.tooltip = BuildUsageTooltip(selectedEntry.MatchedUsages);
-                m_DetailMessageLabel.text = selectedEntry.StatusMessage;
-
-                m_DetailLocateButton.text = "定位对象";
-                m_DetailLocateButton.SetEnabled(selectedEntry.GameObject != null);
-                m_DetailCopyCodeButton.SetEnabled(!string.IsNullOrWhiteSpace(selectedEntry.ResolvedPath));
-                m_DetailCopyPathButton.SetEnabled(true);
-                m_DetailCopySecondaryButton.text = "复制来源";
-                m_DetailCopySecondaryButton.SetEnabled(selectedEntry.MatchedUsages.Count > 0 || !string.IsNullOrEmpty(selectedEntry.HierarchyPath));
+                BuildEntryInspectorContent(parent, selectedEntry);
                 return;
             }
 
             if (selectedGroup != null)
             {
-                m_DetailTitleLabel.text = GetPathDisplay(selectedGroup.Key);
-                m_DetailStatusLabel.text = GetGroupStatusText(selectedGroup);
-                m_DetailStatusLabel.style.color = GetStatusColor(selectedGroup.Issues);
-
-                m_DetailObjectField.value = null;
-                m_DetailSceneLabel.text = selectedGroup.SceneSummary;
-                m_DetailHierarchyLabel.text = $"共 {selectedGroup.Items.Count} 项";
-                m_DetailHierarchyLabel.tooltip = string.Join("\n", selectedGroup.Items.Select(item => item.HierarchyPath));
-                m_DetailActiveLabel.text = GetGroupActiveDisplay(selectedGroup);
-                m_DetailModeLabel.text = "List / 自定义Key";
-                m_DetailPathLabel.text = GetPathDisplay(selectedGroup.Key);
-                m_DetailPathLabel.tooltip = GetPathDisplay(selectedGroup.Key);
-                m_DetailExpectedComponentLabel.text = GetExpectedComponentDisplay(selectedGroup.ExpectedComponentNames, selectedGroup.MissingExpectedComponentNames);
-                m_DetailSourceLabel.text = BuildUsageDisplayText(selectedGroup.MatchedUsages);
-                m_DetailSourceLabel.tooltip = BuildUsageTooltip(selectedGroup.MatchedUsages);
-                m_DetailMessageLabel.text = GetGroupStatusMessage(selectedGroup);
-
-                m_DetailLocateButton.text = "定位";
-                m_DetailLocateButton.SetEnabled(false);
-                m_DetailCopyCodeButton.SetEnabled(!string.IsNullOrWhiteSpace(selectedGroup.Key));
-                m_DetailCopyPathButton.SetEnabled(true);
-                m_DetailCopySecondaryButton.text = "复制来源";
-                m_DetailCopySecondaryButton.SetEnabled(selectedGroup.MatchedUsages.Count > 0);
+                BuildGroupInspectorContent(parent, selectedGroup);
                 return;
             }
 
             if (selectedIssue != null)
             {
-                m_DetailTitleLabel.text = $"<缺失目标> {GetPathDisplay(selectedIssue.Path)}";
-                m_DetailStatusLabel.text = GetDisplayStatus(selectedIssue);
-                m_DetailStatusLabel.style.color = GetStatusColor(selectedIssue.Issues);
-
-                m_DetailObjectField.value = null;
-                m_DetailSceneLabel.text = "代码调用";
-                m_DetailHierarchyLabel.text = $"{selectedIssue.Usages.Count} 处调用";
-                m_DetailHierarchyLabel.tooltip = BuildUsageTooltip(selectedIssue.Usages);
-                m_DetailActiveLabel.text = "-";
-                m_DetailModeLabel.text = GetLookupModeDisplay(selectedIssue.Mode);
-                m_DetailPathLabel.text = GetPathDisplay(selectedIssue.Path);
-                m_DetailPathLabel.tooltip = GetPathDisplay(selectedIssue.Path);
-                m_DetailExpectedComponentLabel.text = selectedIssue.ExpectedComponentNames.Count == 0
-                    ? "仅要求 GameObject 存在。"
-                    : string.Join(", ", selectedIssue.ExpectedComponentNames);
-                m_DetailSourceLabel.text = BuildUsageDisplayText(selectedIssue.Usages);
-                m_DetailSourceLabel.tooltip = BuildUsageTooltip(selectedIssue.Usages);
-                m_DetailMessageLabel.text = selectedIssue.StatusMessage;
-
-                m_DetailLocateButton.text = "定位代码";
-                m_DetailLocateButton.SetEnabled(selectedIssue.Usages.Count > 0);
-                m_DetailCopyCodeButton.SetEnabled(!string.IsNullOrWhiteSpace(selectedIssue.Path));
-                m_DetailCopyPathButton.SetEnabled(true);
-                m_DetailCopySecondaryButton.text = "复制来源";
-                m_DetailCopySecondaryButton.SetEnabled(selectedIssue.Usages.Count > 0);
+                BuildMissingTargetInspectorContent(parent, selectedIssue);
                 return;
             }
 
-            m_DetailTitleLabel.text = "未选择条目";
-            m_DetailStatusLabel.text = "从左侧选择一个条目查看详情。";
-            m_DetailStatusLabel.style.color = new Color(0.8f, 0.8f, 0.8f);
-            m_DetailObjectField.value = null;
-            m_DetailSceneLabel.text = "-";
-            m_DetailHierarchyLabel.text = "-";
-            m_DetailHierarchyLabel.tooltip = string.Empty;
-            m_DetailActiveLabel.text = "-";
-            m_DetailModeLabel.text = "-";
-            m_DetailPathLabel.text = "-";
-            m_DetailPathLabel.tooltip = string.Empty;
-            m_DetailExpectedComponentLabel.text = "-";
-            m_DetailSourceLabel.text = "-";
-            m_DetailSourceLabel.tooltip = string.Empty;
-            m_DetailMessageLabel.text = "-";
-            m_DetailLocateButton.text = "定位";
-            m_DetailLocateButton.SetEnabled(false);
-            m_DetailCopyCodeButton.SetEnabled(false);
-            m_DetailCopyPathButton.SetEnabled(false);
-            m_DetailCopySecondaryButton.text = "复制来源";
-            m_DetailCopySecondaryButton.SetEnabled(false);
+            parent.Add(CreateMutedLabel("未选择条目。"));
+        }
+
+        private void BuildEntryInspectorContent(VisualElement parent, UObjectReferenceEntry entry)
+        {
+            parent.Add(CreateStatusLabel(GetDisplayStatus(entry), GetStatusColor(entry.Issues)));
+
+            ObjectField objectField = new("对象")
+            {
+                objectType = typeof(GameObject),
+                value = entry.GameObject
+            };
+            objectField.SetEnabled(false);
+            parent.Add(objectField);
+
+            AddDetailRow(parent, "场景").text = entry.SceneName;
+            Label hierarchyLabel = AddDetailRow(parent, "层级路径", true);
+            hierarchyLabel.text = entry.HierarchyPath;
+            hierarchyLabel.tooltip = entry.HierarchyPath;
+            AddDetailRow(parent, "激活状态").text = entry.Issues.HasFlag(IssueFlags.Inactive)
+                ? "Inactive In Hierarchy"
+                : "Active In Hierarchy";
+            AddDetailRow(parent, "查询/注册模式").text = GetEntryModeDisplay(entry);
+            Label pathLabel = AddDetailRow(parent, "解析路径");
+            pathLabel.text = GetPathDisplay(entry);
+            pathLabel.tooltip = GetPathDisplay(entry);
+            AddDetailRow(parent, "组件需求", true).text =
+                GetExpectedComponentDisplay(entry.ExpectedComponentNames, entry.MissingExpectedComponentNames);
+            Label sourceLabel = AddDetailRow(parent, "代码来源", true);
+            sourceLabel.text = BuildUsageDisplayText(entry.MatchedUsages);
+            sourceLabel.tooltip = BuildUsageTooltip(entry.MatchedUsages);
+            AddDetailRow(parent, "说明", true).text = entry.StatusMessage;
+
+            parent.Add(CreateActionRow("定位对象", entry.GameObject != null, () => LocateEntry(entry), m_SelectedRow));
+        }
+
+        private void BuildGroupInspectorContent(VisualElement parent, UObjectFinderListGroup group)
+        {
+            parent.Add(CreateStatusLabel(GetGroupStatusText(group), GetStatusColor(group.Issues)));
+
+            AddDetailRow(parent, "场景").text = group.SceneSummary;
+            Label hierarchyLabel = AddDetailRow(parent, "层级路径", true);
+            hierarchyLabel.text = $"共 {group.Items.Count} 项";
+            hierarchyLabel.tooltip = string.Join("\n", group.Items.Select(item => item.HierarchyPath));
+            AddDetailRow(parent, "激活状态").text = GetGroupActiveDisplay(group);
+            AddDetailRow(parent, "查询/注册模式").text = "List / 自定义Key";
+            Label pathLabel = AddDetailRow(parent, "解析路径");
+            pathLabel.text = GetPathDisplay(group.Key);
+            pathLabel.tooltip = GetPathDisplay(group.Key);
+            AddDetailRow(parent, "组件需求", true).text =
+                GetExpectedComponentDisplay(group.ExpectedComponentNames, group.MissingExpectedComponentNames);
+            Label sourceLabel = AddDetailRow(parent, "代码来源", true);
+            sourceLabel.text = BuildUsageDisplayText(group.MatchedUsages);
+            sourceLabel.tooltip = BuildUsageTooltip(group.MatchedUsages);
+            AddDetailRow(parent, "说明", true).text = GetGroupStatusMessage(group);
+
+            parent.Add(CreateActionRow("定位", false, null, m_SelectedRow));
+        }
+
+        private void BuildMissingTargetInspectorContent(VisualElement parent, UObjectFinderMissingTargetIssue issue)
+        {
+            parent.Add(CreateStatusLabel(GetDisplayStatus(issue), GetStatusColor(issue.Issues)));
+
+            AddDetailRow(parent, "场景").text = "代码调用";
+            Label hierarchyLabel = AddDetailRow(parent, "层级路径", true);
+            hierarchyLabel.text = $"{issue.Usages.Count} 处调用";
+            hierarchyLabel.tooltip = BuildUsageTooltip(issue.Usages);
+            AddDetailRow(parent, "激活状态").text = "-";
+            AddDetailRow(parent, "查询/注册模式").text = GetLookupModeDisplay(issue.Mode);
+            Label pathLabel = AddDetailRow(parent, "解析路径");
+            pathLabel.text = GetPathDisplay(issue.Path);
+            pathLabel.tooltip = GetPathDisplay(issue.Path);
+            AddDetailRow(parent, "组件需求", true).text = issue.ExpectedComponentNames.Count == 0
+                ? "仅要求 GameObject 存在。"
+                : string.Join(", ", issue.ExpectedComponentNames);
+            Label sourceLabel = AddDetailRow(parent, "代码来源", true);
+            sourceLabel.text = BuildUsageDisplayText(issue.Usages);
+            sourceLabel.tooltip = BuildUsageTooltip(issue.Usages);
+            AddDetailRow(parent, "说明", true).text = issue.StatusMessage;
+
+            parent.Add(CreateActionRow("定位代码", issue.Usages.Count > 0, () => LocateMissingTargetIssue(issue), m_SelectedRow));
+        }
+
+        private string GetInspectorTitle()
+        {
+            UObjectReferenceEntry selectedEntry = GetSelectedEntry();
+            if (selectedEntry != null)
+            {
+                return selectedEntry.GameObjectName;
+            }
+
+            UObjectFinderListGroup selectedGroup = GetSelectedGroup();
+            if (selectedGroup != null)
+            {
+                return GetPathDisplay(selectedGroup.Key);
+            }
+
+            UObjectFinderMissingTargetIssue selectedIssue = GetSelectedMissingTargetIssue();
+            return selectedIssue != null
+                ? $"<缺失目标> {GetPathDisplay(selectedIssue.Path)}"
+                : "UObjectFinder";
+        }
+
+        private string GetInspectorSubtitle()
+        {
+            UObjectReferenceEntry selectedEntry = GetSelectedEntry();
+            if (selectedEntry != null)
+            {
+                return selectedEntry.HierarchyPath;
+            }
+
+            UObjectFinderListGroup selectedGroup = GetSelectedGroup();
+            if (selectedGroup != null)
+            {
+                return selectedGroup.SceneSummary;
+            }
+
+            UObjectFinderMissingTargetIssue selectedIssue = GetSelectedMissingTargetIssue();
+            return selectedIssue != null ? GetLookupModeDisplay(selectedIssue.Mode) : null;
+        }
+
+        private static Label CreateStatusLabel(string text, Color color)
+        {
+            Label label = new(text);
+            label.style.whiteSpace = WhiteSpace.Normal;
+            label.style.marginBottom = 10f;
+            label.style.color = color;
+            return label;
+        }
+
+        private static Label CreateMutedLabel(string text)
+        {
+            Label label = new(text);
+            label.style.color = new Color(0.72f, 0.72f, 0.72f);
+            label.style.whiteSpace = WhiteSpace.Normal;
+            return label;
+        }
+
+        private VisualElement CreateActionRow(string locateText, bool canLocate, Action locateAction, UObjectFinderDisplayRow row)
+        {
+            var buttonRow = new VisualElement();
+            buttonRow.style.flexDirection = FlexDirection.Row;
+            buttonRow.style.marginTop = 12f;
+
+            var locateButton = new Button(locateAction ?? (() => LocateDisplayRow(row)))
+            {
+                text = locateText
+            };
+            locateButton.style.width = 88f;
+            locateButton.SetEnabled(canLocate);
+            buttonRow.Add(locateButton);
+
+            var copyCodeButton = new Button(() => CopyToClipboard(GetFindCodeForCopy(row)))
+            {
+                text = "复制代码"
+            };
+            copyCodeButton.style.width = 90f;
+            copyCodeButton.style.marginLeft = 8f;
+            copyCodeButton.SetEnabled(!string.IsNullOrWhiteSpace(GetFindCodeForCopy(row)));
+            buttonRow.Add(copyCodeButton);
+
+            var copyPathButton = new Button(() => CopyToClipboard(GetPathForCopy(row)))
+            {
+                text = "复制路径"
+            };
+            copyPathButton.style.width = 90f;
+            copyPathButton.style.marginLeft = 8f;
+            copyPathButton.SetEnabled(!string.IsNullOrWhiteSpace(GetPathForCopy(row)));
+            buttonRow.Add(copyPathButton);
+
+            var copySecondaryButton = new Button(() => CopyToClipboard(GetSecondaryCopyValue(row)))
+            {
+                text = "复制来源"
+            };
+            copySecondaryButton.style.width = 110f;
+            copySecondaryButton.style.marginLeft = 8f;
+            copySecondaryButton.SetEnabled(!string.IsNullOrWhiteSpace(GetSecondaryCopyValue(row)));
+            buttonRow.Add(copySecondaryButton);
+
+            return buttonRow;
         }
 
         private static bool MatchesSearch(UObjectReferenceEntry entry, string search)
@@ -1540,11 +1544,6 @@ namespace XFramework.Editor
             EditorGUIUtility.PingObject(asset);
         }
 
-        private void LocateSelectedItem()
-        {
-            LocateDisplayRow(m_SelectedRow);
-        }
-
         private static void LocateDisplayRow(UObjectFinderDisplayRow row)
         {
             if (row == null)
@@ -1582,7 +1581,7 @@ namespace XFramework.Editor
         private void OnSelectionChanged(IEnumerable<object> selectedItems)
         {
             m_SelectedRow = selectedItems.OfType<UObjectFinderDisplayRow>().FirstOrDefault();
-            RefreshDetailPane();
+            RefreshInspectorDetail(true);
         }
 
         private void OnSceneOpened(Scene scene, OpenSceneMode mode)
@@ -1631,36 +1630,36 @@ namespace XFramework.Editor
             return m_SelectedRow?.MissingTargetIssue;
         }
 
-        private string GetSelectedPathForCopy()
+        private static string GetPathForCopy(UObjectFinderDisplayRow row)
         {
-            if (GetSelectedEntry() != null)
+            if (row?.Entry != null)
             {
-                return GetSelectedEntry().ResolvedPath;
+                return row.Entry.ResolvedPath;
             }
 
-            if (GetSelectedGroup() != null)
+            if (row?.Kind == DisplayRowKind.ListGroup && row.Group != null)
             {
-                return GetSelectedGroup().Key;
+                return row.Group.Key;
             }
 
-            return GetSelectedMissingTargetIssue()?.Path;
+            return row?.MissingTargetIssue?.Path;
         }
 
-        private string GetSelectedFindCodeForCopy()
+        private static string GetFindCodeForCopy(UObjectFinderDisplayRow row)
         {
-            UObjectReferenceEntry entry = GetSelectedEntry();
+            UObjectReferenceEntry entry = row?.Entry;
             if (entry != null)
             {
                 return BuildFindCode(entry.Mode == UObjectReference.RegistrationMode.List ? LookupMode.List : LookupMode.Single, entry.ResolvedPath);
             }
 
-            UObjectFinderListGroup group = GetSelectedGroup();
+            UObjectFinderListGroup group = row?.Kind == DisplayRowKind.ListGroup ? row.Group : null;
             if (group != null)
             {
                 return BuildFindCode(LookupMode.List, group.Key);
             }
 
-            UObjectFinderMissingTargetIssue issue = GetSelectedMissingTargetIssue();
+            UObjectFinderMissingTargetIssue issue = row?.MissingTargetIssue;
             return issue != null ? BuildFindCode(issue.Mode, issue.Path) : string.Empty;
         }
 
@@ -1687,9 +1686,9 @@ namespace XFramework.Editor
                 .Replace("\t", "\\t");
         }
 
-        private string GetSelectedSecondaryCopyValue()
+        private static string GetSecondaryCopyValue(UObjectFinderDisplayRow row)
         {
-            UObjectReferenceEntry entry = GetSelectedEntry();
+            UObjectReferenceEntry entry = row?.Entry;
             if (entry != null)
             {
                 if (entry.MatchedUsages.Count > 0)
@@ -1700,13 +1699,13 @@ namespace XFramework.Editor
                 return entry.HierarchyPath;
             }
 
-            UObjectFinderListGroup group = GetSelectedGroup();
+            UObjectFinderListGroup group = row?.Kind == DisplayRowKind.ListGroup ? row.Group : null;
             if (group != null)
             {
                 return BuildUsageTooltip(group.MatchedUsages);
             }
 
-            return BuildUsageTooltip(GetSelectedMissingTargetIssue()?.Usages);
+            return BuildUsageTooltip(row?.MissingTargetIssue?.Usages);
         }
 
         private static string GetExpectedComponentDisplay(IEnumerable<string> expectedComponents, IEnumerable<string> missingComponents)

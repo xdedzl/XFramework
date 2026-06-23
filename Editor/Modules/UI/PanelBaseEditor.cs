@@ -12,9 +12,7 @@ using UEditor = UnityEditor.Editor;
 
 namespace XFramework.Editor
 {
-    [CanEditMultipleObjects]
-    [CustomEditor(typeof(PanelBase), true)]
-    public sealed class PanelBaseEditor : UEditor
+    public abstract class UIBindingInspectorBase : UEditor
     {
         private const string ScriptPropertyName = "m_Script";
         private const float KeyLabelWidth = 160f;
@@ -24,6 +22,12 @@ namespace XFramework.Editor
         private const float ListenerMethodLabelWidth = 125f;
         private const float ListenerSignatureLabelWidth = 80f;
         private const float ListenerTargetMinWidth = 120f;
+
+        protected abstract Type BindingStopBaseType { get; }
+
+        protected abstract string OwnerDisplayName { get; }
+
+        protected virtual MonoBehaviour TargetBehaviour => target as MonoBehaviour;
 
         public override VisualElement CreateInspectorGUI()
         {
@@ -38,9 +42,14 @@ namespace XFramework.Editor
 
             CreateDefaultInspector(root);
             CreatePanelXUIList(root);
+            CreateExtendedSections(root);
             CreatePanelUIListenerList(root);
 
             return root;
+        }
+
+        protected virtual void CreateExtendedSections(VisualElement root)
+        {
         }
 
         private void CreateDefaultInspector(VisualElement root)
@@ -64,13 +73,13 @@ namespace XFramework.Editor
 
         private void CreatePanelXUIList(VisualElement root)
         {
-            PanelBase panel = target as PanelBase;
-            if (panel == null)
+            MonoBehaviour owner = TargetBehaviour;
+            if (owner == null)
             {
                 return;
             }
 
-            List<ComponentFindHelper<XUIBase>.ComponentInfo> components = ComponentFindHelper<XUIBase>.CollectComponents(panel.gameObject);
+            List<ComponentFindHelper<XUIBase>.ComponentInfo> components = ComponentFindHelper<XUIBase>.CollectComponents(owner.gameObject);
             Dictionary<string, int> keyCounts = CountKeys(components);
             VisualElement section = CreateSection();
             section.Add(CreateTitle($"XUIBase：{components.Count}"));
@@ -89,23 +98,23 @@ namespace XFramework.Editor
 
         private void CreatePanelUIListenerList(VisualElement root)
         {
-            PanelBase panel = target as PanelBase;
-            if (panel == null)
+            MonoBehaviour owner = TargetBehaviour;
+            if (owner == null)
             {
                 return;
             }
 
-            List<UIListenerInfo> listeners = CollectUIListeners(panel.GetType());
+            List<UIListenerInfo> listeners = CollectUIListeners(owner.GetType(), BindingStopBaseType);
             VisualElement section = CreateSection();
             section.Add(CreateTitle($"UIListener 绑定：{listeners.Count}"));
             if (listeners.Count == 0)
             {
-                section.Add(new HelpBox("当前面板没有声明 [UIListener]。", HelpBoxMessageType.Info));
+                section.Add(new HelpBox($"当前{OwnerDisplayName}没有声明 [UIListener]。", HelpBoxMessageType.Info));
                 root.Add(section);
                 return;
             }
 
-            List<ComponentFindHelper<XUIBase>.ComponentInfo> components = ComponentFindHelper<XUIBase>.CollectComponents(panel.gameObject);
+            List<ComponentFindHelper<XUIBase>.ComponentInfo> components = ComponentFindHelper<XUIBase>.CollectComponents(owner.gameObject);
             Dictionary<string, int> keyCounts = CountKeys(components);
             Dictionary<string, XUIBase> componentByKey = CreateComponentMap(components);
             for (int i = 0; i < listeners.Count; i++)
@@ -119,7 +128,7 @@ namespace XFramework.Editor
             root.Add(section);
         }
 
-        private static VisualElement CreateSection()
+        protected static VisualElement CreateSection()
         {
             return new VisualElement
             {
@@ -137,7 +146,7 @@ namespace XFramework.Editor
             };
         }
 
-        private static Label CreateTitle(string text)
+        protected static Label CreateTitle(string text)
         {
             return new Label(text)
             {
@@ -435,10 +444,10 @@ namespace XFramework.Editor
             return beforeMethodName.Contains(" ");
         }
 
-        private static List<UIListenerInfo> CollectUIListeners(Type panelType)
+        private static List<UIListenerInfo> CollectUIListeners(Type ownerType, Type stopBaseType)
         {
             List<UIListenerInfo> listeners = new List<UIListenerInfo>();
-            for (Type type = panelType; type != null && type != typeof(PanelBase); type = type.BaseType)
+            for (Type type = ownerType; type != null && type != stopBaseType; type = type.BaseType)
             {
                 MethodInfo[] methods = type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
                 for (int i = 0; i < methods.Length; i++)
@@ -633,5 +642,111 @@ namespace XFramework.Editor
                 return new UIListenerStatus(string.Empty, error);
             }
         }
+    }
+
+    [CanEditMultipleObjects]
+    [CustomEditor(typeof(PanelBase), true)]
+    public sealed class PanelBaseEditor : UIBindingInspectorBase
+    {
+        private const float NodePathLabelWidth = 160f;
+
+        protected override Type BindingStopBaseType => typeof(PanelBase);
+
+        protected override string OwnerDisplayName => "面板";
+
+        protected override void CreateExtendedSections(VisualElement root)
+        {
+            CreatePanelUINodeList(root);
+        }
+
+        private void CreatePanelUINodeList(VisualElement root)
+        {
+            MonoBehaviour owner = TargetBehaviour;
+            if (owner == null)
+            {
+                return;
+            }
+
+            UINodeBase[] nodes = owner.GetComponentsInChildren<UINodeBase>(true);
+            VisualElement section = CreateSection();
+            section.Add(CreateTitle($"UINode：{nodes.Length}"));
+            for (int i = 0; i < nodes.Length; i++)
+            {
+                section.Add(CreateUINodeItem(owner.transform, nodes[i]));
+            }
+
+            root.Add(section);
+        }
+
+        private static VisualElement CreateUINodeItem(Transform rootTransform, UINodeBase node)
+        {
+            VisualElement row = new VisualElement
+            {
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    alignItems = Align.Center,
+                    marginTop = 1f,
+                    marginBottom = 1f
+                }
+            };
+
+            Label pathLabel = new Label(GetRelativePath(rootTransform, node.transform))
+            {
+                tooltip = "节点层级路径",
+                style =
+                {
+                    width = NodePathLabelWidth,
+                    minWidth = NodePathLabelWidth,
+                    maxWidth = NodePathLabelWidth,
+                    unityTextAlign = TextAnchor.MiddleLeft,
+                    overflow = Overflow.Hidden
+                }
+            };
+
+            ObjectField objectField = new ObjectField
+            {
+                objectType = typeof(UINodeBase),
+                value = node,
+                allowSceneObjects = true,
+                tooltip = "UINode 组件",
+                style =
+                {
+                    flexGrow = 1f
+                }
+            };
+            objectField.SetEnabled(false);
+
+            row.Add(pathLabel);
+            row.Add(objectField);
+            return row;
+        }
+
+        private static string GetRelativePath(Transform rootTransform, Transform targetTransform)
+        {
+            if (targetTransform == rootTransform)
+            {
+                return targetTransform.name;
+            }
+
+            Stack<string> pathParts = new Stack<string>();
+            Transform current = targetTransform;
+            while (current != null && current != rootTransform)
+            {
+                pathParts.Push(current.name);
+                current = current.parent;
+            }
+
+            return pathParts.Count == 0 ? targetTransform.name : string.Join("/", pathParts);
+        }
+    }
+
+    [CanEditMultipleObjects]
+    [CustomEditor(typeof(UINodeBase), true)]
+    public sealed class UINodeBaseEditor : UIBindingInspectorBase
+    {
+        protected override Type BindingStopBaseType => typeof(UINodeBase);
+
+        protected override string OwnerDisplayName => "节点";
     }
 }

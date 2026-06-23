@@ -148,7 +148,7 @@ namespace XFramework.Resource
 
         public void Release(UObject obj)
         {
-            GameObject.Destroy(obj);    
+            
         }
         
         public void ReleaseAll() { }

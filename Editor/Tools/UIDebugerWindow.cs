@@ -33,7 +33,6 @@ namespace XFramework.Editor
         private Label m_SummaryLabel;
         private Label m_AutoRefreshLabel;
         private UIToolkitListView m_ListView;
-        private ScrollView m_DetailPane;
         private GameObject m_TemporaryPanelObject;
         private PanelDebugItem m_SelectedItem;
         private double m_LastRefreshTime;
@@ -60,6 +59,7 @@ namespace XFramework.Editor
         {
             EditorApplication.update -= HandleEditorUpdate;
             DestroyTemporaryPanel();
+            XFrameworkInspectorWindow.ClearIfOwner(this);
         }
 
         public void CreateGUI()
@@ -87,12 +87,7 @@ namespace XFramework.Editor
             m_SummaryLabel.style.whiteSpace = WhiteSpace.Normal;
             root.Add(m_SummaryLabel);
 
-            TwoPaneSplitView splitView = new(0, 660, TwoPaneSplitViewOrientation.Horizontal);
-            splitView.style.flexGrow = 1f;
-            root.Add(splitView);
-
-            splitView.Add(BuildListPane());
-            splitView.Add(BuildDetailPane());
+            root.Add(BuildListPane());
         }
 
         private VisualElement BuildToolbar()
@@ -187,6 +182,8 @@ namespace XFramework.Editor
                     paddingRight = 4f,
                     paddingTop = 4f,
                     paddingBottom = 4f,
+                    minWidth = 0f,
+                    overflow = Overflow.Hidden,
                     backgroundColor = new Color(0.15f, 0.15f, 0.15f, 0.75f)
                 }
             };
@@ -217,24 +214,12 @@ namespace XFramework.Editor
             header.Add(CreateHeaderLabel("类型", 150f));
             header.Add(CreateHeaderLabel("Lv", 36f));
             header.Add(CreateHeaderLabel("UI", 82f));
+            header.Add(CreateHeaderLabel("操作", 72f));
 
             Label path = CreateHeaderLabel("路径", 0f);
             path.style.flexGrow = 1f;
             header.Add(path);
             return header;
-        }
-
-        private VisualElement BuildDetailPane()
-        {
-            m_DetailPane = new ScrollView();
-            m_DetailPane.style.flexGrow = 1f;
-            m_DetailPane.style.marginLeft = 4f;
-            m_DetailPane.style.paddingLeft = 10f;
-            m_DetailPane.style.paddingRight = 10f;
-            m_DetailPane.style.paddingTop = 10f;
-            m_DetailPane.style.paddingBottom = 10f;
-            m_DetailPane.style.backgroundColor = new Color(0.15f, 0.15f, 0.15f, 0.75f);
-            return m_DetailPane;
         }
 
         private VisualElement MakeListItem()
@@ -247,6 +232,13 @@ namespace XFramework.Editor
             row.Add(CreateCellLabel(150f));
             row.Add(CreateCellLabel(36f));
             row.Add(CreateCellLabel(82f));
+            Button actionButton = null;
+            actionButton = new Button(() => ToggleRuntimePanel(actionButton.userData as PanelDebugItem));
+            actionButton.style.width = 72f;
+            actionButton.style.flexShrink = 0f;
+            actionButton.style.marginRight = 8f;
+            actionButton.RegisterCallback<MouseDownEvent>(evt => evt.StopPropagation());
+            row.Add(actionButton);
 
             Label path = CreateCellLabel(0f);
             path.style.flexGrow = 1f;
@@ -267,10 +259,52 @@ namespace XFramework.Editor
             labels[4].text = item.Level.ToString();
             labels[5].text = item.IsUIToolkitPanel ? UIToolkitOption : UGUIOption;
             labels[6].text = string.IsNullOrEmpty(item.Path) ? "<empty>" : item.Path;
+            Button actionButton = element.Q<Button>();
+            BindRuntimeActionButton(actionButton, item);
             element.tooltip = item.FullTypeName;
             element.style.backgroundColor = index % 2 == 0
                 ? new Color(0.24f, 0.24f, 0.24f, 0.10f)
                 : new Color(0.31f, 0.31f, 0.31f, 0.18f);
+        }
+
+        private void BindRuntimeActionButton(Button button, PanelDebugItem item)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            button.userData = item;
+            button.text = GetRuntimeActionText(item);
+            button.tooltip = GetRuntimeActionTooltip(item);
+            button.SetEnabled(CanRunRuntimeAction(item));
+        }
+
+        private void ToggleRuntimePanel(PanelDebugItem item)
+        {
+            if (!CanRunRuntimeAction(item))
+            {
+                return;
+            }
+
+            if (item.IsOpened)
+            {
+                if (!GameEntry.IsModuleLoaded<UIManager>())
+                {
+                    return;
+                }
+
+                UIManager.Instance.ClosePanel(item.PanelName);
+            }
+            else
+            {
+                GetOrCreateRuntimeUIManager().OpenPanel(item.PanelName);
+            }
+
+            RefreshRuntimeSnapshots();
+            MergeRuntimeSnapshots();
+            RefreshView(false);
+            RefreshInspectorDetail(false);
         }
 
         private static void OnListItemMouseDown(MouseDownEvent evt)
@@ -295,13 +329,13 @@ namespace XFramework.Editor
             {
                 m_SelectedItem = selected as PanelDebugItem;
                 DestroyTemporaryPanel();
-                RebuildDetail();
+                RefreshInspectorDetail(true);
                 return;
             }
 
             m_SelectedItem = null;
             DestroyTemporaryPanel();
-            RebuildDetail();
+            XFrameworkInspectorWindow.ClearIfOwner(this);
         }
 
         private void HandleEditorUpdate()
@@ -418,7 +452,7 @@ namespace XFramework.Editor
                     DestroyTemporaryPanel();
                 }
 
-                RebuildDetail();
+                RefreshInspectorDetail(false);
             }
         }
 
@@ -455,45 +489,54 @@ namespace XFramework.Editor
             m_SummaryLabel.text = $"{playMode} | 注册 {m_AllItems.Count} 个 PanelBase，UI Toolkit {toolkitCount} 个，已缓存 {cachedCount} 个，已打开 {openedCount} 个。";
         }
 
-        private void RebuildDetail()
+        private void RefreshInspectorDetail(bool openInspector)
         {
-            if (m_DetailPane == null)
+            if (m_SelectedItem == null)
             {
+                XFrameworkInspectorWindow.ClearIfOwner(this);
                 return;
             }
 
-            m_DetailPane.Clear();
+            if (openInspector)
+            {
+                XFrameworkInspectorWindow.InspectCustom(
+                    this,
+                    GetInspectorTitle(m_SelectedItem),
+                    BuildPanelInspectorContent,
+                    m_SelectedItem.FullTypeName);
+                return;
+            }
+
+            XFrameworkInspectorWindow.RefreshIfOwner(this);
+        }
+
+        private void BuildPanelInspectorContent(VisualElement parent)
+        {
             if (m_SelectedItem == null)
             {
                 Label emptyLabel = new("请选择一个面板。");
                 emptyLabel.style.color = new Color(0.75f, 0.75f, 0.75f);
-                m_DetailPane.Add(emptyLabel);
+                parent.Add(emptyLabel);
                 return;
             }
 
             PanelDebugItem item = m_SelectedItem;
-            Label title = new(item.ShowName == item.PanelName ? item.PanelName : $"{item.ShowName} ({item.PanelName})");
-            title.style.unityFontStyleAndWeight = FontStyle.Bold;
-            title.style.fontSize = 18f;
-            title.style.marginBottom = 8f;
-            m_DetailPane.Add(title);
+            parent.Add(CreateSectionTitle("注册信息"));
+            parent.Add(CreateInfoRow("Show Name", item.ShowName));
+            parent.Add(CreateInfoRow("Panel Name", item.PanelName));
+            parent.Add(CreateInfoRow("Type", item.FullTypeName));
+            parent.Add(CreateInfoRow("Path", string.IsNullOrEmpty(item.Path) ? "<empty>" : item.Path));
+            parent.Add(CreatePanelAssetActionRow(item));
+            parent.Add(CreateInfoRow("Level", item.Level.ToString()));
+            parent.Add(CreateInfoRow("UI Type", item.IsUIToolkitPanel ? UIToolkitOption : UGUIOption));
+            parent.Add(CreateInfoRow("Tags", FormatTags(item)));
 
-            m_DetailPane.Add(CreateSectionTitle("注册信息"));
-            m_DetailPane.Add(CreateInfoRow("Show Name", item.ShowName));
-            m_DetailPane.Add(CreateInfoRow("Panel Name", item.PanelName));
-            m_DetailPane.Add(CreateInfoRow("Type", item.FullTypeName));
-            m_DetailPane.Add(CreateInfoRow("Path", string.IsNullOrEmpty(item.Path) ? "<empty>" : item.Path));
-            m_DetailPane.Add(CreatePanelAssetActionRow(item));
-            m_DetailPane.Add(CreateInfoRow("Level", item.Level.ToString()));
-            m_DetailPane.Add(CreateInfoRow("UI Type", item.IsUIToolkitPanel ? UIToolkitOption : UGUIOption));
-            m_DetailPane.Add(CreateInfoRow("Tags", FormatTags(item)));
-
-            m_DetailPane.Add(CreateSectionTitle("运行时状态"));
-            m_DetailPane.Add(CreateInfoRow("Cached", item.IsCached ? "Yes" : "No"));
-            m_DetailPane.Add(CreateInfoRow("Opened", item.IsOpened ? "Yes" : "No"));
-            m_DetailPane.Add(CreateInfoRow("Visible", item.IsVisible ? "Yes" : "No"));
-            m_DetailPane.Add(CreateInfoRow("Close Callback", item.HasCloseCallback ? "Yes" : "No"));
-            m_DetailPane.Add(CreateInfoRow("Hierarchy", string.IsNullOrEmpty(item.HierarchyPath) ? "<none>" : item.HierarchyPath));
+            parent.Add(CreateSectionTitle("运行时状态"));
+            parent.Add(CreateInfoRow("Cached", item.IsCached ? "Yes" : "No"));
+            parent.Add(CreateInfoRow("Opened", item.IsOpened ? "Yes" : "No"));
+            parent.Add(CreateInfoRow("Visible", item.IsVisible ? "Yes" : "No"));
+            parent.Add(CreateInfoRow("Close Callback", item.HasCloseCallback ? "Yes" : "No"));
+            parent.Add(CreateInfoRow("Hierarchy", string.IsNullOrEmpty(item.HierarchyPath) ? "<none>" : item.HierarchyPath));
             ObjectField objectField = new("GameObject")
             {
                 objectType = typeof(GameObject),
@@ -503,17 +546,22 @@ namespace XFramework.Editor
             objectField.SetEnabled(false);
             objectField.style.marginTop = 2f;
             objectField.style.marginBottom = 2f;
-            m_DetailPane.Add(objectField);
+            parent.Add(objectField);
 
             if (item.IsUIToolkitPanel)
             {
-                BuildUIToolkitDetail(item);
+                BuildUIToolkitDetail(parent, item);
             }
         }
 
-        private void BuildUIToolkitDetail(PanelDebugItem item)
+        private static string GetInspectorTitle(PanelDebugItem item)
         {
-            m_DetailPane.Add(CreateSectionTitle("UI Toolkit"));
+            return item.ShowName == item.PanelName ? item.PanelName : $"{item.ShowName} ({item.PanelName})";
+        }
+
+        private void BuildUIToolkitDetail(VisualElement parent, PanelDebugItem item)
+        {
+            parent.Add(CreateSectionTitle("UI Toolkit"));
 
             string uxmlPath = GetSiblingAssetPath(item.Path, ".uxml");
             string ussPath = GetSiblingAssetPath(item.Path, ".uss");
@@ -531,20 +579,10 @@ namespace XFramework.Editor
                 runtimePanelSettings = uiDocument.panelSettings;
             }
 
-            m_DetailPane.Add(CreateInfoRow("UXML", FormatAssetStatus(uxmlPath, visualTree != null)));
-            m_DetailPane.Add(CreateInfoRow("USS", FormatAssetStatus(ussPath, styleSheet != null)));
-            m_DetailPane.Add(CreateInfoRow("Default PanelSettings", defaultPanelSettings != null ? defaultPanelSettings.name : "<none>"));
-            m_DetailPane.Add(CreateInfoRow("Runtime PanelSettings", runtimePanelSettings != null ? runtimePanelSettings.name : "<none>"));
-
-            Button previewButton = new(() => RenderPreview(item))
-            {
-                text = "刷新预览"
-            };
-            previewButton.tooltip = "创建临时隐藏对象，克隆 UXML 并调用 BindUI";
-            previewButton.style.width = 96f;
-            previewButton.style.marginTop = 8f;
-            previewButton.style.marginBottom = 8f;
-            m_DetailPane.Add(previewButton);
+            parent.Add(CreateInfoRow("UXML", FormatAssetStatus(uxmlPath, visualTree != null)));
+            parent.Add(CreateInfoRow("USS", FormatAssetStatus(ussPath, styleSheet != null)));
+            parent.Add(CreateInfoRow("Default PanelSettings", defaultPanelSettings != null ? defaultPanelSettings.name : "<none>"));
+            parent.Add(CreateInfoRow("Runtime PanelSettings", runtimePanelSettings != null ? runtimePanelSettings.name : "<none>"));
 
             VisualElement previewRoot = new()
             {
@@ -560,17 +598,26 @@ namespace XFramework.Editor
                     backgroundColor = new Color(0.05f, 0.05f, 0.05f, 0.35f)
                 }
             };
-            m_DetailPane.Add(previewRoot);
+
+            Button previewButton = new(() => RenderPreview(previewRoot, item))
+            {
+                text = "刷新预览"
+            };
+            previewButton.tooltip = "创建临时隐藏对象，克隆 UXML 并调用 BindUI";
+            previewButton.style.width = 96f;
+            previewButton.style.marginTop = 8f;
+            previewButton.style.marginBottom = 8f;
+            parent.Add(previewButton);
+            parent.Add(previewRoot);
         }
 
-        private void RenderPreview(PanelDebugItem item)
+        private void RenderPreview(VisualElement previewRoot, PanelDebugItem item)
         {
             if (item == null || !item.IsUIToolkitPanel)
             {
                 return;
             }
 
-            VisualElement previewRoot = m_DetailPane?.Q<VisualElement>("ui-debuger-preview-root");
             if (previewRoot == null)
             {
                 return;
@@ -721,6 +768,58 @@ namespace XFramework.Editor
             return item.IsCached ? "缓存" : "-";
         }
 
+        private static string GetRuntimeActionText(PanelDebugItem item)
+        {
+            if (item.IsOpened)
+            {
+                return "关闭";
+            }
+
+            return "打开";
+        }
+
+        private static string GetRuntimeActionTooltip(PanelDebugItem item)
+        {
+            if (!Application.isPlaying)
+            {
+                return "运行时才能打开或关闭 UI 面板";
+            }
+
+            if (!GameEntry.IsModuleLoaded<UIManager>())
+            {
+                return "点击后会加载 UIManager 并打开运行时面板";
+            }
+
+            if (item.IsOpened)
+            {
+                return "关闭运行时面板";
+            }
+
+            return "打开运行时面板";
+        }
+
+        private static bool CanRunRuntimeAction(PanelDebugItem item)
+        {
+            if (item == null || !Application.isPlaying)
+            {
+                return false;
+            }
+
+            if (item.IsOpened)
+            {
+                return GameEntry.IsModuleLoaded<UIManager>();
+            }
+
+            return true;
+        }
+
+        private static UIManager GetOrCreateRuntimeUIManager()
+        {
+            return GameEntry.IsModuleLoaded<UIManager>()
+                ? UIManager.Instance
+                : GameEntry.AddModule<UIManager>();
+        }
+
         private static Color GetRuntimeStatusColor(PanelDebugItem item)
         {
             if (item.IsOpened)
@@ -859,6 +958,7 @@ namespace XFramework.Editor
                     minHeight = height,
                     paddingLeft = 4f,
                     paddingRight = 4f,
+                    overflow = Overflow.Hidden,
                     backgroundColor = backgroundColor
                 }
             };
@@ -872,6 +972,7 @@ namespace XFramework.Editor
             label.style.width = width;
             label.style.flexShrink = 0f;
             label.style.marginRight = 8f;
+            label.style.overflow = Overflow.Hidden;
             return label;
         }
 

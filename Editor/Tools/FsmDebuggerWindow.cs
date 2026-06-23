@@ -19,17 +19,8 @@ namespace XFramework.Editor
         private TextField m_StateSearchField;
         private DropdownField m_ScopeField;
         private ListView m_ListView;
-        private Label m_StatusLabel;
         private Label m_SummaryLabel;
-        private ObjectField m_OwnerField;
-        private Label m_KeyLabel;
-        private Label m_ScopeLabel;
-        private Label m_ContextLabel;
-        private Label m_CurrentStateLabel;
-        private Label m_PreviousStateLabel;
-        private Label m_LastTransitionLabel;
-        private Label m_LastPayloadLabel;
-        private Label m_StatesLabel;
+        private XFramework.Fsm.FsmDebugEntry? m_SelectedEntry;
 
         private double m_LastRefreshTime;
 
@@ -51,6 +42,7 @@ namespace XFramework.Editor
         private void OnDisable()
         {
             EditorApplication.update -= HandleEditorUpdate;
+            XFrameworkInspectorWindow.ClearIfOwner(this);
         }
 
         public void CreateGUI()
@@ -77,12 +69,7 @@ namespace XFramework.Editor
             m_SummaryLabel.style.color = new Color(0.75f, 0.75f, 0.75f);
             root.Add(m_SummaryLabel);
 
-            var splitView = new TwoPaneSplitView(0, 460, TwoPaneSplitViewOrientation.Horizontal);
-            splitView.style.flexGrow = 1;
-            root.Add(splitView);
-
-            splitView.Add(BuildListPane());
-            splitView.Add(BuildDetailPane());
+            root.Add(BuildListPane());
         }
 
         private VisualElement BuildToolbar()
@@ -177,41 +164,6 @@ namespace XFramework.Editor
             return header;
         }
 
-        private VisualElement BuildDetailPane()
-        {
-            var pane = new ScrollView();
-            pane.style.flexGrow = 1;
-            pane.style.paddingLeft = 10;
-            pane.style.paddingRight = 10;
-            pane.style.paddingTop = 10;
-            pane.style.paddingBottom = 10;
-            pane.style.marginLeft = 4;
-            pane.style.backgroundColor = new Color(0.15f, 0.15f, 0.15f, 0.75f);
-
-            m_StatusLabel = new Label("等待运行中的 FSM。");
-            m_StatusLabel.style.whiteSpace = WhiteSpace.Normal;
-            m_StatusLabel.style.marginBottom = 10;
-            pane.Add(m_StatusLabel);
-
-            m_OwnerField = new ObjectField("Owner")
-            {
-                objectType = typeof(UnityEngine.Object)
-            };
-            m_OwnerField.SetEnabled(false);
-            pane.Add(m_OwnerField);
-
-            m_KeyLabel = AddDetailRow(pane, "Key");
-            m_ScopeLabel = AddDetailRow(pane, "Scope");
-            m_ContextLabel = AddDetailRow(pane, "Context");
-            m_CurrentStateLabel = AddDetailRow(pane, "Current State");
-            m_PreviousStateLabel = AddDetailRow(pane, "Previous State");
-            m_LastTransitionLabel = AddDetailRow(pane, "Last Transition");
-            m_LastPayloadLabel = AddDetailRow(pane, "Payload", true);
-            m_StatesLabel = AddDetailRow(pane, "Registered States", true);
-
-            return pane;
-        }
-
         private void HandleEditorUpdate()
         {
             if (EditorApplication.timeSinceStartup - m_LastRefreshTime < 0.5d)
@@ -287,10 +239,14 @@ namespace XFramework.Editor
                 }
             }
 
-            if (m_FilteredEntries.Count == 0)
+            if (!m_SelectedEntry.HasValue || !m_FilteredEntries.Contains(m_SelectedEntry.Value))
             {
-                ShowEntryDetail(null);
+                m_SelectedEntry = null;
+                XFrameworkInspectorWindow.ClearIfOwner(this);
+                return;
             }
+
+            XFrameworkInspectorWindow.RefreshIfOwner(this);
         }
 
         private VisualElement MakeListItem()
@@ -331,62 +287,75 @@ namespace XFramework.Editor
             object first = selected.FirstOrDefault();
             if (first is XFramework.Fsm.FsmDebugEntry entry)
             {
-                ShowEntryDetail(entry);
+                m_SelectedEntry = entry;
+                ShowEntryDetail(true);
                 return;
             }
 
-            ShowEntryDetail(null);
+            m_SelectedEntry = null;
+            XFrameworkInspectorWindow.ClearIfOwner(this);
         }
 
-        private void ShowEntryDetail(XFramework.Fsm.FsmDebugEntry? entry)
+        private void ShowEntryDetail(bool openInspector)
         {
-            if (!entry.HasValue)
+            if (!m_SelectedEntry.HasValue)
             {
-                if (m_StatusLabel != null)
-                {
-                    m_StatusLabel.text = Application.isPlaying
-                        ? "从左侧选择一个 FSM 查看详情。"
-                        : "进入 Play Mode 后会显示运行中的 FSM。";
-                }
-
-                if (m_OwnerField != null)
-                {
-                    m_OwnerField.value = null;
-                }
-
-                SetLabelValue(m_KeyLabel, string.Empty);
-                SetLabelValue(m_ScopeLabel, string.Empty);
-                SetLabelValue(m_ContextLabel, string.Empty);
-                SetLabelValue(m_CurrentStateLabel, string.Empty);
-                SetLabelValue(m_PreviousStateLabel, string.Empty);
-                SetLabelValue(m_LastTransitionLabel, string.Empty);
-                SetLabelValue(m_LastPayloadLabel, string.Empty);
-                SetLabelValue(m_StatesLabel, string.Empty);
+                XFrameworkInspectorWindow.ClearIfOwner(this);
                 return;
             }
 
-            XFramework.Fsm.FsmDebugEntry value = entry.Value;
-            if (m_StatusLabel != null)
+            if (openInspector)
             {
-                m_StatusLabel.text = $"DebugName: {value.Fsm.DebugName}";
+                XFramework.Fsm.FsmDebugEntry value = m_SelectedEntry.Value;
+                XFrameworkInspectorWindow.InspectCustom(
+                    this,
+                    string.IsNullOrEmpty(value.Key) ? "FSM" : value.Key,
+                    BuildFsmInspectorContent,
+                    value.Fsm != null ? value.Fsm.DebugName : value.ContextTypeName);
+                return;
             }
 
-            if (m_OwnerField != null)
-            {
-                m_OwnerField.value = value.Owner;
-            }
-
-            SetLabelValue(m_KeyLabel, value.Key);
-            SetLabelValue(m_ScopeLabel, value.Scope.ToString());
-            SetLabelValue(m_ContextLabel, value.ContextTypeName);
-            SetLabelValue(m_CurrentStateLabel, string.IsNullOrEmpty(value.CurrentStateName) ? "<Stopped>" : value.CurrentStateName);
-            SetLabelValue(m_PreviousStateLabel, string.IsNullOrEmpty(value.PreviousStateName) ? "<None>" : value.PreviousStateName);
-            SetLabelValue(m_LastTransitionLabel, $"{value.LastTransition.FrameCount} / {value.LastTransition.RealtimeSinceStartup:F3}s");
-            SetLabelValue(m_LastPayloadLabel, value.LastPayloadSummary);
-            SetLabelValue(m_StatesLabel, value.Fsm != null ? string.Join(", ", value.Fsm.RegisteredStateNames) : string.Empty);
+            XFrameworkInspectorWindow.RefreshIfOwner(this);
         }
 
-        private static Label AddDetailRow(VisualElement parent, string title, bool multiline = false)
+        private void BuildFsmInspectorContent(VisualElement parent)
+        {
+            if (!m_SelectedEntry.HasValue)
+            {
+                Label emptyLabel = new(Application.isPlaying
+                    ? "从 FSM Debuger 选择一个 FSM。"
+                    : "进入 Play Mode 后会显示运行中的 FSM。");
+                emptyLabel.style.whiteSpace = WhiteSpace.Normal;
+                emptyLabel.style.color = new Color(0.75f, 0.75f, 0.75f);
+                parent.Add(emptyLabel);
+                return;
+            }
+
+            XFramework.Fsm.FsmDebugEntry value = m_SelectedEntry.Value;
+            Label statusLabel = new(value.Fsm != null ? $"DebugName: {value.Fsm.DebugName}" : "FSM 已失效");
+            statusLabel.style.whiteSpace = WhiteSpace.Normal;
+            statusLabel.style.marginBottom = 10;
+            parent.Add(statusLabel);
+
+            ObjectField ownerField = new("Owner")
+            {
+                objectType = typeof(UnityEngine.Object),
+                value = value.Owner
+            };
+            ownerField.SetEnabled(false);
+            parent.Add(ownerField);
+
+            AddDetailRow(parent, "Key", value.Key);
+            AddDetailRow(parent, "Scope", value.Scope.ToString());
+            AddDetailRow(parent, "Context", value.ContextTypeName);
+            AddDetailRow(parent, "Current State", string.IsNullOrEmpty(value.CurrentStateName) ? "<Stopped>" : value.CurrentStateName);
+            AddDetailRow(parent, "Previous State", string.IsNullOrEmpty(value.PreviousStateName) ? "<None>" : value.PreviousStateName);
+            AddDetailRow(parent, "Last Transition", $"{value.LastTransition.FrameCount} / {value.LastTransition.RealtimeSinceStartup:F3}s");
+            AddDetailRow(parent, "Payload", value.LastPayloadSummary, true);
+            AddDetailRow(parent, "Registered States", value.Fsm != null ? string.Join(", ", value.Fsm.RegisteredStateNames) : string.Empty, true);
+        }
+
+        private static void AddDetailRow(VisualElement parent, string title, string value, bool multiline = false)
         {
             var container = new VisualElement();
             container.style.marginBottom = 6;
@@ -396,14 +365,13 @@ namespace XFramework.Editor
             titleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
             container.Add(titleLabel);
 
-            var valueLabel = new Label();
+            var valueLabel = new Label(value);
             valueLabel.style.whiteSpace = multiline ? WhiteSpace.Normal : WhiteSpace.NoWrap;
             valueLabel.style.marginTop = 2;
             valueLabel.style.color = new Color(0.85f, 0.85f, 0.85f);
             container.Add(valueLabel);
 
             parent.Add(container);
-            return valueLabel;
         }
 
         private static Label CreateHeaderLabel(string text, float width)
@@ -428,12 +396,5 @@ namespace XFramework.Editor
             return label;
         }
 
-        private static void SetLabelValue(Label label, string value)
-        {
-            if (label != null)
-            {
-                label.text = value;
-            }
-        }
     }
 }

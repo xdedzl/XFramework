@@ -31,7 +31,6 @@ namespace XFramework.Editor
         private DropdownField m_MonoFilter;
         private ListView m_ListView;
         private Label m_SummaryLabel;
-        private ScrollView m_DetailPane;
 
         private double m_LastRefreshTime;
         private ModuleInfo m_SelectedModule;
@@ -54,6 +53,7 @@ namespace XFramework.Editor
         private void OnDisable()
         {
             EditorApplication.update -= HandleEditorUpdate;
+            XFrameworkInspectorWindow.ClearIfOwner(this);
         }
 
         public void CreateGUI()
@@ -80,12 +80,7 @@ namespace XFramework.Editor
             m_SummaryLabel.style.color = new Color(0.75f, 0.75f, 0.75f);
             root.Add(m_SummaryLabel);
 
-            var splitView = new TwoPaneSplitView(0, 620, TwoPaneSplitViewOrientation.Horizontal);
-            splitView.style.flexGrow = 1;
-            root.Add(splitView);
-
-            splitView.Add(BuildListPane());
-            splitView.Add(BuildDetailPane());
+            root.Add(BuildListPane());
         }
 
         private VisualElement BuildToolbar()
@@ -147,7 +142,6 @@ namespace XFramework.Editor
             var pane = new VisualElement();
             pane.style.flexGrow = 1;
             pane.style.flexDirection = FlexDirection.Column;
-            pane.style.marginRight = 4;
             pane.style.paddingLeft = 4;
             pane.style.paddingRight = 4;
             pane.style.paddingTop = 4;
@@ -197,19 +191,6 @@ namespace XFramework.Editor
             header.Add(assembly);
 
             return header;
-        }
-
-        private VisualElement BuildDetailPane()
-        {
-            m_DetailPane = new ScrollView();
-            m_DetailPane.style.flexGrow = 1;
-            m_DetailPane.style.paddingLeft = 10;
-            m_DetailPane.style.paddingRight = 10;
-            m_DetailPane.style.paddingTop = 10;
-            m_DetailPane.style.paddingBottom = 10;
-            m_DetailPane.style.marginLeft = 4;
-            m_DetailPane.style.backgroundColor = new Color(0.15f, 0.15f, 0.15f, 0.75f);
-            return m_DetailPane;
         }
 
         private void HandleEditorUpdate()
@@ -322,7 +303,7 @@ namespace XFramework.Editor
                 m_SelectedModule = null;
             }
 
-            ShowModuleDetail(m_SelectedModule);
+            ShowModuleDetail(m_SelectedModule, false);
         }
 
         private void RefreshSummary()
@@ -389,33 +370,60 @@ namespace XFramework.Editor
         private void OnSelectionChanged(IEnumerable<object> selected)
         {
             m_SelectedModule = selected.FirstOrDefault() as ModuleInfo;
-            ShowModuleDetail(m_SelectedModule);
+            ShowModuleDetail(m_SelectedModule, true);
         }
 
-        private void ShowModuleDetail(ModuleInfo module)
+        private void ShowModuleDetail(ModuleInfo module, bool openInspector)
         {
-            if (m_DetailPane == null)
+            if (module == null)
             {
+                XFrameworkInspectorWindow.ClearIfOwner(this);
                 return;
             }
 
-            m_DetailPane.Clear();
+            if (openInspector)
+            {
+                PublishModuleDetail(module);
+            }
+            else
+            {
+                XFrameworkInspectorWindow.RefreshIfOwner(this);
+            }
+        }
+
+        private void PublishModuleDetail(ModuleInfo module)
+        {
             if (module == null)
             {
-                m_DetailPane.Add(CreateEmptyDetail());
+                XFrameworkInspectorWindow.ClearIfOwner(this);
+                return;
+            }
+
+            XFrameworkInspectorWindow.InspectCustom(
+                this,
+                module.Type.Name,
+                parent => BuildModuleDetailContent(parent, module),
+                module.Type.FullName);
+        }
+
+        private void BuildModuleDetailContent(VisualElement parent, ModuleInfo module)
+        {
+            if (module == null)
+            {
+                parent.Add(CreateEmptyDetail());
                 return;
             }
 
             bool isLoaded = m_RuntimeSnapshots.TryGetValue(module.Type, out var snapshot);
 
-            m_DetailPane.Add(CreateInspectorHeader(module, isLoaded));
-            m_DetailPane.Add(CreateScriptSection(module));
-            m_DetailPane.Add(CreateTypeSection(module));
-            m_DetailPane.Add(CreateRuntimeSection(isLoaded, snapshot));
-            m_DetailPane.Add(CreateTypeListSection("依赖模块", module.Dependencies, "无依赖模块。", true));
-            m_DetailPane.Add(CreateTypeListSection("反向依赖", GetStaticDependents(module.Type), "没有其它模块依赖它。", true));
-            m_DetailPane.Add(CreateTypeListSection("Procedure 引用", GetProcedureUsers(module.Type), "没有 Procedure 通过特性引用它。", false));
-            m_DetailPane.Add(CreateWarningsSection(module));
+            parent.Add(CreateInspectorHeader(module, isLoaded));
+            parent.Add(CreateScriptSection(module));
+            parent.Add(CreateTypeSection(module));
+            parent.Add(CreateRuntimeSection(isLoaded, snapshot));
+            parent.Add(CreateTypeListSection("依赖模块", module.Dependencies, "无依赖模块。", true));
+            parent.Add(CreateTypeListSection("反向依赖", GetStaticDependents(module.Type), "没有其它模块依赖它。", true));
+            parent.Add(CreateTypeListSection("Procedure 引用", GetProcedureUsers(module.Type), "没有 Procedure 通过特性引用它。", false));
+            parent.Add(CreateWarningsSection(module));
         }
 
         private void BuildStaticDependents()
@@ -841,7 +849,7 @@ namespace XFramework.Editor
             }
             else
             {
-                ShowModuleDetail(module);
+                ShowModuleDetail(module, true);
             }
         }
 

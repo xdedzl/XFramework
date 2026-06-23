@@ -24,6 +24,18 @@ namespace XFramework.UI
         {
             return this[path] as T;
         }
+
+        protected virtual void Awake()
+        {
+            m_ComponentFindHelper = ComponentFindHelper<XUIBase>.CreateHelper(gameObject);
+            UIAutoBinder.Bind(this, m_ComponentFindHelper, typeof(UINodeBase), "Node");
+            OnInit();
+        }
+        
+        protected virtual void OnInit()
+        {
+
+        }
     }
 
     public class UINode : UINodeBase

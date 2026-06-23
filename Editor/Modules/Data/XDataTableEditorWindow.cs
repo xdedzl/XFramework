@@ -9,6 +9,7 @@ using UnityEngine;
 using UnityEngine.UIElements;
 using Object = UnityEngine.Object;
 using XFramework.Data;
+using XFramework.UI;
 
 namespace XFramework.Editor
 {
@@ -118,11 +119,7 @@ namespace XFramework.Editor
 
         private void OnDisable()
         {
-            XDataTableRowDetailWindow detailWindow = XDataTableRowDetailWindow.GetOpenWindow();
-            if (detailWindow != null && detailWindow.IsOwnedBy(this))
-            {
-                detailWindow.Close();
-            }
+            XFrameworkInspectorWindow.ClearIfOwner(this);
         }
 
         public void CreateGUI()
@@ -1533,10 +1530,46 @@ namespace XFramework.Editor
         {
             if (!HasSelection())
             {
+                XFrameworkInspectorWindow.ClearIfOwner(this);
                 return;
             }
 
-            XDataTableRowDetailWindow.ShowWindow(this, m_SelectedRowIndex);
+            if (!TryCreateRowBinding(m_SelectedRowIndex, out object bindingTarget))
+            {
+                XFrameworkInspectorWindow.ClearIfOwner(this);
+                return;
+            }
+
+            XFrameworkInspectorWindow.InspectObject(
+                this,
+                GetRowInspectorTitle(m_SelectedRowIndex),
+                bindingTarget,
+                GetRowInspectorSubtitle(),
+                true);
+        }
+
+        private bool TryCreateRowBinding(int rowIndex, out object bindingTarget)
+        {
+            bindingTarget = null;
+            if (m_Model == null || rowIndex < 0 || rowIndex >= m_Model.Rows.Count)
+            {
+                return false;
+            }
+
+            Type binderType = typeof(RowBindingContainer<>).MakeGenericType(m_Model.DataType);
+            bindingTarget = Activator.CreateInstance(binderType, this, rowIndex, m_Model.Rows[rowIndex]);
+            return bindingTarget != null;
+        }
+
+        private string GetRowInspectorTitle(int rowIndex)
+        {
+            string tableName = m_Model != null ? m_Model.TableType.Name : "DataTable";
+            return $"{tableName} Row {rowIndex + 1}";
+        }
+
+        private string GetRowInspectorSubtitle()
+        {
+            return m_Model != null ? $"能力: {m_Model.CapabilitySummary}" : null;
         }
 
         internal VisualElement BuildDetailField(int rowIndex, XDataTableEditorColumn column)
@@ -2647,6 +2680,32 @@ namespace XFramework.Editor
         internal int SelectedRowIndex => m_SelectedRowIndex;
         internal bool HasSelectedRow => HasSelection();
         internal string SourceAssetPath => m_SourceAsset != null ? AssetDatabase.GetAssetPath(m_SourceAsset) : string.Empty;
+
+        private sealed class RowBindingContainer<T> : IDataContainer
+        {
+            private readonly XDataTableEditorWindow m_Owner;
+            private readonly int m_RowIndex;
+            private T m_Data;
+
+            public RowBindingContainer(XDataTableEditorWindow owner, int rowIndex, T value)
+            {
+                m_Owner = owner;
+                m_RowIndex = rowIndex;
+                m_Data = value;
+            }
+
+            public T data
+            {
+                get => m_Data;
+                set
+                {
+                    m_Data = value;
+                    m_Owner?.ApplyRowValueChangeFromDetail(m_RowIndex, value);
+                }
+            }
+
+            public object Data => data;
+        }
 
         private sealed class XUnionDataTableEditorInfo
         {

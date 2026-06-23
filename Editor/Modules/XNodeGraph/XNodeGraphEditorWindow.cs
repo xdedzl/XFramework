@@ -6,6 +6,7 @@ using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
+using XFramework.Editor;
 using XFramework.Resource;
 
 namespace XFramework.NodeKit.Editor
@@ -235,12 +236,7 @@ namespace XFramework.NodeKit.Editor
         private void OnDisable()
         {
             SaveData();
-            XNodeGraphInspectorWindow inspectorWindow = XNodeGraphInspectorWindow.GetOpenWindow();
-            if (inspectorWindow != null && inspectorWindow.IsOwnedBy(this))
-            {
-                inspectorWindow.Close();
-            }
-
+            XFrameworkInspectorWindow.ClearIfOwner(this);
             s_OpenWindows.Remove(this);
         }
         
@@ -335,17 +331,29 @@ namespace XFramework.NodeKit.Editor
                 ClearInspectorTarget();
                 return;
             }
-            
-            XNodeGraphInspectorWindow.ShowWindow(this, runtimeNode);
+
+            XFrameworkInspectorWindow.InspectObject(
+                this,
+                GetInspectorTitle(runtimeNode),
+                runtimeNode,
+                runtimeNode.GetType().FullName,
+                true);
         }
 
         public void ClearInspectorTarget()
         {
-            XNodeGraphInspectorWindow inspectorWindow = XNodeGraphInspectorWindow.GetOpenWindow();
-            if (inspectorWindow != null && inspectorWindow.IsOwnedBy(this))
+            XFrameworkInspectorWindow.ClearIfOwner(this);
+        }
+
+        private static string GetInspectorTitle(IXNode runtimeNode)
+        {
+            if (runtimeNode == null)
             {
-                inspectorWindow.ClearSelection();
+                return "Node";
             }
+
+            string typeName = runtimeNode.GetType().Name;
+            return string.IsNullOrEmpty(runtimeNode.name) ? typeName : $"{runtimeNode.name} ({typeName})";
         }
         
         private void SaveData()

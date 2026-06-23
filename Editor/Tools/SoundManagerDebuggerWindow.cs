@@ -31,7 +31,6 @@ namespace XFramework.Editor
         private Label m_SummaryLabel;
         private Label m_AutoRefreshLabel;
         private ListView m_ListView;
-        private ScrollView m_DetailPane;
 
         private double m_LastRefreshTime;
         private VolumeEntry m_SelectedEntry;
@@ -56,6 +55,7 @@ namespace XFramework.Editor
         private void OnDisable()
         {
             EditorApplication.update -= HandleEditorUpdate;
+            XFrameworkInspectorWindow.ClearIfOwner(this);
         }
 
         public void CreateGUI()
@@ -83,12 +83,7 @@ namespace XFramework.Editor
             m_SummaryLabel.style.whiteSpace = WhiteSpace.Normal;
             root.Add(m_SummaryLabel);
 
-            TwoPaneSplitView splitView = new(0, 620, TwoPaneSplitViewOrientation.Horizontal);
-            splitView.style.flexGrow = 1;
-            root.Add(splitView);
-
-            splitView.Add(BuildListPane());
-            splitView.Add(BuildDetailPane());
+            root.Add(BuildListPane());
         }
 
         private VisualElement BuildToolbar()
@@ -193,19 +188,6 @@ namespace XFramework.Editor
             return header;
         }
 
-        private VisualElement BuildDetailPane()
-        {
-            m_DetailPane = new ScrollView();
-            m_DetailPane.style.flexGrow = 1;
-            m_DetailPane.style.paddingLeft = 10;
-            m_DetailPane.style.paddingRight = 10;
-            m_DetailPane.style.paddingTop = 10;
-            m_DetailPane.style.paddingBottom = 10;
-            m_DetailPane.style.marginLeft = 4;
-            m_DetailPane.style.backgroundColor = new Color(0.15f, 0.15f, 0.15f, 0.75f);
-            return m_DetailPane;
-        }
-
         private void HandleEditorUpdate()
         {
             if (EditorApplication.timeSinceStartup - m_LastRefreshTime < 0.5d)
@@ -269,7 +251,7 @@ namespace XFramework.Editor
             RefreshList();
             if (rebuildDetail)
             {
-                RefreshDetail();
+                RefreshInspectorDetail(false);
             }
         }
 
@@ -329,28 +311,44 @@ namespace XFramework.Editor
             m_ListView.Rebuild();
         }
 
-        private void RefreshDetail()
+        private void RefreshInspectorDetail(bool openInspector)
         {
-            if (m_DetailPane == null)
+            m_SelectedEntry = ResolveCurrentSelectedEntry();
+
+            if (m_SelectedEntry == null || m_SelectedEntry.Volume == null)
             {
+                XFrameworkInspectorWindow.ClearIfOwner(this);
                 return;
             }
 
-            m_SelectedEntry = ResolveCurrentSelectedEntry();
+            if (openInspector)
+            {
+                XFrameworkInspectorWindow.InspectCustom(
+                    this,
+                    m_SelectedEntry.Volume.name,
+                    BuildSoundInspectorContent,
+                    "AreaBgmVolume");
+                return;
+            }
 
-            m_DetailPane.Clear();
-            m_DetailPane.Add(BuildSoundManagerSection());
+            XFrameworkInspectorWindow.RefreshIfOwner(this);
+        }
+
+        private void BuildSoundInspectorContent(VisualElement parent)
+        {
+            m_SelectedEntry = ResolveCurrentSelectedEntry();
+            parent.Add(BuildSoundManagerSection());
 
             if (m_SelectedEntry == null || m_SelectedEntry.Volume == null)
             {
                 Label emptyLabel = new("请选择一个 AreaBgmVolume。");
                 emptyLabel.style.marginTop = 12;
                 emptyLabel.style.color = new Color(0.75f, 0.75f, 0.75f);
-                m_DetailPane.Add(emptyLabel);
+                parent.Add(emptyLabel);
                 return;
             }
 
-            m_DetailPane.Add(BuildVolumeDetailSection(m_SelectedEntry));
+            parent.Add(BuildVolumeDetailSection(m_SelectedEntry));
         }
 
         private VisualElement BuildSoundManagerSection()
@@ -848,13 +846,13 @@ namespace XFramework.Editor
             {
                 m_SelectedEntry = item as VolumeEntry;
                 RefreshView(false);
-                RefreshDetail();
+                RefreshInspectorDetail(true);
                 return;
             }
 
             m_SelectedEntry = null;
             RefreshView(false);
-            RefreshDetail();
+            XFrameworkInspectorWindow.ClearIfOwner(this);
         }
 
         private static int CompareEntries(VolumeEntry left, VolumeEntry right)
