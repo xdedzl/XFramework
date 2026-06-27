@@ -640,28 +640,6 @@ namespace XFramework.Editor
             objectField.SetEnabled(false);
             foldout.Add(objectField);
 
-            var row = new VisualElement();
-            row.style.flexDirection = FlexDirection.Row;
-            row.style.marginTop = 4;
-
-            var pingButton = new Button(() => PingScript(module.Script))
-            {
-                text = "定位脚本"
-            };
-            pingButton.style.width = 96;
-            pingButton.SetEnabled(module.Script != null);
-            row.Add(pingButton);
-
-            var openButton = new Button(() => OpenScript(module.Script))
-            {
-                text = "打开脚本"
-            };
-            openButton.style.width = 96;
-            openButton.style.marginLeft = 6;
-            openButton.SetEnabled(module.Script != null);
-            row.Add(openButton);
-
-            foldout.Add(row);
             return foldout;
         }
 
@@ -862,14 +840,6 @@ namespace XFramework.Editor
 
             EditorGUIUtility.PingObject(script);
             Selection.activeObject = script;
-        }
-
-        private static void OpenScript(MonoScript script)
-        {
-            if (script != null)
-            {
-                AssetDatabase.OpenAsset(script);
-            }
         }
 
         private static IEnumerable<Type> DiscoverModuleTypes()

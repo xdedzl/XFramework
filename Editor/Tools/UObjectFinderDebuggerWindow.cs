@@ -117,6 +117,7 @@ namespace XFramework.Editor
             var toolbar = new VisualElement();
             toolbar.style.flexDirection = FlexDirection.Row;
             toolbar.style.alignItems = Align.Center;
+            toolbar.style.flexWrap = Wrap.Wrap;
             toolbar.style.marginBottom = 2f;
 
             m_SearchField = new TextField("搜索");
@@ -128,10 +129,11 @@ namespace XFramework.Editor
 
             m_OnlyIssuesToggle = new Toggle("仅问题项");
             m_OnlyIssuesToggle.style.marginLeft = 8f;
+            m_OnlyIssuesToggle.style.flexShrink = 0f;
             m_OnlyIssuesToggle.RegisterValueChangedCallback(_ => RefreshFilteredEntries());
             toolbar.Add(m_OnlyIssuesToggle);
 
-            m_IssueFilterField = new DropdownField("问题筛选", new List<string>
+            m_IssueFilterField = CreateToolbarDropdown(toolbar, "问题筛选", new List<string>
             {
                 "全部",
                 "Missing Target",
@@ -139,36 +141,27 @@ namespace XFramework.Editor
                 "Duplicate",
                 "Invalid Path",
                 "Inactive"
-            }, 0);
-            m_IssueFilterField.style.width = 170f;
-            m_IssueFilterField.style.marginLeft = 8f;
+            }, 150f);
             m_IssueFilterField.tooltip = "按问题类型过滤";
             m_IssueFilterField.RegisterValueChangedCallback(_ => RefreshFilteredEntries());
-            toolbar.Add(m_IssueFilterField);
 
-            m_KeyFilterField = new DropdownField("Key筛选", new List<string>
+            m_KeyFilterField = CreateToolbarDropdown(toolbar, "Key筛选", new List<string>
             {
                 "全部",
                 "仅自定义Key",
                 "仅默认Name"
-            }, 0);
-            m_KeyFilterField.style.width = 170f;
-            m_KeyFilterField.style.marginLeft = 8f;
+            }, 110f);
             m_KeyFilterField.tooltip = "按是否使用自定义 Key 过滤";
             m_KeyFilterField.RegisterValueChangedCallback(_ => RefreshFilteredEntries());
-            toolbar.Add(m_KeyFilterField);
 
-            m_ModeFilterField = new DropdownField("注册筛选", new List<string>
+            m_ModeFilterField = CreateToolbarDropdown(toolbar, "注册筛选", new List<string>
             {
                 "全部",
                 "仅Single",
                 "仅List"
-            }, 0);
-            m_ModeFilterField.style.width = 150f;
-            m_ModeFilterField.style.marginLeft = 8f;
+            }, 96f);
             m_ModeFilterField.tooltip = "按 UObjectFinder 注册模式过滤";
             m_ModeFilterField.RegisterValueChangedCallback(_ => RefreshFilteredEntries());
-            toolbar.Add(m_ModeFilterField);
 
             var refreshButton = new Button(RefreshEntries)
             {
@@ -176,9 +169,33 @@ namespace XFramework.Editor
             };
             refreshButton.style.width = 64f;
             refreshButton.style.marginLeft = 8f;
+            refreshButton.style.flexShrink = 0f;
             toolbar.Add(refreshButton);
 
             return toolbar;
+        }
+
+        private static DropdownField CreateToolbarDropdown(VisualElement toolbar, string labelText, List<string> options, float dropdownWidth)
+        {
+            var group = new VisualElement();
+            group.style.flexDirection = FlexDirection.Row;
+            group.style.alignItems = Align.Center;
+            group.style.flexShrink = 0f;
+            group.style.marginLeft = 8f;
+
+            var label = new Label(labelText);
+            label.style.marginRight = 4f;
+            label.style.color = new Color(0.75f, 0.75f, 0.75f);
+            label.style.flexShrink = 0f;
+            group.Add(label);
+
+            var dropdown = new DropdownField(options, 0);
+            dropdown.style.width = dropdownWidth;
+            dropdown.style.flexShrink = 0f;
+            group.Add(dropdown);
+
+            toolbar.Add(group);
+            return dropdown;
         }
 
         private VisualElement BuildListPane()

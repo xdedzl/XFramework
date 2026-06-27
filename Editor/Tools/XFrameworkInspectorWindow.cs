@@ -91,12 +91,12 @@ namespace XFramework.Editor
                 return;
             }
 
-            window.BuildUI();
+            window.BuildUI(true);
         }
 
         public static void RefreshCurrent()
         {
-            GetOpenWindow()?.BuildUI();
+            GetOpenWindow()?.BuildUI(true);
         }
 
         public void CreateGUI()
@@ -143,11 +143,12 @@ namespace XFramework.Editor
             return ReferenceEquals(m_Source, source);
         }
 
-        private void BuildUI()
+        private void BuildUI(bool preserveScrollOffset = false)
         {
             titleContent = new GUIContent(WindowTitle);
 
             VisualElement root = rootVisualElement;
+            Vector2 scrollOffset = preserveScrollOffset ? GetCurrentScrollOffset(root) : Vector2.zero;
             root.Clear();
             root.style.flexGrow = 1;
             root.style.paddingLeft = 8;
@@ -180,6 +181,23 @@ namespace XFramework.Editor
                     scrollView.Add(CreateEmptyState());
                     break;
             }
+
+            if (preserveScrollOffset)
+            {
+                RestoreScrollOffset(scrollView, scrollOffset);
+            }
+        }
+
+        private static Vector2 GetCurrentScrollOffset(VisualElement root)
+        {
+            ScrollView scrollView = root?.Q<ScrollView>();
+            return scrollView != null ? scrollView.scrollOffset : Vector2.zero;
+        }
+
+        private static void RestoreScrollOffset(ScrollView scrollView, Vector2 scrollOffset)
+        {
+            scrollView.scrollOffset = scrollOffset;
+            scrollView.schedule.Execute(() => scrollView.scrollOffset = scrollOffset);
         }
 
         private VisualElement CreateHeader()

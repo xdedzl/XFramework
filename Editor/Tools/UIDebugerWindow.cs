@@ -25,6 +25,8 @@ namespace XFramework.Editor
 
         private readonly List<PanelDebugItem> m_AllItems = new();
         private readonly List<PanelDebugItem> m_FilteredItems = new();
+        private readonly List<PanelDebugDisplayRow> m_DisplayRows = new();
+        private readonly HashSet<int> m_CollapsedLevels = new();
         private readonly Dictionary<string, UIPanelDebugSnapshot> m_RuntimeSnapshots = new();
 
         private TextField m_SearchField;
@@ -192,7 +194,7 @@ namespace XFramework.Editor
 
             m_ListView = new UIToolkitListView
             {
-                itemsSource = m_FilteredItems,
+                itemsSource = m_DisplayRows,
                 fixedItemHeight = 26f,
                 selectionType = SelectionType.Single,
                 makeItem = MakeListItem,
@@ -215,56 +217,116 @@ namespace XFramework.Editor
             header.Add(CreateHeaderLabel("Lv", 36f));
             header.Add(CreateHeaderLabel("UI", 82f));
             header.Add(CreateHeaderLabel("操作", 72f));
+            header.Add(CreateHeaderLabel("Prefab", 180f));
 
-            Label path = CreateHeaderLabel("路径", 0f);
-            path.style.flexGrow = 1f;
-            header.Add(path);
+            Label gameObject = CreateHeaderLabel("GameObject", 0f);
+            gameObject.style.flexGrow = 1f;
+            header.Add(gameObject);
             return header;
         }
 
         private VisualElement MakeListItem()
         {
             VisualElement row = CreateRow(Color.clear, 26f);
-            row.RegisterCallback<MouseDownEvent>(OnListItemMouseDown);
-            row.Add(CreateCellLabel(54f));
-            row.Add(CreateCellLabel(150f, true));
-            row.Add(CreateCellLabel(120f));
-            row.Add(CreateCellLabel(150f));
-            row.Add(CreateCellLabel(36f));
-            row.Add(CreateCellLabel(82f));
+            row.RegisterCallback<MouseDownEvent>(OnDisplayRowMouseDown);
+            row.style.paddingLeft = 0f;
+            row.style.paddingRight = 0f;
+
+            VisualElement groupRow = CreateLevelGroupRow();
+            row.Add(groupRow);
+
+            VisualElement panelRow = new()
+            {
+                name = "panel-row",
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    alignItems = Align.Center,
+                    flexGrow = 1f,
+                    paddingLeft = 4f,
+                    paddingRight = 4f,
+                    overflow = Overflow.Hidden
+                }
+            };
+            panelRow.Add(CreateCellLabel(54f));
+            panelRow.Add(CreateCellLabel(150f, true));
+            panelRow.Add(CreateCellLabel(120f));
+            panelRow.Add(CreateCellLabel(150f));
+            panelRow.Add(CreateCellLabel(36f));
+            panelRow.Add(CreateCellLabel(82f));
             Button actionButton = null;
             actionButton = new Button(() => ToggleRuntimePanel(actionButton.userData as PanelDebugItem));
+            actionButton.name = "runtime-action-button";
             actionButton.style.width = 72f;
             actionButton.style.flexShrink = 0f;
             actionButton.style.marginRight = 8f;
             actionButton.RegisterCallback<MouseDownEvent>(evt => evt.StopPropagation());
-            row.Add(actionButton);
+            panelRow.Add(actionButton);
 
-            Label path = CreateCellLabel(0f);
-            path.style.flexGrow = 1f;
-            row.Add(path);
+            ObjectField prefabField = CreateReadOnlyObjectField("prefab-field", 180f, typeof(UnityEngine.Object), false);
+            prefabField.style.marginRight = 8f;
+            panelRow.Add(prefabField);
+
+            ObjectField gameObjectField = CreateReadOnlyObjectField("game-object-field", 0f, typeof(GameObject), true);
+            gameObjectField.style.flexGrow = 1f;
+            panelRow.Add(gameObjectField);
+            row.Add(panelRow);
             return row;
         }
 
         private void BindListItem(VisualElement element, int index)
         {
-            PanelDebugItem item = m_FilteredItems[index];
-            element.userData = item;
-            IReadOnlyList<Label> labels = element.Query<Label>().ToList();
+            PanelDebugDisplayRow row = m_DisplayRows[index];
+            element.userData = row;
+            if (row.IsGroup)
+            {
+                BindGroupRow(element, row, index);
+                return;
+            }
+
+            PanelDebugItem item = row.Item;
+            VisualElement groupRow = element.Q<VisualElement>("level-group-row");
+            groupRow.style.display = DisplayStyle.None;
+            VisualElement panelRow = element.Q<VisualElement>("panel-row");
+            panelRow.style.display = DisplayStyle.Flex;
+
+            IReadOnlyList<Label> labels = panelRow.Query<Label>().ToList();
             labels[0].text = GetRuntimeStatusText(item);
             labels[0].style.color = GetRuntimeStatusColor(item);
-            labels[1].text = item.PanelName;
+            labels[1].text = "  " + item.PanelName;
             labels[2].text = item.ShowName;
             labels[3].text = item.TypeName;
             labels[4].text = item.Level.ToString();
             labels[5].text = item.IsUIToolkitPanel ? UIToolkitOption : UGUIOption;
-            labels[6].text = string.IsNullOrEmpty(item.Path) ? "<empty>" : item.Path;
-            Button actionButton = element.Q<Button>();
+            Button actionButton = element.Q<Button>("runtime-action-button");
+            actionButton.style.display = DisplayStyle.Flex;
             BindRuntimeActionButton(actionButton, item);
+            ObjectField prefabField = element.Q<ObjectField>("prefab-field");
+            prefabField.style.display = DisplayStyle.Flex;
+            BindObjectField(prefabField, LoadPanelAsset(item));
+            ObjectField gameObjectField = element.Q<ObjectField>("game-object-field");
+            gameObjectField.style.display = DisplayStyle.Flex;
+            BindObjectField(gameObjectField, item.GameObject);
             element.tooltip = item.FullTypeName;
-            element.style.backgroundColor = index % 2 == 0
-                ? new Color(0.24f, 0.24f, 0.24f, 0.10f)
-                : new Color(0.31f, 0.31f, 0.31f, 0.18f);
+            element.style.backgroundColor = GetPanelRowBackgroundColor(row.StyleIndex);
+        }
+
+        private void BindGroupRow(VisualElement element, PanelDebugDisplayRow row, int index)
+        {
+            VisualElement groupRow = element.Q<VisualElement>("level-group-row");
+            groupRow.style.display = DisplayStyle.Flex;
+            VisualElement panelRow = element.Q<VisualElement>("panel-row");
+            panelRow.style.display = DisplayStyle.None;
+
+            Label expander = groupRow.Q<Label>("level-expander");
+            expander.text = row.IsExpanded ? "▼" : "▶";
+            Label title = groupRow.Q<Label>("level-title");
+            title.text = $"Level {row.Level}";
+            Label summary = groupRow.Q<Label>("level-summary");
+            summary.text = FormatLevelSummary(row.Items);
+
+            element.tooltip = row.IsExpanded ? "点击收起该 Level" : "点击展开该 Level";
+            element.style.backgroundColor = GetLevelRowBackgroundColor(row.StyleIndex);
         }
 
         private void BindRuntimeActionButton(Button button, PanelDebugItem item)
@@ -307,29 +369,47 @@ namespace XFramework.Editor
             RefreshInspectorDetail(false);
         }
 
-        private static void OnListItemMouseDown(MouseDownEvent evt)
+        private void OnDisplayRowMouseDown(MouseDownEvent evt)
         {
-            if (evt.button != 0 || evt.currentTarget is not VisualElement row || row.userData is not PanelDebugItem item)
+            if (evt.button != 0 || evt.currentTarget is not VisualElement row || row.userData is not PanelDebugDisplayRow displayRow)
             {
                 return;
             }
 
-            if (evt.clickCount >= 2)
+            if (!displayRow.IsGroup)
             {
-                OpenPanelAsset(item);
                 return;
             }
 
-            PingPanelAsset(LoadPanelAsset(item));
+            ToggleLevelExpanded(displayRow.Level);
+            evt.StopPropagation();
+        }
+
+        private void ToggleLevelExpanded(int level)
+        {
+            if (!m_CollapsedLevels.Add(level))
+            {
+                m_CollapsedLevels.Remove(level);
+            }
+
+            RefreshView(false);
         }
 
         private void OnSelectionChanged(IEnumerable<object> selection)
         {
             foreach (object selected in selection)
             {
-                m_SelectedItem = selected as PanelDebugItem;
+                if (selected is PanelDebugDisplayRow { IsGroup: false } row)
+                {
+                    m_SelectedItem = row.Item;
+                    DestroyTemporaryPanel();
+                    RefreshInspectorDetail(true);
+                    return;
+                }
+
+                m_SelectedItem = null;
                 DestroyTemporaryPanel();
-                RefreshInspectorDetail(true);
+                XFrameworkInspectorWindow.ClearIfOwner(this);
                 return;
             }
 
@@ -437,9 +517,11 @@ namespace XFramework.Editor
                 m_FilteredItems.Add(item);
             }
 
+            BuildDisplayRows();
+
             if (m_ListView != null)
             {
-                m_ListView.itemsSource = m_FilteredItems;
+                m_ListView.itemsSource = m_DisplayRows;
                 m_ListView.Rebuild();
             }
 
@@ -453,6 +535,34 @@ namespace XFramework.Editor
                 }
 
                 RefreshInspectorDetail(false);
+            }
+        }
+
+        private void BuildDisplayRows()
+        {
+            m_DisplayRows.Clear();
+
+            int groupStyleIndex = 0;
+            foreach (IGrouping<int, PanelDebugItem> group in m_FilteredItems.GroupBy(item => item.Level).OrderBy(group => group.Key))
+            {
+                List<PanelDebugItem> items = group
+                    .OrderBy(item => item.PanelName, StringComparer.Ordinal)
+                    .ToList();
+                bool isExpanded = !m_CollapsedLevels.Contains(group.Key);
+                m_DisplayRows.Add(PanelDebugDisplayRow.CreateGroup(group.Key, items, isExpanded, groupStyleIndex));
+                groupStyleIndex++;
+
+                if (!isExpanded)
+                {
+                    continue;
+                }
+
+                int itemStyleIndex = 0;
+                foreach (PanelDebugItem item in items)
+                {
+                    m_DisplayRows.Add(PanelDebugDisplayRow.CreateItem(item, itemStyleIndex));
+                    itemStyleIndex++;
+                }
             }
         }
 
@@ -526,7 +636,7 @@ namespace XFramework.Editor
             parent.Add(CreateInfoRow("Panel Name", item.PanelName));
             parent.Add(CreateInfoRow("Type", item.FullTypeName));
             parent.Add(CreateInfoRow("Path", string.IsNullOrEmpty(item.Path) ? "<empty>" : item.Path));
-            parent.Add(CreatePanelAssetActionRow(item));
+            parent.Add(CreatePanelAssetObjectRow(item));
             parent.Add(CreateInfoRow("Level", item.Level.ToString()));
             parent.Add(CreateInfoRow("UI Type", item.IsUIToolkitPanel ? UIToolkitOption : UGUIOption));
             parent.Add(CreateInfoRow("Tags", FormatTags(item)));
@@ -537,16 +647,7 @@ namespace XFramework.Editor
             parent.Add(CreateInfoRow("Visible", item.IsVisible ? "Yes" : "No"));
             parent.Add(CreateInfoRow("Close Callback", item.HasCloseCallback ? "Yes" : "No"));
             parent.Add(CreateInfoRow("Hierarchy", string.IsNullOrEmpty(item.HierarchyPath) ? "<none>" : item.HierarchyPath));
-            ObjectField objectField = new("GameObject")
-            {
-                objectType = typeof(GameObject),
-                value = item.GameObject,
-                allowSceneObjects = true
-            };
-            objectField.SetEnabled(false);
-            objectField.style.marginTop = 2f;
-            objectField.style.marginBottom = 2f;
-            parent.Add(objectField);
+            parent.Add(CreateRuntimeGameObjectRow(item));
 
             if (item.IsUIToolkitPanel)
             {
@@ -715,6 +816,33 @@ namespace XFramework.Editor
             return string.Join(", ", values);
         }
 
+        private static string FormatLevelSummary(IReadOnlyList<PanelDebugItem> items)
+        {
+            int cachedCount = 0;
+            int openedCount = 0;
+            int toolkitCount = 0;
+            for (int i = 0; i < items.Count; i++)
+            {
+                PanelDebugItem item = items[i];
+                if (item.IsCached)
+                {
+                    cachedCount++;
+                }
+
+                if (item.IsOpened)
+                {
+                    openedCount++;
+                }
+
+                if (item.IsUIToolkitPanel)
+                {
+                    toolkitCount++;
+                }
+            }
+
+            return $"{items.Count} 个面板，已缓存 {cachedCount}，已打开 {openedCount}，UI Toolkit {toolkitCount}";
+        }
+
         private static bool TryGetRuntimeTagSnapshot(
             PanelDebugItem item,
             string tag,
@@ -845,7 +973,7 @@ namespace XFramework.Editor
             return exists ? $"{path} (OK)" : $"{path} (Missing)";
         }
 
-        private static VisualElement CreatePanelAssetActionRow(PanelDebugItem item)
+        private static VisualElement CreatePanelAssetObjectRow(PanelDebugItem item)
         {
             UnityEngine.Object panelAsset = LoadPanelAsset(item);
             VisualElement row = new()
@@ -873,32 +1001,12 @@ namespace XFramework.Editor
             };
             assetField.SetEnabled(false);
             assetField.style.flexGrow = 1f;
-            assetField.style.marginRight = 6f;
             row.Add(assetField);
-
-            Button pingButton = new(() => PingPanelAsset(panelAsset))
-            {
-                text = "Ping"
-            };
-            pingButton.style.width = 54f;
-            pingButton.style.marginRight = 4f;
-            pingButton.tooltip = "在 Project 中闪烁 PanelInfo.path 对应的 prefab/资源";
-            pingButton.SetEnabled(panelAsset != null);
-            row.Add(pingButton);
-
-            Button locateButton = new(() => LocatePanelAsset(panelAsset))
-            {
-                text = "定位"
-            };
-            locateButton.style.width = 54f;
-            locateButton.tooltip = "选中 PanelInfo.path 对应的 prefab/资源";
-            locateButton.SetEnabled(panelAsset != null);
-            row.Add(locateButton);
 
             if (panelAsset == null)
             {
                 row.tooltip = string.IsNullOrEmpty(item.Path)
-                    ? "PanelInfo.path 为空，无法定位 prefab。"
+                    ? "PanelInfo.path 为空，无法显示 prefab。"
                     : $"AssetDatabase 找不到路径：{item.Path}";
             }
 
@@ -915,36 +1023,42 @@ namespace XFramework.Editor
             return AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(item.Path);
         }
 
-        private static void PingPanelAsset(UnityEngine.Object panelAsset)
+        private static VisualElement CreateRuntimeGameObjectRow(PanelDebugItem item)
         {
-            if (panelAsset == null)
+            GameObject gameObject = item?.GameObject;
+            VisualElement row = new()
             {
-                return;
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    alignItems = Align.Center,
+                    minHeight = 24f,
+                    marginBottom = 4f
+                }
+            };
+
+            Label label = new("GameObject");
+            label.style.width = 132f;
+            label.style.flexShrink = 0f;
+            label.style.color = new Color(0.70f, 0.70f, 0.70f);
+            row.Add(label);
+
+            ObjectField objectField = new()
+            {
+                objectType = typeof(GameObject),
+                value = gameObject,
+                allowSceneObjects = true
+            };
+            objectField.SetEnabled(false);
+            objectField.style.flexGrow = 1f;
+            row.Add(objectField);
+
+            if (gameObject == null)
+            {
+                row.tooltip = "面板打开或缓存后才会显示运行时 GameObject。";
             }
 
-            EditorGUIUtility.PingObject(panelAsset);
-        }
-
-        private static void LocatePanelAsset(UnityEngine.Object panelAsset)
-        {
-            if (panelAsset == null)
-            {
-                return;
-            }
-
-            Selection.activeObject = panelAsset;
-            EditorGUIUtility.PingObject(panelAsset);
-        }
-
-        private static void OpenPanelAsset(PanelDebugItem item)
-        {
-            UnityEngine.Object panelAsset = LoadPanelAsset(item);
-            if (panelAsset == null)
-            {
-                return;
-            }
-
-            AssetDatabase.OpenAsset(panelAsset);
+            return row;
         }
 
         private static VisualElement CreateRow(Color backgroundColor, float height)
@@ -962,6 +1076,73 @@ namespace XFramework.Editor
                     backgroundColor = backgroundColor
                 }
             };
+            return row;
+        }
+
+        private static Color GetLevelRowBackgroundColor(int index)
+        {
+            return index % 2 == 0
+                ? new Color(0.16f, 0.19f, 0.23f, 0.92f)
+                : new Color(0.19f, 0.23f, 0.28f, 0.92f);
+        }
+
+        private static Color GetPanelRowBackgroundColor(int index)
+        {
+            return index % 2 == 0
+                ? new Color(0.24f, 0.24f, 0.24f, 0.08f)
+                : new Color(0.31f, 0.31f, 0.31f, 0.16f);
+        }
+
+        private static VisualElement CreateLevelGroupRow()
+        {
+            VisualElement row = new()
+            {
+                name = "level-group-row",
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    alignItems = Align.Center,
+                    flexGrow = 1f,
+                    minWidth = 0f,
+                    paddingLeft = 8f,
+                    paddingRight = 8f,
+                    overflow = Overflow.Hidden
+                }
+            };
+
+            Label expander = new()
+            {
+                name = "level-expander"
+            };
+            expander.style.width = 14f;
+            expander.style.flexShrink = 0f;
+            expander.style.fontSize = 9f;
+            expander.style.unityTextAlign = TextAnchor.MiddleCenter;
+            expander.style.color = new Color(0.82f, 0.82f, 0.82f);
+            row.Add(expander);
+
+            Label title = new()
+            {
+                name = "level-title"
+            };
+            title.style.width = 96f;
+            title.style.flexShrink = 0f;
+            title.style.marginLeft = 4f;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.color = new Color(0.90f, 0.90f, 0.90f);
+            row.Add(title);
+
+            Label summary = new()
+            {
+                name = "level-summary"
+            };
+            summary.style.flexGrow = 1f;
+            summary.style.minWidth = 0f;
+            summary.style.overflow = Overflow.Hidden;
+            summary.style.textOverflow = TextOverflow.Ellipsis;
+            summary.style.color = new Color(0.72f, 0.72f, 0.72f);
+            row.Add(summary);
+
             return row;
         }
 
@@ -989,6 +1170,37 @@ namespace XFramework.Editor
             }
 
             return label;
+        }
+
+        private static ObjectField CreateReadOnlyObjectField(string name, float width, Type objectType, bool allowSceneObjects)
+        {
+            ObjectField field = new()
+            {
+                name = name,
+                objectType = objectType,
+                allowSceneObjects = allowSceneObjects
+            };
+            field.SetEnabled(false);
+            field.style.flexShrink = 0f;
+            field.style.minWidth = 0f;
+            field.style.height = 20f;
+            if (width > 0f)
+            {
+                field.style.width = width;
+            }
+
+            return field;
+        }
+
+        private static void BindObjectField(ObjectField field, UnityEngine.Object value)
+        {
+            if (field == null)
+            {
+                return;
+            }
+
+            field.value = value;
+            field.tooltip = value != null ? value.name : string.Empty;
         }
 
         private static Label CreateSectionTitle(string text)
@@ -1065,6 +1277,38 @@ namespace XFramework.Editor
                         .Where(tag => !string.IsNullOrWhiteSpace(tag))
                         .Distinct(StringComparer.Ordinal)
                         .ToArray() ?? Array.Empty<string>()
+                };
+            }
+        }
+
+        private sealed class PanelDebugDisplayRow
+        {
+            public int Level;
+            public List<PanelDebugItem> Items;
+            public PanelDebugItem Item;
+            public bool IsExpanded;
+            public int StyleIndex;
+
+            public bool IsGroup => Items != null;
+
+            public static PanelDebugDisplayRow CreateGroup(int level, List<PanelDebugItem> items, bool isExpanded, int styleIndex)
+            {
+                return new PanelDebugDisplayRow
+                {
+                    Level = level,
+                    Items = items,
+                    IsExpanded = isExpanded,
+                    StyleIndex = styleIndex
+                };
+            }
+
+            public static PanelDebugDisplayRow CreateItem(PanelDebugItem item, int styleIndex)
+            {
+                return new PanelDebugDisplayRow
+                {
+                    Level = item.Level,
+                    Item = item,
+                    StyleIndex = styleIndex
                 };
             }
         }
