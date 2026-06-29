@@ -37,7 +37,7 @@ namespace XFramework.Console
                             AddCmd(cmd, (parm) => method.Invoke(null, null));
 
                         }
-                        else if (parms.Length == 1 || parms[0].ParameterType == typeof(string))
+                        else if (parms.Length == 1 && parms[0].ParameterType == typeof(string))
                         {
                             AddCmd(cmd, (parm) =>
                             {
@@ -55,20 +55,22 @@ namespace XFramework.Console
         
         public static bool Execute(string cmd, out object result)
         {
-            var args = cmd.Split(' ');
             result = null;
-            if (s_Commands.ContainsKey(args[0]))
+            cmd = cmd.Trim();
+            string commandName = cmd;
+            string commandArgs = string.Empty;
+            int separatorIndex = cmd.IndexOf(' ');
+            if (separatorIndex >= 0)
+            {
+                commandName = cmd.Substring(0, separatorIndex);
+                commandArgs = cmd.Substring(separatorIndex + 1).Trim();
+            }
+
+            if (s_Commands.ContainsKey(commandName))
             {
                 try
                 {
-                    if (args.Length == 1)
-                    {
-                        return ExecuteCmd(cmd, "", out result);
-                    }
-                    else
-                    {
-                        return ExecuteCmd(args[0], args[1], out result);
-                    }
+                    return ExecuteCmd(commandName, commandArgs, out result);
                 }
                 catch
                 {
