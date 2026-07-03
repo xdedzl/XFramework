@@ -37,15 +37,11 @@ namespace XFramework.Console
             canvas.overrideSorting = true;
         
             CanvasScaler cs = consoleRoot.AddComponent<CanvasScaler>();
-        
-            // only mobile platform should use screen size.
-            if (!Application.isEditor) 
-            { 
-                cs.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-                cs.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-                cs.referenceResolution = new Vector2(960f, 640f);
-                 cs.matchWidthOrHeight = 1.0f;
-            }
+
+            cs.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            cs.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+            cs.referenceResolution = new Vector2(960f, 640f);
+            cs.matchWidthOrHeight = 1.0f;
         
         
             GraphicRaycaster gr = consoleRoot.AddComponent<GraphicRaycaster>();
