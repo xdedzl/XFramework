@@ -119,6 +119,19 @@ namespace XFramework.Editor
             NotifyChanged();
         }
 
+        public static void ClearAll()
+        {
+            PrefabTabsState state = LoadState();
+            if (state.tabs.Count == 0)
+            {
+                return;
+            }
+
+            state.tabs.Clear();
+            SaveState(state);
+            NotifyChanged();
+        }
+
         public static void CleanupInvalidTabs()
         {
             PrefabTabsState state = LoadState();

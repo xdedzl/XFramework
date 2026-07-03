@@ -123,6 +123,16 @@ namespace XFramework.Editor
             pingButton.style.marginLeft = 4;
             toolbar.Add(pingButton);
 
+            Button clearAllButton = new Button(PrefabTabsStore.ClearAll)
+            {
+                text = m_Compact ? "C" : "Clear All",
+                tooltip = "清空全部 Prefab 页签。"
+            };
+            clearAllButton.style.width = m_Compact ? 24 : 72;
+            clearAllButton.style.height = m_Compact ? 20 : 22;
+            clearAllButton.style.marginLeft = 4;
+            toolbar.Add(clearAllButton);
+
             if (!m_Compact)
             {
                 Label hintLabel = new Label("双击 Prefab 后会自动记录到这里");
