@@ -250,8 +250,17 @@ namespace XFramework.Resource
 
                 if (!m_PooledInstances.Contains(instance))
                 {
+                    UObject sourceAsset = m_InstanceToAsset.TryGetValue(instance, out UObject asset)
+                        ? asset
+                        : null;
                     RemoveInstanceRecord(instance);
-                    return false;
+                    if (sourceAsset != null)
+                    {
+                        m_LoadHelper.Release(sourceAsset);
+                    }
+
+                    DestroyInstance(instance);
+                    return true;
                 }
 
                 if (m_InstanceToAssetName.TryGetValue(instance, out string assetName))
@@ -354,6 +363,38 @@ namespace XFramework.Resource
                 else
                 {
                     UObject.DestroyImmediate(root.gameObject);
+                }
+            }
+
+            private static void DestroyInstance(UObject instance)
+            {
+                if (instance == null)
+                {
+                    return;
+                }
+
+                GameObject go = instance.GetGameObject();
+                if (go != null)
+                {
+                    if (Application.isPlaying)
+                    {
+                        UObject.Destroy(go);
+                    }
+                    else
+                    {
+                        UObject.DestroyImmediate(go);
+                    }
+
+                    return;
+                }
+
+                if (Application.isPlaying)
+                {
+                    UObject.Destroy(instance);
+                }
+                else
+                {
+                    UObject.DestroyImmediate(instance);
                 }
             }
 
