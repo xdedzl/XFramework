@@ -2,6 +2,17 @@ using System;
 
 namespace XFramework.Data
 {
+    [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
+    public class DataTableInfoAttribute : Attribute
+    {
+        public string showName;
+
+        public DataTableInfoAttribute(string showName)
+        {
+            this.showName = showName;
+        }
+    }
+
     public class DataResourcePath : Attribute
     {
         public string[] paths;

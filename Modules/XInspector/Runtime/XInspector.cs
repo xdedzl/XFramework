@@ -175,9 +175,17 @@ namespace XFramework.UI
 
         public XInspectorElement CreateArrayPropertyElement(PropertyAttribute itemPropertyAttribute, int depth)
         {
-            XInspectorElement element = Activator.CreateInstance(typeof(ArrayElement), itemPropertyAttribute) as XInspectorElement;
+            Type drawerType = GetDrawerForPropertyAttribute(itemPropertyAttribute?.GetType());
+            XInspectorElement element = drawerType != null && typeof(PolymorphicArrayElement).IsAssignableFrom(drawerType)
+                ? Activator.CreateInstance(drawerType) as XInspectorElement
+                : Activator.CreateInstance(typeof(ArrayElement), itemPropertyAttribute) as XInspectorElement;
             element.XInspector = this;
             element.Depth = depth;
+            if (element is IPropertyAttributeElement propertyAttributeElement)
+            {
+                propertyAttributeElement.SetPropertyAttribute(itemPropertyAttribute);
+            }
+
             ApplyDefaultLayout(element);
             return element;
         }

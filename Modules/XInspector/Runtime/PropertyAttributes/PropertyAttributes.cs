@@ -157,15 +157,12 @@ namespace XFramework.Editor
                 return;
             }
 
-            int currentIndex = Mathf.Max(0, choices.IndexOf(currentValue));
-            string[] displayOptions = CreateDisplayOptions(choices);
-
             EditorGUI.showMixedValue = property.hasMultipleDifferentValues;
-            EditorGUI.BeginChangeCheck();
-            int newIndex = EditorGUI.Popup(position, label.text, currentIndex, displayOptions);
-            if (EditorGUI.EndChangeCheck())
+            Rect buttonRect = EditorGUI.PrefixLabel(position, label);
+            string displayValue = string.IsNullOrEmpty(currentValue) ? "None" : currentValue;
+            if (EditorGUI.DropdownButton(buttonRect, new GUIContent(displayValue), FocusType.Keyboard))
             {
-                property.stringValue = choices[Mathf.Clamp(newIndex, 0, choices.Count - 1)];
+                ShowDropdownMenu(buttonRect, property, choices, currentValue);
             }
             EditorGUI.showMixedValue = false;
 
@@ -247,15 +244,43 @@ namespace XFramework.Editor
             }
         }
 
-        private static string[] CreateDisplayOptions(IReadOnlyList<string> choices)
+        private static void ShowDropdownMenu(Rect buttonRect, SerializedProperty property, IReadOnlyList<string> choices, string currentValue)
         {
-            string[] displayOptions = new string[choices.Count];
+            GenericMenu menu = new GenericMenu();
+            SerializedObject serializedObject = property.serializedObject;
+            string propertyPath = property.propertyPath;
+
             for (int i = 0; i < choices.Count; i++)
             {
-                displayOptions[i] = string.IsNullOrEmpty(choices[i]) ? "None" : choices[i];
+                string choice = choices[i];
+                menu.AddItem(
+                    new GUIContent(CreateMenuPath(choice)),
+                    choice == currentValue,
+                    () => SetPropertyValue(serializedObject, propertyPath, choice));
             }
 
-            return displayOptions;
+            menu.DropDown(buttonRect);
+        }
+
+        private static void SetPropertyValue(SerializedObject serializedObject, string propertyPath, string value)
+        {
+            serializedObject.Update();
+            SerializedProperty property = serializedObject.FindProperty(propertyPath);
+            if (property != null)
+            {
+                property.stringValue = value;
+                serializedObject.ApplyModifiedProperties();
+            }
+        }
+
+        private static string CreateMenuPath(string choice)
+        {
+            if (string.IsNullOrEmpty(choice))
+            {
+                return "None";
+            }
+
+            return choice.Replace('.', '/');
         }
     }
 

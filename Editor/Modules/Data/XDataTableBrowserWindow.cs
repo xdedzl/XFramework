@@ -268,7 +268,8 @@ namespace XFramework.Editor
                     }
 
                     TextAsset asset = AssetDatabase.LoadAssetAtPath<TextAsset>(path);
-                    string displayName = paths.Length > 1 ? $"{tableType.Name} [{i + 1}]" : tableType.Name;
+                    string tableDisplayName = GetTableDisplayName(tableType);
+                    string displayName = paths.Length > 1 ? $"{tableDisplayName} [{i + 1}]" : tableDisplayName;
                     string detail = asset != null ? path : $"资源缺失: {path}";
                     yield return new XDataTableBrowserItem(
                         XDataTableBrowserItemKind.DataTable,
@@ -290,15 +291,26 @@ namespace XFramework.Editor
                     UnionDataTablesAttribute attribute = type.GetCustomAttribute<UnionDataTablesAttribute>(false);
                     string detail = attribute?.tableTypes == null || attribute.tableTypes.Length == 0
                         ? "无子表"
-                        : string.Join(", ", attribute.tableTypes.Select(child => child != null ? child.Name : "Missing Child"));
+                        : string.Join(", ", attribute.tableTypes.Select(GetTableDisplayName));
                     return new XDataTableBrowserItem(
                         XDataTableBrowserItemKind.UnionDataTable,
                         "Union",
-                        type.Name,
+                        GetTableDisplayName(type),
                         detail,
                         type,
                         null);
                 });
+        }
+
+        private static string GetTableDisplayName(Type tableType)
+        {
+            if (tableType == null)
+            {
+                return "Missing Child";
+            }
+
+            DataTableInfoAttribute attribute = tableType.GetCustomAttribute<DataTableInfoAttribute>(true);
+            return string.IsNullOrWhiteSpace(attribute?.showName) ? tableType.Name : attribute.showName;
         }
 
         private static bool IsConcreteUnionDataTable(Type type)

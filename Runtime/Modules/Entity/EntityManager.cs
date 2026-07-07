@@ -238,6 +238,21 @@ namespace XFramework.Entity
         
         private T AllocateWithPrefab<T>(string prefabPath, string alias, IEntityData data, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
+            return AllocateWithPrefab(prefabPath, typeof(T), alias, data, pos, quaternion, parent) as T;
+        }
+
+        public Entity AllocateWithPrefab(string prefabPath, Type entityType, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null)
+        {
+            return AllocateWithPrefab(prefabPath, entityType, null, pos, quaternion, parent);
+        }
+
+        public Entity AllocateWithPrefab(string prefabPath, Type entityType, IEntityData data, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null)
+        {
+            return AllocateWithPrefab(prefabPath, entityType, null, data, pos, quaternion, parent);
+        }
+
+        private Entity AllocateWithPrefab(string prefabPath, Type entityType, string alias, IEntityData data, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null)
+        {
             if (string.IsNullOrEmpty(prefabPath))
             {
                 throw new XFrameworkException("[EntityError] prefab path is null");
@@ -245,14 +260,23 @@ namespace XFramework.Entity
             
             if (!TryGetContainer(prefabPath, out EntityContainer container))
             {
-                AddTemplate<T>(prefabPath);
+                GameObject template = ResourceManager.Instance.Load<GameObject>(prefabPath);
+                if (template == null)
+                {
+                    throw new XFrameworkException($"[EntityError] prefab path is not found. prefabPath:{prefabPath}");
+                }
+
+                Type resolvedType = ResolvePrefabEntityType(prefabPath, entityType, template);
+                AddTemplate(prefabPath, resolvedType, template);
+                m_NeedReleaseContainer.Add(prefabPath, prefabPath);
             }
             else
             {
-                ValidateTemplateEntityType<T>(prefabPath, container);
+                Type resolvedType = entityType ?? container.EntityType;
+                ValidateTemplateEntityType(prefabPath, resolvedType, container);
             }
             
-            return Allocate(prefabPath, alias, data, pos, quaternion, parent) as T;
+            return Allocate(prefabPath, alias, data, pos, quaternion, parent);
         }
 
         #endregion
@@ -424,10 +448,45 @@ namespace XFramework.Entity
 
         private static void ValidateTemplateEntityType<T>(string key, EntityContainer container) where T : Entity
         {
-            Type requestType = typeof(T);
+            ValidateTemplateEntityType(key, typeof(T), container);
+        }
+
+        private static void ValidateTemplateEntityType(string key, Type requestType, EntityContainer container)
+        {
+            ValidateEntityType(key, requestType);
             if (container.EntityType != requestType)
             {
                 throw new XFrameworkException($"[EntityError] template {key} is already registered with entity type {container.EntityType.FullName}, but requested {requestType.FullName}");
+            }
+        }
+
+        private static Type ResolvePrefabEntityType(string prefabPath, Type entityType, GameObject prefab)
+        {
+            if (entityType != null)
+            {
+                ValidateEntityType(prefabPath, entityType);
+                return entityType;
+            }
+
+            Entity entity = prefab.GetComponent<Entity>();
+            if (entity == null)
+            {
+                throw new XFrameworkException($"[EntityError] prefab root does not contain an Entity component and entity type is not set. prefabPath:{prefabPath}");
+            }
+
+            return entity.GetType();
+        }
+
+        private static void ValidateEntityType(string key, Type entityType)
+        {
+            if (entityType == null)
+            {
+                throw new XFrameworkException($"[EntityError] entity type is null. key:{key}");
+            }
+
+            if (!typeof(Entity).IsAssignableFrom(entityType) || entityType.IsAbstract)
+            {
+                throw new XFrameworkException($"[EntityError] entity type must be a non-abstract Entity subtype. key:{key}, type:{entityType.FullName}");
             }
         }
 

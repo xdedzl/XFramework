@@ -584,6 +584,7 @@ public sealed class ExampleNode
 | `[Hyperlink("标题")]` | 链接字段 |
 | `[Color(r, g, b, a)]` | 带颜色提示的字段 |
 | `[PrettyBox]` / `[PrettyList]` | 更紧凑地显示结构体或列表数据 |
+| `[PolymorphicList]` | 让 `List<T>` / `T[]` 使用运行时类型绘制元素；可传入具体类型白名单 |
 | `[ShowAsFlags]` | 把枚举按位掩码方式显示 |
 | `[ShowInBin32]` / `[ShowInHex(places)]` | 数值的二进制/十六进制辅助显示 |
 | `[ShowInRow(...)]` | 将结构体指定字段横向排布 |
@@ -592,6 +593,7 @@ public sealed class ExampleNode
 - Unity 原生 `[TextArea]`：`string` 字段/集合元素多行文本。
 - `[AssetPath(typeof(TAsset))]`：资源路径字符串用 `ObjectField` 编辑；当前资源为 `Texture`、`Texture2D` 或 `Sprite` 时显示折叠箭头，并默认展开字段下方的图片预览。
 - `[DataTableRef(typeof(TableType))]`：数据表引用显示、定位、双击打开和选择窗口。
+- `[PolymorphicList(typeof(A), typeof(B))]`：集合元素按运行时类型绘制；传参时使用白名单，不传参时扫描声明元素类型的可创建子类。新增/插入时通过表头类型下拉选择具体类型，已有元素只在 `Element N` 后显示类型简称，不提供类型切换。
 
 ```csharp
 using System.Collections.Generic;
@@ -623,6 +625,36 @@ public sealed class InspectorExample : XMonoBehaviour
     {
         return new[] { "Alpha", "Beta", "Gamma" };
     }
+}
+```
+
+```csharp
+using System;
+using System.Collections.Generic;
+using XFramework;
+
+public sealed class DialogueGraph
+{
+    [PolymorphicList(typeof(DialogueTextNode), typeof(DialogueChoiceNode))]
+    public List<DialogueNode> nodes = new();
+}
+
+[Serializable]
+public abstract class DialogueNode
+{
+    public string id;
+}
+
+[Serializable]
+public sealed class DialogueTextNode : DialogueNode
+{
+    public string text;
+}
+
+[Serializable]
+public sealed class DialogueChoiceNode : DialogueNode
+{
+    public string[] choices;
 }
 ```
 
