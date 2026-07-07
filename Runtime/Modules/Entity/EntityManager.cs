@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using XFramework.Resource;
 
 namespace XFramework.Entity
 {
@@ -15,6 +16,10 @@ namespace XFramework.Entity
         /// 存储对应实体容器的字典
         /// </summary>
         private readonly Dictionary<string, EntityContainer> m_EntityContainerDic = new();
+        /// <summary>
+        /// Template是在EntityManager加载的，EntityContainer释放时，要同步释放Template
+        /// </summary>
+        private readonly Dictionary<string, string> m_NeedReleaseContainer = new();
         /// <summary>
         /// 存储所有在使用的实体字典
         /// </summary>
@@ -79,6 +84,18 @@ namespace XFramework.Entity
 
             m_EntityContainerDic.Add(key, container);
         }
+        
+        public void AddTemplate<T>(string prefabPath) where T : Entity
+        {
+            var key = prefabPath;
+            var template = ResourceManager.Instance.Load<GameObject>(prefabPath);
+            if (template == null)
+            {
+                throw new XFrameworkException($"[EntityError] prefab path is not found. prefabPath:{prefabPath}");
+            }
+            AddTemplate<T>(key, template);
+            m_NeedReleaseContainer.Add(prefabPath, prefabPath);
+        }
 
         /// <summary>
         /// 移除一个模板
@@ -101,6 +118,11 @@ namespace XFramework.Entity
                     }
                 }
                 m_EntityContainerDic.Remove(key);
+
+                if (m_NeedReleaseContainer.Remove(key))
+                {
+                    ResourceManager.Instance.Release(container.Template);
+                }
             }
         }
 
@@ -114,24 +136,6 @@ namespace XFramework.Entity
         }
         
         #region Allocate
-        /// <summary>
-        /// 分配实体，模板不存在时使用传入Prefab自动添加模板
-        /// </summary>
-        public T AllocateWithPrefab<T>(GameObject prefab, string alias, IEntityData data, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
-        {
-            if (prefab == null)
-            {
-                throw new XFrameworkException("[EntityError] prefab is null");
-            }
-
-            if (!TryGetContainer(prefab.name, out EntityContainer _))
-            {
-                AddTemplate<T>(prefab.name, prefab, prefab.name);
-            }
-            
-            return Allocate(prefab.name, alias, data, pos, quaternion, parent) as T;
-        }
-        
         public T Allocate<T>(Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
             return Allocate<T>(entityData: null, pos, quaternion, parent);
@@ -148,9 +152,9 @@ namespace XFramework.Entity
             return Allocate(key, null, entityData, pos, quaternion, parent) as T;
         }
         
-        public T Allocate<T>(string key, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null, string alias = null) where T : Entity
+        public T Allocate<T>(string key, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
-            return Allocate<T>(key, alias, null, pos, quaternion, parent);
+            return Allocate<T>(key, null, null, pos, quaternion, parent);
         }
         
         public T Allocate<T>(string key, string alias, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
@@ -219,6 +223,38 @@ namespace XFramework.Entity
             }
             return entity;
         }
+        #endregion
+        
+        #region Allocate With Prefab
+        public T AllocateWithPrefab<T>(string prefabPath, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
+        {
+            return AllocateWithPrefab<T>(prefabPath, null, null, pos, quaternion, parent);
+        }
+        
+        public T AllocateWithPrefab<T>(string prefabPath, IEntityData data, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
+        {
+            return AllocateWithPrefab<T>(prefabPath, null, data, pos, quaternion, parent);
+        }
+        
+        private T AllocateWithPrefab<T>(string prefabPath, string alias, IEntityData data, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
+        {
+            if (string.IsNullOrEmpty(prefabPath))
+            {
+                throw new XFrameworkException("[EntityError] prefab path is null");
+            }
+            
+            if (!TryGetContainer(prefabPath, out EntityContainer container))
+            {
+                AddTemplate<T>(prefabPath);
+            }
+            else
+            {
+                ValidateTemplateEntityType<T>(prefabPath, container);
+            }
+            
+            return Allocate(prefabPath, alias, data, pos, quaternion, parent) as T;
+        }
+
         #endregion
         
         internal void RegisterExistEntity(string templateKey, GameObject entityObj)
@@ -383,6 +419,15 @@ namespace XFramework.Entity
             else
             {
                 return false;
+            }
+        }
+
+        private static void ValidateTemplateEntityType<T>(string key, EntityContainer container) where T : Entity
+        {
+            Type requestType = typeof(T);
+            if (container.EntityType != requestType)
+            {
+                throw new XFrameworkException($"[EntityError] template {key} is already registered with entity type {container.EntityType.FullName}, but requested {requestType.FullName}");
             }
         }
 
@@ -576,28 +621,6 @@ namespace XFramework.Entity
             else
             {
                 throw new XFrameworkException("[EntityContainer] null container");
-            }
-        }
-
-        /// <summary>
-        /// 移除一个模板
-        /// </summary>
-        /// <param name="key">key</param>
-        public void RecycleAllTemplate(string key)
-        {
-            var container = GetContainer(key);
-            container.Clean(0);
-            var entities = container.GetEntities();
-            if (entities != null)
-            {
-                foreach (var item in entities)
-                {
-                    m_EntityDic.Remove(item.Id);
-                    m_EntityInfoDic.Remove(item.Id);
-                    UnregisterEntityAlias(item);
-                    GameObject.Destroy(item.gameObject);
-                }
-                m_EntityContainerDic.Remove(key);
             }
         }
 

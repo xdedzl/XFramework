@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using XFramework.Resource;
 
 namespace XFramework.Entity
 {
@@ -28,6 +29,7 @@ namespace XFramework.Entity
             /// 模板
             /// </summary>
             private readonly GameObject m_Template;
+            private readonly string m_TemplatePrefabPath;
             /// <summary>
             /// 实体池
             /// </summary>
@@ -68,6 +70,33 @@ namespace XFramework.Entity
                 }
             }
 
+            public EntityContainer(Type type, string name, string prefabPath, string entityRootName)
+            {
+                m_TemplatePrefabPath = prefabPath;
+                var template = ResourceManager.Instance.Load<GameObject>(prefabPath);
+                if (!type.IsSubclassOf(typeof(Entity)))
+                {
+                    throw new Exception($"[{type.Name}]类型传入错误，必须是Entity的子类");
+                }
+
+                this.type = type;
+                this.name = name;
+                m_Template = template;
+                if (!string.IsNullOrEmpty(entityRootName))
+                {
+                    var obj = GameObject.Find(entityRootName);
+                    if (obj)
+                    {
+                        entityRoot = obj.transform;
+                    }
+                    else
+                    {
+                        entityRoot = new GameObject(entityRootName).transform;
+                        GameObject.DontDestroyOnLoad(entityRoot.gameObject);
+                    }
+                }
+            }
+
             /// <summary>
             /// 实体数量（不包括池中的）
             /// </summary>
@@ -77,6 +106,11 @@ namespace XFramework.Entity
             /// 模板
             /// </summary>
             public GameObject Template => m_Template;
+
+            /// <summary>
+            /// 实体类型
+            /// </summary>
+            public Type EntityType => type;
 
             /// <summary>
             /// 实体实例化及初始化
