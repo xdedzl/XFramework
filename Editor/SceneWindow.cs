@@ -324,6 +324,17 @@ namespace XFramework.Editor
                         flexDirection = FlexDirection.Row,
                     }
                 };
+                itemContainer.RegisterCallback<ContextClickEvent>(evt =>
+                {
+                    if (IsInteractiveControl(evt.target as VisualElement, itemContainer) ||
+                        itemContainer.userData is not SceneInfo sceneInfo)
+                    {
+                        return;
+                    }
+
+                    ShowSceneContextMenu(sceneInfo);
+                    evt.StopPropagation();
+                });
 
                 var nameLabel = new Label
                 {
@@ -463,6 +474,29 @@ namespace XFramework.Editor
 
             sceneListView.itemsSource = FilterScenes(string.Empty);
             sceneListView.fixedItemHeight = 25;
+        }
+
+        private static bool IsInteractiveControl(VisualElement target, VisualElement row)
+        {
+            for (VisualElement element = target; element != null && element != row; element = element.parent)
+            {
+                if (element is Button || element.ClassListContains("unity-base-field"))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static void ShowSceneContextMenu(SceneInfo sceneInfo)
+        {
+            GenericMenu menu = new();
+            menu.AddItem(new GUIContent("复制路径"), false, () =>
+                EditorGUIUtility.systemCopyBuffer = sceneInfo.Path);
+            menu.AddItem(new GUIContent("复制名称"), false, () =>
+                EditorGUIUtility.systemCopyBuffer = sceneInfo.Name);
+            menu.ShowAsContext();
         }
 
         private List<SceneInfo> FilterScenes(string searchText)

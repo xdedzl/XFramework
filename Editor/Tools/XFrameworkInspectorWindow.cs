@@ -18,6 +18,7 @@ namespace XFramework.Editor
         private object m_Target;
         private Action<VisualElement> m_CustomBuilder;
         private bool m_ExpandFirstLevel;
+        private bool m_ReadOnly;
         private ContentMode m_ContentMode;
 
         [MenuItem(MenuPath)]
@@ -33,7 +34,8 @@ namespace XFramework.Editor
             string title,
             object target,
             string subtitle = null,
-            bool expandFirstLevel = true)
+            bool expandFirstLevel = true,
+            bool readOnly = false)
         {
             XFrameworkInspectorWindow window = OpenOrCreateWindow();
             window.m_Source = source;
@@ -42,6 +44,7 @@ namespace XFramework.Editor
             window.m_Target = target;
             window.m_CustomBuilder = null;
             window.m_ExpandFirstLevel = expandFirstLevel;
+            window.m_ReadOnly = readOnly;
             window.m_ContentMode = ContentMode.Object;
             window.BuildUI();
             window.Show();
@@ -61,6 +64,7 @@ namespace XFramework.Editor
             window.m_Target = null;
             window.m_CustomBuilder = buildContent;
             window.m_ExpandFirstLevel = false;
+            window.m_ReadOnly = false;
             window.m_ContentMode = ContentMode.Custom;
             window.BuildUI();
             window.Show();
@@ -134,6 +138,7 @@ namespace XFramework.Editor
             m_Target = null;
             m_CustomBuilder = null;
             m_ExpandFirstLevel = false;
+            m_ReadOnly = false;
             m_ContentMode = ContentMode.Empty;
             BuildUI();
         }
@@ -281,6 +286,7 @@ namespace XFramework.Editor
                 inspector.style.borderBottomLeftRadius = 4;
                 inspector.style.borderBottomRightRadius = 4;
                 inspector.Bind(m_Target);
+                inspector.SetEnabled(!m_ReadOnly);
                 if (m_ExpandFirstLevel)
                 {
                     inspector.ExpandFirstLevelElements();

@@ -13,7 +13,7 @@ namespace XFramework.Save
     /// 通过 SaveManager.Instance 访问。
     /// </summary>
     [ModuleLifecycle(ModuleLifecycle.RuntimePersistent)]
-    public class SaveManager : GameModuleBase<SaveManager>
+    public partial class SaveManager : GameModuleBase<SaveManager>
     {
         private const string SaveRootFolderName = "Saves";
         private const string MetaFileName = "meta.json";

@@ -312,7 +312,7 @@ namespace XFramework.UI
         {
             if (element.ClassListContains("inspector-element"))
             {
-                element.style.width = Length.Percent(100);
+                element.style.width = StyleKeyword.Auto;
                 element.style.alignSelf = Align.Stretch;
             }
 
