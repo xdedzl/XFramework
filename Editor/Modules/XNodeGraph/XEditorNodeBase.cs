@@ -113,6 +113,8 @@ namespace XFramework.NodeKit.Editor
 
     public abstract class XEditorNodeBase : Node
     {
+        private bool m_IsContentLayoutRefreshScheduled;
+
         protected abstract string nodeTitleName { get; }
         
         protected abstract string nodeName { get; set; }
@@ -136,6 +138,24 @@ namespace XFramework.NodeKit.Editor
         protected XEditorNodeBase()
         {
             title = nodeTitleName;
+            contentContainer.RegisterCallback<GeometryChangedEvent>(_ => ScheduleContentLayoutRefresh());
+        }
+
+        private void ScheduleContentLayoutRefresh()
+        {
+            if (m_IsContentLayoutRefreshScheduled)
+            {
+                return;
+            }
+
+            m_IsContentLayoutRefreshScheduled = true;
+            schedule.Execute(() =>
+            {
+                m_IsContentLayoutRefreshScheduled = false;
+                RefreshExpandedState();
+                RefreshPorts();
+                MarkDirtyRepaint();
+            }).ExecuteLater(0);
         }
 
         public void SetOwnerGraphView(XNodeGraphView ownerGraphView)

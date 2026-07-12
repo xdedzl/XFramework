@@ -34,6 +34,9 @@ namespace XFramework.UI
 
         public XInspector(bool useDefaultStyle = true)
         {
+            style.alignSelf = Align.Stretch;
+            style.minWidth = 0f;
+            style.flexShrink = 1f;
             if (useDefaultStyle)
             {
                 style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.3f));
@@ -314,22 +317,27 @@ namespace XFramework.UI
             {
                 element.style.width = StyleKeyword.Auto;
                 element.style.alignSelf = Align.Stretch;
+                element.style.minWidth = 0f;
+                element.style.flexShrink = 1f;
             }
 
             if (element.ClassListContains("inspector-label"))
             {
                 element.style.width = Length.Percent(40);
-                element.style.minWidth = 120f;
-                element.style.flexShrink = 0f;
+                element.style.minWidth = 0f;
+                element.style.flexShrink = 1f;
                 element.style.whiteSpace = WhiteSpace.NoWrap;
+                element.style.overflow = Overflow.Hidden;
+                element.style.textOverflow = TextOverflow.Ellipsis;
                 element.style.paddingLeft = 5f;
             }
 
             if (element.ClassListContains("inspector-input"))
             {
                 element.style.width = Length.Percent(60);
-                element.style.minWidth = 160f;
+                element.style.minWidth = 0f;
                 element.style.flexGrow = 1f;
+                element.style.flexShrink = 1f;
             }
         }
     }
