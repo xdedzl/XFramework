@@ -9,7 +9,7 @@ using UnityEngine.UIElements;
 
 namespace XFramework.Editor
 {
-    public class GameModuleDebugerWindow : EditorWindow
+    public class GameModuleDebugerWindow : XFrameworkDebugWindowBase
     {
         private const string MenuPath = "XFramework/Debug/Game Module Debuger";
         private const string AllOption = "全部";
@@ -32,7 +32,6 @@ namespace XFramework.Editor
         private ListView m_ListView;
         private Label m_SummaryLabel;
 
-        private double m_LastRefreshTime;
         private ModuleInfo m_SelectedModule;
 
         [MenuItem(MenuPath)]
@@ -44,16 +43,15 @@ namespace XFramework.Editor
             window.Show();
         }
 
-        private void OnEnable()
+        protected override void OnEnable()
         {
-            EditorApplication.update += HandleEditorUpdate;
+            base.OnEnable();
             RefreshModules();
         }
 
-        private void OnDisable()
+        protected override void OnDisable()
         {
-            EditorApplication.update -= HandleEditorUpdate;
-            XFrameworkInspectorWindow.ClearIfOwner(this);
+            base.OnDisable();
         }
 
         public void CreateGUI()
@@ -104,37 +102,9 @@ namespace XFramework.Editor
             m_MonoFilter = CreateToolbarDropdown(toolbar, "类型", new List<string> { AllOption, MonoOption, NonMonoOption }, 86);
             m_MonoFilter.RegisterValueChangedCallback(_ => RefreshView());
 
-            var refreshButton = new Button(RefreshModules)
-            {
-                text = "刷新"
-            };
-            refreshButton.style.marginLeft = 8;
-            refreshButton.style.width = 64;
-            toolbar.Add(refreshButton);
+            AddRefreshControls(toolbar);
 
             return toolbar;
-        }
-
-        private static DropdownField CreateToolbarDropdown(VisualElement toolbar, string labelText, List<string> options, float dropdownWidth)
-        {
-            var group = new VisualElement();
-            group.style.flexDirection = FlexDirection.Row;
-            group.style.alignItems = Align.Center;
-            group.style.flexShrink = 0;
-            group.style.marginLeft = 8;
-
-            var label = new Label(labelText);
-            label.style.marginRight = 4;
-            label.style.color = new Color(0.75f, 0.75f, 0.75f);
-            group.Add(label);
-
-            var dropdown = new DropdownField(options, 0);
-            dropdown.style.width = dropdownWidth;
-            dropdown.style.flexShrink = 0;
-            group.Add(dropdown);
-
-            toolbar.Add(group);
-            return dropdown;
         }
 
         private VisualElement BuildListPane()
@@ -193,16 +163,15 @@ namespace XFramework.Editor
             return header;
         }
 
-        private void HandleEditorUpdate()
+        protected override void OnAutoRefresh()
         {
-            if (EditorApplication.timeSinceStartup - m_LastRefreshTime < 0.5d)
-            {
-                return;
-            }
-
-            m_LastRefreshTime = EditorApplication.timeSinceStartup;
             RefreshRuntimeSnapshots();
             RefreshView();
+        }
+
+        protected override void OnRefreshClicked()
+        {
+            RefreshModules();
         }
 
         private void RefreshModules()
@@ -949,28 +918,6 @@ namespace XFramework.Editor
             var options = new List<string> { AllOption };
             options.AddRange(Enum.GetNames(typeof(ModuleLifecycle)));
             return options;
-        }
-
-        private static Label CreateHeaderLabel(string text, float width)
-        {
-            var label = new Label(text);
-            label.style.width = width;
-            label.style.unityFontStyleAndWeight = FontStyle.Bold;
-            return label;
-        }
-
-        private static Label CreateCellLabel(string name, float width)
-        {
-            var label = new Label
-            {
-                name = name
-            };
-            if (width > 0)
-            {
-                label.style.width = width;
-            }
-
-            return label;
         }
 
         private sealed class ModuleInfo

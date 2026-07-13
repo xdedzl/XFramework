@@ -11,7 +11,7 @@ using XFramework.Resource;
 
 namespace XFramework.NodeKit.Editor
 {
-    public partial class XNodeGraphEditorWindow : EditorWindow
+    public partial class XNodeGraphEditorWindow : EditorWindow, IHasCustomMenu
     {
         private static readonly List<XNodeGraphEditorWindow> s_OpenWindows = new();
 
@@ -238,6 +238,32 @@ namespace XFramework.NodeKit.Editor
             SaveData();
             XFrameworkInspectorWindow.ClearIfOwner(this);
             s_OpenWindows.Remove(this);
+        }
+
+        public void AddItemsToMenu(GenericMenu menu)
+        {
+            menu.AddSeparator(string.Empty);
+            menu.AddItem(new GUIContent("关闭所有 Graph"), false, CloseAllGraphWindows);
+            menu.AddItem(new GUIContent("关闭其他所有 Graph"), false, CloseOtherGraphWindows);
+        }
+
+        private static void CloseAllGraphWindows()
+        {
+            foreach (XNodeGraphEditorWindow window in Resources.FindObjectsOfTypeAll<XNodeGraphEditorWindow>())
+            {
+                window.Close();
+            }
+        }
+
+        private void CloseOtherGraphWindows()
+        {
+            foreach (XNodeGraphEditorWindow window in Resources.FindObjectsOfTypeAll<XNodeGraphEditorWindow>())
+            {
+                if (window != this)
+                {
+                    window.Close();
+                }
+            }
         }
         
         public void SetAsset(XNodeGraphAsset asset)

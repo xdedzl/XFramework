@@ -8,7 +8,7 @@ using UnityEngine.UIElements;
 
 namespace XFramework.Editor
 {
-    public class FsmDebuggerWindow : EditorWindow
+    public class FsmDebuggerWindow : XFrameworkDebugWindowBase
     {
         private const string MenuPath = "XFramework/Debug/FSM Debuger";
 
@@ -22,8 +22,6 @@ namespace XFramework.Editor
         private Label m_SummaryLabel;
         private XFramework.Fsm.FsmDebugEntry? m_SelectedEntry;
 
-        private double m_LastRefreshTime;
-
         [MenuItem(MenuPath)]
         public static void ShowWindow()
         {
@@ -33,16 +31,15 @@ namespace XFramework.Editor
             window.Show();
         }
 
-        private void OnEnable()
+        protected override void OnEnable()
         {
-            EditorApplication.update += HandleEditorUpdate;
+            base.OnEnable();
             RefreshEntries();
         }
 
-        private void OnDisable()
+        protected override void OnDisable()
         {
-            EditorApplication.update -= HandleEditorUpdate;
-            XFrameworkInspectorWindow.ClearIfOwner(this);
+            base.OnDisable();
         }
 
         public void CreateGUI()
@@ -102,13 +99,7 @@ namespace XFramework.Editor
             m_ScopeField.RegisterValueChangedCallback(_ => RefreshView());
             toolbar.Add(m_ScopeField);
 
-            var refreshButton = new Button(RefreshEntries)
-            {
-                text = "刷新"
-            };
-            refreshButton.style.marginLeft = 8;
-            refreshButton.style.width = 64;
-            toolbar.Add(refreshButton);
+            AddRefreshControls(toolbar);
 
             return toolbar;
         }
@@ -164,14 +155,13 @@ namespace XFramework.Editor
             return header;
         }
 
-        private void HandleEditorUpdate()
+        protected override void OnAutoRefresh()
         {
-            if (EditorApplication.timeSinceStartup - m_LastRefreshTime < 0.5d)
-            {
-                return;
-            }
+            RefreshEntries();
+        }
 
-            m_LastRefreshTime = EditorApplication.timeSinceStartup;
+        protected override void OnRefreshClicked()
+        {
             RefreshEntries();
         }
 
@@ -374,27 +364,5 @@ namespace XFramework.Editor
             parent.Add(container);
         }
 
-        private static Label CreateHeaderLabel(string text, float width)
-        {
-            var label = new Label(text);
-            label.style.width = width;
-            label.style.unityFontStyleAndWeight = FontStyle.Bold;
-            return label;
         }
-
-        private static Label CreateCellLabel(string name, float width)
-        {
-            var label = new Label
-            {
-                name = name
-            };
-            if (width > 0)
-            {
-                label.style.width = width;
-            }
-
-            return label;
-        }
-
-    }
 }

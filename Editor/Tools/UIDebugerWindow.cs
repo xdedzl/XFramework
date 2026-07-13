@@ -13,7 +13,7 @@ using UIToolkitListView = UnityEngine.UIElements.ListView;
 
 namespace XFramework.Editor
 {
-    public class UIDebugerWindow : EditorWindow
+    public class UIDebugerWindow : XFrameworkDebugWindowBase
     {
         private const string MenuPath = "XFramework/Debug/UI Debuger";
         private const string AllOption = "全部";
@@ -33,11 +33,10 @@ namespace XFramework.Editor
         private DropdownField m_StatusFilter;
         private DropdownField m_TypeFilter;
         private Label m_SummaryLabel;
-        private Label m_AutoRefreshLabel;
+        
         private UIToolkitListView m_ListView;
         private GameObject m_TemporaryPanelObject;
         private PanelDebugItem m_SelectedItem;
-        private double m_LastRefreshTime;
 
         [MenuItem(MenuPath)]
         public static void ShowWindow()
@@ -50,18 +49,17 @@ namespace XFramework.Editor
             window.Focus();
         }
 
-        private void OnEnable()
+        protected override void OnEnable()
         {
+            base.OnEnable();
             titleContent = new GUIContent("UI Debuger");
-            EditorApplication.update += HandleEditorUpdate;
             RefreshPanels();
         }
 
-        private void OnDisable()
+        protected override void OnDisable()
         {
-            EditorApplication.update -= HandleEditorUpdate;
+            base.OnDisable();
             DestroyTemporaryPanel();
-            XFrameworkInspectorWindow.ClearIfOwner(this);
         }
 
         public void CreateGUI()
@@ -127,48 +125,9 @@ namespace XFramework.Editor
             }, 104f);
             m_TypeFilter.RegisterValueChangedCallback(_ => RefreshView(true));
 
-            Button refreshButton = new(RefreshPanels)
-            {
-                text = "刷新"
-            };
-            refreshButton.style.marginLeft = 8f;
-            refreshButton.style.width = 64f;
-            refreshButton.tooltip = "重新扫描面板类型并刷新运行时状态";
-            toolbar.Add(refreshButton);
-
-            m_AutoRefreshLabel = new Label("自动刷新: 0.5s");
-            m_AutoRefreshLabel.style.marginLeft = 10f;
-            m_AutoRefreshLabel.style.color = new Color(0.70f, 0.70f, 0.70f);
-            toolbar.Add(m_AutoRefreshLabel);
+            AddRefreshControls(toolbar, "重新扫描面板类型并刷新运行时状态");
 
             return toolbar;
-        }
-
-        private static DropdownField CreateToolbarDropdown(VisualElement toolbar, string labelText, List<string> options, float width)
-        {
-            VisualElement group = new()
-            {
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    alignItems = Align.Center,
-                    flexShrink = 0f,
-                    marginLeft = 8f
-                }
-            };
-
-            Label label = new(labelText);
-            label.style.marginRight = 4f;
-            label.style.color = new Color(0.75f, 0.75f, 0.75f);
-            group.Add(label);
-
-            DropdownField dropdown = new(options, 0);
-            dropdown.style.width = width;
-            dropdown.style.flexShrink = 0f;
-            group.Add(dropdown);
-
-            toolbar.Add(group);
-            return dropdown;
         }
 
         private VisualElement BuildListPane()
@@ -210,16 +169,16 @@ namespace XFramework.Editor
         private VisualElement BuildListHeader()
         {
             VisualElement header = CreateRow(new Color(0.20f, 0.20f, 0.20f), 22f);
-            header.Add(CreateHeaderLabel("状态", 54f));
-            header.Add(CreateHeaderLabel("面板", 150f));
-            header.Add(CreateHeaderLabel("显示名", 120f));
-            header.Add(CreateHeaderLabel("类型", 150f));
-            header.Add(CreateHeaderLabel("Lv", 36f));
-            header.Add(CreateHeaderLabel("UI", 82f));
-            header.Add(CreateHeaderLabel("操作", 72f));
-            header.Add(CreateHeaderLabel("Prefab", 180f));
+            header.Add(CreateHeaderLabel("状态", 54f, marginRight: 8f, flexShrink: true));
+            header.Add(CreateHeaderLabel("面板", 150f, marginRight: 8f, flexShrink: true));
+            header.Add(CreateHeaderLabel("显示名", 120f, marginRight: 8f, flexShrink: true));
+            header.Add(CreateHeaderLabel("类型", 150f, marginRight: 8f, flexShrink: true));
+            header.Add(CreateHeaderLabel("Lv", 36f, marginRight: 8f, flexShrink: true));
+            header.Add(CreateHeaderLabel("UI", 82f, marginRight: 8f, flexShrink: true));
+            header.Add(CreateHeaderLabel("操作", 72f, marginRight: 8f, flexShrink: true));
+            header.Add(CreateHeaderLabel("Prefab", 180f, marginRight: 8f, flexShrink: true));
 
-            Label gameObject = CreateHeaderLabel("GameObject", 0f);
+            Label gameObject = CreateHeaderLabel("GameObject", 0f, marginRight: 8f, flexShrink: true);
             gameObject.style.flexGrow = 1f;
             header.Add(gameObject);
             return header;
@@ -248,12 +207,12 @@ namespace XFramework.Editor
                     overflow = Overflow.Hidden
                 }
             };
-            panelRow.Add(CreateCellLabel(54f));
-            panelRow.Add(CreateCellLabel(150f, true));
-            panelRow.Add(CreateCellLabel(120f));
-            panelRow.Add(CreateCellLabel(150f));
-            panelRow.Add(CreateCellLabel(36f));
-            panelRow.Add(CreateCellLabel(82f));
+            panelRow.Add(CreateCellLabel(54f, marginRight: 8f, flexShrink: true, textOverflow: TextOverflow.Ellipsis));
+            panelRow.Add(CreateCellLabel(150f, bold: true, marginRight: 8f, flexShrink: true, textOverflow: TextOverflow.Ellipsis));
+            panelRow.Add(CreateCellLabel(120f, marginRight: 8f, flexShrink: true, textOverflow: TextOverflow.Ellipsis));
+            panelRow.Add(CreateCellLabel(150f, marginRight: 8f, flexShrink: true, textOverflow: TextOverflow.Ellipsis));
+            panelRow.Add(CreateCellLabel(36f, marginRight: 8f, flexShrink: true, textOverflow: TextOverflow.Ellipsis));
+            panelRow.Add(CreateCellLabel(82f, marginRight: 8f, flexShrink: true, textOverflow: TextOverflow.Ellipsis));
             Button actionButton = null;
             actionButton = new Button(() => ToggleRuntimePanel(actionButton.userData as PanelDebugItem));
             actionButton.name = "runtime-action-button";
@@ -418,17 +377,16 @@ namespace XFramework.Editor
             XFrameworkInspectorWindow.ClearIfOwner(this);
         }
 
-        private void HandleEditorUpdate()
+        protected override void OnAutoRefresh()
         {
-            if (EditorApplication.timeSinceStartup - m_LastRefreshTime < 0.5d)
-            {
-                return;
-            }
-
-            m_LastRefreshTime = EditorApplication.timeSinceStartup;
             RefreshRuntimeSnapshots();
             MergeRuntimeSnapshots();
             RefreshView(false);
+        }
+
+        protected override void OnRefreshClicked()
+        {
+            RefreshPanels();
         }
 
         private void RefreshPanels()
@@ -632,21 +590,21 @@ namespace XFramework.Editor
 
             PanelDebugItem item = m_SelectedItem;
             parent.Add(CreateSectionTitle("注册信息"));
-            parent.Add(CreateInfoRow("Show Name", item.ShowName));
-            parent.Add(CreateInfoRow("Panel Name", item.PanelName));
-            parent.Add(CreateInfoRow("Type", item.FullTypeName));
-            parent.Add(CreateInfoRow("Path", string.IsNullOrEmpty(item.Path) ? "<empty>" : item.Path));
+            parent.Add(CreateInfoRow("Show Name", item.ShowName, labelWidth: 132f, marginBottom: 2f));
+            parent.Add(CreateInfoRow("Panel Name", item.PanelName, labelWidth: 132f, marginBottom: 2f));
+            parent.Add(CreateInfoRow("Type", item.FullTypeName, labelWidth: 132f, marginBottom: 2f));
+            parent.Add(CreateInfoRow("Path", string.IsNullOrEmpty(item.Path) ? "<empty>" : item.Path, labelWidth: 132f, marginBottom: 2f));
             parent.Add(CreatePanelAssetObjectRow(item));
-            parent.Add(CreateInfoRow("Level", item.Level.ToString()));
-            parent.Add(CreateInfoRow("UI Type", item.IsUIToolkitPanel ? UIToolkitOption : UGUIOption));
-            parent.Add(CreateInfoRow("Tags", FormatTags(item)));
+            parent.Add(CreateInfoRow("Level", item.Level.ToString(), labelWidth: 132f, marginBottom: 2f));
+            parent.Add(CreateInfoRow("UI Type", item.IsUIToolkitPanel ? UIToolkitOption : UGUIOption, labelWidth: 132f, marginBottom: 2f));
+            parent.Add(CreateInfoRow("Tags", FormatTags(item), labelWidth: 132f, marginBottom: 2f));
 
             parent.Add(CreateSectionTitle("运行时状态"));
-            parent.Add(CreateInfoRow("Cached", item.IsCached ? "Yes" : "No"));
-            parent.Add(CreateInfoRow("Opened", item.IsOpened ? "Yes" : "No"));
-            parent.Add(CreateInfoRow("Visible", item.IsVisible ? "Yes" : "No"));
-            parent.Add(CreateInfoRow("Close Callback", item.HasCloseCallback ? "Yes" : "No"));
-            parent.Add(CreateInfoRow("Hierarchy", string.IsNullOrEmpty(item.HierarchyPath) ? "<none>" : item.HierarchyPath));
+            parent.Add(CreateInfoRow("Cached", item.IsCached ? "Yes" : "No", labelWidth: 132f, marginBottom: 2f));
+            parent.Add(CreateInfoRow("Opened", item.IsOpened ? "Yes" : "No", labelWidth: 132f, marginBottom: 2f));
+            parent.Add(CreateInfoRow("Visible", item.IsVisible ? "Yes" : "No", labelWidth: 132f, marginBottom: 2f));
+            parent.Add(CreateInfoRow("Close Callback", item.HasCloseCallback ? "Yes" : "No", labelWidth: 132f, marginBottom: 2f));
+            parent.Add(CreateInfoRow("Hierarchy", string.IsNullOrEmpty(item.HierarchyPath) ? "<none>" : item.HierarchyPath, labelWidth: 132f, marginBottom: 2f));
             parent.Add(CreateRuntimeGameObjectRow(item));
 
             if (item.IsUIToolkitPanel)
@@ -680,10 +638,10 @@ namespace XFramework.Editor
                 runtimePanelSettings = uiDocument.panelSettings;
             }
 
-            parent.Add(CreateInfoRow("UXML", FormatAssetStatus(uxmlPath, visualTree != null)));
-            parent.Add(CreateInfoRow("USS", FormatAssetStatus(ussPath, styleSheet != null)));
-            parent.Add(CreateInfoRow("Default PanelSettings", defaultPanelSettings != null ? defaultPanelSettings.name : "<none>"));
-            parent.Add(CreateInfoRow("Runtime PanelSettings", runtimePanelSettings != null ? runtimePanelSettings.name : "<none>"));
+            parent.Add(CreateInfoRow("UXML", FormatAssetStatus(uxmlPath, visualTree != null), labelWidth: 132f, marginBottom: 2f));
+            parent.Add(CreateInfoRow("USS", FormatAssetStatus(ussPath, styleSheet != null), labelWidth: 132f, marginBottom: 2f));
+            parent.Add(CreateInfoRow("Default PanelSettings", defaultPanelSettings != null ? defaultPanelSettings.name : "<none>", labelWidth: 132f, marginBottom: 2f));
+            parent.Add(CreateInfoRow("Runtime PanelSettings", runtimePanelSettings != null ? runtimePanelSettings.name : "<none>", labelWidth: 132f, marginBottom: 2f));
 
             VisualElement previewRoot = new()
             {
@@ -1061,23 +1019,7 @@ namespace XFramework.Editor
             return row;
         }
 
-        private static VisualElement CreateRow(Color backgroundColor, float height)
-        {
-            VisualElement row = new()
-            {
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    alignItems = Align.Center,
-                    minHeight = height,
-                    paddingLeft = 4f,
-                    paddingRight = 4f,
-                    overflow = Overflow.Hidden,
-                    backgroundColor = backgroundColor
-                }
-            };
-            return row;
-        }
+        
 
         private static Color GetLevelRowBackgroundColor(int index)
         {
@@ -1146,31 +1088,9 @@ namespace XFramework.Editor
             return row;
         }
 
-        private static Label CreateHeaderLabel(string text, float width)
-        {
-            Label label = new(text);
-            label.style.unityFontStyleAndWeight = FontStyle.Bold;
-            label.style.width = width;
-            label.style.flexShrink = 0f;
-            label.style.marginRight = 8f;
-            label.style.overflow = Overflow.Hidden;
-            return label;
-        }
+        
 
-        private static Label CreateCellLabel(float width, bool bold = false)
-        {
-            Label label = new();
-            label.style.width = width;
-            label.style.flexShrink = 0f;
-            label.style.marginRight = 8f;
-            label.style.overflow = Overflow.Hidden;
-            if (bold)
-            {
-                label.style.unityFontStyleAndWeight = FontStyle.Bold;
-            }
-
-            return label;
-        }
+        
 
         private static ObjectField CreateReadOnlyObjectField(string name, float width, Type objectType, bool allowSceneObjects)
         {
@@ -1214,31 +1134,7 @@ namespace XFramework.Editor
             return label;
         }
 
-        private static VisualElement CreateInfoRow(string labelText, string valueText)
-        {
-            VisualElement row = new()
-            {
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    minHeight = 22f,
-                    alignItems = Align.Center,
-                    marginBottom = 2f
-                }
-            };
-
-            Label label = new(labelText);
-            label.style.width = 132f;
-            label.style.flexShrink = 0f;
-            label.style.color = new Color(0.70f, 0.70f, 0.70f);
-            row.Add(label);
-
-            Label value = new(valueText);
-            value.style.flexGrow = 1f;
-            value.style.whiteSpace = WhiteSpace.Normal;
-            row.Add(value);
-            return row;
-        }
+        
 
         private sealed class PanelDebugItem
         {

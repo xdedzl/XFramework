@@ -8,11 +8,13 @@ using XFramework.Save;
 
 namespace XFramework.Editor
 {
-    public sealed class SaveDebuggerWindow : EditorWindow
+    public sealed class SaveDebuggerWindow : XFrameworkDebugWindowBase
     {
         private const string MenuPath = "XFramework/Debug/Save Debugger";
         private const float ProfilePaneWidth = 300f;
         private const double AutoApplyInterval = 0.2d;
+
+        protected override double RefreshInterval => AutoApplyInterval;
 
         private readonly List<SaveProfileDebugSnapshot> m_Profiles = new();
         private readonly List<SaveDatabaseDebugSnapshot> m_Databases = new();
@@ -31,7 +33,6 @@ namespace XFramework.Editor
         private SaveProfileDebugSnapshot? m_SelectedProfile;
         private SaveDatabaseDebugSnapshot? m_SelectedDatabase;
         private bool m_IsSaveManagerLoaded;
-        private double m_LastRefreshTime;
         private double m_LastAutoApplyTime;
         private string m_SelectedProfileSignature;
         private string m_LastAutoApplyFailureSignature;
@@ -45,16 +46,15 @@ namespace XFramework.Editor
             window.Show();
         }
 
-        private void OnEnable()
+        protected override void OnEnable()
         {
-            EditorApplication.update += HandleEditorUpdate;
+            base.OnEnable();
             RefreshData(true);
         }
 
-        private void OnDisable()
+        protected override void OnDisable()
         {
-            EditorApplication.update -= HandleEditorUpdate;
-            XFrameworkInspectorWindow.ClearIfOwner(this);
+            base.OnDisable();
         }
 
         public void CreateGUI()
@@ -132,18 +132,7 @@ namespace XFramework.Editor
             m_ClearButton.tooltip = "仅限非 Play Mode，删除存档根目录下的全部档位";
             toolbar.Add(m_ClearButton);
 
-            Button refreshButton = new(RefreshFromToolbar)
-            {
-                text = "刷新"
-            };
-            refreshButton.style.marginLeft = 6;
-            refreshButton.tooltip = "重新扫描磁盘上的存档和当前运行时数据";
-            toolbar.Add(refreshButton);
-
-            Label autoRefreshLabel = new("Play Mode 自动刷新: 0.5s");
-            autoRefreshLabel.style.marginLeft = 10;
-            autoRefreshLabel.style.color = new Color(0.70f, 0.70f, 0.70f);
-            toolbar.Add(autoRefreshLabel);
+            AddRefreshControls(toolbar, "重新扫描磁盘上的存档和当前运行时数据");
 
             m_FeedbackLabel = new Label();
             m_FeedbackLabel.style.marginLeft = 8;
@@ -159,7 +148,7 @@ namespace XFramework.Editor
         private VisualElement BuildProfilePane()
         {
             VisualElement pane = CreatePane();
-            pane.Add(CreatePaneTitle("存档列表"));
+            pane.Add(CreatePaneTitle("存档列表", marginBottom: 5f));
             pane.Add(BuildProfileListHeader());
 
             m_ProfileListView = new ListView
@@ -181,7 +170,7 @@ namespace XFramework.Editor
         {
             VisualElement pane = CreatePane();
             pane.style.marginLeft = 4;
-            pane.Add(CreatePaneTitle("细分存档"));
+            pane.Add(CreatePaneTitle("细分存档", marginBottom: 5f));
 
             m_SelectedProfileLabel = new();
             m_SelectedProfileLabel.style.marginBottom = 5;
@@ -206,27 +195,21 @@ namespace XFramework.Editor
             return pane;
         }
 
-        private void HandleEditorUpdate()
+        protected override void OnAutoRefresh()
         {
-            double currentTime = EditorApplication.timeSinceStartup;
-            if (currentTime - m_LastAutoApplyTime >= AutoApplyInterval)
-            {
-                m_LastAutoApplyTime = currentTime;
-                TryAutoApplySelectedProfile();
-            }
+            TryAutoApplySelectedProfile();
 
             if (!Application.isPlaying || (m_SelectedProfile.HasValue && !m_SelectedProfile.Value.IsActive))
             {
                 return;
             }
 
-            if (currentTime - m_LastRefreshTime < 0.5d)
-            {
-                return;
-            }
-
-            m_LastRefreshTime = currentTime;
             RefreshData(false);
+        }
+
+        protected override void OnRefreshClicked()
+        {
+            RefreshFromToolbar();
         }
 
         private void RefreshFromToolbar()
@@ -748,7 +731,7 @@ namespace XFramework.Editor
         {
             if (!m_SelectedDatabase.HasValue)
             {
-                parent.Add(CreateMutedLabel("请选择一个细分存档。"));
+                parent.Add(CreateMutedLabel("请选择一个细分存档。", wrap: true, marginTop: 6f));
                 return;
             }
 
@@ -756,7 +739,7 @@ namespace XFramework.Editor
             parent.Add(CreateInfoLabel("无法绑定为 SaveDatabase。"));
             if (!string.IsNullOrWhiteSpace(database.Error))
             {
-                parent.Add(CreateMutedLabel(database.Error));
+                parent.Add(CreateMutedLabel(database.Error, wrap: true, marginTop: 6f));
             }
 
             if (string.IsNullOrWhiteSpace(database.RawJson))
@@ -929,31 +912,6 @@ namespace XFramework.Editor
                 && previous.version == current.version;
         }
 
-        private static VisualElement CreatePane()
-        {
-            return new VisualElement
-            {
-                style =
-                {
-                    flexGrow = 1,
-                    flexDirection = FlexDirection.Column,
-                    paddingLeft = 4,
-                    paddingRight = 4,
-                    paddingTop = 4,
-                    paddingBottom = 4,
-                    backgroundColor = new Color(0.15f, 0.15f, 0.15f, 0.75f)
-                }
-            };
-        }
-
-        private static Label CreatePaneTitle(string text)
-        {
-            Label label = new(text);
-            label.style.marginBottom = 5;
-            label.style.unityFontStyleAndWeight = FontStyle.Bold;
-            return label;
-        }
-
         private static VisualElement BuildProfileListHeader()
         {
             VisualElement header = CreateRow(new Color(0.20f, 0.20f, 0.20f), 22);
@@ -979,61 +937,11 @@ namespace XFramework.Editor
             return header;
         }
 
-        private static VisualElement CreateRow(Color backgroundColor, float height)
-        {
-            return new VisualElement
-            {
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    alignItems = Align.Center,
-                    minHeight = height,
-                    paddingLeft = 4,
-                    paddingRight = 4,
-                    backgroundColor = backgroundColor
-                }
-            };
-        }
-
-        private static Label CreateHeaderLabel(string text, float width)
-        {
-            Label label = CreateCellLabel(null, width);
-            label.text = text;
-            label.style.unityFontStyleAndWeight = FontStyle.Bold;
-            label.style.color = new Color(0.82f, 0.82f, 0.82f);
-            return label;
-        }
-
-        private static Label CreateCellLabel(string name, float width)
-        {
-            Label label = new()
-            {
-                name = name
-            };
-            if (width > 0)
-            {
-                label.style.width = width;
-            }
-
-            label.style.marginRight = 4;
-            label.style.overflow = Overflow.Hidden;
-            return label;
-        }
-
         private static Label CreateInfoLabel(string text)
         {
             Label label = new(text);
             label.style.whiteSpace = WhiteSpace.Normal;
             label.style.color = new Color(1f, 0.72f, 0.50f);
-            return label;
-        }
-
-        private static Label CreateMutedLabel(string text)
-        {
-            Label label = new(text);
-            label.style.marginTop = 6;
-            label.style.whiteSpace = WhiteSpace.Normal;
-            label.style.color = new Color(0.75f, 0.75f, 0.75f);
             return label;
         }
 

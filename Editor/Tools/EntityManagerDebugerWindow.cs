@@ -10,7 +10,7 @@ using EntityComponent = XFramework.Entity.Entity;
 
 namespace XFramework.Editor
 {
-    public class EntityManagerDebugerWindow : EditorWindow
+    public class EntityManagerDebugerWindow : XFrameworkDebugWindowBase
     {
         private const string MenuPath = "XFramework/Debug/Entity Manager Debuger";
         private const float ContainerPaneWidth = 300f;
@@ -21,14 +21,13 @@ namespace XFramework.Editor
 
         private TextField m_SearchField;
         private Label m_SummaryLabel;
-        private Label m_AutoRefreshLabel;
+        
         private ListView m_ContainerListView;
         private ListView m_EntityListView;
         private EntityManagerDebugSnapshot? m_ManagerSnapshot;
         private string m_SelectedContainerName;
         private string m_SelectedEntityId;
         private DetailSelectionKind m_DetailSelectionKind;
-        private double m_LastRefreshTime;
 
         [MenuItem(MenuPath)]
         public static void ShowWindow()
@@ -39,16 +38,15 @@ namespace XFramework.Editor
             window.Show();
         }
 
-        private void OnEnable()
+        protected override void OnEnable()
         {
-            EditorApplication.update += HandleEditorUpdate;
+            base.OnEnable();
             RefreshData();
         }
 
-        private void OnDisable()
+        protected override void OnDisable()
         {
-            EditorApplication.update -= HandleEditorUpdate;
-            XFrameworkInspectorWindow.ClearIfOwner(this);
+            base.OnDisable();
         }
 
         public void CreateGUI()
@@ -97,19 +95,7 @@ namespace XFramework.Editor
             m_SearchField.RegisterValueChangedCallback(_ => RefreshView());
             toolbar.Add(m_SearchField);
 
-            Button refreshButton = new(RefreshData)
-            {
-                text = "刷新"
-            };
-            refreshButton.style.marginLeft = 8f;
-            refreshButton.style.width = 64f;
-            refreshButton.tooltip = "刷新 EntityManager 当前有效实体快照";
-            toolbar.Add(refreshButton);
-
-            m_AutoRefreshLabel = new Label("自动刷新: 0.5s");
-            m_AutoRefreshLabel.style.marginLeft = 10f;
-            m_AutoRefreshLabel.style.color = new Color(0.70f, 0.70f, 0.70f);
-            toolbar.Add(m_AutoRefreshLabel);
+            AddRefreshControls(toolbar, "刷新 EntityManager 当前有效实体快照");
 
             return toolbar;
         }
@@ -128,7 +114,7 @@ namespace XFramework.Editor
             VisualElement pane = CreatePane();
             pane.style.marginRight = 4f;
 
-            Label title = CreatePaneTitle("Containers");
+            Label title = CreatePaneTitle("Containers", height: 22f);
             pane.Add(title);
             pane.Add(BuildContainerHeader());
 
@@ -152,7 +138,7 @@ namespace XFramework.Editor
             VisualElement pane = CreatePane();
             pane.style.marginLeft = 4f;
 
-            Label title = CreatePaneTitle("Entities");
+            Label title = CreatePaneTitle("Entities", height: 22f);
             pane.Add(title);
             pane.Add(BuildEntityHeader());
 
@@ -198,14 +184,13 @@ namespace XFramework.Editor
             return header;
         }
 
-        private void HandleEditorUpdate()
+        protected override void OnAutoRefresh()
         {
-            if (EditorApplication.timeSinceStartup - m_LastRefreshTime < 0.5d)
-            {
-                return;
-            }
+            RefreshData();
+        }
 
-            m_LastRefreshTime = EditorApplication.timeSinceStartup;
+        protected override void OnRefreshClicked()
+        {
             RefreshData();
         }
 
@@ -380,10 +365,10 @@ namespace XFramework.Editor
         private VisualElement MakeContainerItem()
         {
             VisualElement row = CreateRow(Color.clear, 28f);
-            row.Add(CreateCellLabel("name", 150f, true));
-            row.Add(CreateCellLabel("count", 46f));
+            row.Add(CreateCellLabel("name", 150f, bold: true, flexShrink: true));
+            row.Add(CreateCellLabel("count", 46f, flexShrink: true));
 
-            Label type = CreateCellLabel("type", 0f);
+            Label type = CreateCellLabel("type", 0f, flexShrink: true);
             type.style.flexGrow = 1f;
             row.Add(type);
             return row;
@@ -412,13 +397,13 @@ namespace XFramework.Editor
         private VisualElement MakeEntityItem()
         {
             VisualElement row = CreateRow(Color.clear, 26f);
-            row.Add(CreateCellLabel("status", 62f));
-            row.Add(CreateCellLabel("type", 160f));
-            row.Add(CreateCellLabel("alias", 130f));
-            row.Add(CreateCellLabel("name", 180f));
-            row.Add(CreateCellLabel("children", 48f));
+            row.Add(CreateCellLabel("status", 62f, flexShrink: true));
+            row.Add(CreateCellLabel("type", 160f, flexShrink: true));
+            row.Add(CreateCellLabel("alias", 130f, flexShrink: true));
+            row.Add(CreateCellLabel("name", 180f, flexShrink: true));
+            row.Add(CreateCellLabel("children", 48f, flexShrink: true));
 
-            Label scene = CreateCellLabel("scene", 0f);
+            Label scene = CreateCellLabel("scene", 0f, flexShrink: true);
             scene.style.flexGrow = 1f;
             row.Add(scene);
             return row;
@@ -569,7 +554,7 @@ namespace XFramework.Editor
 
         private VisualElement BuildContainerActionSection(EntityContainerDebugSnapshot container)
         {
-            VisualElement section = CreateSection("Container Actions");
+            VisualElement section = CreateSection("Container Actions", marginBottom: 12f);
             VisualElement buttonRow = CreateButtonRow();
             buttonRow.Add(CreateActionButton("Ping模板", () => PingObject(container.Template), container.Template != null));
             buttonRow.Add(CreateActionButton("选中模板", () => SelectObject(container.Template), container.Template != null));
@@ -580,22 +565,22 @@ namespace XFramework.Editor
 
         private VisualElement BuildContainerIdentitySection(EntityContainerDebugSnapshot container)
         {
-            VisualElement section = CreateSection("Container");
-            section.Add(CreateInfoRow("Name", container.Name));
-            section.Add(CreateInfoRow("Type", container.EntityType != null ? container.EntityType.FullName : "-"));
-            section.Add(CreateInfoRow("Active Count", container.ActiveEntityCount.ToString()));
-            section.Add(CreateInfoRow("Filtered Count", m_FilteredEntries.Count.ToString()));
+            VisualElement section = CreateSection("Container", marginBottom: 12f);
+            section.Add(CreateEntityInfoRow("Name", container.Name));
+            section.Add(CreateEntityInfoRow("Type", container.EntityType != null ? container.EntityType.FullName : "-"));
+            section.Add(CreateEntityInfoRow("Active Count", container.ActiveEntityCount.ToString()));
+            section.Add(CreateEntityInfoRow("Filtered Count", m_FilteredEntries.Count.ToString()));
             section.Add(CreateObjectFieldRow("Template", typeof(GameObject), container.Template));
             return section;
         }
 
         private VisualElement BuildContainerEntityPreviewSection(EntityContainerDebugSnapshot container)
         {
-            VisualElement section = CreateSection("Entities");
+            VisualElement section = CreateSection("Entities", marginBottom: 12f);
             List<EntityDebugSnapshot> entries = GetEntriesInContainer(container.Name);
             if (entries.Count == 0)
             {
-                section.Add(CreateInfoRow("Entities", "无"));
+                section.Add(CreateEntityInfoRow("Entities", "无"));
                 return section;
             }
 
@@ -634,7 +619,7 @@ namespace XFramework.Editor
 
             if (entries.Count > previewCount)
             {
-                section.Add(CreateInfoRow("More", $"还有 {entries.Count - previewCount} 个 Entity 未在详情中展开。"));
+                section.Add(CreateEntityInfoRow("More", $"还有 {entries.Count - previewCount} 个 Entity 未在详情中展开。"));
             }
 
             return section;
@@ -642,7 +627,7 @@ namespace XFramework.Editor
 
         private VisualElement BuildActionSection(EntityDebugSnapshot entry)
         {
-            VisualElement section = CreateSection("Entity Actions");
+            VisualElement section = CreateSection("Entity Actions", marginBottom: 12f);
             VisualElement buttonRow = CreateButtonRow();
             buttonRow.Add(CreateActionButton("选中对象", () => SelectObject(entry.GameObject), entry.GameObject != null));
             buttonRow.Add(CreateActionButton("Ping对象", () => PingObject(entry.GameObject), entry.GameObject != null));
@@ -654,53 +639,53 @@ namespace XFramework.Editor
 
         private VisualElement BuildObjectSection(EntityDebugSnapshot entry)
         {
-            VisualElement section = CreateSection("Object");
+            VisualElement section = CreateSection("Object", marginBottom: 12f);
             section.Add(CreateObjectFieldRow("Entity", typeof(EntityComponent), entry.Entity));
             section.Add(CreateObjectFieldRow("GameObject", typeof(GameObject), entry.GameObject));
-            section.Add(CreateInfoRow("Hierarchy", entry.GameObject != null ? GetHierarchyPath(entry.GameObject) : "-"));
+            section.Add(CreateEntityInfoRow("Hierarchy", entry.GameObject != null ? GetHierarchyPath(entry.GameObject) : "-"));
             return section;
         }
 
         private VisualElement BuildIdentitySection(EntityDebugSnapshot entry)
         {
-            VisualElement section = CreateSection("Identity");
-            section.Add(CreateInfoRow("Id", entry.Id));
-            section.Add(CreateInfoRow("Container", entry.ContainerName));
-            section.Add(CreateInfoRow("Alias", FormatEmpty(entry.Alias)));
-            section.Add(CreateInfoRow("Type", entry.EntityType != null ? entry.EntityType.FullName : "-"));
-            section.Add(CreateInfoRow("Name", FormatEmpty(entry.Name)));
-            section.Add(CreateInfoRow("Status", GetStatusText(entry)));
-            section.Add(CreateInfoRow("ActiveSelf", FormatBool(entry.ActiveSelf)));
-            section.Add(CreateInfoRow("ActiveInHierarchy", FormatBool(entry.ActiveInHierarchy)));
-            section.Add(CreateInfoRow("Scene", FormatEmpty(entry.SceneName)));
+            VisualElement section = CreateSection("Identity", marginBottom: 12f);
+            section.Add(CreateEntityInfoRow("Id", entry.Id));
+            section.Add(CreateEntityInfoRow("Container", entry.ContainerName));
+            section.Add(CreateEntityInfoRow("Alias", FormatEmpty(entry.Alias)));
+            section.Add(CreateEntityInfoRow("Type", entry.EntityType != null ? entry.EntityType.FullName : "-"));
+            section.Add(CreateEntityInfoRow("Name", FormatEmpty(entry.Name)));
+            section.Add(CreateEntityInfoRow("Status", GetStatusText(entry)));
+            section.Add(CreateEntityInfoRow("ActiveSelf", FormatBool(entry.ActiveSelf)));
+            section.Add(CreateEntityInfoRow("ActiveInHierarchy", FormatBool(entry.ActiveInHierarchy)));
+            section.Add(CreateEntityInfoRow("Scene", FormatEmpty(entry.SceneName)));
             return section;
         }
 
         private VisualElement BuildTransformSection(EntityDebugSnapshot entry)
         {
-            VisualElement section = CreateSection("Transform");
+            VisualElement section = CreateSection("Transform", marginBottom: 12f);
             Transform transform = entry.GameObject != null ? entry.GameObject.transform : null;
             if (transform == null)
             {
-                section.Add(CreateInfoRow("Transform", "-"));
+                section.Add(CreateEntityInfoRow("Transform", "-"));
                 return section;
             }
 
-            section.Add(CreateInfoRow("Position", transform.position.ToString()));
-            section.Add(CreateInfoRow("Rotation", transform.rotation.eulerAngles.ToString()));
-            section.Add(CreateInfoRow("Scale", transform.localScale.ToString()));
+            section.Add(CreateEntityInfoRow("Position", transform.position.ToString()));
+            section.Add(CreateEntityInfoRow("Rotation", transform.rotation.eulerAngles.ToString()));
+            section.Add(CreateEntityInfoRow("Scale", transform.localScale.ToString()));
             return section;
         }
 
         private VisualElement BuildRelationSection(EntityDebugSnapshot entry)
         {
-            VisualElement section = CreateSection("Relations");
-            section.Add(CreateInfoRow("ChildCount", entry.ChildCount.ToString()));
+            VisualElement section = CreateSection("Relations", marginBottom: 12f);
+            section.Add(CreateEntityInfoRow("ChildCount", entry.ChildCount.ToString()));
             section.Add(CreateEntityReferenceRow("Parent", entry.Parent));
 
             if (entry.Children == null || entry.Children.Count == 0)
             {
-                section.Add(CreateInfoRow("Children", "无"));
+                section.Add(CreateEntityInfoRow("Children", "无"));
                 return section;
             }
 
@@ -828,7 +813,7 @@ namespace XFramework.Editor
             return row;
         }
 
-        private static VisualElement CreateInfoRow(string labelText, string valueText)
+        private static VisualElement CreateEntityInfoRow(string labelText, string valueText)
         {
             Label value = new(string.IsNullOrEmpty(valueText) ? "-" : valueText);
             value.style.flexGrow = 1f;
@@ -861,57 +846,6 @@ namespace XFramework.Editor
             return row;
         }
 
-        private static VisualElement CreatePane()
-        {
-            VisualElement pane = new()
-            {
-                style =
-                {
-                    flexGrow = 1f,
-                    flexDirection = FlexDirection.Column,
-                    paddingLeft = 4f,
-                    paddingRight = 4f,
-                    paddingTop = 4f,
-                    paddingBottom = 4f,
-                    minWidth = 0f,
-                    overflow = Overflow.Hidden,
-                    backgroundColor = new Color(0.15f, 0.15f, 0.15f, 0.75f)
-                }
-            };
-            return pane;
-        }
-
-        private static Label CreatePaneTitle(string text)
-        {
-            Label label = new(text);
-            label.style.height = 22f;
-            label.style.unityFontStyleAndWeight = FontStyle.Bold;
-            label.style.color = new Color(0.86f, 0.86f, 0.86f);
-            return label;
-        }
-
-        private static VisualElement CreateSection(string title)
-        {
-            VisualElement section = new()
-            {
-                style =
-                {
-                    marginBottom = 12f,
-                    paddingLeft = 8f,
-                    paddingRight = 8f,
-                    paddingTop = 8f,
-                    paddingBottom = 8f,
-                    backgroundColor = new Color(0.11f, 0.11f, 0.11f, 0.50f)
-                }
-            };
-
-            Label titleLabel = new(title);
-            titleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            titleLabel.style.marginBottom = 6f;
-            section.Add(titleLabel);
-            return section;
-        }
-
         private static VisualElement CreateButtonRow()
         {
             VisualElement buttonRow = new()
@@ -924,58 +858,6 @@ namespace XFramework.Editor
                 }
             };
             return buttonRow;
-        }
-
-        private static VisualElement CreateRow(Color backgroundColor, float height)
-        {
-            VisualElement row = new()
-            {
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    alignItems = Align.Center,
-                    minHeight = height,
-                    paddingLeft = 4f,
-                    paddingRight = 4f,
-                    overflow = Overflow.Hidden,
-                    backgroundColor = backgroundColor
-                }
-            };
-            return row;
-        }
-
-        private static Label CreateHeaderLabel(string text, float width)
-        {
-            Label label = CreateCellLabel(null, width);
-            label.text = text;
-            label.style.unityFontStyleAndWeight = FontStyle.Bold;
-            label.style.color = new Color(0.82f, 0.82f, 0.82f);
-            return label;
-        }
-
-        private static Label CreateCellLabel(string name, float width, bool bold = false)
-        {
-            Label label = new()
-            {
-                name = name
-            };
-
-            if (width > 0f)
-            {
-                label.style.width = width;
-                label.style.flexShrink = 0f;
-            }
-
-            label.style.marginRight = 8f;
-            label.style.minWidth = 0f;
-            label.style.overflow = Overflow.Hidden;
-            label.style.textOverflow = TextOverflow.Ellipsis;
-            if (bold)
-            {
-                label.style.unityFontStyleAndWeight = FontStyle.Bold;
-            }
-
-            return label;
         }
 
         private int GetSelectedContainerIndex()

@@ -10,7 +10,7 @@ using Object = UnityEngine.Object;
 
 namespace XFramework.Editor
 {
-    public class SoundManagerDebuggerWindow : EditorWindow
+    public class SoundManagerDebuggerWindow : XFrameworkDebugWindowBase
     {
         private const string MenuPath = "XFramework/Debug/SoundManagerDebugger";
         private const string FilterAll = "全部";
@@ -29,10 +29,9 @@ namespace XFramework.Editor
         private TextField m_SearchField;
         private DropdownField m_FilterField;
         private Label m_SummaryLabel;
-        private Label m_AutoRefreshLabel;
+        
         private ListView m_ListView;
 
-        private double m_LastRefreshTime;
         private VolumeEntry m_SelectedEntry;
         private SoundManagerDebugSnapshot? m_SoundSnapshot;
         private bool m_IsSoundManagerLoaded;
@@ -46,16 +45,15 @@ namespace XFramework.Editor
             window.Show();
         }
 
-        private void OnEnable()
+        protected override void OnEnable()
         {
-            EditorApplication.update += HandleEditorUpdate;
+            base.OnEnable();
             RefreshData();
         }
 
-        private void OnDisable()
+        protected override void OnDisable()
         {
-            EditorApplication.update -= HandleEditorUpdate;
-            XFrameworkInspectorWindow.ClearIfOwner(this);
+            base.OnDisable();
         }
 
         public void CreateGUI()
@@ -120,19 +118,7 @@ namespace XFramework.Editor
             m_FilterField.RegisterValueChangedCallback(_ => RefreshView());
             toolbar.Add(m_FilterField);
 
-            Button refreshButton = new(RefreshData)
-            {
-                text = "刷新"
-            };
-            refreshButton.style.marginLeft = 8;
-            refreshButton.style.width = 64;
-            refreshButton.tooltip = "重新扫描当前场景中的 AreaBgmVolume";
-            toolbar.Add(refreshButton);
-
-            m_AutoRefreshLabel = new Label("自动刷新: 0.5s");
-            m_AutoRefreshLabel.style.marginLeft = 10;
-            m_AutoRefreshLabel.style.color = new Color(0.70f, 0.70f, 0.70f);
-            toolbar.Add(m_AutoRefreshLabel);
+            AddRefreshControls(toolbar, "重新扫描当前场景中的 AreaBgmVolume");
 
             return toolbar;
         }
@@ -188,14 +174,13 @@ namespace XFramework.Editor
             return header;
         }
 
-        private void HandleEditorUpdate()
+        protected override void OnAutoRefresh()
         {
-            if (EditorApplication.timeSinceStartup - m_LastRefreshTime < 0.5d)
-            {
-                return;
-            }
+            RefreshData();
+        }
 
-            m_LastRefreshTime = EditorApplication.timeSinceStartup;
+        protected override void OnRefreshClicked()
+        {
             RefreshData();
         }
 
@@ -804,15 +789,15 @@ namespace XFramework.Editor
         private VisualElement MakeListItem()
         {
             VisualElement row = CreateRow(Color.clear, 24);
-            row.Add(CreateCellLabel("status", 82));
-            row.Add(CreateCellLabel("name", 170));
-            row.Add(CreateCellLabel("priority", 44));
-            row.Add(CreateCellLabel("bgm", 48));
-            row.Add(CreateCellLabel("player", 44));
-            row.Add(CreateCellLabel("enabled", 44));
-            row.Add(CreateCellLabel("trigger", 58));
+            row.Add(CreateCellLabel("status", 82, marginRight: 4f));
+            row.Add(CreateCellLabel("name", 170, marginRight: 4f));
+            row.Add(CreateCellLabel("priority", 44, marginRight: 4f));
+            row.Add(CreateCellLabel("bgm", 48, marginRight: 4f));
+            row.Add(CreateCellLabel("player", 44, marginRight: 4f));
+            row.Add(CreateCellLabel("enabled", 44, marginRight: 4f));
+            row.Add(CreateCellLabel("trigger", 58, marginRight: 4f));
 
-            Label scene = CreateCellLabel("scene", 0);
+            Label scene = CreateCellLabel("scene", 0, marginRight: 4f);
             scene.style.flexGrow = 1;
             row.Add(scene);
             return row;
@@ -927,50 +912,9 @@ namespace XFramework.Editor
             return m_AllEntries.Find(entry => entry.Volume == m_SelectedEntry.Volume);
         }
 
-        private static VisualElement CreateSection(string title)
+        private static string FormatBool(bool value)
         {
-            VisualElement section = new()
-            {
-                style =
-                {
-                    marginBottom = 14,
-                    paddingLeft = 8,
-                    paddingRight = 8,
-                    paddingTop = 8,
-                    paddingBottom = 8,
-                    backgroundColor = new Color(0.11f, 0.11f, 0.11f, 0.50f)
-                }
-            };
-
-            Label titleLabel = new(title);
-            titleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            titleLabel.style.marginBottom = 6;
-            section.Add(titleLabel);
-            return section;
-        }
-
-        private static VisualElement CreateInfoRow(string labelText, string valueText)
-        {
-            VisualElement row = new()
-            {
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    minHeight = 22,
-                    alignItems = Align.Center
-                }
-            };
-
-            Label label = new(labelText);
-            label.style.width = 110;
-            label.style.color = new Color(0.72f, 0.72f, 0.72f);
-            row.Add(label);
-
-            Label value = new(valueText);
-            value.style.flexGrow = 1;
-            value.style.whiteSpace = WhiteSpace.Normal;
-            row.Add(value);
-            return row;
+            return value ? "是" : "否";
         }
 
         private static VisualElement CreateInspectorFieldRow(string labelText, VisualElement field)
@@ -1021,52 +965,6 @@ namespace XFramework.Editor
             field.style.minWidth = 0;
             field.style.marginLeft = 0;
             field.style.marginRight = 0;
-        }
-
-        private static VisualElement CreateRow(Color color, float height)
-        {
-            VisualElement row = new()
-            {
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    alignItems = Align.Center,
-                    minHeight = height,
-                    paddingLeft = 4,
-                    paddingRight = 4,
-                    backgroundColor = color
-                }
-            };
-            return row;
-        }
-
-        private static Label CreateHeaderLabel(string text, float width)
-        {
-            Label label = CreateCellLabel(text, width);
-            label.style.unityFontStyleAndWeight = FontStyle.Bold;
-            label.style.color = new Color(0.82f, 0.82f, 0.82f);
-            return label;
-        }
-
-        private static Label CreateCellLabel(string text, float width)
-        {
-            Label label = new(text);
-            label.style.width = width;
-            label.style.overflow = Overflow.Hidden;
-            label.style.marginRight = 4;
-            return label;
-        }
-
-        private static Label CreateMutedLabel(string text)
-        {
-            Label label = new(text);
-            label.style.color = new Color(0.70f, 0.70f, 0.70f);
-            return label;
-        }
-
-        private static string FormatBool(bool value)
-        {
-            return value ? "是" : "否";
         }
 
         private static string BuildStatusText(VolumeEntry entry)

@@ -12,8 +12,9 @@ using UnityEngine.UIElements;
 
 namespace XFramework.Editor
 {
-    public class UObjectFinderDebuggerWindow : EditorWindow
+    public class UObjectFinderDebuggerWindow : XFrameworkDebugWindowBase
     {
+        protected override bool EnableAutoRefresh => false;
         private const string MenuPath = "XFramework/Debug/UObjectFinderDebugger";
         private const float PathColumnWidth = 280f;
         private const float NameColumnWidth = 150f;
@@ -59,8 +60,9 @@ namespace XFramework.Editor
             window.Show();
         }
 
-        private void OnEnable()
+        protected override void OnEnable()
         {
+            base.OnEnable();
             EditorApplication.hierarchyChanged += OnTrackedEditorStateChanged;
             EditorApplication.projectChanged += OnProjectChanged;
             EditorSceneManager.sceneOpened += OnSceneOpened;
@@ -72,8 +74,14 @@ namespace XFramework.Editor
             RefreshEntries();
         }
 
-        private void OnDisable()
+        protected override void OnRefreshClicked()
         {
+            RefreshEntries();
+        }
+
+        protected override void OnDisable()
+        {
+            base.OnDisable();
             EditorApplication.hierarchyChanged -= OnTrackedEditorStateChanged;
             EditorApplication.projectChanged -= OnProjectChanged;
             EditorSceneManager.sceneOpened -= OnSceneOpened;
@@ -81,7 +89,6 @@ namespace XFramework.Editor
             EditorSceneManager.activeSceneChangedInEditMode -= OnActiveSceneChanged;
             EditorSceneManager.newSceneCreated -= OnNewSceneCreated;
             Undo.undoRedoPerformed -= OnTrackedEditorStateChanged;
-            XFrameworkInspectorWindow.ClearIfOwner(this);
         }
 
         public void CreateGUI()
@@ -163,39 +170,9 @@ namespace XFramework.Editor
             m_ModeFilterField.tooltip = "按 UObjectFinder 注册模式过滤";
             m_ModeFilterField.RegisterValueChangedCallback(_ => RefreshFilteredEntries());
 
-            var refreshButton = new Button(RefreshEntries)
-            {
-                text = "刷新"
-            };
-            refreshButton.style.width = 64f;
-            refreshButton.style.marginLeft = 8f;
-            refreshButton.style.flexShrink = 0f;
-            toolbar.Add(refreshButton);
+            AddRefreshControls(toolbar);
 
             return toolbar;
-        }
-
-        private static DropdownField CreateToolbarDropdown(VisualElement toolbar, string labelText, List<string> options, float dropdownWidth)
-        {
-            var group = new VisualElement();
-            group.style.flexDirection = FlexDirection.Row;
-            group.style.alignItems = Align.Center;
-            group.style.flexShrink = 0f;
-            group.style.marginLeft = 8f;
-
-            var label = new Label(labelText);
-            label.style.marginRight = 4f;
-            label.style.color = new Color(0.75f, 0.75f, 0.75f);
-            label.style.flexShrink = 0f;
-            group.Add(label);
-
-            var dropdown = new DropdownField(options, 0);
-            dropdown.style.width = dropdownWidth;
-            dropdown.style.flexShrink = 0f;
-            group.Add(dropdown);
-
-            toolbar.Add(group);
-            return dropdown;
         }
 
         private VisualElement BuildListPane()
@@ -235,19 +212,19 @@ namespace XFramework.Editor
             header.style.alignItems = Align.Center;
             header.style.backgroundColor = new Color(0.2f, 0.2f, 0.2f);
 
-            header.Add(CreateHeaderLabel("Path", PathColumnWidth));
-            header.Add(CreateHeaderLabel("对象", NameColumnWidth));
-            header.Add(CreateHeaderLabel("场景", SceneColumnWidth));
-            header.Add(CreateHeaderLabel("模式", ModeColumnWidth));
+            header.Add(CreateFinderHeaderLabel("Path", PathColumnWidth));
+            header.Add(CreateFinderHeaderLabel("对象", NameColumnWidth));
+            header.Add(CreateFinderHeaderLabel("场景", SceneColumnWidth));
+            header.Add(CreateFinderHeaderLabel("模式", ModeColumnWidth));
 
-            Label statusLabel = CreateHeaderLabel("状态", 90f);
+            Label statusLabel = CreateFinderHeaderLabel("状态", 90f);
             statusLabel.style.flexGrow = 1f;
             header.Add(statusLabel);
 
             return header;
         }
 
-        private static Label CreateHeaderLabel(string text, float width)
+        private static Label CreateFinderHeaderLabel(string text, float width)
         {
             var label = new Label(text);
             label.style.width = width;
@@ -878,13 +855,7 @@ namespace XFramework.Editor
             return label;
         }
 
-        private static Label CreateMutedLabel(string text)
-        {
-            Label label = new(text);
-            label.style.color = new Color(0.72f, 0.72f, 0.72f);
-            label.style.whiteSpace = WhiteSpace.Normal;
-            return label;
-        }
+        
 
         private VisualElement CreateActionRow(string locateText, bool canLocate, Action locateAction, UObjectFinderDisplayRow row)
         {

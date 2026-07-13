@@ -13,7 +13,7 @@ using XFramework.UI;
 
 namespace XFramework.Editor
 {
-    public class XDataTableEditorWindow : EditorWindow
+    public class XDataTableEditorWindow : EditorWindow, IHasCustomMenu
     {
         private const float TableRowHeight = 28f;
         private const float InlineEditorHeight = 22f;
@@ -120,6 +120,13 @@ namespace XFramework.Editor
         private void OnDisable()
         {
             XFrameworkInspectorWindow.ClearIfOwner(this);
+        }
+
+        public void AddItemsToMenu(GenericMenu menu)
+        {
+            menu.AddSeparator(string.Empty);
+            menu.AddItem(new GUIContent("关闭所有表格"), false, CloseAllTableWindows);
+            menu.AddItem(new GUIContent("关闭其他所有表格"), false, CloseOtherTableWindows);
         }
 
         public void CreateGUI()
@@ -702,6 +709,25 @@ namespace XFramework.Editor
             }
 
             menu.ShowAsContext();
+        }
+
+        private static void CloseAllTableWindows()
+        {
+            foreach (XDataTableEditorWindow window in Resources.FindObjectsOfTypeAll<XDataTableEditorWindow>())
+            {
+                window.Close();
+            }
+        }
+
+        private void CloseOtherTableWindows()
+        {
+            foreach (XDataTableEditorWindow window in Resources.FindObjectsOfTypeAll<XDataTableEditorWindow>())
+            {
+                if (window != this)
+                {
+                    window.Close();
+                }
+            }
         }
 
         private VisualElement BuildReferencePanel()
