@@ -3,6 +3,7 @@ using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
+using UEvent = UnityEngine.Event;
 using XFramework.UI;
 
 namespace XFramework.Editor
@@ -153,6 +154,164 @@ namespace XFramework.Editor
                 },
                 anchorRect,
                 Value);
+        }
+    }
+
+    [CustomPropertyDrawer(typeof(DataTableRefAttribute))]
+    public sealed class DataTableRefDrawer : PropertyDrawer
+    {
+        private const float PickerButtonWidth = 24f;
+        private const float ControlSpacing = 4f;
+
+        public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
+        {
+            EditorGUI.BeginProperty(position, label, property);
+
+            var dataTableRefAttribute = (DataTableRefAttribute)attribute;
+            XDataTableRefMeta meta = XDataTableRefResolver.Resolve(fieldInfo, dataTableRefAttribute, out string resolveError);
+            if (!string.IsNullOrEmpty(resolveError))
+            {
+                EditorGUI.HelpBox(position, resolveError, MessageType.Error);
+                EditorGUI.EndProperty();
+                return;
+            }
+
+            Type fieldType = fieldInfo.FieldType;
+            if (!TryGetPropertyValue(property, fieldType, out object currentValue))
+            {
+                EditorGUI.HelpBox(position, $"{label.text} 的字段类型 {fieldType.Name} 不受 DataTableRefDrawer 支持。", MessageType.Error);
+                EditorGUI.EndProperty();
+                return;
+            }
+
+            Rect controlRect = EditorGUI.PrefixLabel(position, label);
+            Rect pickerRect = new(
+                controlRect.xMax - PickerButtonWidth,
+                controlRect.y,
+                PickerButtonWidth,
+                controlRect.height);
+            Rect valueRect = new(
+                controlRect.x,
+                controlRect.y,
+                controlRect.width - PickerButtonWidth - ControlSpacing,
+                controlRect.height);
+
+            string displayText = property.hasMultipleDifferentValues
+                ? "—"
+                : XDataTableRefResolver.GetDisplayText(meta, currentValue, fieldType);
+            var displayContent = new GUIContent(displayText, displayText);
+
+            if (GUI.Button(valueRect, displayContent, EditorStyles.textField))
+            {
+                if (UEvent.current.clickCount >= 2)
+                {
+                    XDataTableRefResolver.OpenReferencedTable(meta, currentValue, fieldType);
+                }
+                else
+                {
+                    XDataTableRefResolver.PingReferencedTable(meta);
+                }
+            }
+
+            if (GUI.Button(pickerRect, new GUIContent("◉", "选择数据表引用")))
+            {
+                ShowPicker(property, label.text, meta, fieldType, currentValue, pickerRect);
+            }
+
+            EditorGUI.EndProperty();
+        }
+
+        public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
+        {
+            return EditorGUIUtility.singleLineHeight;
+        }
+
+        private static void ShowPicker(
+            SerializedProperty property,
+            string title,
+            XDataTableRefMeta meta,
+            Type fieldType,
+            object currentValue,
+            Rect pickerRect)
+        {
+            SerializedObject serializedObject = property.serializedObject;
+            string propertyPath = property.propertyPath;
+            pickerRect.position = GUIUtility.GUIToScreenPoint(pickerRect.position);
+
+            XDataTableRefPickerWindow.ShowWindow(
+                title,
+                meta,
+                fieldType,
+                pickedValue => SetPropertyValue(serializedObject, propertyPath, fieldType, pickedValue),
+                pickerRect,
+                currentValue);
+        }
+
+        private static void SetPropertyValue(
+            SerializedObject serializedObject,
+            string propertyPath,
+            Type fieldType,
+            object pickedValue)
+        {
+            if (!XDataTableRefResolver.TryConvertReferenceValue(fieldType, pickedValue, out object converted))
+            {
+                throw new InvalidOperationException($"无法将数据表主键转换为 {fieldType.Name}。");
+            }
+
+            serializedObject.Update();
+            SerializedProperty property = serializedObject.FindProperty(propertyPath);
+            SetPropertyValue(property, fieldType, converted);
+            serializedObject.ApplyModifiedProperties();
+        }
+
+        private static bool TryGetPropertyValue(SerializedProperty property, Type fieldType, out object value)
+        {
+            if (fieldType == typeof(string) && property.propertyType == SerializedPropertyType.String)
+            {
+                value = property.stringValue;
+                return true;
+            }
+
+            if (property.propertyType != SerializedPropertyType.Integer)
+            {
+                value = null;
+                return false;
+            }
+
+            if (fieldType == typeof(ulong))
+            {
+                value = property.ulongValue;
+                return true;
+            }
+
+            long number = property.longValue;
+            value = fieldType == typeof(long) ? number
+                : fieldType == typeof(uint) ? (uint)number
+                : fieldType == typeof(int) ? (int)number
+                : fieldType == typeof(ushort) ? (ushort)number
+                : fieldType == typeof(short) ? (short)number
+                : fieldType == typeof(byte) ? (byte)number
+                : fieldType == typeof(sbyte) ? (sbyte)number
+                : fieldType == typeof(char) ? (char)number
+                : null;
+            return value != null;
+        }
+
+        private static void SetPropertyValue(SerializedProperty property, Type fieldType, object value)
+        {
+            if (fieldType == typeof(string))
+            {
+                property.stringValue = (string)value;
+                return;
+            }
+
+            if (fieldType == typeof(ulong))
+            {
+                property.ulongValue = (ulong)value;
+                return;
+            }
+
+            property.longValue = Convert.ToInt64(value);
         }
     }
 }
