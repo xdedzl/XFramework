@@ -778,7 +778,7 @@ public class TimerModule : MonoGameModuleBase<TimerModule>
 所有模块都可以重写 `Priority` 属性。
 - **语义分层**：数值越小，地位越高（参考 `GameModulePriority`）。
 - **Update 顺序**：`Priority` 数值越小，在链表中排得越靠前，每帧执行顺位也越靠前。
-- **Shutdown 顺序**：在 `ClearAllModule` 时，`Priority` **数值越大越先销毁**，**数值越小（底层设施）最后销毁**。
+- **Shutdown 顺序**：在 `ClearAllModule` 时，依赖者先销毁、被依赖模块后销毁；没有依赖约束的模块再按 `Priority` 降序销毁。
 
 ### 5.5 注册与访问
 - **显式手动加载**：`GameEntry.AddModule<MySystemModule>();`
@@ -809,9 +809,10 @@ public class BattleProcedure : SceneProcedureBase { ... }
 - **出流程时**：如果下一个流程不需要该模块，框架会自动调用 `Shutdown` 释放资源。
 
 #### 5.5.2 模块销毁顺序 (Shutdown Order)
-在调用 `GameEntry.ClearAllModule(force)` 时，系统会严格按照 `Priority` 进行**降序排列销毁**。
-- **逻辑设计**：这一设计是为了保护"底层设施"。通常底层设施（如 `SaveManager`, `ResourceManager`）的优先级设为**较小数值**（地位更高），而上层业务逻辑设为**较大数值**。
-- **结果**：业务模块（数值大）先执行 `Shutdown`（可以进行数据落盘操作），此时底层设施（数值小）依然存活，直到整条链路最后才会被关闭。
+在调用 `GameEntry.ClearAllModule(force)` 时，系统会先按照 `[DependenceModule]` 生成销毁顺序，再用 `Priority` 处理没有依赖约束的模块。
+- **依赖规则**：若 `ModuleA` 依赖 `ModuleB`，则 `ModuleA` 必须先执行 `Shutdown`，`ModuleB` 后执行。
+- **优先级规则**：没有依赖约束的模块按照 `Priority` 降序销毁，数值大的模块先执行 `Shutdown`。
+- **结果**：上层模块清理期间，其依赖的存档、资源等底层设施仍然可用。
 
 ---
 

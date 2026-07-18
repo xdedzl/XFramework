@@ -76,6 +76,7 @@ namespace XFramework.Console
             sendClient.Close();
             sendClient.Dispose();
             sendClient = null;
+            hunterEndPoint = null;
             LogMessageReceived -= OnLogMessageReceived;
             Application.logMessageReceived -= OnUnityLogMessageReceived;
         }

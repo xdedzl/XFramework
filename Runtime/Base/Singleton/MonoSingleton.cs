@@ -11,11 +11,9 @@ namespace XFramework
 
         private static readonly object _lock = new object();
 
-        protected bool isGlobal = true; // 是否是全局单例
-
         static MonoSingleton()
         {
-            ApplicationIsQuitting = false;
+            s_ApplicationIsQuitting = false;
         }
 
         public static bool IsValid => _instance != null;
@@ -24,56 +22,57 @@ namespace XFramework
         {
             get
             {
-                if (ApplicationIsQuitting)
+#if UNITY_EDITOR
+                if (!Application.isPlaying)
                 {
-                    if (Debug.isDebugBuild)
+                    if (!typeof(T).IsDefined(typeof(ExecuteInEditMode), true) &&
+                        !typeof(T).IsDefined(typeof(ExecuteAlways), true))
                     {
-                        Debug.LogWarning("[Singleton] Instance '" + typeof(T) +
-                                                "' already destroyed on application quit." +
-                                                " Won't create again - returning null.");
+                        return null;
                     }
-
-                    return null;
                 }
-
-                lock (_lock)
+#endif
+                
+                if (_instance == null)
                 {
+                    // 场景中找不到就创建
                     if (_instance == null)
                     {
-                        // 先在场景中找寻这个单例
+                        // 应对关闭DomainReload后
+                        s_ApplicationIsQuitting = false;
+                    #if UNITY_EDITOR // UNITY_EDITOR会发生Domain Reload，要先查场景中的
                         _instance = FindFirstObjectByType<T>(FindObjectsInactive.Include);
-
-                        if (FindObjectsByType<T>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length > 1)
+                        if (_instance != null)
                         {
-                            if (Debug.isDebugBuild)
-                            {
-                                Debug.LogWarning("[Singleton] " + typeof(T) +
-                                                        " - there should never be more than 1 singleton!");
-                            }
-
                             return _instance;
                         }
+                        
+                    #elif DEVELOPMENT_BUILD
+                        var objects = Resources.FindObjectsOfTypeAll<T>();
+                        Debug.Assert(objects == null || objects.Length == 0);
+                    #endif
+                        
+                        var singleton = new GameObject();
+                        _instance = singleton.AddComponent<T>();
+                        singleton.name = "(singleton) " + typeof(T);
 
-                        // 场景中找不到就创建
-                        if (_instance == null)
+                        if (Application.isPlaying)
                         {
-                            var singleton = new GameObject();
-                            _instance = singleton.AddComponent<T>();
-                            singleton.name = "(singleton) " + typeof(T);
-
-                            if (_instance.isGlobal && Application.isPlaying)
-                            {
-                                DontDestroyOnLoad(singleton);
-                            }
+                            DontDestroyOnLoad(singleton);
+                        }
+                        else
+                        {
+                            singleton.hideFlags = HideFlags.HideAndDontSave;
                         }
                     }
-
-                    return _instance;
                 }
+
+                return _instance;
             }
         }
 
-        protected static bool ApplicationIsQuitting { get; private set; }
+        // ReSharper disable once StaticMemberInGenericType
+        private static bool s_ApplicationIsQuitting;
 
         /// <summary>
         /// 当工程运行结束，在退出时机时候，不允许访问单例
@@ -84,7 +83,14 @@ namespace XFramework
 
         public void OnDestroy()
         {
-            ApplicationIsQuitting = true;
+            if (ReferenceEquals(_instance, this))
+                _instance = null;
+            s_ApplicationIsQuitting = true;
+        }
+        
+        public static bool IsDestroy()
+        {
+            return s_ApplicationIsQuitting;
         }
     }
 }

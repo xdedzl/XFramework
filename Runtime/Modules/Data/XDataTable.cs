@@ -45,6 +45,20 @@ namespace XFramework.Data
                 }
             }
         }
+#if UNITY_EDITOR
+        // 编辑器下应对关闭 Reload Domain
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStaticCache()
+        {
+            S_DataTableMap.Clear();
+            S_DataListMap.Clear();
+            S_DataDictMap.Clear();
+            S_DataAliasDictMap.Clear();
+            S_UnionDataListMap.Clear();
+            S_UnionDataDictMap.Clear();
+            S_UnionDataAliasDictMap.Clear();
+        }
+#endif
 
         protected static IReadOnlyList<T> LoadData<T>() where T : IData
         {

@@ -155,8 +155,24 @@ namespace XFramework
         }
 
 #if UNITY_EDITOR
+        // InitializeOnLoadMethod 只会在脚本域加载时运行。关闭 Reload Domain 后，退出 Play 不会自动重新初始化编辑器模块。
+        
         [InitializeOnLoadMethod]
         private static void OnProjectInitialize()
+        {
+            EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+            InitializeEditorModules();
+        }
+
+        private static void OnPlayModeStateChanged(PlayModeStateChange state)
+        {
+            if (state == PlayModeStateChange.EnteredEditMode)
+            {
+                InitializeEditorModules();
+            }
+        }
+
+        private static void InitializeEditorModules()
         {
             XJson.SetUnityDefaultSetting();
             GameEntry.InitializeModules(ModuleLifecycle.Persistent, ModuleLifecycle.EditorPersistent);

@@ -98,6 +98,7 @@ namespace XFramework.UI
     }
     
     [DependenceModule(typeof(ResourceManager))]
+    [DependenceModule(typeof(EntityManager))]
     [ModuleLifecycle(ModuleLifecycle.RuntimePersistent)]
     public class UIManager : MonoGameModuleBase<UIManager>
     {

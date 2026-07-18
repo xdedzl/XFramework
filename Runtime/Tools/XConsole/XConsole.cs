@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using UnityEngine;
 using System.Linq;
 
@@ -14,7 +15,7 @@ namespace XFramework.Console
         private static Action<Message> LogMessageReceived;
 
         private static readonly Queue<Message> m_messages = new ();
-        private static readonly IConsole console = new UGUIConsole();
+        private static IConsole console = new UGUIConsole();
         
         private static readonly Dictionary<string, CommandDelegate> m_ExecuteFunctions = new ();
         private static readonly List<CommandDelegate> m_AutoFunctions = new ();
@@ -22,6 +23,7 @@ namespace XFramework.Console
             
         private static bool m_isOpen;
         private static bool m_isInit;
+        private static CancellationTokenRegistration s_ExitRegistration;
         
         
         private static readonly LinkedList<string> cmdCache = new ();
@@ -66,6 +68,38 @@ namespace XFramework.Console
             AddCommand("Auto", ExecuteAutoCommand);
             AddCommand("GM", ExecuteGMCommand, true);
         }
+
+        
+#if UNITY_EDITOR // 编辑器下应对关闭 Reload Domain
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void OnSubsystemRegistration()
+        {
+            s_ExitRegistration.Dispose();
+            ResetStaticState();
+            s_ExitRegistration = Application.exitCancellationToken.Register(ResetStaticState);
+        }
+
+        private static void ResetStaticState()
+        {
+            DisConnetHunter();
+            LogMessageReceived = null;
+            m_messages.Clear();
+            m_CurrentExecuteKey = "Auto";
+            m_isOpen = false;
+            m_isInit = false;
+            cmdCache.Clear();
+            currentCmd = null;
+            console = new UGUIConsole();
+
+            Message.defaultColor = Color.white;
+            Message.warningColor = Color.yellow;
+            Message.errorColor = Color.red;
+            Message.systemColor = Color.green;
+            Message.inputColor = Color.green;
+            Message.outputColor = Color.cyan;
+            Message.unityColor = new Color(0.3882f, 0.7725f, 1f, 1f);
+        }
+#endif
 
         private static void OnInit()
         {

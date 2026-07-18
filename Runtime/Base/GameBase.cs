@@ -1,3 +1,4 @@
+using System;
 using System.Reflection;
 using UnityEngine;
 using XAnimationEngine;
@@ -18,7 +19,7 @@ namespace XFramework
         public ProcedureBase startProcedure;
 
         public static GameBase activeGame { get; private set; }
-
+        
         private void Awake()
         {
             var a = XApplication.Setting; 
@@ -146,10 +147,11 @@ namespace XFramework
 
         private void OnApplicationQuit()
         {
-            if (activeGame == this)
+            if (ReferenceEquals(activeGame, this))
             {
                 ProcedureManager.Instance.ChangeProcedure(null);
                 GameEntry.ClearAllModule(true);
+                activeGame = null;
             }
         }
 
@@ -159,15 +161,6 @@ namespace XFramework
             {
                 ProcedureManager.Instance.UpdateProcedure(startProcedure);
             }
-        }
-    }
-    
-    internal static class GameBootstrap
-    {
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
-        private static void OnGameInit()
-        {
-            
         }
     }
 }

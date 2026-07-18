@@ -4,6 +4,8 @@
 // 时间： 2018-11-08 10:44:17
 // 版本： V 1.0
 // ==========================================
+
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -12,6 +14,7 @@ namespace XFramework
     /// <summary>
     /// 鼠标连续点击
     /// </summary>
+    [Obsolete]
     public static class InputEvent
     {
         public class RepeatInfo

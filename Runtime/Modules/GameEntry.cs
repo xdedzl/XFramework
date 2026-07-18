@@ -37,7 +37,7 @@ namespace XFramework
         private static readonly Dictionary<Type, IGameModule> m_GameModules = new Dictionary<Type, IGameModule>();
         private static readonly LinkedList<IMonoGameModule> m_MonoGameModules = new LinkedList<IMonoGameModule>();
         private static LinkedListNode<IMonoGameModule> m_CurrentModule;
-
+        
         /// <summary>
         /// 初始化指定生命周期的模块
         /// </summary>
@@ -110,19 +110,7 @@ namespace XFramework
 
             IGameModule module = CreateModule(moduleType, args);
 
-            // Instance 赋值
-            var tempType = moduleType.BaseType;
-            var genericTypeDefinition = typeof(GameModuleBase<>);
-            while(tempType != typeof(object))
-            {
-                if (tempType.IsGenericType && tempType.GetGenericTypeDefinition() == genericTypeDefinition)
-                {
-                    var field = tempType.GetField("m_instance", BindingFlags.Static | BindingFlags.NonPublic);
-                    field.SetValue(null, module);
-                    break;
-                }
-                tempType = tempType.BaseType;
-            }
+            SetModuleInstance(moduleType, module);
 
             m_GameModules.Add(moduleType, module);
             
@@ -152,6 +140,22 @@ namespace XFramework
 
 
             return module;
+        }
+
+        private static void SetModuleInstance(Type moduleType, IGameModule module)
+        {
+            var tempType = moduleType.BaseType;
+            var genericTypeDefinition = typeof(GameModuleBase<>);
+            while (tempType != typeof(object))
+            {
+                if (tempType.IsGenericType && tempType.GetGenericTypeDefinition() == genericTypeDefinition)
+                {
+                    var field = tempType.GetField("m_instance", BindingFlags.Static | BindingFlags.NonPublic);
+                    field.SetValue(null, module);
+                    break;
+                }
+                tempType = tempType.BaseType;
+            }
         }
 
         /// <summary>
@@ -220,19 +224,7 @@ namespace XFramework
                 gameModule.Shutdown();
                 m_GameModules.Remove(moduleType);    
                 
-                // Instance 赋值
-                var tempType = moduleType.BaseType;
-                var genericTypeDefinition = typeof(GameModuleBase<>);
-                while (tempType != typeof(object))
-                {
-                    if (tempType.IsGenericType && tempType.GetGenericTypeDefinition() == genericTypeDefinition)
-                    {
-                        var field = tempType.GetField("m_instance", BindingFlags.Static | BindingFlags.NonPublic);
-                        field.SetValue(null, null);
-                        break;
-                    }
-                    tempType = tempType.BaseType;
-                }
+                SetModuleInstance(moduleType, null);
                 
                 // mono模块处理
                 if (gameModule is IMonoGameModule monoGameModule)
@@ -369,15 +361,17 @@ namespace XFramework
         /// <summary>
         /// 卸载当前已加载的所有模块
         /// </summary>
-        public static void ClearAllModule(bool force=false)
+        internal static void ClearAllModule(bool force=false)
         {
+            var modules = GetModuleShutdownOrder();
+            m_GameModules.Clear();
             if (force)
             {
-                // 获取所有模块并按优先级从高到低排列销毁 (数值大的先死，数值小的即底层设施后死)
-                var modules = m_GameModules.Values.OrderByDescending(m => m.Priority).ToList();
+                // 依赖者先销毁，被依赖模块后销毁；无依赖约束时按优先级降序销毁
                 foreach (var item in modules)
                 {
-                    item.Shutdown();
+                    item.Value.Shutdown();
+                    SetModuleInstance(item.Key, null);
                 }
                 
                 m_GameModules.Clear();
@@ -387,13 +381,35 @@ namespace XFramework
             }
             else
             {
-                // 同样按优先级降序逐个安全卸载
-                var types = m_GameModules.OrderByDescending(kvp => kvp.Value.Priority).Select(kvp => kvp.Key).ToList();
-                foreach (var item in types)
+                foreach (var item in modules)
                 {
-                    ShutdownModule(item);
+                    ShutdownModule(item.Key);
                 }
             }
+        }
+
+        private static List<KeyValuePair<Type, IGameModule>> GetModuleShutdownOrder()
+        {
+            var remainingModules = new Dictionary<Type, IGameModule>(m_GameModules);
+            var result = new List<KeyValuePair<Type, IGameModule>>(remainingModules.Count);
+            while (remainingModules.Count > 0)
+            {
+                var module = remainingModules
+                    .Where(item => !remainingModules.Keys.Any(type => IsDependentOn(type, item.Key)))
+                    .OrderByDescending(item => item.Value.Priority)
+                    .First();
+
+                result.Add(module);
+                remainingModules.Remove(module.Key);
+            }
+
+            return result;
+        }
+
+        private static bool IsDependentOn(Type moduleType, Type dependenceType)
+        {
+            return m_DependenceDic.TryGetValue(moduleType.Name, out var dependenceTypes)
+                && dependenceTypes.Contains(dependenceType);
         }
     }
 }
