@@ -1,5 +1,6 @@
-﻿using System.IO;
+using System.IO;
 using UnityEditor;
+using UnityEditor.ShortcutManagement;
 using UnityEngine;
 using XFramework;
 using System.Collections.Generic;
@@ -14,7 +15,7 @@ namespace XFramework.Editor
     /// </summary>
     public static class MenuExtend
     {
-        private const string kSnapToGroundMenuPath = "GameObject/XFramework/Snap To Ground %#G";
+        private const string kSnapToGroundMenuPath = "GameObject/XFramework/Snap To Ground";
         private const string kSnapToGroundOptionsMenuPath = "GameObject/XFramework/Snap To Ground...";
         private const string kTransformSnapToGroundMenuPath = "CONTEXT/Transform/XFramework/Snap To Ground";
         private const string kTransformSnapToGroundOptionsMenuPath = "CONTEXT/Transform/XFramework/Snap To Ground...";
@@ -113,6 +114,7 @@ namespace XFramework.Editor
             Selection.activeGameObject = parentGo;
         }
 
+        [Shortcut("XFramework/Snap To Ground", KeyCode.G, ShortcutModifiers.Action | ShortcutModifiers.Shift)]
         [MenuItem(kSnapToGroundMenuPath, false, 20)]
         public static void SnapSelectedToGround()
         {
@@ -621,7 +623,8 @@ namespace XFramework.Editor
         
         
         private static Component[] copiedComponents;
-        [MenuItem("GameObject/Copy Current Components #&C")]
+        [Shortcut("XFramework/Copy Current Components", KeyCode.C, ShortcutModifiers.Shift | ShortcutModifiers.Alt)]
+        [MenuItem("GameObject/Copy Current Components")]
         static void CopyComponents()
         {
             copiedComponents = Selection.activeGameObject.GetComponents<Component>();
@@ -632,7 +635,8 @@ namespace XFramework.Editor
             Debug.Log("已复制组件");
         }
 
-        [MenuItem("GameObject/Paste Components If Not Present #&P")]
+        [Shortcut("XFramework/Paste Components If Not Present", KeyCode.P, ShortcutModifiers.Shift | ShortcutModifiers.Alt)]
+        [MenuItem("GameObject/Paste Components If Not Present")]
         static void PasteComponents()
         {
             if (copiedComponents == null)

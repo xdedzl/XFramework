@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using UnityEditor;
+using UnityEditor.ShortcutManagement;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -16,22 +17,38 @@ namespace XFramework.Editor
     {
         private const string MenuPath = "XFramework/Tools/MenuItem Search";
         private const float RootColumnWidth = 110f;
+        private const float KindColumnWidth = 80f;
         private const float SourceColumnWidth = 86f;
-        private const float ShortcutColumnWidth = 72f;
+        private const float ShortcutColumnWidth = 110f;
         private const float MethodColumnWidth = 220f;
         private const string XFrameworkPackageRoot = "Packages/com.xdedzl.xframework/";
         private const string XAnimationPackageRoot = "Packages/com.xdedzl.xanimation/";
 
+        private static readonly FieldInfo ShortcutIdentifierField = typeof(ShortcutAttribute).GetField("identifier", BindingFlags.NonPublic | BindingFlags.Instance);
+        private static readonly PropertyInfo ShortcutIdentifierProperty = typeof(ShortcutAttribute).GetProperty("identifier", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Public);
+        private static readonly PropertyInfo ShortcutIdProperty = typeof(ShortcutAttribute).GetProperty("id", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly PropertyInfo ShortcutDefaultBindingProperty = typeof(ShortcutAttribute).GetProperty("defaultBinding", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Public);
+        private static readonly PropertyInfo ShortcutBindingSequenceProperty = Type.GetType("UnityEditor.ShortcutManagement.ShortcutBinding,UnityEditor.CoreModule")?.GetProperty("keyCombinationSequence", BindingFlags.Public | BindingFlags.Instance);
+        private static readonly FieldInfo KeyCombinationKeyCodeField = typeof(KeyCombination).GetField("keyCode", BindingFlags.NonPublic | BindingFlags.Instance);
+        private static readonly FieldInfo KeyCombinationModifiersField = typeof(KeyCombination).GetField("modifiers", BindingFlags.NonPublic | BindingFlags.Instance);
+        private static readonly PropertyInfo KeyCombinationKeyCodeProperty = typeof(KeyCombination).GetProperty("keyCode", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly PropertyInfo KeyCombinationModifiersProperty = typeof(KeyCombination).GetProperty("modifiers", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
+
         private readonly List<MenuItemInfo> m_AllItems = new();
         private readonly List<MenuItemInfo> m_FilteredItems = new();
 
+        private PopupField<TypeFilterKind> m_TypeFilter;
         private TextField m_SearchField;
         private Toggle m_ShowDisabledToggle;
-        private Button m_SourceFilterButton;
+        private Button m_PresetButton;
+        private Button m_SourceButton;
+        private Button m_PackageFilterButton;
+        private readonly HashSet<string> m_SelectedPackageNames = new();
+        private List<string> m_DiscoveredPackageNames = new();
+        private bool m_PackagesInitialized;
         private readonly HashSet<MenuItemSourceKind> m_SelectedSourceKinds = new()
         {
             MenuItemSourceKind.XFramework,
-            MenuItemSourceKind.XAnimation,
             MenuItemSourceKind.Project
         };
         private Label m_SummaryLabel;
@@ -58,8 +75,8 @@ namespace XFramework.Editor
         public static void ShowWindow()
         {
             MenuItemSearchWindow window = GetWindow<MenuItemSearchWindow>();
-            window.titleContent = new GUIContent("MenuItem Search");
-            window.minSize = new Vector2(900f, 520f);
+            window.titleContent = new GUIContent("MenuItem & Shortcut Summary");
+            window.minSize = new Vector2(980f, 520f);
             window.Show();
             window.Focus();
         }
@@ -121,25 +138,47 @@ namespace XFramework.Editor
             toolbar.style.flexDirection = FlexDirection.Row;
             toolbar.style.alignItems = Align.Center;
 
+            var typeFilterChoices = new List<TypeFilterKind> { TypeFilterKind.All, TypeFilterKind.MenuItem, TypeFilterKind.Shortcut };
+            m_TypeFilter = new PopupField<TypeFilterKind>(typeFilterChoices, TypeFilterKind.All, FormatTypeFilterLabel, FormatTypeFilterLabel);
+            m_TypeFilter.style.width = 100f;
+            m_TypeFilter.tooltip = "筛选显示的类型";
+            m_TypeFilter.RegisterValueChangedCallback(_ => RefreshView());
+            toolbar.Add(m_TypeFilter);
+
             m_SearchField = new TextField("搜索");
             m_SearchField.style.flexGrow = 1f;
             m_SearchField.style.minWidth = 180f;
+            m_SearchField.style.marginLeft = 8f;
             m_SearchField.tooltip = "搜索菜单路径、根目录、声明类型、方法或程序集。空格分词后全部命中才显示。";
             m_SearchField.RegisterValueChangedCallback(_ => RefreshView());
             toolbar.Add(m_SearchField);
+
+            m_SourceButton = new Button(ShowSourceMenu);
+            m_SourceButton.style.width = 200f;
+            m_SourceButton.style.marginLeft = 8f;
+            m_SourceButton.tooltip = "手动勾选要显示的来源";
+            toolbar.Add(m_SourceButton);
+            RefreshSourceButtonText();
+
+            m_PresetButton = new Button(ShowPresetMenu);
+            m_PresetButton.style.width = 160f;
+            m_PresetButton.style.marginLeft = 8f;
+            m_PresetButton.tooltip = "快捷预设组合,不匹配时显示 None";
+            toolbar.Add(m_PresetButton);
+            RefreshPresetButtonText();
+
+            m_PackageFilterButton = new Button(ShowPackageFilterMenu);
+            m_PackageFilterButton.style.width = 160f;
+            m_PackageFilterButton.style.marginLeft = 8f;
+            m_PackageFilterButton.tooltip = "当来源包含 Package 时,按具体 Package 进一步筛选。";
+            toolbar.Add(m_PackageFilterButton);
+            RefreshPackageFilterButtonState();
 
             m_ShowDisabledToggle = new Toggle("显示不可用项");
             m_ShowDisabledToggle.style.marginLeft = 8f;
             m_ShowDisabledToggle.tooltip = "显示当前 validation 返回 false 的菜单项。";
             m_ShowDisabledToggle.RegisterValueChangedCallback(_ => RefreshView());
             toolbar.Add(m_ShowDisabledToggle);
-
-            m_SourceFilterButton = new Button(ShowSourceFilterMenu);
-            m_SourceFilterButton.style.width = 190f;
-            m_SourceFilterButton.style.marginLeft = 8f;
-            m_SourceFilterButton.tooltip = "选择要显示的 MenuItem 来源。";
-            toolbar.Add(m_SourceFilterButton);
-            RefreshSourceFilterButtonText();
 
             m_RefreshButton = new Button(RefreshItems)
             {
@@ -150,6 +189,16 @@ namespace XFramework.Editor
             toolbar.Add(m_RefreshButton);
 
             return toolbar;
+        }
+
+        private static string FormatTypeFilterLabel(TypeFilterKind kind)
+        {
+            switch (kind)
+            {
+                case TypeFilterKind.MenuItem: return "MenuItem";
+                case TypeFilterKind.Shortcut: return "Shortcut";
+                default: return "全部";
+            }
         }
 
         private VisualElement BuildLoadingOverlay()
@@ -194,11 +243,147 @@ namespace XFramework.Editor
             return m_LoadingOverlay;
         }
 
-        private void ShowSourceFilterMenu()
+        private void ShowPresetMenu()
+        {
+            var menu = new GenericMenu();
+            AddPresetMenuItem(menu, SourcePreset.XFrameworkAndProject, "XFramework + 项目");
+            AddPresetMenuItem(menu, SourcePreset.XFrameworkOnly, "仅 XFramework");
+            AddPresetMenuItem(menu, SourcePreset.ProjectOnly, "仅项目");
+            AddPresetMenuItem(menu, SourcePreset.PackageOnly, "仅 Package");
+            AddPresetMenuItem(menu, SourcePreset.PackageAndProject, "Package + 项目");
+            AddPresetMenuItem(menu, SourcePreset.All, "全部");
+            menu.ShowAsContext();
+        }
+
+        private void AddPresetMenuItem(GenericMenu menu, SourcePreset preset, string displayName)
+        {
+            bool matched = GetMatchedPreset() == preset;
+            menu.AddItem(new GUIContent(displayName), matched, () => ApplyPreset(preset));
+        }
+
+        private void ApplyPreset(SourcePreset preset)
+        {
+            m_SelectedSourceKinds.Clear();
+            foreach (MenuItemSourceKind kind in GetPresetSourceKinds(preset))
+            {
+                m_SelectedSourceKinds.Add(kind);
+            }
+
+            RefreshPresetButtonText();
+            RefreshSourceButtonText();
+            RefreshPackageFilterButtonState();
+            RefreshView();
+        }
+
+        private SourcePreset? GetMatchedPreset()
+        {
+            foreach (SourcePreset preset in GetAllPresets())
+            {
+                HashSet<MenuItemSourceKind> expected = GetPresetSourceKinds(preset);
+                if (expected.Count != m_SelectedSourceKinds.Count)
+                {
+                    continue;
+                }
+
+                bool matched = true;
+                foreach (MenuItemSourceKind kind in expected)
+                {
+                    if (!m_SelectedSourceKinds.Contains(kind))
+                    {
+                        matched = false;
+                        break;
+                    }
+                }
+
+                if (matched)
+                {
+                    return preset;
+                }
+            }
+
+            return null;
+        }
+
+        private static IEnumerable<SourcePreset> GetAllPresets()
+        {
+            yield return SourcePreset.XFrameworkAndProject;
+            yield return SourcePreset.XFrameworkOnly;
+            yield return SourcePreset.ProjectOnly;
+            yield return SourcePreset.PackageOnly;
+            yield return SourcePreset.PackageAndProject;
+            yield return SourcePreset.All;
+        }
+
+        private static HashSet<MenuItemSourceKind> GetPresetSourceKinds(SourcePreset preset)
+        {
+            var set = new HashSet<MenuItemSourceKind>();
+            switch (preset)
+            {
+                case SourcePreset.All:
+                    foreach (MenuItemSourceKind sourceKind in GetAllSourceKinds())
+                    {
+                        set.Add(sourceKind);
+                    }
+                    break;
+                case SourcePreset.ProjectOnly:
+                    set.Add(MenuItemSourceKind.Project);
+                    break;
+                case SourcePreset.PackageOnly:
+                    set.Add(MenuItemSourceKind.Package);
+                    break;
+                case SourcePreset.PackageAndProject:
+                    set.Add(MenuItemSourceKind.Project);
+                    set.Add(MenuItemSourceKind.Package);
+                    break;
+                case SourcePreset.XFrameworkOnly:
+                    set.Add(MenuItemSourceKind.XFramework);
+                    break;
+                case SourcePreset.XFrameworkAndProject:
+                    set.Add(MenuItemSourceKind.XFramework);
+                    set.Add(MenuItemSourceKind.Project);
+                    break;
+            }
+            return set;
+        }
+
+        private static string GetPresetLabel(SourcePreset preset)
+        {
+            switch (preset)
+            {
+                case SourcePreset.All: return "全部";
+                case SourcePreset.ProjectOnly: return "仅项目";
+                case SourcePreset.PackageOnly: return "仅 Package";
+                case SourcePreset.PackageAndProject: return "Package+项目";
+                case SourcePreset.XFrameworkOnly: return "仅 XFramework";
+                case SourcePreset.XFrameworkAndProject: return "XFramework+项目";
+                default: return preset.ToString();
+            }
+        }
+
+        private void RefreshPresetButtonText()
+        {
+            if (m_PresetButton == null)
+            {
+                return;
+            }
+
+            SourcePreset? matched = GetMatchedPreset();
+            m_PresetButton.text = matched.HasValue ? $"预设: {GetPresetLabel(matched.Value)}" : "预设: None";
+        }
+
+        private void ShowSourceMenu()
         {
             var menu = new GenericMenu();
             bool allSelected = AreAllSourcesSelected();
-            menu.AddItem(new GUIContent("ALL"), allSelected, ToggleAllSources);
+            if (allSelected)
+            {
+                menu.AddItem(new GUIContent("全部"), true, () => { });
+            }
+            else
+            {
+                menu.AddItem(new GUIContent("全部"), false, ToggleAllSources);
+            }
+
             menu.AddSeparator(string.Empty);
             AddSourceMenuItem(menu, MenuItemSourceKind.XFramework);
             AddSourceMenuItem(menu, MenuItemSourceKind.XAnimation);
@@ -206,6 +391,194 @@ namespace XFramework.Editor
             AddSourceMenuItem(menu, MenuItemSourceKind.Package);
             AddSourceMenuItem(menu, MenuItemSourceKind.Unity);
             menu.ShowAsContext();
+        }
+
+        private void RefreshSourceButtonText()
+        {
+            if (m_SourceButton == null)
+            {
+                return;
+            }
+
+            if (AreAllSourcesSelected())
+            {
+                m_SourceButton.text = "来源: ALL";
+                return;
+            }
+
+            if (m_SelectedSourceKinds.Count == 0)
+            {
+                m_SourceButton.text = "来源: 无";
+                return;
+            }
+
+            m_SourceButton.text = $"来源: {string.Join(", ", GetAllSourceKinds().Where(m_SelectedSourceKinds.Contains).Select(GetSourceLabel))}";
+        }
+
+        private void RefreshPackageFilterButtonState()
+        {
+            if (m_PackageFilterButton == null)
+            {
+                return;
+            }
+
+            bool packageEnabled = m_SelectedSourceKinds.Overlaps(GetAllPackageSourceKinds());
+            bool hasPackages = m_DiscoveredPackageNames.Count > 0;
+            m_PackageFilterButton.SetEnabled(packageEnabled && hasPackages);
+            RefreshPackageFilterButtonText();
+        }
+
+        private static IEnumerable<MenuItemSourceKind> GetAllPackageSourceKinds()
+        {
+            yield return MenuItemSourceKind.XFramework;
+            yield return MenuItemSourceKind.XAnimation;
+            yield return MenuItemSourceKind.Package;
+            yield return MenuItemSourceKind.Unity;
+        }
+
+        private static bool IsPackageSourceKind(MenuItemSourceKind sourceKind)
+        {
+            return sourceKind == MenuItemSourceKind.XFramework
+                || sourceKind == MenuItemSourceKind.XAnimation
+                || sourceKind == MenuItemSourceKind.Package
+                || sourceKind == MenuItemSourceKind.Unity;
+        }
+
+        private void RefreshPackageFilterButtonText()
+        {
+            if (m_PackageFilterButton == null)
+            {
+                return;
+            }
+
+            if (m_DiscoveredPackageNames.Count == 0)
+            {
+                m_PackageFilterButton.text = "Packages: 无";
+                return;
+            }
+
+            if (m_SelectedPackageNames.Count == m_DiscoveredPackageNames.Count)
+            {
+                m_PackageFilterButton.text = "Packages: 全部";
+                return;
+            }
+
+            if (m_SelectedPackageNames.Count == 0)
+            {
+                m_PackageFilterButton.text = "Packages: 0";
+                return;
+            }
+
+            m_PackageFilterButton.text = $"Packages: {m_SelectedPackageNames.Count}/{m_DiscoveredPackageNames.Count}";
+        }
+
+        private void ShowPackageFilterMenu()
+        {
+            if (m_DiscoveredPackageNames.Count == 0)
+            {
+                Debug.Log("当前没有 Package 来源的条目。");
+                return;
+            }
+
+            var menu = new GenericMenu();
+            bool allSelected = m_SelectedPackageNames.Count == m_DiscoveredPackageNames.Count;
+            bool noneSelected = m_SelectedPackageNames.Count == 0;
+
+            if (allSelected)
+            {
+                menu.AddItem(new GUIContent("全部"), true, () => { });
+            }
+            else
+            {
+                menu.AddItem(new GUIContent("全部"), false, SelectAllPackages);
+            }
+
+            if (noneSelected)
+            {
+                menu.AddItem(new GUIContent("无"), true, () => { });
+            }
+            else
+            {
+                menu.AddItem(new GUIContent("无"), false, DeselectAllPackages);
+            }
+
+            menu.AddSeparator(string.Empty);
+            foreach (string packageName in m_DiscoveredPackageNames)
+            {
+                bool selected = m_SelectedPackageNames.Contains(packageName);
+                string currentPackage = packageName;
+                menu.AddItem(new GUIContent(currentPackage), selected, () => TogglePackage(currentPackage));
+            }
+
+            menu.ShowAsContext();
+        }
+
+        private void SelectAllPackages()
+        {
+            m_SelectedPackageNames.Clear();
+            foreach (string name in m_DiscoveredPackageNames)
+            {
+                m_SelectedPackageNames.Add(name);
+            }
+            RefreshPackageFilterButtonText();
+            RefreshView();
+        }
+
+        private void DeselectAllPackages()
+        {
+            m_SelectedPackageNames.Clear();
+            RefreshPackageFilterButtonText();
+            RefreshView();
+        }
+
+        private void TogglePackage(string packageName)
+        {
+            if (!m_SelectedPackageNames.Add(packageName))
+            {
+                m_SelectedPackageNames.Remove(packageName);
+            }
+
+            RefreshPackageFilterButtonText();
+            RefreshView();
+        }
+
+        private void RebuildDiscoveredPackages()
+        {
+            var set = new HashSet<string>(StringComparer.Ordinal);
+            foreach (MenuItemInfo item in m_AllItems)
+            {
+                // 扫描所有 UPM 包来源(XFramework/XAnimation/Package/Unity),通过 EffectivePackageName 获取包名
+                if (!IsPackageSourceKind(item.SourceKind))
+                {
+                    continue;
+                }
+
+                string packageName = item.EffectivePackageName;
+                if (!string.IsNullOrEmpty(packageName) && packageName != "-")
+                {
+                    set.Add(packageName);
+                }
+            }
+
+            m_DiscoveredPackageNames = set.OrderBy(name => name, StringComparer.Ordinal).ToList();
+
+            if (!m_PackagesInitialized)
+            {
+                // 首次:默认全选
+                m_SelectedPackageNames.Clear();
+                foreach (string name in m_DiscoveredPackageNames)
+                {
+                    m_SelectedPackageNames.Add(name);
+                }
+                m_PackagesInitialized = true;
+            }
+            else
+            {
+                // 后续:保留之前的选择,丢弃失效项
+                m_SelectedPackageNames.RemoveWhere(name => !m_DiscoveredPackageNames.Contains(name));
+            }
+
+            RefreshPackageFilterButtonState();
         }
 
         private void AddSourceMenuItem(GenericMenu menu, MenuItemSourceKind sourceKind)
@@ -228,7 +601,9 @@ namespace XFramework.Editor
                 }
             }
 
-            RefreshSourceFilterButtonText();
+            RefreshPresetButtonText();
+            RefreshSourceButtonText();
+            RefreshPackageFilterButtonState();
             RefreshView();
         }
 
@@ -239,30 +614,10 @@ namespace XFramework.Editor
                 m_SelectedSourceKinds.Remove(sourceKind);
             }
 
-            RefreshSourceFilterButtonText();
+            RefreshPresetButtonText();
+            RefreshSourceButtonText();
+            RefreshPackageFilterButtonState();
             RefreshView();
-        }
-
-        private void RefreshSourceFilterButtonText()
-        {
-            if (m_SourceFilterButton == null)
-            {
-                return;
-            }
-
-            if (AreAllSourcesSelected())
-            {
-                m_SourceFilterButton.text = "来源: ALL";
-                return;
-            }
-
-            if (m_SelectedSourceKinds.Count == 0)
-            {
-                m_SourceFilterButton.text = "来源: 无";
-                return;
-            }
-
-            m_SourceFilterButton.text = $"来源: {string.Join(", ", GetAllSourceKinds().Where(m_SelectedSourceKinds.Contains).Select(GetSourceLabel))}";
         }
 
         private bool AreAllSourcesSelected()
@@ -309,8 +664,9 @@ namespace XFramework.Editor
             header.style.backgroundColor = new Color(0.2f, 0.2f, 0.2f);
 
             header.Add(CreateHeaderLabel("根目录", RootColumnWidth));
+            header.Add(CreateHeaderLabel("类型", KindColumnWidth));
             header.Add(CreateHeaderLabel("来源", SourceColumnWidth));
-            header.Add(CreateHeaderLabel("菜单路径", 1f, true));
+            header.Add(CreateHeaderLabel("菜单路径 / Shortcut ID", 1f, true));
             header.Add(CreateHeaderLabel("快捷键", ShortcutColumnWidth));
             header.Add(CreateHeaderLabel("方法", MethodColumnWidth));
             return header;
@@ -422,6 +778,7 @@ namespace XFramework.Editor
             List<MenuItemInfo> result = completedTask.Result ?? new List<MenuItemInfo>();
             m_AllItems.AddRange(result);
             m_IsScanning = false;
+            RebuildDiscoveredPackages();
             UpdateLoadingState();
             RefreshView(m_ScanSelectedPath);
         }
@@ -489,10 +846,23 @@ namespace XFramework.Editor
                 .Where(keyword => keyword.Length > 0)
                 .ToArray();
             bool showDisabled = m_ShowDisabledToggle?.value ?? false;
+            TypeFilterKind typeFilter = m_TypeFilter?.value ?? TypeFilterKind.All;
 
             foreach (MenuItemInfo item in m_AllItems)
             {
+                if (typeFilter != TypeFilterKind.All && item.Kind != MapTypeFilterToEntryKind(typeFilter))
+                {
+                    continue;
+                }
+
                 if (!m_SelectedSourceKinds.Contains(item.SourceKind))
+                {
+                    continue;
+                }
+
+                // 所有 UPM 包来源(XFramework/XAnimation/Package)都按 EffectivePackageName 进一步筛选
+                if (IsPackageSourceKind(item.SourceKind)
+                    && !m_SelectedPackageNames.Contains(item.EffectivePackageName))
                 {
                     continue;
                 }
@@ -583,7 +953,7 @@ namespace XFramework.Editor
                 emptyTitle.style.marginBottom = 8f;
                 m_DetailPane.Add(emptyTitle);
 
-                var hint = new Label("从左侧选择一个 MenuItem 查看详情。");
+                var hint = new Label("从左侧选择一个 MenuItem / Shortcut 查看详情。");
                 hint.style.color = new Color(0.72f, 0.72f, 0.72f);
                 m_DetailPane.Add(hint);
                 m_ExecuteButton = null;
@@ -619,7 +989,10 @@ namespace XFramework.Editor
             pathTitle.style.whiteSpace = WhiteSpace.Normal;
             titleGroup.Add(pathTitle);
 
-            var subtitle = new Label($"{item.DeclaringType.FullName}.{item.Method.Name}");
+            string subtitleText = item.Kind == EntryKind.Shortcut
+                ? $"Shortcut: {item.ShortcutId}  →  {item.DeclaringType.FullName}.{item.Method.Name}"
+                : $"{item.DeclaringType.FullName}.{item.Method.Name}";
+            var subtitle = new Label(subtitleText);
             subtitle.style.color = new Color(0.72f, 0.72f, 0.72f);
             subtitle.style.marginTop = 2f;
             subtitle.style.whiteSpace = WhiteSpace.Normal;
@@ -628,6 +1001,7 @@ namespace XFramework.Editor
 
             m_DetailPane.Add(header);
 
+            m_DetailPane.Add(CreateReadOnlyTextField("类型", item.Kind == EntryKind.Shortcut ? "Shortcut" : "MenuItem"));
             m_DetailPane.Add(CreateReadOnlyTextField("完整路径", item.MenuPath));
             m_DetailPane.Add(CreateReadOnlyTextField("原始声明", item.AttributePath));
             m_DetailPane.Add(CreateReadOnlyTextField("根目录", item.Root));
@@ -638,6 +1012,7 @@ namespace XFramework.Editor
             m_DetailPane.Add(CreateReadOnlyTextField("声明类型", item.DeclaringType.FullName));
             m_DetailPane.Add(CreateReadOnlyTextField("方法", item.Method.Name));
             m_DetailPane.Add(CreateReadOnlyTextField("程序集", item.AssemblyName));
+            m_DetailPane.Add(CreateReadOnlyTextField("Modifiers", item.Kind == EntryKind.Shortcut ? item.Modifiers.ToString() : "-"));
             m_DetailPane.Add(CreateReadOnlyTextField("Validation", item.ValidateMethod != null ? item.ValidateMethod.Name : "无"));
             m_DetailPane.Add(CreateReadOnlyTextField("当前状态", item.IsAvailable ? "可执行" : item.DisabledReason));
 
@@ -676,6 +1051,19 @@ namespace XFramework.Editor
                 return;
             }
 
+            if (item.Kind == EntryKind.Shortcut)
+            {
+                try
+                {
+                    item.Method.Invoke(null, null);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogException(ex);
+                }
+                return;
+            }
+
             bool executed = EditorApplication.ExecuteMenuItem(item.MenuPath);
             if (!executed && !string.Equals(item.MenuPath, item.AttributePath, StringComparison.Ordinal))
             {
@@ -691,6 +1079,7 @@ namespace XFramework.Editor
         private List<MenuItemInfo> DiscoverMenuItems(int scanVersion, string projectRoot)
         {
             var executableItems = new Dictionary<string, MenuItemInfo>(StringComparer.Ordinal);
+            var shortcutItems = new Dictionary<string, MenuItemInfo>(StringComparer.Ordinal);
             var validators = new Dictionary<string, MethodInfo>(StringComparer.Ordinal);
             var sourceCache = new Dictionary<Type, MenuItemSourceInfo>();
             SetScanProgress(0.02f, "建立脚本索引...");
@@ -749,6 +1138,32 @@ namespace XFramework.Editor
                                     sourceInfo);
                             }
                         }
+
+                        foreach (ShortcutAttribute shortcutAttribute in method.GetCustomAttributes<ShortcutAttribute>(false))
+                        {
+                            if (shortcutAttribute == null)
+                            {
+                                continue;
+                            }
+
+                            string shortcutId = GetShortcutIdentifier(shortcutAttribute);
+                            if (string.IsNullOrEmpty(shortcutId))
+                            {
+                                continue;
+                            }
+
+                            if (shortcutItems.ContainsKey(shortcutId))
+                            {
+                                continue;
+                            }
+
+                            MenuItemSourceInfo sourceInfo = GetSourceInfo(method.DeclaringType, sourceCache, sourcePathIndex);
+                            shortcutItems[shortcutId] = new MenuItemInfo(
+                                scanVersion,
+                                shortcutAttribute,
+                                method,
+                                sourceInfo);
+                        }
                     }
                 }
             }
@@ -764,7 +1179,9 @@ namespace XFramework.Editor
 
             SetScanProgress(1f, "扫描完成");
             return executableItems.Values
+                .Concat(shortcutItems.Values)
                 .OrderBy(item => GetSourceSortOrder(item.SourceKind))
+                .ThenBy(item => item.Kind == EntryKind.MenuItem ? 0 : 1)
                 .ThenBy(item => item.Priority)
                 .ThenBy(item => item.MenuPath, StringComparer.Ordinal)
                 .ToList();
@@ -787,8 +1204,7 @@ namespace XFramework.Editor
         private static bool IsDefaultSource(MenuItemSourceKind sourceKind)
         {
             return sourceKind == MenuItemSourceKind.Project
-                || sourceKind == MenuItemSourceKind.XFramework
-                || sourceKind == MenuItemSourceKind.XAnimation;
+                || sourceKind == MenuItemSourceKind.XFramework;
         }
 
         private static int GetSourceSortOrder(MenuItemSourceKind sourceKind)
@@ -1035,6 +1451,245 @@ namespace XFramework.Editor
             return label;
         }
 
+        private static string FormatShortcut(ShortcutAttribute attribute)
+        {
+            if (attribute == null)
+            {
+                return "-";
+            }
+
+            IEnumerable<KeyCombination> sequence = GetKeyCombinations(attribute);
+            if (sequence != null)
+            {
+                var parts = new List<string>();
+                foreach (KeyCombination combo in sequence)
+                {
+                    string text = FormatKeyCombination(combo);
+                    if (!string.IsNullOrEmpty(text))
+                    {
+                        parts.Add(text);
+                    }
+                }
+
+                if (parts.Count > 0)
+                {
+                    return string.Join(" ", parts);
+                }
+            }
+
+            // 回退:直接从 attribute 的 keyCode/modifiers 属性读取(KeyboardShortcutAttribute)
+            KeyCode keyCode = GetAttributeKeyCode(attribute);
+            ShortcutModifiers modifiers = GetAttributeModifiers(attribute);
+            if (keyCode == KeyCode.None && modifiers == ShortcutModifiers.None)
+            {
+                return "-";
+            }
+
+            return FormatKeyCodeAndModifiers(keyCode, modifiers);
+        }
+
+        private static string FormatKeyCodeAndModifiers(KeyCode keyCode, ShortcutModifiers modifiers)
+        {
+            var parts = new List<string>();
+            if ((modifiers & ShortcutModifiers.Action) != 0 || (modifiers & ShortcutModifiers.Control) != 0)
+            {
+                parts.Add("Ctrl");
+            }
+
+            if ((modifiers & ShortcutModifiers.Shift) != 0)
+            {
+                parts.Add("Shift");
+            }
+
+            if ((modifiers & ShortcutModifiers.Alt) != 0)
+            {
+                parts.Add("Alt");
+            }
+
+            if (keyCode != KeyCode.None)
+            {
+                parts.Add(keyCode.ToString());
+            }
+
+            return parts.Count == 0 ? "-" : string.Join("+", parts);
+        }
+
+        private static string FormatKeyCombination(KeyCombination combo)
+        {
+            var parts = new List<string>();
+            ShortcutModifiers mods = GetModifiers(combo);
+            if ((mods & ShortcutModifiers.Action) != 0 || (mods & ShortcutModifiers.Control) != 0)
+            {
+                parts.Add("Ctrl");
+            }
+
+            if ((mods & ShortcutModifiers.Shift) != 0)
+            {
+                parts.Add("Shift");
+            }
+
+            if ((mods & ShortcutModifiers.Alt) != 0)
+            {
+                parts.Add("Alt");
+            }
+
+            KeyCode keyCode = GetKeyCode(combo);
+            if (keyCode != KeyCode.None)
+            {
+                parts.Add(keyCode.ToString());
+            }
+
+            return parts.Count == 0 ? string.Empty : string.Join("+", parts);
+        }
+
+        private static ShortcutModifiers GetFirstModifiers(ShortcutAttribute attribute)
+        {
+            if (attribute == null)
+            {
+                return ShortcutModifiers.None;
+            }
+
+            IEnumerable<KeyCombination> sequence = GetKeyCombinations(attribute);
+            if (sequence != null)
+            {
+                foreach (KeyCombination combo in sequence)
+                {
+                    return GetModifiers(combo);
+                }
+            }
+
+            return GetAttributeModifiers(attribute);
+        }
+
+        private static IEnumerable<KeyCombination> GetKeyCombinations(ShortcutAttribute attribute)
+        {
+            if (attribute == null || ShortcutDefaultBindingProperty == null || ShortcutBindingSequenceProperty == null)
+            {
+                return null;
+            }
+
+            object binding = ShortcutDefaultBindingProperty.GetValue(attribute, null);
+            if (binding == null)
+            {
+                return null;
+            }
+
+            return ShortcutBindingSequenceProperty.GetValue(binding, null) as IEnumerable<KeyCombination>;
+        }
+
+        private static KeyCode GetKeyCode(KeyCombination combo)
+        {
+            if (KeyCombinationKeyCodeField != null)
+            {
+                return (KeyCode)KeyCombinationKeyCodeField.GetValue(combo);
+            }
+
+            if (KeyCombinationKeyCodeProperty != null)
+            {
+                object value = KeyCombinationKeyCodeProperty.GetValue(combo, null);
+                return value is KeyCode keyCode ? keyCode : KeyCode.None;
+            }
+
+            return KeyCode.None;
+        }
+
+        private static KeyCode GetAttributeKeyCode(ShortcutAttribute attribute)
+        {
+            if (attribute == null)
+            {
+                return KeyCode.None;
+            }
+
+            const BindingFlags flags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic;
+            PropertyInfo prop = attribute.GetType().GetProperty("keyCode", flags);
+            if (prop == null)
+            {
+                return KeyCode.None;
+            }
+
+            object value = prop.GetValue(attribute, null);
+            return value is KeyCode keyCode ? keyCode : KeyCode.None;
+        }
+
+        private static ShortcutModifiers GetAttributeModifiers(ShortcutAttribute attribute)
+        {
+            if (attribute == null)
+            {
+                return ShortcutModifiers.None;
+            }
+
+            const BindingFlags flags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic;
+            PropertyInfo prop = attribute.GetType().GetProperty("modifiers", flags);
+            if (prop == null)
+            {
+                return ShortcutModifiers.None;
+            }
+
+            object value = prop.GetValue(attribute, null);
+            return value is ShortcutModifiers modifiers ? modifiers : ShortcutModifiers.None;
+        }
+
+        private static ShortcutModifiers GetModifiers(KeyCombination combo)
+        {
+            if (KeyCombinationModifiersField != null)
+            {
+                return (ShortcutModifiers)KeyCombinationModifiersField.GetValue(combo);
+            }
+
+            if (KeyCombinationModifiersProperty != null)
+            {
+                object value = KeyCombinationModifiersProperty.GetValue(combo, null);
+                return value is ShortcutModifiers modifiers ? modifiers : ShortcutModifiers.None;
+            }
+
+            return ShortcutModifiers.None;
+        }
+
+        private static string GetShortcutIdentifier(ShortcutAttribute attribute)
+        {
+            if (attribute == null)
+            {
+                return string.Empty;
+            }
+
+            if (ShortcutIdentifierField != null)
+            {
+                return ShortcutIdentifierField.GetValue(attribute) as string ?? string.Empty;
+            }
+
+            if (ShortcutIdentifierProperty != null)
+            {
+                return ShortcutIdentifierProperty.GetValue(attribute, null) as string ?? string.Empty;
+            }
+
+            if (ShortcutIdProperty != null)
+            {
+                return ShortcutIdProperty.GetValue(attribute, null) as string ?? string.Empty;
+            }
+
+            return string.Empty;
+        }
+
+        internal static string ExtractPackageName(string sourcePath)
+        {
+            if (string.IsNullOrEmpty(sourcePath))
+            {
+                return string.Empty;
+            }
+
+            string normalized = sourcePath.Replace('\\', '/');
+            const string prefix = "Packages/";
+            int start = normalized.IndexOf(prefix, StringComparison.OrdinalIgnoreCase);
+            if (start < 0)
+            {
+                return string.Empty;
+            }
+
+            start += prefix.Length;
+            int slash = normalized.IndexOf('/', start);
+            return slash > start ? normalized.Substring(start, slash - start) : normalized.Substring(start);
+        }
+
         private static void CopyToClipboard(string value)
         {
             EditorGUIUtility.systemCopyBuffer = value ?? string.Empty;
@@ -1044,10 +1699,13 @@ namespace XFramework.Editor
         {
             public MenuItemInfo(int scanVersion, string attributePath, string menuPath, string shortcut, int priority, MethodInfo method, MenuItemSourceInfo sourceInfo)
             {
+                Kind = EntryKind.MenuItem;
                 ScanVersion = scanVersion;
                 AttributePath = attributePath;
                 MenuPath = menuPath;
                 Shortcut = shortcut;
+                ShortcutId = string.Empty;
+                ShortcutDisplay = shortcut ?? string.Empty;
                 Priority = priority;
                 Method = method;
                 DeclaringType = method.DeclaringType;
@@ -1056,13 +1714,39 @@ namespace XFramework.Editor
                 SourceKind = sourceInfo.Kind;
                 SourceLabel = sourceInfo.Label;
                 SourcePath = sourceInfo.Path;
-                SearchText = $"{menuPath} {Root} {SourceLabel} {SourcePath} {method.Name} {DeclaringType?.FullName} {AssemblyName}";
+                SearchText = $"{menuPath} {Root} {SourceLabel} {SourcePath} {method.Name} {DeclaringType?.FullName} {AssemblyName} MenuItem {shortcut}";
             }
 
+            public MenuItemInfo(int scanVersion, ShortcutAttribute attribute, MethodInfo method, MenuItemSourceInfo sourceInfo)
+            {
+                Kind = EntryKind.Shortcut;
+                ScanVersion = scanVersion;
+                string id = GetShortcutIdentifier(attribute);
+                AttributePath = id;
+                MenuPath = id;
+                ShortcutId = id;
+                ShortcutDisplay = FormatShortcut(attribute);
+                Shortcut = ShortcutDisplay;
+                Priority = 0;
+                Method = method;
+                DeclaringType = method.DeclaringType;
+                AssemblyName = method.DeclaringType?.Assembly.GetName().Name ?? "-";
+                Root = GetRoot(id);
+                SourceKind = sourceInfo.Kind;
+                SourceLabel = sourceInfo.Label;
+                SourcePath = sourceInfo.Path;
+                Modifiers = GetFirstModifiers(attribute);
+                SearchText = $"{id} {Root} {SourceLabel} {SourcePath} {method.Name} {DeclaringType?.FullName} {AssemblyName} Shortcut {ShortcutDisplay}";
+            }
+
+            public EntryKind Kind { get; }
             public string AttributePath { get; }
             public int ScanVersion { get; }
             public string MenuPath { get; }
             public string Shortcut { get; }
+            public string ShortcutId { get; }
+            public string ShortcutDisplay { get; }
+            public ShortcutModifiers Modifiers { get; }
             public int Priority { get; }
             public MethodInfo Method { get; }
             public Type DeclaringType { get; }
@@ -1076,6 +1760,80 @@ namespace XFramework.Editor
             public bool IsAvailable { get; private set; } = true;
             public string DisabledReason { get; private set; } = "不可用";
 
+            public string PackageName => ExtractPackageName(SourcePath);
+
+            public string EffectivePackageName
+            {
+                get
+                {
+                    string name = PackageName;
+                    if (!string.IsNullOrEmpty(name))
+                    {
+                        return name;
+                    }
+
+                    // SourcePath 找不到时,通过 Unity PackageInfo API 获取 UPM 包名
+                    return GetUpmPackageName(DeclaringType);
+                }
+            }
+
+            private static readonly Dictionary<Assembly, string> UpmPackageCache = new();
+
+            private static string GetUpmPackageName(Type type)
+            {
+                if (type == null)
+                {
+                    return string.Empty;
+                }
+
+                Assembly assembly = type.Assembly;
+                if (UpmPackageCache.TryGetValue(assembly, out string cached))
+                {
+                    return cached ?? string.Empty;
+                }
+
+                string packageName = ResolveUpmPackageName(assembly);
+                UpmPackageCache[assembly] = packageName;
+                return packageName;
+            }
+
+            private static string ResolveUpmPackageName(Assembly assembly)
+            {
+                try
+                {
+                    // 优先使用 PackageInfo.FindForAssembly(Unity 2020.1+)
+                    UnityEditor.PackageManager.PackageInfo info = UnityEditor.PackageManager.PackageInfo.FindForAssembly(assembly);
+                    if (info != null && !string.IsNullOrEmpty(info.name))
+                    {
+                        return info.name;
+                    }
+                }
+                catch
+                {
+                    // 忽略,尝试其他方式
+                }
+
+                // 回退:通过程序集 Location 推断
+                try
+                {
+                    string location = assembly.Location?.Replace('\\', '/') ?? string.Empty;
+                    const string packagesPrefix = "Packages/";
+                    int idx = location.IndexOf(packagesPrefix, StringComparison.OrdinalIgnoreCase);
+                    if (idx >= 0)
+                    {
+                        int start = idx + packagesPrefix.Length;
+                        int slash = location.IndexOf('/', start);
+                        return slash > start ? location.Substring(start, slash - start) : location.Substring(start);
+                    }
+                }
+                catch
+                {
+                    // 忽略
+                }
+
+                return string.Empty;
+            }
+
             public bool Matches(string keyword)
             {
                 return !string.IsNullOrEmpty(SearchText)
@@ -1084,6 +1842,13 @@ namespace XFramework.Editor
 
             public void RefreshAvailability()
             {
+                if (Kind == EntryKind.Shortcut)
+                {
+                    IsAvailable = true;
+                    DisabledReason = "可执行";
+                    return;
+                }
+
                 if (ValidateMethod == null)
                 {
                     IsAvailable = true;
@@ -1129,6 +1894,7 @@ namespace XFramework.Editor
         private sealed class MenuItemRow : XItemBox
         {
             private readonly Label m_RootLabel;
+            private readonly Label m_KindLabel;
             private readonly Label m_SourceLabel;
             private readonly Label m_PathLabel;
             private readonly Label m_ShortcutLabel;
@@ -1144,6 +1910,9 @@ namespace XFramework.Editor
 
                 m_RootLabel = CreateFixedLabel(RootColumnWidth);
                 Add(m_RootLabel);
+
+                m_KindLabel = CreateFixedLabel(KindColumnWidth);
+                Add(m_KindLabel);
 
                 m_SourceLabel = CreateFixedLabel(SourceColumnWidth);
                 Add(m_SourceLabel);
@@ -1188,6 +1957,8 @@ namespace XFramework.Editor
 
                 m_RootLabel.text = item.Root;
                 m_RootLabel.tooltip = item.Root;
+                m_KindLabel.text = item.Kind == EntryKind.Shortcut ? "Shortcut" : "MenuItem";
+                m_KindLabel.tooltip = item.Kind.ToString();
                 m_SourceLabel.text = item.SourceLabel;
                 m_SourceLabel.tooltip = item.SourcePath;
                 m_PathLabel.text = item.MenuPath;
@@ -1200,6 +1971,9 @@ namespace XFramework.Editor
 
                 Color textColor = item.IsAvailable ? new Color(0.86f, 0.86f, 0.86f) : new Color(0.62f, 0.62f, 0.62f);
                 m_RootLabel.style.color = textColor;
+                m_KindLabel.style.color = item.Kind == EntryKind.Shortcut
+                    ? new Color(0.65f, 0.85f, 1f)
+                    : textColor;
                 m_SourceLabel.style.color = GetSourceColor(item.SourceKind, textColor);
                 m_PathLabel.style.color = textColor;
                 m_ShortcutLabel.style.color = textColor;
@@ -1250,6 +2024,34 @@ namespace XFramework.Editor
             XAnimation,
             Package,
             Unity
+        }
+
+        private enum EntryKind
+        {
+            MenuItem,
+            Shortcut
+        }
+
+        private enum TypeFilterKind
+        {
+            All,
+            MenuItem,
+            Shortcut
+        }
+
+        private enum SourcePreset
+        {
+            All,
+            ProjectOnly,
+            PackageOnly,
+            PackageAndProject,
+            XFrameworkOnly,
+            XFrameworkAndProject
+        }
+
+        private static EntryKind MapTypeFilterToEntryKind(TypeFilterKind filter)
+        {
+            return filter == TypeFilterKind.Shortcut ? EntryKind.Shortcut : EntryKind.MenuItem;
         }
 
         private struct MenuItemSourceInfo
