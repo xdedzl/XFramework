@@ -14,6 +14,8 @@ namespace XFramework
         private bool m_HasOverlaySnapshot;
         private string m_PreOverlayCameraName;
 
+        internal string DebugActiveCameraName => m_ActiveCameraName;
+
         public void OnRefreshProcedureState(ProcedureRefreshContext context)
         {
             var overlayAttr = context.OverlayContext?.CameraAttr;

@@ -63,5 +63,12 @@ namespace XFramework
                 panels.Add(panelName);
             }
         }
+
+        internal IReadOnlyList<string> GetDebugManagedPanels()
+        {
+            var panels = new List<string>(m_ProcedureManagedPanels);
+            panels.Sort();
+            return panels;
+        }
     }
 }

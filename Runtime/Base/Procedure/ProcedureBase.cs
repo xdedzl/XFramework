@@ -90,6 +90,13 @@ namespace XFramework
             m_currentSubProcedure = null;
             ProcedureManager.Instance.RefreshProcedureState();
         }
+
+        internal IReadOnlyList<SubProcedureBase> GetDebugSubProcedures()
+        {
+            return m_subProcedureBases == null
+                ? Array.Empty<SubProcedureBase>()
+                : m_subProcedureBases.ToArray();
+        }
     }
 
     public abstract class ProcedureWithEvent : ProcedureBase

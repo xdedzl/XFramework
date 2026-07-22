@@ -15,7 +15,7 @@ namespace XFramework.Editor
 {
     public class MenuItemSearchWindow : EditorWindow
     {
-        private const string MenuPath = "XFramework/Tools/MenuItem Search";
+        private const string MenuPath = "XFramework/Tools/MenuItem & Shortcut Summary";
         private const float RootColumnWidth = 110f;
         private const float KindColumnWidth = 80f;
         private const float SourceColumnWidth = 86f;
@@ -33,6 +33,7 @@ namespace XFramework.Editor
         private static readonly FieldInfo KeyCombinationModifiersField = typeof(KeyCombination).GetField("modifiers", BindingFlags.NonPublic | BindingFlags.Instance);
         private static readonly PropertyInfo KeyCombinationKeyCodeProperty = typeof(KeyCombination).GetProperty("keyCode", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly PropertyInfo KeyCombinationModifiersProperty = typeof(KeyCombination).GetProperty("modifiers", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
+        private static List<MenuItemInfo> s_CachedItems;
 
         private readonly List<MenuItemInfo> m_AllItems = new();
         private readonly List<MenuItemInfo> m_FilteredItems = new();
@@ -83,7 +84,15 @@ namespace XFramework.Editor
 
         private void OnEnable()
         {
-            RefreshItems();
+            if (s_CachedItems == null)
+            {
+                RefreshItems();
+            }
+            else
+            {
+                LoadCachedItems();
+            }
+
             EditorApplication.update += HandleEditorUpdate;
         }
 
@@ -155,6 +164,9 @@ namespace XFramework.Editor
 
             m_SourceButton = new Button(ShowSourceMenu);
             m_SourceButton.style.width = 200f;
+            m_SourceButton.style.whiteSpace = WhiteSpace.NoWrap;
+            m_SourceButton.style.overflow = Overflow.Hidden;
+            m_SourceButton.style.textOverflow = TextOverflow.Ellipsis;
             m_SourceButton.style.marginLeft = 8f;
             m_SourceButton.tooltip = "手动勾选要显示的来源";
             toolbar.Add(m_SourceButton);
@@ -752,6 +764,14 @@ namespace XFramework.Editor
             m_ScanTask = Task.Run(() => DiscoverMenuItems(scanVersion, projectRoot));
         }
 
+        private void LoadCachedItems()
+        {
+            m_AllItems.Clear();
+            m_AllItems.AddRange(s_CachedItems);
+            RebuildDiscoveredPackages();
+            RefreshView();
+        }
+
         private void HandleEditorUpdate()
         {
             if (m_IsScanning)
@@ -777,6 +797,7 @@ namespace XFramework.Editor
             m_AllItems.Clear();
             List<MenuItemInfo> result = completedTask.Result ?? new List<MenuItemInfo>();
             m_AllItems.AddRange(result);
+            s_CachedItems = result;
             m_IsScanning = false;
             RebuildDiscoveredPackages();
             UpdateLoadingState();

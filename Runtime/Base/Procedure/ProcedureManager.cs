@@ -6,7 +6,7 @@ namespace XFramework
     /// <summary>
     /// 流程的优先级应比状态机低
     /// </summary>
-    public class ProcedureManager : MonoSingleton<ProcedureManager>
+    public partial class ProcedureManager : MonoSingleton<ProcedureManager>
     {
         /// <summary>
         /// 存储所有流程实例

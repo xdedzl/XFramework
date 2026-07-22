@@ -321,6 +321,119 @@ namespace XFramework.Resource
                 return asset != null;
             }
 
+            public void CollectDebugSnapshots(
+                List<ResourceInstanceGroupDebugSnapshot> groups,
+                List<ResourceInstanceDebugSnapshot> instances)
+            {
+                var freeQueueOrders = new Dictionary<UObject, int>();
+                var lruOrders = new Dictionary<UObject, int>();
+                var groupNames = new HashSet<string>(m_FreeInstances.Keys, StringComparer.Ordinal);
+                var normalActiveCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+                var pooledActiveCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+
+                foreach (KeyValuePair<string, Queue<UObject>> pair in m_FreeInstances)
+                {
+                    int order = 1;
+                    foreach (UObject instance in pair.Value)
+                    {
+                        freeQueueOrders[instance] = order++;
+                    }
+                }
+
+                int lruOrder = 1;
+                foreach (UObject instance in m_InstanceLruList)
+                {
+                    lruOrders[instance] = lruOrder++;
+                }
+
+                foreach (KeyValuePair<UObject, string> pair in m_InstanceToAssetName)
+                {
+                    UObject instance = pair.Key;
+                    string assetName = pair.Value;
+                    groupNames.Add(assetName);
+
+                    ResourceInstanceDebugState state;
+                    float freeDuration = 0f;
+                    int freeQueueOrder = -1;
+                    int instanceLruOrder = -1;
+                    if (m_InstanceToFreeTime.TryGetValue(instance, out float freeTime))
+                    {
+                        state = ResourceInstanceDebugState.PooledFree;
+                        freeDuration = Time.time - freeTime;
+                        freeQueueOrder = freeQueueOrders[instance];
+                        instanceLruOrder = lruOrders[instance];
+                    }
+                    else if (m_PooledInstances.Contains(instance))
+                    {
+                        state = ResourceInstanceDebugState.PooledActive;
+                        IncrementCount(pooledActiveCounts, assetName);
+                    }
+                    else
+                    {
+                        state = ResourceInstanceDebugState.NormalActive;
+                        IncrementCount(normalActiveCounts, assetName);
+                    }
+
+                    instances.Add(new ResourceInstanceDebugSnapshot(
+                        instance.GetInstanceID(),
+                        assetName,
+                        instance,
+                        m_InstanceToAsset[instance],
+                        state,
+                        freeDuration,
+                        freeQueueOrder,
+                        instanceLruOrder));
+                }
+
+                instances.Sort(CompareDebugInstances);
+
+                var sortedGroupNames = new List<string>(groupNames);
+                sortedGroupNames.Sort(StringComparer.Ordinal);
+                foreach (string assetName in sortedGroupNames)
+                {
+                    int normalActiveCount = normalActiveCounts.TryGetValue(assetName, out int normalCount) ? normalCount : 0;
+                    int pooledActiveCount = pooledActiveCounts.TryGetValue(assetName, out int pooledCount) ? pooledCount : 0;
+                    int freeCount = m_FreeInstances.TryGetValue(assetName, out Queue<UObject> queue) ? queue.Count : 0;
+                    groups.Add(new ResourceInstanceGroupDebugSnapshot(
+                        assetName,
+                        normalActiveCount,
+                        pooledActiveCount,
+                        freeCount));
+                }
+            }
+
+            private static void IncrementCount(Dictionary<string, int> counts, string assetName)
+            {
+                counts.TryGetValue(assetName, out int count);
+                counts[assetName] = count + 1;
+            }
+
+            private static int CompareDebugInstances(ResourceInstanceDebugSnapshot left, ResourceInstanceDebugSnapshot right)
+            {
+                int assetResult = string.Compare(left.AssetName, right.AssetName, StringComparison.Ordinal);
+                if (assetResult != 0)
+                {
+                    return assetResult;
+                }
+
+                int stateResult = left.State.CompareTo(right.State);
+                if (stateResult != 0)
+                {
+                    return stateResult;
+                }
+
+                if (left.State == ResourceInstanceDebugState.PooledFree)
+                {
+                    int lruResult = left.LruOrder.CompareTo(right.LruOrder);
+                    if (lruResult != 0)
+                    {
+                        return lruResult;
+                    }
+                }
+
+                return left.InstanceId.CompareTo(right.InstanceId);
+            }
+
             private bool TryResolveInstance(UObject unityObject, out UObject instance)
             {
                 instance = null;

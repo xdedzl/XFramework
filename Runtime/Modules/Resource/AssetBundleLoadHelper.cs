@@ -328,6 +328,60 @@ namespace XFramework.Resource
             });
             return task;
         }
+
+        internal void CollectDebugSnapshots(
+            List<ResourceAssetDebugSnapshot> assets,
+            List<ResourceBundleDebugSnapshot> bundles)
+        {
+            var assetKeys = new HashSet<string>(m_LoadedAssets.Keys, StringComparer.Ordinal);
+            assetKeys.UnionWith(m_LoadingAssets.Keys);
+            foreach (string cacheKey in assetKeys)
+            {
+                bool isLoaded = m_LoadedAssets.TryGetValue(cacheKey, out AssetObject assetObject);
+                bool isLoading = m_LoadingAssets.TryGetValue(cacheKey, out AssetLoadTask loadTask);
+                int separatorIndex = cacheKey.IndexOf('|');
+                string assetPath = separatorIndex >= 0 ? cacheKey[..separatorIndex] : cacheKey;
+                string subAssetName = separatorIndex >= 0 ? cacheKey[(separatorIndex + 1)..] : string.Empty;
+                UObject asset = isLoaded ? assetObject.asset : null;
+                if (asset == null && isLoading && loadTask.assetBundleRequest != null && loadTask.assetBundleRequest.isDone)
+                {
+                    asset = loadTask.assetBundleRequest.asset;
+                }
+
+                assets.Add(new ResourceAssetDebugSnapshot(
+                    cacheKey,
+                    assetPath,
+                    subAssetName,
+                    GetUnityAbPath(Asset2Ab(assetPath)),
+                    asset,
+                    isLoaded,
+                    isLoading));
+            }
+
+            assets.Sort((left, right) => string.Compare(left.CacheKey, right.CacheKey, StringComparison.Ordinal));
+
+            var bundlePaths = new HashSet<string>(m_LoadedAB.Keys, StringComparer.Ordinal);
+            bundlePaths.UnionWith(m_LoadingAB.Keys);
+            foreach (string bundlePath in bundlePaths)
+            {
+                bool isLoaded = m_LoadedAB.TryGetValue(bundlePath, out AssetBundleObject bundleObject);
+                bool isLoading = m_LoadingAB.TryGetValue(bundlePath, out AssetBundleLoadTask loadTask);
+                AssetBundle bundle = isLoaded ? bundleObject.assetBundle : loadTask.assetBundleObject.assetBundle;
+                if (bundle == null && isLoading && loadTask.assetBundleCreateRequest.isDone)
+                {
+                    bundle = loadTask.assetBundleCreateRequest.assetBundle;
+                }
+
+                bundles.Add(new ResourceBundleDebugSnapshot(
+                    bundlePath,
+                    bundle,
+                    m_DependenceInfo.GetDirectDependencies(bundlePath),
+                    isLoaded,
+                    isLoading));
+            }
+
+            bundles.Sort((left, right) => string.Compare(left.BundlePath, right.BundlePath, StringComparison.Ordinal));
+        }
         
         public void Release(UObject obj)
         {
