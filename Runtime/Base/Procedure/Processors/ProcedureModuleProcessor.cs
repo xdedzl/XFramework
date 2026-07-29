@@ -13,6 +13,11 @@ namespace XFramework
         {
             var requiredTypes = new HashSet<Type>();
             AddRequiredModules(requiredTypes, context.SubContext?.ModuleAttr ?? context.ParentContext?.ModuleAttr);
+            for (int i = 0; i < context.ParallelBranches.Count; i++)
+            {
+                var branch = context.ParallelBranches[i];
+                AddRequiredModules(requiredTypes, branch.SubContext?.ModuleAttr ?? branch.ParentContext?.ModuleAttr);
+            }
             AddRequiredModules(requiredTypes, context.OverlayContext?.ModuleAttr);
 
             var loadedProcedureModules = GameEntry.GetLoadedModuleTypes(ModuleLifecycle.Procedure);

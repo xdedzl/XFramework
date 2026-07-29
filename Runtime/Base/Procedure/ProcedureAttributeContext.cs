@@ -14,6 +14,7 @@ namespace XFramework
         public ProcedureCameraAttribute CameraAttr { get; private set; }
         public ProcedureCursorAttribute CursorAttr { get; private set; }
         public ProcedureTimeScaleAttribute TimeScaleAttr { get; private set; }
+        public ParallelProcedurePriorityAttribute ParallelPriorityAttr { get; private set; }
 
         public ProcedureAttributeContext(Type procedureType)
         {
@@ -25,6 +26,7 @@ namespace XFramework
             CameraAttr = procedureType.GetCustomAttribute<ProcedureCameraAttribute>();
             CursorAttr = procedureType.GetCustomAttribute<ProcedureCursorAttribute>();
             TimeScaleAttr = procedureType.GetCustomAttribute<ProcedureTimeScaleAttribute>();
+            ParallelPriorityAttr = procedureType.GetCustomAttribute<ParallelProcedurePriorityAttribute>();
         }
     }
 }

@@ -136,6 +136,7 @@ namespace XFramework.Editor
             {
                 AllOption,
                 "Procedure",
+                "Parallel",
                 "SubProcedure",
                 "Overlay"
             }, 116f);
@@ -238,7 +239,11 @@ namespace XFramework.Editor
             m_PanelTypesByName.Clear();
 
             ScanPanelDefinitions();
-            AddTypes(TypeCache.GetTypesDerivedFrom<ProcedureBase>(), ProcedureDebugKind.Procedure);
+            AddTypes(
+                TypeCache.GetTypesDerivedFrom<ProcedureBase>()
+                    .Where(type => !typeof(ParallelProcedureBase).IsAssignableFrom(type)),
+                ProcedureDebugKind.Procedure);
+            AddTypes(TypeCache.GetTypesDerivedFrom<ParallelProcedureBase>(), ProcedureDebugKind.Parallel);
             AddTypes(TypeCache.GetTypesDerivedFrom<SubProcedureBase>(), ProcedureDebugKind.SubProcedure);
             AddTypes(TypeCache.GetTypesDerivedFrom<ProcedureOverlayBase>(), ProcedureDebugKind.Overlay);
 
@@ -323,12 +328,20 @@ namespace XFramework.Editor
                         "无法从继承链解析 SubProcedureBase<T> 的父 Procedure。"));
                 }
 
+                if (item.Kind == ProcedureDebugKind.Parallel &&
+                    (item.Attributes.ParallelPriority == null || item.Attributes.ParallelPriority.Priority <= 0))
+                {
+                    item.StaticDiagnostics.Add(new ProcedureDiagnostic(
+                        DiagnosticSeverity.Error,
+                        "ParallelProcedure 必须声明值大于 0 的 ParallelProcedurePriorityAttribute。"));
+                }
+
                 ValidateModuleAttribute(item);
                 ValidateUIAttribute(item);
             }
 
             IEnumerable<IGrouping<string, ProcedureDebugItem>> duplicateNames = m_AllItems
-                .Where(item => item.Kind == ProcedureDebugKind.Procedure)
+                .Where(item => item.Kind == ProcedureDebugKind.Procedure || item.Kind == ProcedureDebugKind.Parallel)
                 .GroupBy(item => item.Type.Name, StringComparer.Ordinal)
                 .Where(group => group.Count() > 1);
 
@@ -585,6 +598,12 @@ namespace XFramework.Editor
 
             SetRuntimeState(snapshot.CurrentProcedure, ProcedureRuntimeStatus.Current);
             SetRuntimeState(snapshot.CurrentSubProcedure, ProcedureRuntimeStatus.Current);
+            for (int i = 0; i < snapshot.ParallelProcedures.Count; i++)
+            {
+                ParallelProcedureDebugSnapshot parallel = snapshot.ParallelProcedures[i];
+                SetRuntimeState(parallel.Procedure, ProcedureRuntimeStatus.Current);
+                SetRuntimeState(parallel.CurrentSubProcedure, ProcedureRuntimeStatus.Current);
+            }
             SetRuntimeState(snapshot.CurrentOverlay, ProcedureRuntimeStatus.Current);
 
             m_CurrentEffectiveConfig = BuildCurrentEffectiveConfig(snapshot);
@@ -613,6 +632,24 @@ namespace XFramework.Editor
                     m_RuntimeDiagnostics.Add(new ProcedureDiagnostic(
                         DiagnosticSeverity.Error,
                         $"当前 SubProcedure 声明的父类型是 {declaredParent?.FullName ?? "None"}，实际父流程是 {actualParent?.FullName ?? "None"}。"));
+                }
+            }
+
+            for (int i = 0; i < snapshot.ParallelProcedures.Count; i++)
+            {
+                ParallelProcedureDebugSnapshot parallel = snapshot.ParallelProcedures[i];
+                if (parallel.CurrentSubProcedure == null)
+                {
+                    continue;
+                }
+
+                Type declaredParent = FindSubProcedureParent(parallel.CurrentSubProcedure.GetType());
+                Type actualParent = parallel.Procedure.GetType();
+                if (declaredParent != actualParent)
+                {
+                    m_RuntimeDiagnostics.Add(new ProcedureDiagnostic(
+                        DiagnosticSeverity.Error,
+                        $"并行根 {actualParent.FullName} 的当前 SubProcedure 声明父类型为 {declaredParent?.FullName ?? "None"}。"));
                 }
             }
 
@@ -797,7 +834,12 @@ namespace XFramework.Editor
             if (m_RuntimeSnapshot.HasValue)
             {
                 ProcedureManagerDebugSnapshot snapshot = m_RuntimeSnapshot.Value;
-                runtimeText = $" | 当前链: {GetTypeName(snapshot.CurrentProcedure)} / {GetTypeName(snapshot.CurrentSubProcedure)} / {GetTypeName(snapshot.CurrentOverlay)}";
+                string parallelText = snapshot.ParallelProcedures.Count == 0
+                    ? "None"
+                    : string.Join(", ", snapshot.ParallelProcedures.Select(parallel =>
+                        $"{parallel.Priority}:{GetTypeName(parallel.Procedure)}/{GetTypeName(parallel.CurrentSubProcedure)}"));
+                runtimeText = $" | 主流程: {GetTypeName(snapshot.CurrentProcedure)} / {GetTypeName(snapshot.CurrentSubProcedure)}" +
+                              $" | 并行根: {parallelText} | Overlay: {GetTypeName(snapshot.CurrentOverlay)}";
             }
             else if (Application.isPlaying)
             {
@@ -907,6 +949,12 @@ namespace XFramework.Editor
             attributes.Add(CreateInfoRow("Camera", FormatAttribute(item.Type, item.Attributes.Camera)));
             attributes.Add(CreateInfoRow("Cursor", FormatAttribute(item.Type, item.Attributes.Cursor)));
             attributes.Add(CreateInfoRow("TimeScale", FormatAttribute(item.Type, item.Attributes.TimeScale)));
+            if (item.Kind == ProcedureDebugKind.Parallel)
+            {
+                attributes.Add(CreateInfoRow(
+                    "Parallel Priority",
+                    FormatAttribute(item.Type, item.Attributes.ParallelPriority)));
+            }
             root.Add(attributes);
 
             VisualElement effective = CreateSection(item.Kind == ProcedureDebugKind.Overlay ? "Overlay 配置影响" : "有效配置");
@@ -961,7 +1009,7 @@ namespace XFramework.Editor
                     if (info.GameBase.startProcedure is SceneProcedureBase sceneProcedure)
                     {
                         scene.Add(CreateMutedLabel(
-                            $"ScenePath={sceneProcedure.ScenePath} | LoadSceneMode={sceneProcedure.LoadSceneMode}",
+                            $"XScenePath={sceneProcedure.XScenePath}",
                             true,
                             2f));
                     }
@@ -994,6 +1042,20 @@ namespace XFramework.Editor
             VisualElement runtime = CreateSection("运行时现场");
             runtime.Add(CreateInfoRow("Current", GetTypeName(snapshot.CurrentProcedure)));
             runtime.Add(CreateInfoRow("Sub", GetTypeName(snapshot.CurrentSubProcedure)));
+            if (snapshot.ParallelProcedures.Count == 0)
+            {
+                runtime.Add(CreateInfoRow("Parallel", "None"));
+            }
+            else
+            {
+                for (int i = 0; i < snapshot.ParallelProcedures.Count; i++)
+                {
+                    ParallelProcedureDebugSnapshot parallel = snapshot.ParallelProcedures[i];
+                    runtime.Add(CreateInfoRow(
+                        $"Parallel [{parallel.Priority}]",
+                        $"{GetTypeName(parallel.Procedure)} / {GetTypeName(parallel.CurrentSubProcedure)}"));
+                }
+            }
             runtime.Add(CreateInfoRow("Overlay", GetTypeName(snapshot.CurrentOverlay)));
             runtime.Add(CreateInfoRow("Managed UI", string.Join(", ", snapshot.ManagedPanelNames)));
             runtime.Add(CreateInfoRow("Active Camera", snapshot.ActiveCameraName ?? "None"));
@@ -1016,9 +1078,24 @@ namespace XFramework.Editor
             }
 
             ProcedureManagerDebugSnapshot snapshot = m_RuntimeSnapshot.Value;
-            return item.Type == snapshot.CurrentProcedure?.GetType() ||
-                   item.Type == snapshot.CurrentSubProcedure?.GetType() ||
-                   item.Type == snapshot.CurrentOverlay?.GetType();
+            if (item.Type == snapshot.CurrentProcedure?.GetType() ||
+                item.Type == snapshot.CurrentSubProcedure?.GetType() ||
+                item.Type == snapshot.CurrentOverlay?.GetType())
+            {
+                return true;
+            }
+
+            for (int i = 0; i < snapshot.ParallelProcedures.Count; i++)
+            {
+                ParallelProcedureDebugSnapshot parallel = snapshot.ParallelProcedures[i];
+                if (item.Type == parallel.Procedure.GetType() ||
+                    item.Type == parallel.CurrentSubProcedure?.GetType())
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static void AddConfigRows(VisualElement section, ProcedureEffectiveConfig config)
@@ -1049,75 +1126,54 @@ namespace XFramework.Editor
                 item.Attributes.UI ?? parent.UI,
                 item.Attributes.Camera ?? parent.Camera,
                 item.Attributes.Cursor ?? parent.Cursor,
-                item.Attributes.TimeScale ?? parent.TimeScale));
+                item.Attributes.TimeScale ?? parent.TimeScale,
+                item.Attributes.ParallelPriority ?? parent.ParallelPriority));
         }
 
         private ProcedureEffectiveConfig BuildCurrentEffectiveConfig(ProcedureManagerDebugSnapshot snapshot)
         {
-            ProcedureAttributeSet parentAttributes = snapshot.CurrentProcedure != null
-                ? ProcedureAttributeSet.Create(snapshot.CurrentProcedure.GetType())
-                : default;
-            ProcedureAttributeSet effectiveBaseAttributes = parentAttributes;
-            if (snapshot.CurrentSubProcedure != null)
+            ProcedureEffectiveConfig config = ProcedureEffectiveConfig.FromAttributes(
+                GetEffectiveBranchAttributes(snapshot.CurrentProcedure, snapshot.CurrentSubProcedure));
+
+            for (int i = 0; i < snapshot.ParallelProcedures.Count; i++)
             {
-                ProcedureAttributeSet subAttributes = ProcedureAttributeSet.Create(snapshot.CurrentSubProcedure.GetType());
-                effectiveBaseAttributes = new ProcedureAttributeSet(
-                    subAttributes.Module ?? parentAttributes.Module,
-                    subAttributes.UI ?? parentAttributes.UI,
-                    subAttributes.Camera ?? parentAttributes.Camera,
-                    subAttributes.Cursor ?? parentAttributes.Cursor,
-                    subAttributes.TimeScale ?? parentAttributes.TimeScale);
+                ParallelProcedureDebugSnapshot parallel = snapshot.ParallelProcedures[i];
+                config.ApplyAttributes(GetEffectiveBranchAttributes(
+                    parallel.Procedure,
+                    parallel.CurrentSubProcedure));
             }
 
-            ProcedureEffectiveConfig config = ProcedureEffectiveConfig.FromAttributes(effectiveBaseAttributes);
-
-            if (snapshot.CurrentOverlay == null)
+            if (snapshot.CurrentOverlay != null)
             {
-                return config;
+                config.ApplyAttributes(ProcedureAttributeSet.Create(snapshot.CurrentOverlay.GetType()));
             }
 
-            ProcedureAttributeSet overlayAttributes = ProcedureAttributeSet.Create(snapshot.CurrentOverlay.GetType());
-
-            foreach (Type moduleType in overlayAttributes.Module?.ModuleTypes ?? Array.Empty<Type>())
-            {
-                if (moduleType != null)
-                {
-                    config.ModuleTypes.Add(moduleType);
-                }
-            }
-
-            if (overlayAttributes.UI != null)
-            {
-                if (overlayAttributes.UI.Mode == ProcedureAttributeMode.Replace)
-                {
-                    config.PanelNames.Clear();
-                }
-                foreach (string panelName in overlayAttributes.UI.PanelNames)
-                {
-                    if (!string.IsNullOrWhiteSpace(panelName))
-                    {
-                        config.PanelNames.Add(panelName);
-                    }
-                }
-            }
-
-            if (overlayAttributes.Camera != null)
-            {
-                config.HasCamera = true;
-                config.CameraName = overlayAttributes.Camera.CameraName;
-            }
-            if (overlayAttributes.Cursor != null)
-            {
-                config.HasCursor = true;
-                config.CursorLockMode = overlayAttributes.Cursor.CursorLockMode;
-                config.CursorVisible = overlayAttributes.Cursor.Visible;
-            }
-            if (overlayAttributes.TimeScale != null)
-            {
-                config.HasTimeScale = true;
-                config.TimeScale = overlayAttributes.TimeScale.TimeScale;
-            }
             return config;
+        }
+
+        private static ProcedureAttributeSet GetEffectiveBranchAttributes(
+            ProcedureBase procedure,
+            SubProcedureBase subProcedure)
+        {
+            if (procedure == null)
+            {
+                return default;
+            }
+
+            ProcedureAttributeSet parent = ProcedureAttributeSet.Create(procedure.GetType());
+            if (subProcedure == null)
+            {
+                return parent;
+            }
+
+            ProcedureAttributeSet sub = ProcedureAttributeSet.Create(subProcedure.GetType());
+            return new ProcedureAttributeSet(
+                sub.Module ?? parent.Module,
+                sub.UI ?? parent.UI,
+                sub.Camera ?? parent.Camera,
+                sub.Cursor ?? parent.Cursor,
+                sub.TimeScale ?? parent.TimeScale,
+                parent.ParallelPriority);
         }
 
         private IEnumerable<ProcedureDiagnostic> GetDiagnostics(ProcedureDebugItem item)
@@ -1216,6 +1272,7 @@ namespace XFramework.Editor
         {
             return kind switch
             {
+                ProcedureDebugKind.Parallel => "Parallel",
                 ProcedureDebugKind.SubProcedure => "SubProcedure",
                 ProcedureDebugKind.Overlay => "Overlay",
                 _ => "Procedure"
@@ -1253,6 +1310,7 @@ namespace XFramework.Editor
                 ProcedureCameraAttribute camera => camera.CameraName,
                 ProcedureCursorAttribute cursor => $"{cursor.CursorLockMode}, Visible={cursor.Visible}",
                 ProcedureTimeScaleAttribute timeScale => timeScale.TimeScale.ToString(),
+                ParallelProcedurePriorityAttribute priority => priority.Priority.ToString(),
                 _ => attribute.ToString()
             };
             return $"{value} ({sourceText})";
@@ -1297,6 +1355,7 @@ namespace XFramework.Editor
         private enum ProcedureDebugKind
         {
             Procedure,
+            Parallel,
             SubProcedure,
             Overlay
         }
@@ -1354,13 +1413,15 @@ namespace XFramework.Editor
                 ProcedureUIAttribute ui,
                 ProcedureCameraAttribute camera,
                 ProcedureCursorAttribute cursor,
-                ProcedureTimeScaleAttribute timeScale)
+                ProcedureTimeScaleAttribute timeScale,
+                ParallelProcedurePriorityAttribute parallelPriority)
             {
                 Module = module;
                 UI = ui;
                 Camera = camera;
                 Cursor = cursor;
                 TimeScale = timeScale;
+                ParallelPriority = parallelPriority;
             }
 
             public ProcedureModuleAttribute Module { get; }
@@ -1368,6 +1429,7 @@ namespace XFramework.Editor
             public ProcedureCameraAttribute Camera { get; }
             public ProcedureCursorAttribute Cursor { get; }
             public ProcedureTimeScaleAttribute TimeScale { get; }
+            public ParallelProcedurePriorityAttribute ParallelPriority { get; }
 
             public static ProcedureAttributeSet Create(Type type)
             {
@@ -1376,7 +1438,8 @@ namespace XFramework.Editor
                     type.GetCustomAttribute<ProcedureUIAttribute>(),
                     type.GetCustomAttribute<ProcedureCameraAttribute>(),
                     type.GetCustomAttribute<ProcedureCursorAttribute>(),
-                    type.GetCustomAttribute<ProcedureTimeScaleAttribute>());
+                    type.GetCustomAttribute<ProcedureTimeScaleAttribute>(),
+                    type.GetCustomAttribute<ParallelProcedurePriorityAttribute>());
             }
         }
 
@@ -1395,38 +1458,47 @@ namespace XFramework.Editor
             public static ProcedureEffectiveConfig FromAttributes(ProcedureAttributeSet attributes)
             {
                 var config = new ProcedureEffectiveConfig();
+                config.ApplyAttributes(attributes);
+                return config;
+            }
+
+            public void ApplyAttributes(ProcedureAttributeSet attributes)
+            {
                 foreach (Type moduleType in attributes.Module?.ModuleTypes ?? Array.Empty<Type>())
                 {
                     if (moduleType != null)
                     {
-                        config.ModuleTypes.Add(moduleType);
+                        ModuleTypes.Add(moduleType);
                     }
+                }
+                if (attributes.UI?.Mode == ProcedureAttributeMode.Replace)
+                {
+                    PanelNames.Clear();
                 }
                 foreach (string panelName in attributes.UI?.PanelNames ?? Array.Empty<string>())
                 {
                     if (!string.IsNullOrWhiteSpace(panelName))
                     {
-                        config.PanelNames.Add(panelName);
+                        PanelNames.Add(panelName);
                     }
                 }
 
                 if (attributes.Camera != null)
                 {
-                    config.HasCamera = true;
-                    config.CameraName = attributes.Camera.CameraName;
+                    HasCamera = true;
+                    CameraName = attributes.Camera.CameraName;
                 }
                 if (attributes.Cursor != null)
                 {
-                    config.HasCursor = true;
-                    config.CursorLockMode = attributes.Cursor.CursorLockMode;
-                    config.CursorVisible = attributes.Cursor.Visible;
+                    HasCursor = true;
+                    CursorLockMode = attributes.Cursor.CursorLockMode;
+                    CursorVisible = attributes.Cursor.Visible;
                 }
                 if (attributes.TimeScale != null)
                 {
-                    config.HasTimeScale = true;
-                    config.TimeScale = attributes.TimeScale.TimeScale;
+                    HasTimeScale = true;
+                    TimeScale = attributes.TimeScale.TimeScale;
                 }
-                return config;
             }
 
         }

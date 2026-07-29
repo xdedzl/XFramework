@@ -11,36 +11,24 @@ namespace XFramework
         /// 当前激活的相机对象名称
         /// </summary>
         private string m_ActiveCameraName;
-        private bool m_HasOverlaySnapshot;
-        private string m_PreOverlayCameraName;
 
         internal string DebugActiveCameraName => m_ActiveCameraName;
 
         public void OnRefreshProcedureState(ProcedureRefreshContext context)
         {
-            var overlayAttr = context.OverlayContext?.CameraAttr;
-            var baseAttr = context.SubContext?.CameraAttr ?? context.ParentContext?.CameraAttr;
-            if (overlayAttr != null && !m_HasOverlaySnapshot)
+            var camAttr = context.SubContext?.CameraAttr ?? context.ParentContext?.CameraAttr;
+            for (int i = 0; i < context.ParallelBranches.Count; i++)
             {
-                m_PreOverlayCameraName = m_ActiveCameraName;
-                m_HasOverlaySnapshot = true;
+                var branch = context.ParallelBranches[i];
+                camAttr = branch.SubContext?.CameraAttr ?? branch.ParentContext?.CameraAttr ?? camAttr;
             }
 
-            var camAttr = overlayAttr ?? baseAttr;
+            camAttr = context.OverlayContext?.CameraAttr ?? camAttr;
             string targetCameraName = camAttr?.CameraName;
-            if (camAttr == null && m_HasOverlaySnapshot)
-            {
-                targetCameraName = m_PreOverlayCameraName;
-            }
 
             // 1. 如果都有相机且名称一致，则无需任何操作
             if (!string.IsNullOrEmpty(targetCameraName) && targetCameraName == m_ActiveCameraName)
             {
-                if (overlayAttr == null)
-                {
-                    m_HasOverlaySnapshot = false;
-                    m_PreOverlayCameraName = null;
-                }
                 return;
             }
 
@@ -75,11 +63,6 @@ namespace XFramework
                 m_ActiveCameraName = null;
             }
 
-            if (overlayAttr == null)
-            {
-                m_HasOverlaySnapshot = false;
-                m_PreOverlayCameraName = null;
-            }
         }
 
         private void ToggleCameraObject(GameObject go, bool active)

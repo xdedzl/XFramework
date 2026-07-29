@@ -125,7 +125,8 @@ public class GameInspector : Editor
 
             EditorGUILayout.LabelField("Runtime Status", EditorStyles.boldLabel);
 
-            var current = ProcedureManager.Instance.CurrentProcedure;
+            ProcedureManagerDebugSnapshot snapshot = ProcedureManager.Instance.GetDebugSnapshot();
+            var current = snapshot.CurrentProcedure;
             if (current != null)
             {
                 var type = current.GetType();
@@ -134,7 +135,7 @@ public class GameInspector : Editor
                 EditorGUILayout.LabelField("Full Name", type.FullName, EditorStyles.miniLabel);
                 EditorGUI.indentLevel--;
 
-                var sub = ProcedureManager.Instance.CurrenSubProcedure;
+                var sub = snapshot.CurrentSubProcedure;
                 if (sub != null)
                 {
                     EditorGUILayout.LabelField("Sub Procedure", sub.GetType().Name, EditorStyles.boldLabel);
@@ -151,6 +152,24 @@ public class GameInspector : Editor
             {
                 EditorGUILayout.LabelField("Current Procedure", "None");
             }
+
+            EditorGUILayout.Space(2);
+            EditorGUILayout.LabelField("Parallel Procedures", snapshot.ParallelProcedures.Count.ToString(), EditorStyles.boldLabel);
+            for (int i = 0; i < snapshot.ParallelProcedures.Count; i++)
+            {
+                ParallelProcedureDebugSnapshot parallel = snapshot.ParallelProcedures[i];
+                EditorGUILayout.LabelField($"Priority {parallel.Priority}", parallel.Procedure.GetType().Name, EditorStyles.boldLabel);
+                EditorGUI.indentLevel++;
+                EditorGUILayout.LabelField(
+                    "Sub Procedure",
+                    parallel.CurrentSubProcedure != null ? parallel.CurrentSubProcedure.GetType().Name : "None");
+                EditorGUI.indentLevel--;
+            }
+
+            EditorGUILayout.LabelField(
+                "Overlay",
+                snapshot.CurrentOverlay != null ? snapshot.CurrentOverlay.GetType().Name : "None",
+                EditorStyles.boldLabel);
 
             GUILayout.EndVertical();
         }
@@ -181,7 +200,11 @@ public class GameInspector : Editor
 
         foreach (Type type in assembly.GetTypes())
         {
-            if (type.IsClass && !type.IsAbstract && type.IsSubclassOf(typeBase) && type.GetCustomAttribute<HideInEditor>() == null)
+            if (type.IsClass &&
+                !type.IsAbstract &&
+                type.IsSubclassOf(typeBase) &&
+                !type.IsSubclassOf(typeof(ParallelProcedureBase)) &&
+                type.GetCustomAttribute<HideInEditor>() == null)
             {
                 fullNames.Add(type.FullName);
                 // namespace を / 区切りに変換して表示 (例: GeoPet/LaunchProcedure)

@@ -1,56 +1,48 @@
 using System;
-using UnityEngine.SceneManagement;
+using UnityEngine;
 
 namespace XFramework
 {
     /// <summary>
-    /// 带场景的流程基类，派生类设置场景路径。
-    /// 流程切换时自动加载场景，Module和UI会延迟到场景加载完成后再处理。
+    /// 带 XScene 的主流程基类，派生类设置 XScene 资源路径。
+    /// 流程切换时自动加载 XScene，Module 和 UI 会延迟到加载完成后再处理。
     /// </summary>
     public abstract class SceneProcedureBase : ProcedureBase
     {
         /// <summary>
-        /// 场景路径
+        /// XScene 资源路径
         /// </summary>
-        public abstract string ScenePath { get; }
+        public abstract string XScenePath { get; }
 
         /// <summary>
-        /// 场景加载模式，默认为 Single
-        /// </summary>
-        public virtual LoadSceneMode LoadSceneMode => LoadSceneMode.Single;
-
-        private ProcedureBase m_preProcedure;
-
-        public override void OnEnter(ProcedureBase preProcedure)
-        {
-            base.OnEnter(preProcedure);
-            m_preProcedure = preProcedure;
-        }
-
-        /// <summary>
-        /// 异步加载场景，完成后调用 onReady 以触发 Module/UI 处理
+        /// 异步加载 XScene，完成后调用 onReady 以触发 Module/UI 处理
         /// </summary>
         public override void OnPrepare(Action onReady)
         {
-            // 如果上一个流程也是 SceneProcedureBase，并且场景路径相同，则不需要重新加载场景
-            if (m_preProcedure is SceneProcedureBase preSceneProcedure && preSceneProcedure.ScenePath == this.ScenePath)
+            PrepareXSceneAsync(onReady);
+        }
+
+        private async void PrepareXSceneAsync(Action onReady)
+        {
+            bool loaded = await XSceneManager.LoadSceneAsync(XScenePath);
+            if (!loaded)
             {
-                onReady?.Invoke();
-                OnSceneLoaded();
+                Debug.LogError($"[Procedure] Load XScene failed. procedure:{GetType().Name}, xScenePath:{XScenePath}.");
                 return;
             }
 
-            var asyncOp = SceneManager.LoadSceneAsync(ScenePath, LoadSceneMode);
-            asyncOp.completed += _ =>
+            if (!ProcedureManager.IsValid || ProcedureManager.Instance.CurrentProcedure != this)
             {
-                onReady?.Invoke();
-                OnSceneLoaded();
-            };
+                return;
+            }
+
+            onReady?.Invoke();
+            OnXSceneLoaded();
         }
 
         /// <summary>
-        /// 场景加载完成后调用，此时 Module 和 UI 已经加载完毕
+        /// XScene 加载完成后调用，此时 Module 和 UI 已经加载完毕
         /// </summary>
-        public virtual void OnSceneLoaded() { }
+        public virtual void OnXSceneLoaded() { }
     }
 }

@@ -17,6 +17,23 @@ namespace XFramework
         public IReadOnlyList<SubProcedureBase> SubProcedures { get; }
     }
 
+    public readonly struct ParallelProcedureDebugSnapshot
+    {
+        public ParallelProcedureDebugSnapshot(
+            ParallelProcedureBase procedure,
+            SubProcedureBase currentSubProcedure,
+            int priority)
+        {
+            Procedure = procedure;
+            CurrentSubProcedure = currentSubProcedure;
+            Priority = priority;
+        }
+
+        public ParallelProcedureBase Procedure { get; }
+        public SubProcedureBase CurrentSubProcedure { get; }
+        public int Priority { get; }
+    }
+
     public readonly struct ProcedureManagerDebugSnapshot
     {
         public ProcedureManagerDebugSnapshot(
@@ -27,10 +44,32 @@ namespace XFramework
             IReadOnlyList<string> managedPanelNames,
             string activeCameraName,
             IReadOnlyList<Type> processorTypes)
+            : this(
+                currentProcedure,
+                currentSubProcedure,
+                currentOverlay,
+                Array.Empty<ParallelProcedureDebugSnapshot>(),
+                cachedProcedures,
+                managedPanelNames,
+                activeCameraName,
+                processorTypes)
+        {
+        }
+
+        public ProcedureManagerDebugSnapshot(
+            ProcedureBase currentProcedure,
+            SubProcedureBase currentSubProcedure,
+            ProcedureOverlayBase currentOverlay,
+            IReadOnlyList<ParallelProcedureDebugSnapshot> parallelProcedures,
+            IReadOnlyList<ProcedureCacheDebugSnapshot> cachedProcedures,
+            IReadOnlyList<string> managedPanelNames,
+            string activeCameraName,
+            IReadOnlyList<Type> processorTypes)
         {
             CurrentProcedure = currentProcedure;
             CurrentSubProcedure = currentSubProcedure;
             CurrentOverlay = currentOverlay;
+            ParallelProcedures = parallelProcedures;
             CachedProcedures = cachedProcedures;
             ManagedPanelNames = managedPanelNames;
             ActiveCameraName = activeCameraName;
@@ -40,6 +79,7 @@ namespace XFramework
         public ProcedureBase CurrentProcedure { get; }
         public SubProcedureBase CurrentSubProcedure { get; }
         public ProcedureOverlayBase CurrentOverlay { get; }
+        public IReadOnlyList<ParallelProcedureDebugSnapshot> ParallelProcedures { get; }
         public IReadOnlyList<ProcedureCacheDebugSnapshot> CachedProcedures { get; }
         public IReadOnlyList<string> ManagedPanelNames { get; }
         public string ActiveCameraName { get; }
@@ -79,10 +119,21 @@ namespace XFramework
                 }
             }
 
+            var parallelProcedures = new List<ParallelProcedureDebugSnapshot>(m_ParallelProcedures.Count);
+            for (int i = 0; i < m_ParallelProcedures.Count; i++)
+            {
+                var procedure = m_ParallelProcedures[i];
+                parallelProcedures.Add(new ParallelProcedureDebugSnapshot(
+                    procedure,
+                    procedure.CurrentSubProcedure,
+                    GetParallelProcedurePriority(procedure.GetType())));
+            }
+
             return new ProcedureManagerDebugSnapshot(
                 m_CurrentProcedure,
                 CurrenSubProcedure,
                 m_CurrentOverlay,
+                parallelProcedures,
                 cachedProcedures,
                 managedPanels,
                 activeCameraName,

@@ -45,6 +45,7 @@ namespace XFramework
         public virtual void OnExit()
         {
             m_currentSubProcedure?.OnExit();
+            m_currentSubProcedure = null;
         }
 
         /// <summary>
@@ -117,6 +118,27 @@ namespace XFramework
         {
             base.OnExit();
             _registerHelper.UnRegister();
+        }
+    }
+
+    /// <summary>
+    /// 并行根流程基类。并行根流程与主流程同时运行，但不隶属于主流程。
+    /// </summary>
+    public abstract class ParallelProcedureBase : ProcedureBase
+    {
+    }
+
+    /// <summary>
+    /// 声明并行根流程的合成与更新优先级。优先级必须大于 0，且运行期间必须唯一。
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+    public sealed class ParallelProcedurePriorityAttribute : Attribute
+    {
+        public int Priority { get; }
+
+        public ParallelProcedurePriorityAttribute(int priority)
+        {
+            Priority = priority;
         }
     }
 

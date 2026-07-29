@@ -1,5 +1,31 @@
+using System;
+using System.Collections.Generic;
+
 namespace XFramework
 {
+    public class ProcedureBranchContext
+    {
+        public ProcedureBase Procedure { get; }
+        public SubProcedureBase SubProcedure { get; }
+        public ProcedureAttributeContext ParentContext { get; }
+        public ProcedureAttributeContext SubContext { get; }
+        public int Priority { get; }
+
+        public ProcedureBranchContext(
+            ProcedureBase procedure,
+            SubProcedureBase subProcedure,
+            ProcedureAttributeContext parentContext,
+            ProcedureAttributeContext subContext,
+            int priority)
+        {
+            Procedure = procedure;
+            SubProcedure = subProcedure;
+            ParentContext = parentContext;
+            SubContext = subContext;
+            Priority = priority;
+        }
+    }
+
     public class ProcedureRefreshContext
     {
         public ProcedureBase Procedure { get; }
@@ -8,6 +34,7 @@ namespace XFramework
         public ProcedureAttributeContext ParentContext { get; }
         public ProcedureAttributeContext SubContext { get; }
         public ProcedureAttributeContext OverlayContext { get; }
+        public IReadOnlyList<ProcedureBranchContext> ParallelBranches { get; }
 
         public ProcedureRefreshContext(
             ProcedureBase procedure,
@@ -16,6 +43,25 @@ namespace XFramework
             ProcedureAttributeContext parentContext,
             ProcedureAttributeContext subContext,
             ProcedureAttributeContext overlayContext)
+            : this(
+                procedure,
+                subProcedure,
+                overlay,
+                parentContext,
+                subContext,
+                overlayContext,
+                Array.Empty<ProcedureBranchContext>())
+        {
+        }
+
+        public ProcedureRefreshContext(
+            ProcedureBase procedure,
+            SubProcedureBase subProcedure,
+            ProcedureOverlayBase overlay,
+            ProcedureAttributeContext parentContext,
+            ProcedureAttributeContext subContext,
+            ProcedureAttributeContext overlayContext,
+            IReadOnlyList<ProcedureBranchContext> parallelBranches)
         {
             Procedure = procedure;
             SubProcedure = subProcedure;
@@ -23,6 +69,7 @@ namespace XFramework
             ParentContext = parentContext;
             SubContext = subContext;
             OverlayContext = overlayContext;
+            ParallelBranches = parallelBranches;
         }
     }
 

@@ -20,6 +20,9 @@ namespace XFramework
 
         private ProcedureOverlayBase m_CurrentOverlay;
 
+        private readonly List<ParallelProcedureBase> m_ParallelProcedures = new();
+        private readonly List<ParallelProcedureBase> m_ParallelUpdateBuffer = new();
+
         // UI 面板状态已移至 ProcedureUIProcessor 中管理
 
         /// <summary>
@@ -30,6 +33,8 @@ namespace XFramework
         public ProcedureOverlayBase CurrentOverlay => m_CurrentOverlay;
 
         public bool IsOverlayRunning => m_CurrentOverlay != null;
+
+        public IReadOnlyList<ParallelProcedureBase> CurrentParallelProcedures => m_ParallelProcedures;
 
         /// <summary>
         /// 当前的子流程
@@ -51,17 +56,19 @@ namespace XFramework
         /// <param name="type">流程类型</param>
         public void ChangeProcedure(Type type)
         {
+            if (type != null && typeof(ParallelProcedureBase).IsAssignableFrom(type))
+            {
+                throw new XFrameworkException($"[Procedure] {type.Name} is a parallel procedure and cannot be used as the main procedure.");
+            }
+
             ProcedureBase newProcedure = type is null ? null : GetOrCreateProcedure(type);
             if (m_CurrentProcedure == newProcedure)
             {
-                if (m_CurrentOverlay != null)
-                {
-                    StopOverlay();
-                }
                 return;
             }
 
-            StopOverlay();
+            StopOverlay(false);
+            StopAllParallelProcedures(false);
 
             var oldProcedure = m_CurrentProcedure;
             oldProcedure?.OnExit();
@@ -98,6 +105,22 @@ namespace XFramework
             if (m_CurrentProcedure != null && key == m_CurrentProcedure.GetType().Name)
             {
                 m_CurrentProcedure = procedure;
+            }
+
+            for (int i = 0; i < m_ParallelProcedures.Count; i++)
+            {
+                if (key != m_ParallelProcedures[i].GetType().Name)
+                {
+                    continue;
+                }
+
+                if (procedure is not ParallelProcedureBase parallelProcedure)
+                {
+                    throw new XFrameworkException($"[Procedure] {key} is active as a parallel procedure and must be updated with a parallel procedure instance.");
+                }
+
+                m_ParallelProcedures[i] = parallelProcedure;
+                break;
             }
         }
 
@@ -166,6 +189,11 @@ namespace XFramework
 
         public void StopOverlay()
         {
+            StopOverlay(true);
+        }
+
+        private void StopOverlay(bool refreshState)
+        {
             if (m_CurrentOverlay == null)
             {
                 return;
@@ -174,12 +202,126 @@ namespace XFramework
             var overlay = m_CurrentOverlay;
             m_CurrentOverlay = null;
             overlay.OnExit();
-            RefreshProcedureState();
+            if (refreshState)
+            {
+                RefreshProcedureState();
+            }
+        }
+
+        public bool StartParallelProcedure<TProcedure>() where TProcedure : ParallelProcedureBase
+        {
+            if (TryGetParallelProcedure<TProcedure>(out _))
+            {
+                return false;
+            }
+
+            int priority = GetParallelProcedurePriority(typeof(TProcedure));
+            for (int i = 0; i < m_ParallelProcedures.Count; i++)
+            {
+                int activePriority = GetParallelProcedurePriority(m_ParallelProcedures[i].GetType());
+                if (activePriority == priority)
+                {
+                    throw new XFrameworkException($"[Procedure] Parallel priority {priority} is already used by {m_ParallelProcedures[i].GetType().Name}; cannot start {typeof(TProcedure).Name}.");
+                }
+            }
+
+            var procedure = (TProcedure)GetOrCreateProcedure(typeof(TProcedure));
+
+            int insertIndex = 0;
+            while (insertIndex < m_ParallelProcedures.Count &&
+                   GetParallelProcedurePriority(m_ParallelProcedures[insertIndex].GetType()) < priority)
+            {
+                insertIndex++;
+            }
+
+            m_ParallelProcedures.Insert(insertIndex, procedure);
+            procedure.OnEnter(null);
+            if (!m_ParallelProcedures.Contains(procedure))
+            {
+                return false;
+            }
+
+            procedure.OnPrepare(() =>
+            {
+                if (!m_ParallelProcedures.Contains(procedure))
+                {
+                    return;
+                }
+
+                RefreshProcedureState();
+            });
+            return true;
+        }
+
+        public bool StopParallelProcedure<TProcedure>() where TProcedure : ParallelProcedureBase
+        {
+            for (int i = 0; i < m_ParallelProcedures.Count; i++)
+            {
+                if (m_ParallelProcedures[i] is not TProcedure procedure)
+                {
+                    continue;
+                }
+
+                m_ParallelProcedures.RemoveAt(i);
+                procedure.OnExit();
+                RefreshProcedureState();
+                return true;
+            }
+
+            return false;
+        }
+
+        public bool TryGetParallelProcedure<TProcedure>(out TProcedure procedure) where TProcedure : ParallelProcedureBase
+        {
+            for (int i = 0; i < m_ParallelProcedures.Count; i++)
+            {
+                if (m_ParallelProcedures[i] is TProcedure activeProcedure)
+                {
+                    procedure = activeProcedure;
+                    return true;
+                }
+            }
+
+            procedure = null;
+            return false;
+        }
+
+        public void StopAllParallelProcedures()
+        {
+            StopAllParallelProcedures(true);
+        }
+
+        private void StopAllParallelProcedures(bool refreshState)
+        {
+            for (int i = m_ParallelProcedures.Count - 1; i >= 0; i--)
+            {
+                var procedure = m_ParallelProcedures[i];
+                m_ParallelProcedures.RemoveAt(i);
+                procedure.OnExit();
+            }
+
+            if (refreshState)
+            {
+                RefreshProcedureState();
+            }
         }
 
         public void Update()
         {
             m_CurrentProcedure?.OnUpdate();
+
+            m_ParallelUpdateBuffer.Clear();
+            m_ParallelUpdateBuffer.AddRange(m_ParallelProcedures);
+            for (int i = 0; i < m_ParallelUpdateBuffer.Count; i++)
+            {
+                var procedure = m_ParallelUpdateBuffer[i];
+                if (m_ParallelProcedures.Contains(procedure))
+                {
+                    procedure.OnUpdate();
+                }
+            }
+            m_ParallelUpdateBuffer.Clear();
+
             m_CurrentOverlay?.OnUpdate();
         }
 
@@ -192,6 +334,17 @@ namespace XFramework
                 procedure.OnInit();
             }
             return procedure;
+        }
+
+        private int GetParallelProcedurePriority(Type type)
+        {
+            var priorityAttribute = GetContext(type).ParallelPriorityAttr;
+            if (priorityAttribute == null || priorityAttribute.Priority <= 0)
+            {
+                throw new XFrameworkException($"[Procedure] Parallel procedure {type.Name} must declare a positive ParallelProcedurePriorityAttribute.");
+            }
+
+            return priorityAttribute.Priority;
         }
 
         /// <summary>
@@ -246,7 +399,27 @@ namespace XFramework
             var parentContext = GetContext(m_CurrentProcedure?.GetType());
             var subContext = subProcedure != null ? GetContext(subProcedure.GetType()) : null;
             var overlayContext = m_CurrentOverlay != null ? GetContext(m_CurrentOverlay.GetType()) : null;
-            var context = new ProcedureRefreshContext(m_CurrentProcedure, subProcedure, m_CurrentOverlay, parentContext, subContext, overlayContext);
+            var parallelBranches = new List<ProcedureBranchContext>(m_ParallelProcedures.Count);
+            for (int i = 0; i < m_ParallelProcedures.Count; i++)
+            {
+                var parallelProcedure = m_ParallelProcedures[i];
+                var parallelSubProcedure = parallelProcedure.CurrentSubProcedure;
+                parallelBranches.Add(new ProcedureBranchContext(
+                    parallelProcedure,
+                    parallelSubProcedure,
+                    GetContext(parallelProcedure.GetType()),
+                    parallelSubProcedure != null ? GetContext(parallelSubProcedure.GetType()) : null,
+                    GetParallelProcedurePriority(parallelProcedure.GetType())));
+            }
+
+            var context = new ProcedureRefreshContext(
+                m_CurrentProcedure,
+                subProcedure,
+                m_CurrentOverlay,
+                parentContext,
+                subContext,
+                overlayContext,
+                parallelBranches);
 
             foreach (var processor in m_Processors)
             {

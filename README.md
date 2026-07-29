@@ -135,31 +135,55 @@ flowchart TB
 - **内置子流程 (SubProcedure)**: 
   - 支持在大流程内部进行二次状态拆分（如：战斗流程中的"部署"、"开战"、"结算"）。
   - 使用 `ChangeSubProcedure<T>(args)` 进行内部切换。
+  - 根流程退出时会退出并清空当前子流程；缓存的根流程再次进入后，可以重新触发子流程的完整生命周期。
 - **全局重置 (ChangeProcedure(null))**: 
-  - 当切换到空流程时，框架会自动检测并清理当前所有 `Procedure` 生命周期绑定的模块及 UI 面板，确保系统状态彻底归零。
+  - 当切换到空流程时，框架按 Overlay、并行根、旧主流程的顺序退出，并清理所有 `Procedure` 生命周期绑定的模块及 UI 面板。
+
+#### 三层流程模型
+
+`ProcedureManager` 同时管理三类互相独立的活跃流程：
+
+1. **主流程 (`ProcedureBase`)**：始终最多一个，优先级固定为 `0`，通过 `ChangeProcedure<T>()` 切换。请求切换到当前主流程类型是幂等操作，不会清理并行根或 Overlay。
+2. **并行根 (`ParallelProcedureBase`)**：可同时存在多个，不是主流程的子流程。每个类型必须显式声明正数 `[ParallelProcedurePriority(priority)]`，运行期间优先级不可重复。
+3. **Overlay (`ProcedureOverlayBase`)**：始终最多一个，拥有最高优先级，适合可从任意主流程临时进入的小游戏或覆盖玩法。
+
+并行根通过以下接口管理：
+
+```csharp
+ProcedureManager.Instance.StartParallelProcedure<TavernProcedure>();
+ProcedureManager.Instance.TryGetParallelProcedure<TavernProcedure>(out TavernProcedure tavern);
+ProcedureManager.Instance.StopParallelProcedure<TavernProcedure>();
+ProcedureManager.Instance.StopAllParallelProcedures();
+var active = ProcedureManager.Instance.CurrentParallelProcedures;
+```
+
+每帧更新顺序固定为：主流程 → 并行根（优先级升序）→ Overlay。真正切换主流程时，退出顺序固定为：Overlay → 并行根（优先级降序）→ 旧主流程。
 
 ### 2.2 扩展流程类型
 针对不同业务场景，框架预设了以下扩展：
-- **SceneProcedureBase**：专为包含场景切换的流程设计。
-  - `ScenePath`：重写以指定 Unity 场景。
-  - 自动处理了 `OnPrepare` 中的场景加载逻辑，并在 `OnSceneLoaded()` 钩子中通知业务层。
+- **SceneProcedureBase**：专为需要加载 XScene 的主流程设计。
+  - `XScenePath`：重写以指定 XScene 资源路径。
+  - 内部通过 `XSceneManager.LoadSceneAsync()` 加载；相同 XScene 已加载时直接完成准备，不重载 Unity 场景。
+  - 加载成功后调用 `OnXSceneLoaded()`；加载失败时记录错误且不触发 `onReady` 或完成钩子。
+  - 异步完成时只有该实例仍是当前主流程，才会继续激活 Module、UI 并调用完成钩子。
+- **ParallelProcedureBase**：并行根流程基类，必须声明 `[ParallelProcedurePriority]`。
 - **SubProcedureBase**：子流程基类。
   - 通过 `Parent` 属性（`SubProcedureBase<T>`）可安全访问所属的大流程实例。
 
 ### 2.3 驱动机制 (Automatic Drivers)
 流程通过特性自动驱动其他系统，实现配置化、声明式的逻辑切换：
-1. **模块驱动 (`[ProcedureModule]`)**：进入流程时自动加载所需的业务 Module（见 5.5 节）。
-2. **UI 驱动 (`[ProcedureUI]`)**：根据名称自动打开/关闭对应的 UI 面板，实现"所见即所得"的界面切换体验。
-3. **相机驱动 (`[ProcedureCamera]`)**：**[New]** 声明流程所需的相机名称。进入阶段时，框架将通过 `UObjectFinder` 查找并激活该相机，并自动关闭前一个相机的激活状态。
-   - **优先级规则**：系统会优先应用子流程（SubProcedure）指定的相机；若子流程未声明，则回退并应用父流程的配置。
+1. **模块驱动 (`[ProcedureModule]`)**：所有活跃分支的有效模块声明取并集（见 5.5 节）。
+2. **UI 驱动 (`[ProcedureUI]`)**：按主流程、并行根优先级升序、Overlay 的顺序合成；`Replace` 清空低优先级面板，`Additive` 追加面板。
+3. **相机驱动 (`[ProcedureCamera]`)**：声明流程所需的相机名称。进入阶段时，框架将通过 `UObjectFinder` 查找并激活该相机，并自动关闭前一个相机的激活状态。
+   - **优先级规则**：每个分支内部优先采用子流程声明，否则采用根流程声明；分支之间由最高优先级的有效声明获胜，Overlay 拥有最终覆盖权。
    - **核心依赖**：依赖场景中需要切换的相机对象挂载 `UObjectReference`。
+4. **鼠标与时间缩放 (`[ProcedureCursor]`、`[ProcedureTimeScale]`)**：与相机采用相同的最高有效优先级规则，全部声明消失后恢复进入流程控制前的值。
 
 ### 2.4 完整流程编写示例 (Usage Example)
 以下是一个典型的游戏流程代码示例，展示了如何结合特性与生命周期钩子：
 
 ```csharp
 using XFramework;
-using Action = System.Action;
 
 // 1. 定义流程依赖：自动加载模块、打开 UI、激活相机
 [ProcedureModule(typeof(BattleModule))]
@@ -167,27 +191,13 @@ using Action = System.Action;
 [ProcedureCamera("MainCamera")]
 public class BattleProcedure : SceneProcedureBase
 {
-    // 指定该流程关联的 Unity 场景路径
-    protected override string ScenePath => "Assets/Scenes/MainBattle.unity";
+    // 指定该流程关联的 XScene 资源路径
+    public override string XScenePath => "Assets/ABRes/XScene/MainBattle.asset";
 
-    // 2. 异步准备：正式开始前加载特定资源
-    public override void OnPrepare(Action onReady)
+    // XScene 就绪，且流程声明的 Module/UI 已完成刷新后调用
+    public override void OnXSceneLoaded()
     {
-        // 调用基类处理场景加载
-        base.OnPrepare(async () => 
-        {
-            // 加载战斗所需的音效/配置（示意）
-            await ResourceManager.Instance.LoadAsync<AudioClip>("BGM_Battle");
-            
-            // 准备完毕，通知框架继续后续流程（加载 Module、打开 UI）
-            onReady();
-        });
-    }
-
-    public override void OnEnter(ProcedureBase preProcedure)
-    {
-        base.OnEnter(preProcedure);
-        // 执行入场逻辑，如初始化战斗管理器
+        base.OnXSceneLoaded();
         BattleModule.Instance.StartBattle();
     }
 
@@ -197,10 +207,16 @@ public class BattleProcedure : SceneProcedureBase
         // 监测战斗是否结束
         if (BattleModule.Instance.IsBattleEnd)
         {
-            // 3. 切换流程：跳转至大厅
+            // 2. 切换流程：跳转至大厅
             ProcedureManager.Instance.ChangeProcedure<LobbyProcedure>();
         }
     }
+}
+
+[ParallelProcedurePriority(100)]
+[ProcedureUI(ProcedureAttributeMode.Additive, "TavernPanel")]
+public class TavernProcedure : ParallelProcedureBase
+{
 }
 ```
 

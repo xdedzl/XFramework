@@ -16,15 +16,13 @@ namespace XFramework
         public void OnRefreshProcedureState(ProcedureRefreshContext context)
         {
             var requiredPanels = new HashSet<string>();
-            var baseUIAttr = context.SubContext?.UIAttr ?? context.ParentContext?.UIAttr;
-            var overlayUIAttr = context.OverlayContext?.UIAttr;
-
-            if (overlayUIAttr == null || overlayUIAttr.Mode == ProcedureAttributeMode.Additive)
+            ApplyPanels(requiredPanels, context.SubContext?.UIAttr ?? context.ParentContext?.UIAttr);
+            for (int i = 0; i < context.ParallelBranches.Count; i++)
             {
-                AddPanels(requiredPanels, baseUIAttr);
+                var branch = context.ParallelBranches[i];
+                ApplyPanels(requiredPanels, branch.SubContext?.UIAttr ?? branch.ParentContext?.UIAttr);
             }
-
-            AddPanels(requiredPanels, overlayUIAttr);
+            ApplyPanels(requiredPanels, context.OverlayContext?.UIAttr);
 
             // 关闭不再需要的面板
             foreach (var panelName in m_ProcedureManagedPanels)
@@ -51,11 +49,16 @@ namespace XFramework
             }
         }
 
-        private void AddPanels(HashSet<string> panels, ProcedureUIAttribute uiAttr)
+        private void ApplyPanels(HashSet<string> panels, ProcedureUIAttribute uiAttr)
         {
             if (uiAttr == null)
             {
                 return;
+            }
+
+            if (uiAttr.Mode == ProcedureAttributeMode.Replace)
+            {
+                panels.Clear();
             }
 
             foreach (var panelName in uiAttr.PanelNames)
