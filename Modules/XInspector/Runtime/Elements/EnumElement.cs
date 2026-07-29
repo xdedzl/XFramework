@@ -27,6 +27,12 @@ namespace XFramework.UI
             enumField.RegisterValueChangedCallback(OnValueChanged);
         }
 
+        public override void Refresh()
+        {
+            base.Refresh();
+            enumField.SetValueWithoutNotify(Value as Enum);
+        }
+
         private void OnValueChanged(ChangeEvent<Enum> e)
         {
             Value = e.newValue;

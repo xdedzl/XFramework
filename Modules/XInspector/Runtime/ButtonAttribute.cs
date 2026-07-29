@@ -1,11 +1,13 @@
 using System;
 using System.Diagnostics;
+using JetBrains.Annotations;
 
 namespace XFramework
 {
     /// <summary>
     /// 按钮检视器
     /// </summary>
+    [MeansImplicitUse(ImplicitUseKindFlags.Access, ImplicitUseTargetFlags.Itself)]
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = true)]
     [Conditional("UNITY_EDITOR")]
     public sealed class ButtonAttribute : Attribute

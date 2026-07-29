@@ -142,6 +142,23 @@ namespace XFramework.UI
         }
 
         /// <summary>
+        /// 通过自定义访问器绑定成员。
+        /// </summary>
+        public virtual void BindTo(MemberInfo member, string propertyName, Getter valueGetter, Setter valueSetter)
+        {
+            m_boundMemberInfo = member;
+            Type variableType = member is FieldInfo field
+                ? field.FieldType
+                : ((PropertyInfo)member).PropertyType;
+            BindTo(
+                variableType,
+                propertyName ?? member.Name,
+                valueGetter,
+                valueSetter,
+                GetCustomDisplayName(member));
+        }
+
+        /// <summary>
         /// 绑定UI
         /// </summary>
         /// <param name="variableType">变量类型</param>
@@ -174,7 +191,7 @@ namespace XFramework.UI
         /// </summary>
         public virtual void Refresh()
         {
-
+            m_value = getter();
         }
 
         internal void SetVariableNameTextRowHeight(float height)

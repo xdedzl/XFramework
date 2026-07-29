@@ -13,26 +13,7 @@ namespace XFramework
             return nameof(AssetBundleSceneLoadHelper);
         }
 
-        public override bool LoadScene(string scenePath, LoadSceneMode mode)
-        {
-            try
-            {
-                if (!ResourceManager.Instance.PrepareAsset(scenePath))
-                {
-                    Debug.LogError($"[XSceneManager] Scene asset bundle is not ready: {scenePath}.");
-                    return false;
-                }
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"[XSceneManager] Prepare scene asset bundle failed: {scenePath}. {e}");
-                return false;
-            }
-
-            return base.LoadScene(scenePath, mode);
-        }
-
-        public override XAwaitableTask<bool> LoadSceneAsync(string scenePath, LoadSceneMode mode)
+        public override XAwaitableTask<bool> LoadSceneAsync(string scenePath)
         {
             var resultTask = new XAwaitableTask<bool>();
             XAwaitableTask<bool> prepareTask;
@@ -68,7 +49,7 @@ namespace XFramework
                     return;
                 }
 
-                XAwaitableTask<bool> loadTask = base.LoadSceneAsync(scenePath, mode);
+                XAwaitableTask<bool> loadTask = base.LoadSceneAsync(scenePath);
                 var loadAwaiter = loadTask.GetAwaiter();
                 if (loadAwaiter.IsCompleted)
                 {

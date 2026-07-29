@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using TMPro;
@@ -6,6 +7,46 @@ using UnityEngine.UIElements;
 
 namespace XFramework
 {
+    [Serializable]
+    public sealed class XSceneType
+    {
+        public const string MainName = "Main";
+        public const string SubName = "Sub";
+
+        private static readonly XSceneType[] s_BuiltIn =
+        {
+            new(MainName, 1, 0, false),
+            new(SubName, int.MaxValue, 100, true)
+        };
+
+        [SerializeField] private string name;
+        [SerializeField, Min(1)] private int maxLoadedSceneCount = 1;
+        [SerializeField] private int activePriority;
+        [SerializeField]
+        [Tooltip("切换 Main 类型场景时，是否卸载该类型下已加载的 XScene。")]
+        private bool unloadOnMainSceneChanged = true;
+
+        public XSceneType() { }
+
+        private XSceneType(
+            string name,
+            int maxLoadedSceneCount,
+            int activePriority,
+            bool unloadOnMainSceneChanged)
+        {
+            this.name = name;
+            this.maxLoadedSceneCount = maxLoadedSceneCount;
+            this.activePriority = activePriority;
+            this.unloadOnMainSceneChanged = unloadOnMainSceneChanged;
+        }
+
+        public string Name => name;
+        public int MaxLoadedSceneCount => maxLoadedSceneCount;
+        public int ActivePriority => activePriority;
+        public bool UnloadOnMainSceneChanged => unloadOnMainSceneChanged;
+        public static IReadOnlyList<XSceneType> BuiltIn => s_BuiltIn;
+    }
+
     [System.Serializable]
     public class UIClickSoundSetting
     {
@@ -27,6 +68,63 @@ namespace XFramework
         public PanelSettings defaultUIToolkitPanelSettings;
         [Tooltip("UI 点击音效配置。")]
         public UIClickSoundSetting[] uiClickSounds;
+
+        [Header("Scene")]
+        [Tooltip("项目补充的场景类型。Main 和 Sub 由框架内置，无需重复配置。")]
+        [SerializeField] private XSceneType[] sceneTypes = Array.Empty<XSceneType>();
+
+        public IReadOnlyList<XSceneType> SceneTypes => sceneTypes ?? Array.Empty<XSceneType>();
+
+        public bool TryGetSceneType(string name, out XSceneType sceneType)
+        {
+            sceneType = null;
+            if (string.IsNullOrEmpty(name))
+            {
+                return false;
+            }
+
+            foreach (XSceneType builtInSceneType in XSceneType.BuiltIn)
+            {
+                if (builtInSceneType.Name == name)
+                {
+                    sceneType = builtInSceneType;
+                    break;
+                }
+            }
+
+            foreach (XSceneType item in SceneTypes)
+            {
+                if (item == null || item.Name != name)
+                {
+                    continue;
+                }
+
+                if (sceneType != null)
+                {
+                    throw new XFrameworkException($"[XSceneManager] Duplicate scene type: {name}.");
+                }
+
+                sceneType = item;
+            }
+
+            return sceneType != null;
+        }
+
+        public IEnumerable<string> GetSceneTypeNames()
+        {
+            foreach (XSceneType sceneType in XSceneType.BuiltIn)
+            {
+                yield return sceneType.Name;
+            }
+
+            foreach (XSceneType sceneType in SceneTypes)
+            {
+                if (sceneType != null && !string.IsNullOrEmpty(sceneType.Name))
+                {
+                    yield return sceneType.Name;
+                }
+            }
+        }
 
         public static IEnumerable<string> GetUIClickSoundKeyOptions()
         {

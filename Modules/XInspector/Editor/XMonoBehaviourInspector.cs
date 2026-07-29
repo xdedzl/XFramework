@@ -6,6 +6,7 @@ using UnityEditor.UIElements;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.UIElements;
+using XFramework.UI;
 using UEditor = UnityEditor.Editor;
 
 namespace XFramework.Editor
@@ -22,9 +23,12 @@ namespace XFramework.Editor
         private const float GroupBodyPadding = 4f;
         private const float GroupChildSpacing = 2f;
         private const string ScriptPropertyName = "m_Script";
+        private const long ShowFieldRefreshInterval = 200;
 
         private readonly List<SceneField> m_sceneFields = new ();
         private readonly List<MethodInspector> m_methods = new ();
+        private readonly List<FieldInfo> m_inspectorFields = new ();
+        private readonly List<XInspectorElement> m_showInInspectorElements = new ();
         
         public static List<MethodInfo> GetMethods(Type type, Func<MethodInfo, bool> filter)
         {
@@ -40,12 +44,38 @@ namespace XFramework.Editor
             return methods;
         }
 
+        private static List<FieldInfo> GetInspectorFields(Type type)
+        {
+            var typeHierarchy = new Stack<Type>();
+            while (type != null && type != typeof(MonoBehaviour))
+            {
+                typeHierarchy.Push(type);
+                type = type.BaseType;
+            }
+
+            var fields = new List<FieldInfo>();
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+            while (typeHierarchy.Count > 0)
+            {
+                FieldInfo[] declaredFields = typeHierarchy.Pop().GetFields(flags);
+                Array.Sort(declaredFields, (a, b) => a.MetadataToken.CompareTo(b.MetadataToken));
+                for (int i = 0; i < declaredFields.Length; i++)
+                {
+                    fields.Add(declaredFields[i]);
+                }
+            }
+
+            return fields;
+        }
+
         private void OnEnable()
         {
             try
             {
                 m_sceneFields.Clear();
                 m_methods.Clear();
+                m_inspectorFields.Clear();
+                m_showInInspectorElements.Clear();
 
                 using (SerializedProperty iterator = serializedObject.GetIterator())
                 {
@@ -62,6 +92,7 @@ namespace XFramework.Editor
                     }
                 }
 
+                m_inspectorFields.AddRange(GetInspectorFields(target.GetType()));
 
                 List<MethodInfo> methods = GetMethods(target.GetType(), (method) =>
                 {
@@ -87,36 +118,150 @@ namespace XFramework.Editor
                 }
             };
 
-            CreatePropertiesGUI(root);
+            List<SerializedProperty> properties = GetVisibleRootProperties();
+            CreateFieldsGUI(root, properties);
             CreateMethodGUI(root);
 
             return root;
         }
 
-        private void CreatePropertiesGUI(VisualElement root)
+        private void CreateFieldsGUI(VisualElement root, List<SerializedProperty> visibleProperties)
         {
-            List<SerializedProperty> properties = GetVisibleRootProperties();
-            Dictionary<string, List<SerializedProperty>> groupProperties = CollectGroupProperties(properties);
-            HashSet<string> drawnGroups = new HashSet<string>();
-
-            for (int i = 0; i < properties.Count; i++)
+            Dictionary<string, SerializedProperty> visiblePropertiesByName = new Dictionary<string, SerializedProperty>();
+            for (int i = 0; i < visibleProperties.Count; i++)
             {
-                SerializedProperty property = properties[i];
-                if (TryGetPrettyGroupTitle(property, out string groupTitle))
-                {
-                    if (drawnGroups.Add(groupTitle))
-                    {
-                        root.Add(new PrettyGroupElement(
-                            serializedObject,
-                            target.GetType(),
-                            groupTitle,
-                            groupProperties[groupTitle]));
-                    }
+                visiblePropertiesByName[visibleProperties[i].name] = visibleProperties[i];
+            }
 
+            Dictionary<string, List<SerializedProperty>> groupProperties = CollectGroupProperties(visibleProperties);
+            HashSet<string> drawnGroups = new HashSet<string>();
+            HashSet<string> drawnPropertyPaths = new HashSet<string>();
+            XInspector reflectedDrawerFactory = null;
+
+            if (visiblePropertiesByName.TryGetValue(ScriptPropertyName, out SerializedProperty scriptProperty))
+            {
+                AddSerializedPropertyGUI(
+                    root,
+                    scriptProperty,
+                    groupProperties,
+                    drawnGroups,
+                    drawnPropertyPaths);
+            }
+
+            for (int i = 0; i < m_inspectorFields.Count; i++)
+            {
+                FieldInfo field = m_inspectorFields[i];
+                if (visiblePropertiesByName.TryGetValue(field.Name, out SerializedProperty property))
+                {
+                    AddSerializedPropertyGUI(root, property, groupProperties, drawnGroups, drawnPropertyPaths);
                     continue;
                 }
 
-                root.Add(CreatePropertyField(property, property.name == ScriptPropertyName));
+                if (!field.IsDefined(typeof(ShowInInspectorAttribute), true))
+                {
+                    continue;
+                }
+
+                property = serializedObject.FindProperty(field.Name);
+                if (property != null)
+                {
+                    root.Add(CreatePropertyField(property, false));
+                    drawnPropertyPaths.Add(property.propertyPath);
+                    continue;
+                }
+
+                reflectedDrawerFactory ??= new XInspector(false);
+                root.Add(CreateReflectedField(reflectedDrawerFactory, field));
+            }
+
+            for (int i = 0; i < visibleProperties.Count; i++)
+            {
+                AddSerializedPropertyGUI(
+                    root,
+                    visibleProperties[i],
+                    groupProperties,
+                    drawnGroups,
+                    drawnPropertyPaths);
+            }
+
+            if (m_showInInspectorElements.Count > 0)
+            {
+                root.schedule.Execute(RefreshShowInInspectorFields).Every(ShowFieldRefreshInterval);
+            }
+        }
+
+        private void AddSerializedPropertyGUI(
+            VisualElement root,
+            SerializedProperty property,
+            Dictionary<string, List<SerializedProperty>> groupProperties,
+            HashSet<string> drawnGroups,
+            HashSet<string> drawnPropertyPaths)
+        {
+            if (!drawnPropertyPaths.Add(property.propertyPath))
+            {
+                return;
+            }
+
+            if (TryGetPrettyGroupTitle(property, out string groupTitle))
+            {
+                if (drawnGroups.Add(groupTitle))
+                {
+                    List<SerializedProperty> properties = groupProperties[groupTitle];
+                    root.Add(new PrettyGroupElement(
+                        serializedObject,
+                        target.GetType(),
+                        groupTitle,
+                        properties));
+
+                    for (int i = 0; i < properties.Count; i++)
+                    {
+                        drawnPropertyPaths.Add(properties[i].propertyPath);
+                    }
+                }
+
+                return;
+            }
+
+            root.Add(CreatePropertyField(property, property.name == ScriptPropertyName));
+        }
+
+        private VisualElement CreateReflectedField(XInspector drawerFactory, FieldInfo field)
+        {
+            XInspectorElement element = drawerFactory.CreateDrawerForMember(field, 0);
+            element.BindTo(
+                field,
+                field.Name,
+                () => field.GetValue(target),
+                value => field.SetValue(target, value));
+            element.Refresh();
+
+            bool editable = targets.Length == 1
+                            && !field.IsInitOnly
+                            && !field.IsDefined(typeof(ReadOnlyAttribute), true);
+            element.SetEnabled(editable);
+            if (targets.Length > 1)
+            {
+                element.tooltip = "ShowInInspector 字段不支持多对象编辑";
+            }
+
+            element.style.marginBottom = 2f;
+            m_showInInspectorElements.Add(element);
+            return element;
+        }
+
+        private void RefreshShowInInspectorFields()
+        {
+            for (int i = 0; i < m_showInInspectorElements.Count; i++)
+            {
+                XInspectorElement element = m_showInInspectorElements[i];
+                Focusable focusedElement = element.panel?.focusController.focusedElement;
+                if (focusedElement is VisualElement focusedVisualElement
+                    && (focusedVisualElement == element || element.Contains(focusedVisualElement)))
+                {
+                    continue;
+                }
+
+                element.Refresh();
             }
         }
 

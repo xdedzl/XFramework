@@ -28,6 +28,12 @@ namespace XFramework.UI
             input.value = Value.ToString();
         }
 
+        public override void Refresh()
+        {
+            base.Refresh();
+            input.SetValueWithoutNotify(Value.ToString());
+        }
+
         private void OnValueChanged(ChangeEvent<string> v)
         {
             if (string.IsNullOrEmpty(v.newValue))

@@ -79,6 +79,7 @@ namespace XFramework.Editor
 
         public override void Refresh()
         {
+            base.Refresh();
             Object asset = AssetDatabase.LoadAssetAtPath(Value as string, m_ObjectField.objectType ?? typeof(Object));
             m_ObjectField.SetValueWithoutNotify(asset);
             RefreshPreview();

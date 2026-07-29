@@ -34,6 +34,18 @@ namespace XFramework.UI
         protected override void OnBound()
         {
             base.OnBound();
+            RebuildEnums();
+        }
+
+        public override void Refresh()
+        {
+            base.Refresh();
+            RebuildEnums();
+        }
+
+        private void RebuildEnums()
+        {
+            enumsContainer.Clear();
             var values = System.Enum.GetValues(BoundVariableType);
 
             foreach (var item in values)

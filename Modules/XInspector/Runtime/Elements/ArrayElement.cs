@@ -36,6 +36,7 @@ namespace XFramework.UI
         private int selectedIndex = -1;
         private int dragSourceIndex = -1;
         private int dropTargetIndex = -1;
+        private bool m_Initialized;
 
         private int Length
         {
@@ -190,8 +191,21 @@ namespace XFramework.UI
 
         public override void Refresh()
         {
-            ClearElements();
-            CreateElements();
+            base.Refresh();
+            if (!m_Initialized || elementDrawers.Count != Length)
+            {
+                ClearElements();
+                CreateElements();
+                m_Initialized = true;
+            }
+            else
+            {
+                for (int i = 0; i < elementDrawers.Count; i++)
+                {
+                    elementDrawers[i].Refresh();
+                }
+            }
+
             UpdateHeaderState();
         }
 

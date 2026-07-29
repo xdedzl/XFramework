@@ -162,6 +162,26 @@ namespace XFramework.UI
         }
 
         /// <summary>
+        /// 根据成员类型及其 PropertyAttribute 创建绘制器。
+        /// </summary>
+        public XInspectorElement CreateDrawerForMember(MemberInfo member, int depth)
+        {
+            Type memberType = member is FieldInfo field
+                ? field.FieldType
+                : ((PropertyInfo)member).PropertyType;
+            PropertyAttribute propertyAttribute = GetPropertyAttribute(member);
+            if (propertyAttribute != null && IsArrayPropertyTarget(memberType))
+            {
+                return CreateArrayPropertyElement(propertyAttribute, depth);
+            }
+
+            Type propertyDrawerType = GetDrawerForPropertyAttribute(propertyAttribute?.GetType());
+            return propertyDrawerType != null
+                ? CreateDrawerForType(propertyDrawerType, depth)
+                : CreateDrawerForMemberType(memberType, depth);
+        }
+
+        /// <summary>
         /// 通过UI类型获取UIItem
         /// </summary>
         /// <param name="elementType"></param>
@@ -339,6 +359,12 @@ namespace XFramework.UI
                 element.style.flexGrow = 1f;
                 element.style.flexShrink = 1f;
             }
+        }
+
+        private static bool IsArrayPropertyTarget(Type type)
+        {
+            return (type.IsArray && type.GetArrayRank() == 1)
+                   || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>));
         }
     }
 }

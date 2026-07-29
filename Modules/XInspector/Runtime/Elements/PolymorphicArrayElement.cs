@@ -45,11 +45,13 @@ namespace XFramework.UI
         private readonly List<string> candidateErrors = new();
         private readonly List<VisualElement> rowElements = new();
         private readonly List<XInspectorElement> elementDrawers = new();
+        private readonly List<Type> rowTypes = new();
 
         private VisualElement capturedDragHandle;
         private int selectedIndex = -1;
         private int dragSourceIndex = -1;
         private int dropTargetIndex = -1;
+        private bool m_Initialized;
 
         private int Length
         {
@@ -217,8 +219,21 @@ namespace XFramework.UI
 
         public override void Refresh()
         {
-            ClearElements();
-            CreateElements();
+            base.Refresh();
+            if (!m_Initialized || HasRowStructureChanged())
+            {
+                ClearElements();
+                CreateElements();
+                m_Initialized = true;
+            }
+            else
+            {
+                for (int i = 0; i < elementDrawers.Count; i++)
+                {
+                    elementDrawers[i].Refresh();
+                }
+            }
+
             UpdateHeaderState();
         }
 
@@ -271,6 +286,25 @@ namespace XFramework.UI
             elementsContent.Clear();
             rowElements.Clear();
             elementDrawers.Clear();
+            rowTypes.Clear();
+        }
+
+        private bool HasRowStructureChanged()
+        {
+            if (rowTypes.Count != Length)
+            {
+                return true;
+            }
+
+            for (int i = 0; i < Length; i++)
+            {
+                if (rowTypes[i] != GetElementValue(i)?.GetType())
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private VisualElement CreateMessageRow(string text, bool isError)
@@ -297,6 +331,7 @@ namespace XFramework.UI
             int rowIndex = index;
             object rowValue = GetElementValue(rowIndex);
             Type rowType = rowValue?.GetType();
+            rowTypes.Add(rowType);
 
             var row = new VisualElement
             {

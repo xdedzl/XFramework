@@ -19,6 +19,14 @@ namespace XFramework.Editor
         private Toggle showPackagesToggle;
         private bool includePackages;
         private const string WindowTitle = "场景列表";
+
+        private enum DisplayMode
+        {
+            UnityScene,
+            XScene
+        }
+
+        private DisplayMode displayMode;
         
         static SceneListWindow()
         {
@@ -84,11 +92,17 @@ namespace XFramework.Editor
 
         private void OnEditorSceneOpened(UnityEngine.SceneManagement.Scene scene, OpenSceneMode mode)
         {
-            // 更新当前列表中的该项时间并刷新视图
-            var target = sceneInfos.FirstOrDefault(s => s.Path == scene.path);
-            if (target != null)
+            long ticks = DateTime.Now.Ticks;
+            bool changed = false;
+            foreach (SceneInfo target in sceneInfos.Where(sceneInfo => sceneInfo.OpenScenePaths.Contains(scene.path)))
             {
-                target.LastOpenTicks = DateTime.Now.Ticks;
+                target.LastOpenTicks = ticks;
+                EditorPrefs.SetString(LastOpenKeyPrefix + target.Path, ticks.ToString());
+                changed = true;
+            }
+
+            if (changed)
+            {
                 ApplySorting();
                 RefreshFilteredList();
             }
@@ -97,6 +111,20 @@ namespace XFramework.Editor
         private void RefreshSceneList()
         {
             sceneInfos.Clear();
+            if (displayMode == DisplayMode.UnityScene)
+            {
+                RefreshUnitySceneList();
+            }
+            else
+            {
+                RefreshXSceneList();
+            }
+
+            ApplySorting();
+        }
+
+        private void RefreshUnitySceneList()
+        {
             string[] guids = AssetDatabase.FindAssets("t:Scene");
 
             foreach (string guid in guids)
@@ -127,12 +155,47 @@ namespace XFramework.Editor
                         Name = Path.GetFileNameWithoutExtension(path),
                         Path = path,
                         Asset = sceneAsset,
+                        OpenScenePaths = new[] { path },
                         LastOpenTicks = ticks
                     });
                 }
             }
+        }
 
-            ApplySorting();
+        private void RefreshXSceneList()
+        {
+            string[] guids = AssetDatabase.FindAssets("t:XScene");
+            foreach (string guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (!includePackages && path.StartsWith("Packages/"))
+                {
+                    continue;
+                }
+
+                XScene xScene = AssetDatabase.LoadAssetAtPath<XScene>(path);
+                if (xScene == null)
+                {
+                    continue;
+                }
+
+                long ticks = 0;
+                string key = LastOpenKeyPrefix + path;
+                if (EditorPrefs.HasKey(key))
+                {
+                    string stored = EditorPrefs.GetString(key, string.Empty);
+                    long.TryParse(stored, out ticks);
+                }
+
+                sceneInfos.Add(new SceneInfo
+                {
+                    Name = Path.GetFileNameWithoutExtension(path),
+                    Path = path,
+                    Asset = xScene,
+                    OpenScenePaths = xScene.ScenePaths?.ToArray() ?? Array.Empty<string>(),
+                    LastOpenTicks = ticks
+                });
+            }
         }
 
         private void CreateUI()
@@ -155,8 +218,27 @@ namespace XFramework.Editor
             };
             root.Add(toolbarContainer);
 
+            var displayModeDropdown = new DropdownField(
+                new List<string> { "Unity Scene", "XScene" },
+                displayMode == DisplayMode.UnityScene ? 0 : 1)
+            {
+                tooltip = "选择显示所有 Unity 场景或所有 XScene 配置",
+                style =
+                {
+                    width = 110
+                }
+            };
+            displayModeDropdown.RegisterValueChangedCallback(evt =>
+            {
+                displayMode = evt.newValue == "XScene" ? DisplayMode.XScene : DisplayMode.UnityScene;
+                RefreshList();
+            });
+            toolbarContainer.Add(displayModeDropdown);
+
             // 排序方式（新增）
-            var sortDropdown = new DropdownField(new List<string> { "名称", "最后打开时间" }, 1)
+            var sortDropdown = new DropdownField(
+                new List<string> { "名称", "最后打开时间" },
+                sortMode == SortMode.Name ? 0 : 1)
             {
                 tooltip = "选择列表的排序方式",
                 style =
@@ -185,7 +267,7 @@ namespace XFramework.Editor
             toolbarContainer.Add(searchField);
 
             // 包含Packages选项
-            showPackagesToggle = new Toggle("包含Packages下的场景")
+            showPackagesToggle = new Toggle("包含 Packages")
             {
                 value = includePackages
             };
@@ -352,7 +434,7 @@ namespace XFramework.Editor
                 nameLabel.RegisterCallback<MouseDownEvent>(evt => {
                     if (evt.clickCount == 2 && itemContainer.userData is SceneInfo sceneInfo)
                     {
-                        OpenScene(sceneInfo.Path);
+                        OpenScene(sceneInfo);
                     }
                 });
                 itemContainer.Add(nameLabel);
@@ -374,8 +456,7 @@ namespace XFramework.Editor
                 pathLabel.RegisterCallback<MouseDownEvent>(evt =>
                 {
                     if (evt.clickCount != 2 || itemContainer.userData is not SceneInfo sceneInfo) return;
-                    Selection.activeObject = sceneInfo.Asset;
-                    EditorGUIUtility.PingObject(sceneInfo.Asset);
+                    LocateAsset(sceneInfo);
                 });
                 itemContainer.Add(pathLabel);
 
@@ -411,6 +492,13 @@ namespace XFramework.Editor
                         fontSize = 10
                     }
                 };
+                locateButton.clicked += () =>
+                {
+                    if (itemContainer.userData is SceneInfo sceneInfo)
+                    {
+                        LocateAsset(sceneInfo);
+                    }
+                };
                 buttonsContainer.Add(locateButton);
 
                 var openButton = new Button
@@ -422,6 +510,13 @@ namespace XFramework.Editor
                         height = 20,
                         fontSize = 10,
                         marginLeft = 5
+                    }
+                };
+                openButton.clicked += () =>
+                {
+                    if (itemContainer.userData is SceneInfo sceneInfo)
+                    {
+                        OpenScene(sceneInfo);
                     }
                 };
                 buttonsContainer.Add(openButton);
@@ -450,13 +545,7 @@ namespace XFramework.Editor
                     : "未打开";
 
                 var buttons = element.Query<Button>().ToList();
-                buttons[0].clicked += () => {
-                    Selection.activeObject = sceneInfo.Asset;
-                    EditorGUIUtility.PingObject(sceneInfo.Asset);
-                };
-                buttons[1].clicked += () => {
-                    OpenScene(sceneInfo.Path);
-                };
+                buttons[1].SetEnabled(sceneInfo.OpenScenePaths.Count > 0);
 
                 // 设置交错背景色 - 更明显的对比
                 element.style.backgroundColor = i % 2 == 0 ?
@@ -557,8 +646,20 @@ namespace XFramework.Editor
             }
         }
 
-        private void OpenScene(string path)
+        private static void LocateAsset(SceneInfo sceneInfo)
         {
+            Selection.activeObject = sceneInfo.Asset;
+            EditorGUIUtility.PingObject(sceneInfo.Asset);
+        }
+
+        private void OpenScene(SceneInfo sceneInfo)
+        {
+            if (sceneInfo.OpenScenePaths.Count == 0)
+            {
+                Debug.LogError($"[Scene Viewer] XScene has no Unity scenes: {sceneInfo.Path}.", sceneInfo.Asset);
+                return;
+            }
+
             // 如果有未保存的修改，先提示保存
             if (EditorSceneManager.GetActiveScene().isDirty)
             {
@@ -569,15 +670,24 @@ namespace XFramework.Editor
                 }
             }
 
-            // 打开选中的场景
-            EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
+            long ticks = DateTime.Now.Ticks;
+            sceneInfo.LastOpenTicks = ticks;
+            EditorPrefs.SetString(LastOpenKeyPrefix + sceneInfo.Path, ticks.ToString());
+
+            for (int i = 0; i < sceneInfo.OpenScenePaths.Count; i++)
+            {
+                EditorSceneManager.OpenScene(
+                    sceneInfo.OpenScenePaths[i],
+                    i == 0 ? OpenSceneMode.Single : OpenSceneMode.Additive);
+            }
         }
 
         private class SceneInfo
         {
             public string Name { get; set; }
             public string Path { get; set; }
-            public SceneAsset Asset { get; set; }
+            public UnityEngine.Object Asset { get; set; }
+            public IReadOnlyList<string> OpenScenePaths { get; set; }
             public long LastOpenTicks { get; set; } // 新增：最后打开时间
         }
     }

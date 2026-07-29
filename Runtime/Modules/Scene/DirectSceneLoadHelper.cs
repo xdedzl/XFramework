@@ -7,52 +7,11 @@ namespace XFramework
 {
     internal class DirectSceneLoadHelper : ISceneLoadHelper
     {
-        public virtual bool LoadScene(string scenePath, LoadSceneMode mode)
+        public virtual XAwaitableTask<bool> LoadSceneAsync(string scenePath)
         {
-            try
-            {
-                SceneManager.LoadScene(scenePath, mode);
-                return true;
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"[XSceneManager] Load scene failed: {scenePath}. {e}");
-                return false;
-            }
-        }
-
-        public virtual bool LoadScene(int buildIndex, LoadSceneMode mode)
-        {
-            try
-            {
-                SceneManager.LoadScene(buildIndex, mode);
-                return true;
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"[XSceneManager] Load scene failed: {buildIndex}. {e}");
-                return false;
-            }
-        }
-
-        public virtual XAwaitableTask<bool> LoadSceneAsync(string scenePath, LoadSceneMode mode)
-        {
-            return ToBoolTask(() => SceneManager.LoadSceneAsync(scenePath, mode), $"Load scene failed: {scenePath}.");
-        }
-
-        public virtual XAwaitableTask<bool> LoadSceneAsync(int buildIndex, LoadSceneMode mode)
-        {
-            return ToBoolTask(() => SceneManager.LoadSceneAsync(buildIndex, mode), $"Load scene failed: {buildIndex}.");
-        }
-
-        public virtual XAwaitableTask<bool> UnloadSceneAsync(string sceneName)
-        {
-            return ToBoolTask(() => SceneManager.UnloadSceneAsync(sceneName), $"Unload scene failed: {sceneName}.");
-        }
-
-        public virtual XAwaitableTask<bool> UnloadSceneAsync(int buildIndex)
-        {
-            return ToBoolTask(() => SceneManager.UnloadSceneAsync(buildIndex), $"Unload scene failed: {buildIndex}.");
+            return ToBoolTask(
+                () => SceneManager.LoadSceneAsync(scenePath, LoadSceneMode.Additive),
+                $"Load scene failed: {scenePath}.");
         }
 
         public virtual XAwaitableTask<bool> UnloadSceneAsync(Scene scene)

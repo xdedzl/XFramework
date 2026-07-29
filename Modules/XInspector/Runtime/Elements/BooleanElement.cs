@@ -22,6 +22,12 @@ namespace XFramework.UI
             toggle.RegisterValueChangedCallback(OnValueChanged);
         }
 
+        public override void Refresh()
+        {
+            base.Refresh();
+            toggle.SetValueWithoutNotify((bool)Value);
+        }
+
         private void OnValueChanged(ChangeEvent<bool> e)
         {
             Value = e.newValue;

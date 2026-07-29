@@ -659,10 +659,13 @@ public sealed class DialogueChoiceNode : DialogueNode
 ```
 
 #### 4. XMonoBehaviourInspector 额外能力
-继承 `XMonoBehaviour` 的组件会使用 `XMonoBehaviourInspector`。它保留 Unity 默认 Inspector 和全部 `PropertyDrawer` 行为，并额外提供两类编辑器增强：
+继承 `XMonoBehaviour` 的组件会使用 `XMonoBehaviourInspector`。它保留 Unity 默认 Inspector 和全部 `PropertyDrawer` 行为，并额外提供三类编辑器增强：
 
+- **非序列化字段显示**：字段添加 `[ShowInInspector]` 后，即使未被 Unity 序列化也会显示；使用 XInspector 的类型绘制器并实时刷新，可叠加 `[ReadOnly]` 禁止编辑。已经由 Unity 默认显示的序列化字段不会重复绘制。
 - **方法按钮**：无参方法添加 `[Button]` 后，会在 Inspector 底部生成按钮；支持多选对象、Undo、场景 dirty 标记，以及按 `Order` 排序。
 - **Scene 视图句柄**：字段添加 `SceneHandlerAttribute` 派生标记后，会在 `OnSceneGUI` 中绘制和编辑对应场景句柄。
+
+`[ShowInInspector]` 不会改变 Unity 序列化规则；非序列化字段的修改只作用于当前对象实例，不会保存到场景或 Prefab。多对象选择时，这类字段只读显示第一个对象的当前值。
 
 `[Button]` 支持 `EnableMode.Always`、`EnableMode.Editor`、`EnableMode.Playmode` 三种启用模式：
 
@@ -672,6 +675,9 @@ using XFramework;
 
 public sealed class SpawnArea : XMonoBehaviour
 {
+    [ShowInInspector, ReadOnly]
+    private int runtimeSpawnCount;
+
     [MoveHandler("出生点")]
     public Vector3 spawnPoint;
 

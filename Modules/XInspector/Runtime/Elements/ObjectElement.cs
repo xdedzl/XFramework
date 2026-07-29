@@ -20,6 +20,7 @@ namespace XFramework.UI
         private readonly VisualElement elementsContent;
         private readonly Label foldoutLabel;
         private bool arrowActive = true;
+        private bool m_Initialized;
 
         public ObjectElement()
         {
@@ -142,8 +143,18 @@ namespace XFramework.UI
 
         public override void Refresh()
         {
-            ClearElements();
-            CreateElements();
+            base.Refresh();
+            if (!m_Initialized)
+            {
+                ClearElements();
+                CreateElements();
+                m_Initialized = true;
+            }
+            else if (Value != null)
+            {
+                RefreshChildren(elementsContent);
+            }
+
             UpdateHeaderState();
         }
 
@@ -279,26 +290,7 @@ namespace XFramework.UI
                 return null;
             }
 
-            Type variableType = member is FieldInfo fieldInfo ? fieldInfo.FieldType : ((PropertyInfo)member).PropertyType;
-            PropertyAttribute propertyAttribute = XInspector.GetPropertyAttribute(member);
-            if (propertyAttribute != null && IsArrayPropertyTarget(variableType))
-            {
-                return XInspector.CreateArrayPropertyElement(propertyAttribute, depth);
-            }
-
-            Type propertyDrawerType = XInspector.GetDrawerForPropertyAttribute(propertyAttribute?.GetType());
-            if (propertyDrawerType != null)
-            {
-                return XInspector.CreateDrawerForType(propertyDrawerType, depth);
-            }
-
-            return XInspector.CreateDrawerForMemberType(variableType, depth);
-        }
-
-        private static bool IsArrayPropertyTarget(Type type)
-        {
-            return (type.IsArray && type.GetArrayRank() == 1)
-                   || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>));
+            return XInspector.CreateDrawerForMember(member, depth);
         }
 
         private static bool IsHiddenInInspector(MemberInfo member)
@@ -355,6 +347,27 @@ namespace XFramework.UI
             }
 
             return aa;
+        }
+
+        private static void RefreshChildren(VisualElement parent)
+        {
+            foreach (VisualElement child in parent.Children())
+            {
+                if (child is XInspectorElement inspectorElement)
+                {
+                    inspectorElement.Refresh();
+                }
+                else if (child is IExpandableElement expandableElement)
+                {
+                    foreach (VisualElement nestedChild in expandableElement.GetChildElements())
+                    {
+                        if (nestedChild is XInspectorElement nestedInspectorElement)
+                        {
+                            nestedInspectorElement.Refresh();
+                        }
+                    }
+                }
+            }
         }
 
         private readonly struct MemberEntry
