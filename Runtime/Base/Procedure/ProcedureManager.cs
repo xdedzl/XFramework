@@ -271,6 +271,96 @@ namespace XFramework
             return false;
         }
 
+        public bool StartParallelProcedure(Type type)
+        {
+            if (!typeof(ParallelProcedureBase).IsAssignableFrom(type))
+            {
+                UnityEngine.Debug.LogError($"[Procedure] Type {type.Name} is not a ParallelProcedureBase.");
+                return false;
+            }
+
+            if (TryGetParallelProcedure(type, out _))
+            {
+                return false;
+            }
+
+            int priority = GetParallelProcedurePriority(type);
+            for (int i = 0; i < m_ParallelProcedures.Count; i++)
+            {
+                int activePriority = GetParallelProcedurePriority(m_ParallelProcedures[i].GetType());
+                if (activePriority == priority)
+                {
+                    throw new XFrameworkException($"[Procedure] Parallel priority {priority} is already used by {m_ParallelProcedures[i].GetType().Name}; cannot start {type.Name}.");
+                }
+            }
+
+            var procedure = (ParallelProcedureBase)GetOrCreateProcedure(type);
+
+            int insertIndex = 0;
+            while (insertIndex < m_ParallelProcedures.Count &&
+                   GetParallelProcedurePriority(m_ParallelProcedures[insertIndex].GetType()) < priority)
+            {
+                insertIndex++;
+            }
+
+            m_ParallelProcedures.Insert(insertIndex, procedure);
+            procedure.OnEnter(null);
+            if (!m_ParallelProcedures.Contains(procedure))
+            {
+                return false;
+            }
+
+            procedure.OnPrepare(() =>
+            {
+                if (!m_ParallelProcedures.Contains(procedure))
+                {
+                    return;
+                }
+
+                RefreshProcedureState();
+            });
+            return true;
+        }
+
+        public bool StopParallelProcedure(Type type)
+        {
+            for (int i = 0; i < m_ParallelProcedures.Count; i++)
+            {
+                if (m_ParallelProcedures[i].GetType() != type)
+                {
+                    continue;
+                }
+
+                var procedure = m_ParallelProcedures[i];
+                m_ParallelProcedures.RemoveAt(i);
+                procedure.OnExit();
+                RefreshProcedureState();
+                return true;
+            }
+
+            return false;
+        }
+
+        public bool TryGetParallelProcedure(Type type, out ParallelProcedureBase procedure)
+        {
+            for (int i = 0; i < m_ParallelProcedures.Count; i++)
+            {
+                if (m_ParallelProcedures[i].GetType() == type)
+                {
+                    procedure = m_ParallelProcedures[i];
+                    return true;
+                }
+            }
+
+            procedure = null;
+            return false;
+        }
+
+        public bool ContainsParallelProcedure(ParallelProcedureBase procedure)
+        {
+            return m_ParallelProcedures.Contains(procedure);
+        }
+
         public bool TryGetParallelProcedure<TProcedure>(out TProcedure procedure) where TProcedure : ParallelProcedureBase
         {
             for (int i = 0; i < m_ParallelProcedures.Count; i++)

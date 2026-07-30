@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -25,6 +27,7 @@ namespace XFramework.Editor
             menu.AddSeparator(string.Empty);
             menu.AddItem(new GUIContent("关闭所有Debug窗口"), false, CloseAllDebugWindows);
             menu.AddItem(new GUIContent("关闭其他所有Debug窗口"), false, CloseOtherDebugWindows);
+            AddSwitchToOtherDebugItems(menu);
         }
 
         protected virtual void OnEnable()
@@ -154,6 +157,149 @@ namespace XFramework.Editor
                 {
                     window.Close();
                 }
+            }
+        }
+
+        private void AddSwitchToOtherDebugItems(GenericMenu menu)
+        {
+            Type currentType = GetType();
+            TypeCache.TypeCollection derivedTypes = TypeCache.GetTypesDerivedFrom<XFrameworkDebugWindowBase>();
+
+            bool anyAdded = false;
+            foreach (Type type in derivedTypes)
+            {
+                if (type.IsAbstract || type == currentType)
+                {
+                    continue;
+                }
+
+                string displayName = GetDebugWindowDisplayName(type);
+                if (string.IsNullOrEmpty(displayName))
+                {
+                    continue;
+                }
+
+                anyAdded = true;
+                Type capturedType = type;
+                menu.AddItem(new GUIContent($"切换到其他Debug/{displayName}"), false,
+                    () => SwitchToDebugWindow(capturedType));
+            }
+
+            if (!anyAdded)
+            {
+                menu.AddDisabledItem(new GUIContent("切换到其他Debug/(无其它Debug)"));
+            }
+        }
+
+        private static string GetDebugWindowDisplayName(Type type)
+        {
+            MethodInfo[] methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+            foreach (MethodInfo method in methods)
+            {
+                MenuItem attr = method.GetCustomAttribute<MenuItem>();
+                if (attr == null || string.IsNullOrEmpty(attr.menuItem))
+                {
+                    continue;
+                }
+
+                int lastSlash = attr.menuItem.LastIndexOf('/');
+                return lastSlash >= 0 ? attr.menuItem.Substring(lastSlash + 1) : attr.menuItem;
+            }
+            return type.Name;
+        }
+
+        private static void SwitchToDebugWindow(Type targetType)
+        {
+            XFrameworkDebugWindowBase current = focusedWindow as XFrameworkDebugWindowBase;
+
+            // 保存当前窗口的 dock 父节点与屏幕位置，用于切换后恢复
+            object currentDockArea = null;
+            Rect savedPosition = default;
+            if (current != null)
+            {
+                currentDockArea = GetWindowDockArea(current);
+                savedPosition = current.position;
+            }
+
+            // 调用目标类型的 ShowWindow（带 [MenuItem] 的静态方法）打开目标窗口
+            InvokeShowWindow(targetType);
+
+            // 找到刚打开的目标窗口实例
+            XFrameworkDebugWindowBase target = FindOpenWindow(targetType);
+
+            // 关闭当前窗口（避免与目标同类型时误关）
+            if (current != null && current.GetType() != targetType)
+            {
+                current.Close();
+            }
+
+            // 把目标窗口放回原窗口的位置：优先 dock 到原 dock area，否则保留屏幕坐标
+            if (target != null && current != null)
+            {
+                if (currentDockArea != null)
+                {
+                    DockWindowToArea(target, currentDockArea);
+                }
+                else
+                {
+                    target.position = savedPosition;
+                }
+            }
+        }
+
+        private static void InvokeShowWindow(Type targetType)
+        {
+            MethodInfo[] methods = targetType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+            foreach (MethodInfo method in methods)
+            {
+                if (method.GetCustomAttribute<MenuItem>() != null)
+                {
+                    method.Invoke(null, null);
+                    return;
+                }
+            }
+        }
+
+        private static XFrameworkDebugWindowBase FindOpenWindow(Type targetType)
+        {
+            foreach (XFrameworkDebugWindowBase window in Resources.FindObjectsOfTypeAll<XFrameworkDebugWindowBase>())
+            {
+                if (window != null && window.GetType() == targetType)
+                {
+                    return window;
+                }
+            }
+            return null;
+        }
+
+        // 获取 EditorWindow 的 dock 父节点（m_Parent）。
+        // 窗口 docked 时实际类型为 DockArea；浮动窗口返回 null。
+        private static object GetWindowDockArea(EditorWindow window)
+        {
+            FieldInfo parentField = typeof(EditorWindow).GetField("m_Parent",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            object parent = parentField?.GetValue(window);
+            if (parent == null)
+            {
+                return null;
+            }
+            // 仅当父节点为 DockArea（窗口处于 docked 状态）时才返回，浮动窗口返回 null
+            return parent.GetType().Name == "DockArea" ? parent : null;
+        }
+
+        // 通过反射调用 DockArea.AddTab(EditorWindow) 把窗口插入到指定 dock area，
+        // 让切换后的窗口占据原窗口的 dock 位置。
+        private static void DockWindowToArea(EditorWindow window, object dockArea)
+        {
+            try
+            {
+                MethodInfo addTabMethod = dockArea.GetType().GetMethod("AddTab",
+                    new[] { typeof(EditorWindow) });
+                addTabMethod?.Invoke(dockArea, new object[] { window });
+            }
+            catch
+            {
+                // 反射调用失败时忽略，窗口保留 ShowWindow 后的默认位置
             }
         }
 

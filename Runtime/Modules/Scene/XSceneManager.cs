@@ -8,7 +8,7 @@ using XFramework.Tasks;
 
 namespace XFramework
 {
-    public static class XSceneManager
+    public static partial class XSceneManager
     {
         private sealed class LoadedXScene
         {
@@ -173,6 +173,15 @@ namespace XFramework
                 for (int i = 0; i < xScene.ScenePaths.Count; i++)
                 {
                     string unityScenePath = xScene.ScenePaths[i];
+
+                    // 若场景已被 Unity 原生加载（如作为启动场景），直接接管，纳入 XSceneManager 管理
+                    Scene existingScene = SceneManager.GetSceneByPath(unityScenePath);
+                    if (existingScene.IsValid() && existingScene.isLoaded)
+                    {
+                        unityScenes.Add(existingScene);
+                        continue;
+                    }
+
                     if (!await LoadHelper.LoadSceneAsync(unityScenePath))
                     {
                         Debug.LogError(
@@ -201,6 +210,12 @@ namespace XFramework
                     ++s_LoadOrder);
                 s_LoadedXScenes.Add(xScenePath, loadedXScene);
                 scenePathsReserved = false;
+
+                // 加载 Main 类型 XScene 后，卸载不属于它的 orphan fallback scene（如编辑器启动场景）
+                if (sceneType.Name == XSceneType.MainName && !await UnloadOrphanFallbackSceneAsync(xScene))
+                {
+                    return false;
+                }
 
                 RefreshActiveScene();
                 InvokeXSceneLoaded(xScenePath);
@@ -420,6 +435,42 @@ namespace XFramework
             s_FallbackSceneCaptured = true;
         }
 
+        /// <summary>
+        /// 加载 Main 类型 XScene 后，卸载不属于它的 orphan fallback scene（如 Unity 原生加载的编辑器启动场景）。
+        /// 若 fallback scene 属于新加载的 Main XScene（如启动场景就是目标场景，已被接管），则不卸载。
+        /// </summary>
+        private static async XAwaitableTask<bool> UnloadOrphanFallbackSceneAsync(XScene newMainXScene)
+        {
+            if (!s_FallbackScene.IsValid() || !s_FallbackScene.isLoaded)
+            {
+                return true;
+            }
+
+            // fallback scene 属于新加载的 Main XScene（如启动场景就是 BigWorld，已被接管），不卸载
+            foreach (string unityScenePath in newMainXScene.ScenePaths)
+            {
+                if (string.Equals(s_FallbackScene.path, unityScenePath, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            // fallback scene 已被某个 XScene 占有（理论上不会，因为它是 Unity 原生加载的），不卸载
+            if (s_UnitySceneOwners.ContainsKey(s_FallbackScene.path))
+            {
+                return true;
+            }
+
+            // 卸载 orphan fallback scene（如编辑器打开的 TavernInterior）
+            if (!await LoadHelper.UnloadSceneAsync(s_FallbackScene))
+            {
+                Debug.LogError($"[XSceneManager] Unload orphan fallback scene failed: {s_FallbackScene.path}.");
+                return false;
+            }
+
+            return true;
+        }
+
         private static XSceneType GetSceneType(string sceneTypeName)
         {
             InitializeSceneTypes();
@@ -619,14 +670,7 @@ namespace XFramework
                         $"[XSceneManager] Unity scene is already owned. scenePath:{unityScenePath}, owner:{ownerPath}, requester:{xScenePath}.");
                     return false;
                 }
-
-                Scene loadedScene = SceneManager.GetSceneByPath(unityScenePath);
-                if (loadedScene.IsValid() && loadedScene.isLoaded)
-                {
-                    Debug.LogError(
-                        $"[XSceneManager] Unity scene is already loaded outside XSceneManager: {unityScenePath}.");
-                    return false;
-                }
+                // 不再阻止接管已被 Unity 原生加载的启动场景，改在加载循环中处理
             }
 
             foreach (string unityScenePath in xScene.ScenePaths)

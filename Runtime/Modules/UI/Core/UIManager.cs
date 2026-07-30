@@ -135,12 +135,50 @@ namespace XFramework.UI
         
         private GameObject m_TipsPrefab;
 
+        /// <summary>
+        /// 框架自动加载的 UGUI 根节点（含 Canvas 与 EventSystem），生命周期跟随 UIManager。
+        /// </summary>
+        private GameObject m_UGUIRoot;
 
         public UIManager()
         {
             InitPathDic();
             InitTagHandlers();
             ValidatePanelTagHandlers();
+        }
+
+        public override void Initialize()
+        {
+            base.Initialize();
+            EnsureUGUIRoot();
+        }
+
+        /// <summary>
+        /// 从 Resources 加载 UGUI prefab 并挂到 DontDestroyOnLoad 场景下，避免在每个场景中手动放置。
+        /// </summary>
+        private void EnsureUGUIRoot()
+        {
+            var prefab = ResourceManager.Instance.LoadInResources<GameObject>("UGUI");
+            if (prefab == null)
+            {
+                throw new XFrameworkException(
+                    "[UI] Failed to load UGUI prefab from Resources/UGUI. " +
+                    "Please ensure the prefab exists at 'Packages/com.xdedzl.xframework/Resources/UGUI.prefab'.");
+            }
+
+            m_UGUIRoot = GameObject.Instantiate(prefab);
+            m_UGUIRoot.name = "UGUI";
+            var rootTransform = m_UGUIRoot.transform;
+            rootTransform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+            rootTransform.localScale = Vector3.one;
+            GameObject.DontDestroyOnLoad(m_UGUIRoot);
+
+            var canvas = m_UGUIRoot.GetComponentInChildren<Canvas>();
+            if (canvas == null)
+            {
+                throw new XFrameworkException("[UI] UGUI prefab does not contain a Canvas component.");
+            }
+            canvasTransform = canvas.GetComponent<RectTransform>();
         }
 
         public void OpenPanel<TPanel>() where TPanel : PanelBase
@@ -979,6 +1017,13 @@ namespace XFramework.UI
             m_PanelCloseCallbacks.Clear();
             m_Tag2Handler.Clear();
             EntityManager.Instance.RemoveTemplate("ui-tip-entity");
+
+            if (m_UGUIRoot != null)
+            {
+                GameObject.Destroy(m_UGUIRoot);
+                m_UGUIRoot = null;
+                canvasTransform = null;
+            }
         }
 
         #endregion

@@ -129,6 +129,67 @@ namespace XFramework
     }
 
     /// <summary>
+    /// 带 XScene 的并行根流程基类，派生类设置 XScene 资源路径。
+    /// 流程启动时自动加载 XScene，停止时自动卸载。
+    /// </summary>
+    public abstract class SceneParallelProcedureBase : ParallelProcedureBase
+    {
+        /// <summary>
+        /// XScene 资源路径
+        /// </summary>
+        public abstract string XScenePath { get; }
+
+        /// <summary>
+        /// 异步加载 XScene，完成后调用 onReady 以触发 Module/UI 处理
+        /// </summary>
+        public override void OnPrepare(Action onReady)
+        {
+            PrepareXSceneAsync(onReady);
+        }
+
+        private async void PrepareXSceneAsync(Action onReady)
+        {
+            bool loaded = await XSceneManager.LoadSceneAsync(XScenePath);
+            if (!loaded)
+            {
+                UnityEngine.Debug.LogError($"[Procedure] Load XScene failed. procedure:{GetType().Name}, xScenePath:{XScenePath}.");
+                return;
+            }
+
+            if (!ProcedureManager.IsValid || !ProcedureManager.Instance.ContainsParallelProcedure(this))
+            {
+                return;
+            }
+
+            onReady?.Invoke();
+            OnXSceneLoaded();
+        }
+
+        /// <summary>
+        /// 流程停止时卸载关联的 XScene
+        /// </summary>
+        public override void OnExit()
+        {
+            base.OnExit();
+            UnloadXSceneAsync();
+        }
+
+        private async void UnloadXSceneAsync()
+        {
+            if (!XSceneManager.IsSceneLoaded(XScenePath))
+            {
+                return;
+            }
+            await XSceneManager.UnloadSceneAsync(XScenePath);
+        }
+
+        /// <summary>
+        /// XScene 加载完成后调用，此时 Module 和 UI 已经就绪
+        /// </summary>
+        public virtual void OnXSceneLoaded() { }
+    }
+
+    /// <summary>
     /// 声明并行根流程的合成与更新优先级。优先级必须大于 0，且运行期间必须唯一。
     /// </summary>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]

@@ -49,7 +49,7 @@ namespace XFramework
                     return;
                 }
 
-                XAwaitableTask<bool> loadTask = base.LoadSceneAsync(scenePath);
+                XAwaitableTask<bool> loadTask = LoadSceneBySceneManager(scenePath);
                 var loadAwaiter = loadTask.GetAwaiter();
                 if (loadAwaiter.IsCompleted)
                 {

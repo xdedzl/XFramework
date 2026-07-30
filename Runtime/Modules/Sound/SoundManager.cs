@@ -284,6 +284,17 @@ namespace XFramework
 
         public void RefreshBgmVolumes()
         {
+            // 先校验各 Volume 的玩家碰撞体是否仍在其触发范围内，
+            // 用于清理玩家被传送后残留的过期引用（OnTriggerExit 未触发的情况）。
+            for (int i = m_ActiveBgmVolumes.Count - 1; i >= 0; i--)
+            {
+                AreaBgmVolume volume = m_ActiveBgmVolumes[i];
+                if (volume != null)
+                {
+                    volume.ValidatePlayerOverlap();
+                }
+            }
+
             RefreshAreaBgm(true);
         }
 
