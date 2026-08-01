@@ -48,7 +48,7 @@ namespace XFramework.Entity
     /// </summary>
     public readonly struct EntityDebugSnapshot
     {
-        public EntityDebugSnapshot(Entity entity, Entity parent, IReadOnlyList<Entity> children)
+        public EntityDebugSnapshot(Entity entity)
         {
             Entity = entity;
             GameObject = entity != null ? entity.gameObject : null;
@@ -60,9 +60,6 @@ namespace XFramework.Entity
             ActiveSelf = GameObject != null && GameObject.activeSelf;
             ActiveInHierarchy = GameObject != null && GameObject.activeInHierarchy;
             SceneName = GameObject != null && GameObject.scene.IsValid() ? GameObject.scene.name : "<No Scene>";
-            Parent = parent;
-            Children = children ?? Array.Empty<Entity>();
-            ChildCount = Children.Count;
         }
 
         public Entity Entity { get; }
@@ -75,9 +72,6 @@ namespace XFramework.Entity
         public bool ActiveSelf { get; }
         public bool ActiveInHierarchy { get; }
         public string SceneName { get; }
-        public Entity Parent { get; }
-        public IReadOnlyList<Entity> Children { get; }
-        public int ChildCount { get; }
     }
 
     public partial class EntityManager
@@ -108,40 +102,11 @@ namespace XFramework.Entity
                     continue;
                 }
 
-                m_EntityInfoDic.TryGetValue(entity.Id, out EntityInfo info);
-                Entity parent = IsDebugEntityValid(info?.Parent) ? info.Parent : null;
-                IReadOnlyList<Entity> children = GetDebugChildren(info);
-                entities.Add(new EntityDebugSnapshot(entity, parent, children));
+                entities.Add(new EntityDebugSnapshot(entity));
             }
 
             entities.Sort(CompareEntitySnapshots);
             return new EntityManagerDebugSnapshot(containers, entities, m_EntityAliasDic.Count);
-        }
-
-        private IReadOnlyList<Entity> GetDebugChildren(EntityInfo info)
-        {
-            if (info == null)
-            {
-                return Array.Empty<Entity>();
-            }
-
-            Entity[] children = info.GetChilds();
-            if (children.Length == 0)
-            {
-                return Array.Empty<Entity>();
-            }
-
-            var validChildren = new List<Entity>(children.Length);
-            for (int i = 0; i < children.Length; i++)
-            {
-                Entity child = children[i];
-                if (IsDebugEntityValid(child))
-                {
-                    validChildren.Add(child);
-                }
-            }
-
-            return validChildren;
         }
 
         private bool IsDebugEntityValid(Entity entity)

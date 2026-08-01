@@ -43,26 +43,6 @@ namespace XFramework.Entity
         /// </summary>
         public virtual void OnRecycle() { }
         /// <summary>
-        /// 附加子实体
-        /// </summary>
-        /// <param name="childEntity">子实体</param>
-        public virtual void OnAttached(Entity childEntity) { }
-        /// <summary>
-        /// 移除子实体
-        /// </summary>
-        /// <param name="childEntity">子实体</param>
-        public virtual void OnDetached(Entity childEntity) { }
-        /// <summary>
-        /// 附加到别的实体上
-        /// </summary>
-        /// <param name="parentEntity">父实体</param>
-        public virtual void OnAttachTo(Entity parentEntity) { }
-        /// <summary>
-        /// 被别的实体移除
-        /// </summary>
-        /// <param name="parentEntity">父实体</param>
-        public virtual void OnDetachFrom(Entity parentEntity) { }
-        /// <summary>
         /// 轮询
         /// </summary>
         public virtual void OnUpdate() { }
@@ -70,31 +50,6 @@ namespace XFramework.Entity
         /// 释放前，在unity的OnDestroy之前调用
         /// </summary>
         public virtual void OnRelease() { }
-
-        /// <summary>
-        /// 附加实体，将child附加到自身上
-        /// </summary>
-        /// <param name="child">子实体</param>
-        public void Attach(Entity child)
-        {
-            EntityManager.Instance.Attach(child, this);
-        }
-
-        /// <summary>
-        /// 移除实体，将自身从父物体上移除
-        /// </summary>
-        public void Detach()
-        {
-            EntityManager.Instance.Detach(this);
-        }
-
-        /// <summary>
-        /// 移除自身上所有子实体
-        /// </summary>
-        public void DetachChildren()
-        {
-            EntityManager.Instance.DetachChildren(this);
-        }
 
         /// <summary>
         /// 回收

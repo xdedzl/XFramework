@@ -15,7 +15,7 @@ namespace XFramework.Editor
         private const string FilterCurrent = "当前生效";
         private const string FilterActive = "已激活";
         private const string FilterPlayerInside = "玩家在内";
-        private const string FilterNoSettings = "无有效光设置";
+        private const string FilterNoSettings = "无有效设置";
         private const string FilterColliderNotTrigger = "Collider 非 Trigger";
         private const string FilterDisabled = "禁用对象";
 
@@ -211,12 +211,14 @@ namespace XFramework.Editor
             AreaLightVolume selectedVolume = m_SelectedEntry?.Volume;
             m_AllEntries.Clear();
 
-            AreaLightVolume currentVolume;
+            AreaLightVolume currentLightVolume;
+            AreaLightVolume currentEnvironmentVolume;
             HashSet<AreaLightVolume> activeVolumes = new();
 
             if (Application.isPlaying && m_LightSnapshot != null)
             {
-                currentVolume = m_LightSnapshot.Value.CurrentLightVolume;
+                currentLightVolume = m_LightSnapshot.Value.CurrentLightVolume;
+                currentEnvironmentVolume = m_LightSnapshot.Value.CurrentEnvironmentVolume;
                 if (m_LightSnapshot.Value.ActiveLightVolumes != null)
                 {
                     foreach (AreaLightVolume volume in m_LightSnapshot.Value.ActiveLightVolumes)
@@ -231,15 +233,22 @@ namespace XFramework.Editor
             else if (!Application.isPlaying && m_EditModeSnapshot != null)
             {
                 // 编辑模式：摄像机所在的 Volume 作为 current
-                currentVolume = m_EditModeSnapshot.Value.CurrentVolumeAtCamera;
-                if (currentVolume != null)
+                currentLightVolume = m_EditModeSnapshot.Value.CurrentLightVolumeAtCamera;
+                currentEnvironmentVolume = m_EditModeSnapshot.Value.CurrentEnvironmentVolumeAtCamera;
+                if (currentLightVolume != null)
                 {
-                    activeVolumes.Add(currentVolume);
+                    activeVolumes.Add(currentLightVolume);
+                }
+
+                if (currentEnvironmentVolume != null)
+                {
+                    activeVolumes.Add(currentEnvironmentVolume);
                 }
             }
             else
             {
-                currentVolume = null;
+                currentLightVolume = null;
+                currentEnvironmentVolume = null;
             }
 
             foreach (AreaLightVolume volume in Object.FindObjectsByType<AreaLightVolume>(FindObjectsInactive.Include, FindObjectsSortMode.None))
@@ -249,7 +258,11 @@ namespace XFramework.Editor
                     continue;
                 }
 
-                m_AllEntries.Add(VolumeEntry.Create(volume, activeVolumes.Contains(volume), volume == currentVolume));
+                m_AllEntries.Add(VolumeEntry.Create(
+                    volume,
+                    activeVolumes.Contains(volume),
+                    volume == currentLightVolume,
+                    volume == currentEnvironmentVolume));
             }
 
             m_AllEntries.Sort(CompareEntries);
@@ -301,14 +314,17 @@ namespace XFramework.Editor
                 }
 
                 LightVolumeEditorPreview.EditModeSnapshot snapshot = m_EditModeSnapshot.Value;
-                string currentVolume = snapshot.CurrentVolumeAtCamera != null ? snapshot.CurrentVolumeAtCamera.name : "无";
+                string currentLightVolume = snapshot.CurrentLightVolumeAtCamera != null ? snapshot.CurrentLightVolumeAtCamera.name : "无";
+                string currentEnvironmentVolume = snapshot.CurrentEnvironmentVolumeAtCamera != null
+                    ? snapshot.CurrentEnvironmentVolumeAtCamera.name
+                    : "无";
                 string sceneLight = snapshot.HasSceneMainLight ? snapshot.SceneMainLightName : "无";
                 string mode = snapshot.HasSceneMainLight
                     ? (snapshot.IsOverridingSceneLight ? "覆盖全局光" : "等待覆盖")
                     : (snapshot.HasPreviewLight ? "临时光已创建" : "无临时光");
                 m_SummaryLabel.text =
-                    $"Edit Mode | 场景 Volume: {m_AllEntries.Count} | 摄像机所在区域: {currentVolume} | " +
-                    $"场景全局光: {sceneLight} | 模式: {mode}";
+                    $"Edit Mode | 场景 Volume: {m_AllEntries.Count} | 光照区域: {currentLightVolume} | " +
+                    $"环境区域: {currentEnvironmentVolume} | 场景全局光: {sceneLight} | 模式: {mode}";
                 return;
             }
 
@@ -320,10 +336,13 @@ namespace XFramework.Editor
 
             LightVolumeManagerDebugSnapshot snapshot2 = m_LightSnapshot.Value;
             string currentVolume2 = snapshot2.CurrentLightVolume != null ? snapshot2.CurrentLightVolume.name : "无";
+            string currentEnvironmentVolume2 = snapshot2.CurrentEnvironmentVolume != null
+                ? snapshot2.CurrentEnvironmentVolume.name
+                : "无";
             string sceneLight2 = snapshot2.HasSceneMainLight ? snapshot2.SceneMainLightName : "无";
             string managerLight = snapshot2.HasManagerLight ? "已创建" : "无";
             m_SummaryLabel.text =
-                $"Play Mode | 当前区域: {currentVolume2} | 激活区域: {snapshot2.ActiveLightVolumes.Count} | " +
+                $"Play Mode | 光照区域: {currentVolume2} | 环境区域: {currentEnvironmentVolume2} | 激活区域: {snapshot2.ActiveLightVolumes.Count} | " +
                 $"场景全局光: {sceneLight2} | Manager临时光: {managerLight}";
         }
 
@@ -380,7 +399,11 @@ namespace XFramework.Editor
                 section.Add(CreateInfoRow("场景全局光", snapshot.HasSceneMainLight ? snapshot.SceneMainLightName : "无"));
                 section.Add(CreateInfoRow("正在覆盖", FormatBool(snapshot.IsOverridingSceneLight)));
                 section.Add(CreateInfoRow("临时光", snapshot.HasPreviewLight ? "已创建" : "无"));
-                section.Add(CreateInfoRow("摄像机所在 Volume", snapshot.CurrentVolumeAtCamera != null ? snapshot.CurrentVolumeAtCamera.name : "无"));
+                section.Add(CreateInfoRow("当前光照 Volume", snapshot.CurrentLightVolumeAtCamera != null ? snapshot.CurrentLightVolumeAtCamera.name : "无"));
+                section.Add(CreateInfoRow("当前环境 Volume", snapshot.CurrentEnvironmentVolumeAtCamera != null ? snapshot.CurrentEnvironmentVolumeAtCamera.name : "无"));
+                section.Add(CreateInfoRow("环境覆盖", FormatBool(snapshot.IsOverridingEnvironment)));
+                section.Add(CreateInfoRow("环境预览模式", snapshot.EnvironmentPreviewMode));
+                section.Add(CreateInfoRow("原始天空盒", snapshot.OriginalSkybox != null ? snapshot.OriginalSkybox.name : "无"));
 
                 if (snapshot.OriginalSettings != null)
                 {
@@ -399,10 +422,20 @@ namespace XFramework.Editor
             }
 
             LightVolumeManagerDebugSnapshot snapshot2 = m_LightSnapshot.Value;
-            section.Add(CreateInfoRow("当前区域", snapshot2.CurrentLightVolume != null ? snapshot2.CurrentLightVolume.name : "无"));
+            section.Add(CreateInfoRow("当前光照 Volume", snapshot2.CurrentLightVolume != null ? snapshot2.CurrentLightVolume.name : "无"));
+            section.Add(CreateInfoRow("当前环境 Volume", snapshot2.CurrentEnvironmentVolume != null ? snapshot2.CurrentEnvironmentVolume.name : "无"));
             section.Add(CreateInfoRow("激活区域数", snapshot2.ActiveLightVolumes.Count.ToString()));
             section.Add(CreateInfoRow("场景全局光", snapshot2.HasSceneMainLight ? snapshot2.SceneMainLightName : "无"));
             section.Add(CreateInfoRow("Manager临时光", snapshot2.HasManagerLight ? "已创建" : "无"));
+            section.Add(CreateInfoRow("主相机", snapshot2.HasMainCamera ? snapshot2.MainCameraName : "无"));
+            section.Add(CreateInfoRow("环境覆盖", FormatBool(snapshot2.IsOverridingEnvironment)));
+
+            if (snapshot2.IsOverridingEnvironment)
+            {
+                section.Add(CreateInfoRow("  原始背景类型", snapshot2.OriginalCameraClearFlags.ToString()));
+                section.Add(CreateInfoRow("  原始背景颜色", $"#{ColorUtility.ToHtmlStringRGBA(snapshot2.OriginalCameraBackgroundColor)}"));
+                section.Add(CreateInfoRow("  原始天空盒", snapshot2.OriginalSkybox != null ? snapshot2.OriginalSkybox.name : "无"));
+            }
 
             if (snapshot2.OriginalSettings != null)
             {
@@ -425,8 +458,12 @@ namespace XFramework.Editor
             section.Add(CreateInfoRow("场景", entry.SceneName));
             section.Add(CreateInfoRow("优先级", snapshot.Priority.ToString()));
             section.Add(CreateInfoRow("玩家碰撞体数", snapshot.PlayerColliderCount.ToString()));
+            section.Add(CreateInfoRow("覆盖全局光照", FormatBool(volume.OverrideLightSettings)));
             section.Add(CreateInfoRow("有效光设置", FormatBool(snapshot.HasLightSettings)));
-            section.Add(CreateInfoRow("是当前生效", FormatBool(entry.IsCurrent)));
+            section.Add(CreateInfoRow("覆盖相机环境", FormatBool(volume.OverrideEnvironmentSettings)));
+            section.Add(CreateInfoRow("有效环境设置", FormatBool(snapshot.HasCameraEnvironmentSettings)));
+            section.Add(CreateInfoRow("当前光照", FormatBool(entry.IsCurrentLight)));
+            section.Add(CreateInfoRow("当前环境", FormatBool(entry.IsCurrentEnvironment)));
             section.Add(CreateInfoRow("已激活", FormatBool(entry.IsActive)));
             section.Add(CreateInfoRow("启用", FormatBool(volume.isActiveAndEnabled)));
 
@@ -445,6 +482,27 @@ namespace XFramework.Editor
                 section.Add(CreateInfoRow("  EulerAngles", settings.EulerAngles.ToString("0.0"), 130));
                 section.Add(CreateInfoRow("  ShadowType", settings.ShadowType.ToString(), 130));
                 section.Add(CreateInfoRow("  ShadowStrength", settings.ShadowStrength.ToString("0.00"), 130));
+            }
+
+            CameraEnvironmentSettings environmentSettings = volume.CameraEnvironmentSettings;
+            if (environmentSettings != null)
+            {
+                section.Add(CreateInfoRow("环境设置", string.Empty, marginBottom: 4));
+                section.Add(CreateInfoRow("  BackgroundType", environmentSettings.BackgroundType.ToString(), 130));
+                if (environmentSettings.BackgroundType == CameraEnvironmentBackgroundType.Skybox)
+                {
+                    section.Add(CreateInfoRow(
+                        "  Skybox",
+                        environmentSettings.SkyboxMaterial != null ? environmentSettings.SkyboxMaterial.name : "无",
+                        130));
+                }
+                else
+                {
+                    section.Add(CreateInfoRow(
+                        "  BackgroundColor",
+                        $"#{ColorUtility.ToHtmlStringRGBA(environmentSettings.BackgroundColor)}",
+                        130));
+                }
             }
 
             return section;
@@ -495,7 +553,7 @@ namespace XFramework.Editor
 
             if (filter == FilterCurrent)
             {
-                return entry.IsCurrent;
+                return entry.IsCurrentLight || entry.IsCurrentEnvironment;
             }
 
             if (filter == FilterActive)
@@ -510,7 +568,7 @@ namespace XFramework.Editor
 
             if (filter == FilterNoSettings)
             {
-                return !entry.HasLightSettings;
+                return !entry.HasLightSettings && !entry.HasEnvironmentSettings;
             }
 
             if (filter == FilterColliderNotTrigger)
@@ -567,8 +625,12 @@ namespace XFramework.Editor
         {
             VolumeEntry entry = m_FilteredEntries[index];
 
-            element.Q<Label>("status").text = entry.IsCurrent ? "● 当前" : entry.IsActive ? "○ 激活" : entry.IsEnabled ? "  " : "  禁用";
-            element.Q<Label>("status").style.color = entry.IsCurrent ? new Color(0.30f, 0.85f, 0.46f) : entry.IsActive ? new Color(0.55f, 0.75f, 1f) : new Color(0.6f, 0.6f, 0.6f);
+            element.Q<Label>("status").text = GetStatusText(entry);
+            element.Q<Label>("status").style.color = entry.IsCurrentLight || entry.IsCurrentEnvironment
+                ? new Color(0.30f, 0.85f, 0.46f)
+                : entry.IsActive
+                    ? new Color(0.55f, 0.75f, 1f)
+                    : new Color(0.6f, 0.6f, 0.6f);
 
             element.Q<Label>("name").text = entry.VolumeName;
             element.Q<Label>("prio").text = entry.Priority.ToString();
@@ -576,6 +638,26 @@ namespace XFramework.Editor
             element.Q<Label>("enabled").text = entry.IsEnabled ? "✓" : "✗";
             element.Q<Label>("trigger").text = entry.HasCollider ? (entry.IsTrigger ? "✓" : "✗") : "无";
             element.Q<Label>("scene").text = entry.SceneName;
+        }
+
+        private static string GetStatusText(VolumeEntry entry)
+        {
+            if (entry.IsCurrentLight && entry.IsCurrentEnvironment)
+            {
+                return "● 光+环境";
+            }
+
+            if (entry.IsCurrentLight)
+            {
+                return "● 光照";
+            }
+
+            if (entry.IsCurrentEnvironment)
+            {
+                return "● 环境";
+            }
+
+            return entry.IsActive ? "○ 激活" : entry.IsEnabled ? "  " : "  禁用";
         }
 
         private class VolumeEntry
@@ -586,13 +668,19 @@ namespace XFramework.Editor
             public int Priority { get; private set; }
             public int PlayerColliderCount { get; private set; }
             public bool HasLightSettings { get; private set; }
-            public bool IsCurrent { get; private set; }
+            public bool HasEnvironmentSettings { get; private set; }
+            public bool IsCurrentLight { get; private set; }
+            public bool IsCurrentEnvironment { get; private set; }
             public bool IsActive { get; private set; }
             public bool IsEnabled { get; private set; }
             public bool HasCollider { get; private set; }
             public bool IsTrigger { get; private set; }
 
-            public static VolumeEntry Create(AreaLightVolume volume, bool isActive, bool isCurrent)
+            public static VolumeEntry Create(
+                AreaLightVolume volume,
+                bool isActive,
+                bool isCurrentLight,
+                bool isCurrentEnvironment)
             {
                 AreaLightVolumeDebugSnapshot snapshot = volume.GetDebugSnapshot();
                 Collider collider = volume.GetComponent<Collider>();
@@ -605,7 +693,9 @@ namespace XFramework.Editor
                     Priority = snapshot.Priority,
                     PlayerColliderCount = snapshot.PlayerColliderCount,
                     HasLightSettings = snapshot.HasLightSettings,
-                    IsCurrent = isCurrent,
+                    HasEnvironmentSettings = snapshot.HasCameraEnvironmentSettings,
+                    IsCurrentLight = isCurrentLight,
+                    IsCurrentEnvironment = isCurrentEnvironment,
                     IsActive = isActive,
                     IsEnabled = volume.isActiveAndEnabled,
                     HasCollider = collider != null,

@@ -176,7 +176,6 @@ namespace XFramework.Editor
             header.Add(CreateHeaderLabel("类型", 160f));
             header.Add(CreateHeaderLabel("Alias", 130f));
             header.Add(CreateHeaderLabel("对象", 180f));
-            header.Add(CreateHeaderLabel("子数", 48f));
 
             Label scene = CreateHeaderLabel("场景", 0f);
             scene.style.flexGrow = 1f;
@@ -401,7 +400,6 @@ namespace XFramework.Editor
             row.Add(CreateCellLabel("type", 160f, flexShrink: true));
             row.Add(CreateCellLabel("alias", 130f, flexShrink: true));
             row.Add(CreateCellLabel("name", 180f, flexShrink: true));
-            row.Add(CreateCellLabel("children", 48f, flexShrink: true));
 
             Label scene = CreateCellLabel("scene", 0f, flexShrink: true);
             scene.style.flexGrow = 1f;
@@ -429,7 +427,6 @@ namespace XFramework.Editor
             element.Q<Label>("type").text = entry.EntityType != null ? entry.EntityType.Name : "-";
             element.Q<Label>("alias").text = FormatEmpty(entry.Alias);
             element.Q<Label>("name").text = FormatEmpty(entry.Name);
-            element.Q<Label>("children").text = entry.ChildCount.ToString();
             element.Q<Label>("scene").text = FormatEmpty(entry.SceneName);
         }
 
@@ -549,7 +546,6 @@ namespace XFramework.Editor
             parent.Add(BuildObjectSection(entry));
             parent.Add(BuildIdentitySection(entry));
             parent.Add(BuildTransformSection(entry));
-            parent.Add(BuildRelationSection(entry));
         }
 
         private VisualElement BuildContainerActionSection(EntityContainerDebugSnapshot container)
@@ -677,32 +673,6 @@ namespace XFramework.Editor
             return section;
         }
 
-        private VisualElement BuildRelationSection(EntityDebugSnapshot entry)
-        {
-            VisualElement section = CreateSection("Relations", marginBottom: 12f);
-            section.Add(CreateEntityInfoRow("ChildCount", entry.ChildCount.ToString()));
-            section.Add(CreateEntityReferenceRow("Parent", entry.Parent));
-
-            if (entry.Children == null || entry.Children.Count == 0)
-            {
-                section.Add(CreateEntityInfoRow("Children", "无"));
-                return section;
-            }
-
-            Label title = new("Children");
-            title.style.marginTop = 8f;
-            title.style.marginBottom = 4f;
-            title.style.unityFontStyleAndWeight = FontStyle.Bold;
-            section.Add(title);
-
-            for (int i = 0; i < entry.Children.Count; i++)
-            {
-                section.Add(CreateEntityReferenceRow($"[{i}]", entry.Children[i]));
-            }
-
-            return section;
-        }
-
         private void SelectEntityFromContainerPreview(string entityId)
         {
             if (string.IsNullOrEmpty(entityId) || !TryFindEntry(m_AllEntries, entityId, out EntityDebugSnapshot entry))
@@ -742,67 +712,6 @@ namespace XFramework.Editor
             field.style.flexGrow = 1f;
             field.style.minWidth = 0f;
             return CreateInspectorFieldRow(labelText, field);
-        }
-
-        private VisualElement CreateEntityReferenceRow(string labelText, EntityComponent entity)
-        {
-            VisualElement row = new()
-            {
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    alignItems = Align.Center,
-                    minHeight = 24f,
-                    marginTop = 2f,
-                    marginBottom = 2f
-                }
-            };
-
-            Label label = new(labelText);
-            label.style.width = 112f;
-            label.style.flexShrink = 0f;
-            label.style.color = new Color(0.72f, 0.72f, 0.72f);
-            row.Add(label);
-
-            ObjectField field = new()
-            {
-                objectType = typeof(EntityComponent),
-                value = entity,
-                allowSceneObjects = true
-            };
-            field.SetEnabled(false);
-            field.style.flexGrow = 1f;
-            field.style.minWidth = 0f;
-            row.Add(field);
-
-            Button selectButton = new(() => SelectObject(entity != null ? entity.gameObject : null))
-            {
-                text = "选中"
-            };
-            selectButton.style.width = 54f;
-            selectButton.style.marginLeft = 6f;
-            selectButton.SetEnabled(entity != null);
-            row.Add(selectButton);
-
-            Button pingButton = new(() => PingObject(entity != null ? entity.gameObject : null))
-            {
-                text = "Ping"
-            };
-            pingButton.style.width = 54f;
-            pingButton.style.marginLeft = 4f;
-            pingButton.SetEnabled(entity != null);
-            row.Add(pingButton);
-
-            Button copyButton = new(() => CopyToClipboard(entity != null ? entity.Id : string.Empty))
-            {
-                text = "复制Id"
-            };
-            copyButton.style.width = 64f;
-            copyButton.style.marginLeft = 4f;
-            copyButton.SetEnabled(entity != null && !string.IsNullOrEmpty(entity.Id));
-            row.Add(copyButton);
-
-            return row;
         }
 
         private static VisualElement CreateInspectorFieldRow(string labelText, VisualElement field)

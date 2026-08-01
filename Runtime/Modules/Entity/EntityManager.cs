@@ -28,10 +28,6 @@ namespace XFramework.Entity
         /// 存储所有在使用的实体别名字典
         /// </summary>
         private readonly Dictionary<string, Entity> m_EntityAliasDic = new();
-        /// <summary>
-        /// 存储实体父子关系的字典(从实际经验看大多数entity都不需要attach/detach,所以不直接存在Entity中)
-        /// </summary>
-        private readonly Dictionary<string, EntityInfo> m_EntityInfoDic = new();
 
         #region 增删改
 
@@ -112,7 +108,6 @@ namespace XFramework.Entity
                     foreach (var item in entities)
                     {
                         m_EntityDic.Remove(item.Id);
-                        m_EntityInfoDic.Remove(item.Id);
                         UnregisterEntityAlias(item);
                         UnityEngine.Object.Destroy(item.gameObject);
                     }
@@ -301,8 +296,6 @@ namespace XFramework.Entity
                 EntityContainer container = GetContainer(entity.ContainerName);
                 if (container != null)
                 {
-                    Detach(entity);
-                    m_EntityInfoDic.Remove(entity.Id);
                     m_EntityDic.Remove(entity.Id);
                     UnregisterEntityAlias(entity);
                     return container.Recycle(entity);
@@ -356,57 +349,6 @@ namespace XFramework.Entity
             }
         }
 
-
-        /// <summary>
-        /// 附加实体，将child附加到parent上
-        /// </summary>
-        /// <param name="child">子实体</param>
-        /// <param name="parent">父实体</param>
-        public void Attach(Entity child, Entity parent)
-        {
-            EntityInfo childInfo = GetEntityInfo(child);
-            EntityInfo parentInfo = GetEntityInfo(parent);
-
-            childInfo.Parent = parent;
-            parentInfo.AddChild(child);
-
-            child.OnAttachTo(parent);
-            parent.OnAttached(child);
-        }
-
-        /// <summary>
-        /// 移除实体，将child从它的父物体上移除
-        /// </summary>
-        /// <param name="child">子实体</param>
-        public void Detach(Entity child)
-        {
-            EntityInfo childInfo = GetEntityInfo(child);
-
-            if (childInfo.Parent != null)
-            {
-                childInfo.Parent.OnDetached(child);
-                child.OnDetachFrom(childInfo.Parent);
-                childInfo.Parent = null;
-            }
-        }
-
-        /// <summary>
-        /// 移除父实体上的所有子实体
-        /// </summary>
-        /// <param name="parent">父实体</param>
-        public void DetachChildren(Entity parent)
-        {
-            EntityInfo parentInfo = GetEntityInfo(parent);
-
-            if (parent != null)
-            {
-                foreach (var item in parentInfo.GetChilds())
-                {
-                    Detach(item);
-                }
-                m_EntityInfoDic.Remove(parent.Id);
-            }
-        }
 
         #endregion
 
@@ -582,73 +524,6 @@ namespace XFramework.Entity
             return GetContainer(entityName).GetEntities();
         }
 
-        /// <summary>
-        /// 获取一个实体的父子关系
-        /// </summary>
-        /// <param name="entity"></param>
-        /// <returns></returns>
-        private EntityInfo GetEntityInfo(Entity entity)
-        {
-            return GetEntityInfo(entity.Id);
-        }
-
-        private EntityInfo GetEntityInfo(string entityId)
-        {
-            if (m_EntityInfoDic.TryGetValue(entityId, out EntityInfo entityInfo))
-            {
-                return entityInfo;
-            }
-            else
-            {
-                EntityInfo info = new EntityInfo(GetEntity(entityId));
-                m_EntityInfoDic.Add(entityId, info);
-                return info;
-            }
-        }
-        
-        /// <summary>
-        /// 获取一个实体的子实体
-        /// </summary>
-        /// <param name="entityId">父实体编号</param>
-        /// <param name="index">子实体索引</param>
-        /// <returns>子实体</returns>
-        public Entity GetChildEntity(string entityId, int index)
-        {
-            Entity entity = GetEntity(entityId);
-            return GetChildEntity(entity, index);
-        }
-
-        /// <summary>
-        /// 获取一个实体的子实体
-        /// </summary>
-        /// <param name="entity">父实体</param>
-        /// <param name="index">子实体索引</param>
-        /// <returns>子实体</returns>
-        public Entity GetChildEntity(Entity entity, int index)
-        {
-            return GetEntityInfo(entity)[index];
-        }
-
-        /// <summary>
-        /// 获取一个实体的父实体
-        /// </summary>
-        /// <param name="entityId">子实体编号</param>
-        /// <returns>父实体</returns>
-        public Entity GetParentEntity(string entityId)
-        {
-            return GetEntityInfo(entityId).Parent;
-        }
-
-        /// <summary>
-        /// 获取一个实体的父实体
-        /// </summary>
-        /// <param name="entity">子实体</param>
-        /// <returns>父实体</returns>
-        public Entity GetParentEntity(Entity entity)
-        {
-            return GetParentEntity(entity.Id);
-        }
-
         #endregion
 
         #region 池的清理
@@ -694,7 +569,6 @@ namespace XFramework.Entity
             m_EntityContainerDic.Clear();
             m_EntityDic.Clear();
             m_EntityAliasDic.Clear();
-            m_EntityInfoDic.Clear();
         }
 
         public override void Update()

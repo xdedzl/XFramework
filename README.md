@@ -278,13 +278,13 @@ ResourceManager.Instance.Release(bullet);
 - 当 AssetBundle 的引用计数归零时，框架会自动调用 `Unload(true)`。
 
 ### 3.2 实体与对象池 (EntityManager)
-为角色、怪物、子弹等提供池化管理与复杂的逻辑层级维护。
+为角色、怪物、子弹等提供基于 `GameObject` 的实体分配、回收与池化管理。
 - **分配/回收**：
   ```csharp
   var enemy = EntityManager.Instance.Allocate<EnemyEntity>(enemyPrefab);
   EntityManager.Instance.Recycle(enemy); // 必须回收，不可 Destroy
   ```
-- **层级管理**：使用 `Attach()` / `Detach()` 控制逻辑父子级关系（如将武器 Entity 附着在角色 Entity 的特定部位上）。
+- **职责边界**：`EntityManager` 不维护 Entity 之间的逻辑父子关系。GameObject 的表现层级直接使用 `Transform` 或业务挂点系统；需要独立于模型存在的逻辑实体关系，应由游戏逻辑层的数据系统维护。
 
 ### 3.3 UI 界面系统 (UIManager)
 基于自动化特性的纯 C# 界面管理。

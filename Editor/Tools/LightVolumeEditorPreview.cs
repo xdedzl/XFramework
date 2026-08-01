@@ -1,16 +1,15 @@
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
 using XFramework;
 
 namespace XFramework.Editor
 {
     /// <summary>
-    /// 编辑器预览光管理器。遵循与运行时 <see cref="LightVolumeManager"/> 相同的双模式逻辑：
-    /// 1. 场景没有全局方向光时：摄像机进入 Volume → 创建临时光并应用 Volume 参数；离开 → 删除临时光
-    /// 2. 场景有全局方向光时：摄像机进入 Volume → 覆盖全局光参数；离开 → 恢复原始参数
-    /// 场景保存前自动恢复原始参数，避免误保存覆盖后的值。
+    /// 编辑器预览光与相机环境管理器。方向光和相机环境分别按优先级选取当前 Volume，
+    /// 场景保存、关闭以及切换 Play Mode 前恢复被预览覆盖的状态。
     /// </summary>
     [InitializeOnLoad]
     internal static class LightVolumeEditorPreview
@@ -21,11 +20,20 @@ namespace XFramework.Editor
         private static DirectionalLightSettings s_SceneOriginalSettings;
         private static Light s_PreviewLight;
         private static bool s_IsOverridingSceneLight;
-        private static AreaLightVolume s_CurrentVolumeAtCamera;
+        private static AreaLightVolume s_CurrentLightVolumeAtCamera;
 
-        /// <summary>
-        /// 编辑模式预览状态快照，供 Debug 窗口查询。
-        /// </summary>
+        private static AreaLightVolume s_CurrentEnvironmentVolumeAtCamera;
+        private static SceneView s_EnvironmentSceneView;
+        private static Material s_OriginalSkybox;
+        private static bool s_OriginalSceneViewSkyboxEnabled;
+        private static bool s_IsOverridingEnvironment;
+
+#if UNITY_6000_0_OR_NEWER
+        private static Camera s_RenderingSceneViewCamera;
+        private static CameraClearFlags s_RenderingOriginalClearFlags;
+        private static Color s_RenderingOriginalBackgroundColor;
+#endif
+
         public readonly struct EditModeSnapshot
         {
             public EditModeSnapshot(
@@ -33,28 +41,39 @@ namespace XFramework.Editor
                 string sceneMainLightName,
                 bool isOverridingSceneLight,
                 bool hasPreviewLight,
-                AreaLightVolume currentVolumeAtCamera,
-                DirectionalLightSettings originalSettings)
+                AreaLightVolume currentLightVolumeAtCamera,
+                DirectionalLightSettings originalSettings,
+                AreaLightVolume currentEnvironmentVolumeAtCamera,
+                bool isOverridingEnvironment,
+                string environmentPreviewMode,
+                Material originalSkybox)
             {
                 HasSceneMainLight = hasSceneMainLight;
                 SceneMainLightName = sceneMainLightName;
                 IsOverridingSceneLight = isOverridingSceneLight;
                 HasPreviewLight = hasPreviewLight;
-                CurrentVolumeAtCamera = currentVolumeAtCamera;
+                CurrentLightVolumeAtCamera = currentLightVolumeAtCamera;
                 OriginalSettings = originalSettings;
+                CurrentEnvironmentVolumeAtCamera = currentEnvironmentVolumeAtCamera;
+                IsOverridingEnvironment = isOverridingEnvironment;
+                EnvironmentPreviewMode = environmentPreviewMode;
+                OriginalSkybox = originalSkybox;
             }
 
             public bool HasSceneMainLight { get; }
             public string SceneMainLightName { get; }
             public bool IsOverridingSceneLight { get; }
             public bool HasPreviewLight { get; }
-            public AreaLightVolume CurrentVolumeAtCamera { get; }
+            public AreaLightVolume CurrentLightVolumeAtCamera { get; }
             public DirectionalLightSettings OriginalSettings { get; }
+            public AreaLightVolume CurrentEnvironmentVolumeAtCamera { get; }
+            public bool IsOverridingEnvironment { get; }
+            public string EnvironmentPreviewMode { get; }
+            public Material OriginalSkybox { get; }
         }
 
         static LightVolumeEditorPreview()
         {
-            // 编译/域重载后静态字段被清空，但场景里可能残留上一轮创建的预览光对象，先清理
             CleanupOrphanPreviewLights();
 
             EditorSceneManager.sceneOpened += OnSceneOpened;
@@ -64,13 +83,14 @@ namespace XFramework.Editor
             SceneManager.sceneUnloaded += OnSceneUnloadedRuntime;
             EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
             EditorApplication.update += OnEditorUpdate;
-            Selection.selectionChanged += OnSelectionChanged;
+            AssemblyReloadEvents.beforeAssemblyReload += RestorePreviewState;
+
+#if UNITY_6000_0_OR_NEWER
+            RenderPipelineManager.beginCameraRendering += OnBeginCameraRendering;
+            RenderPipelineManager.endCameraRendering += OnEndCameraRendering;
+#endif
         }
 
-        /// <summary>
-        /// 清理场景中所有同名的孤儿预览光对象。
-        /// 用于编译/域重载后静态引用丢失的情况。
-        /// </summary>
         private static void CleanupOrphanPreviewLights()
         {
             Light[] lights = Object.FindObjectsByType<Light>(FindObjectsInactive.Include, FindObjectsSortMode.None);
@@ -87,7 +107,7 @@ namespace XFramework.Editor
 
             if (foundOrphan)
             {
-                InvalidateSceneMainLight();
+                InvalidatePreviewState();
             }
         }
 
@@ -95,22 +115,23 @@ namespace XFramework.Editor
         {
             EditorApplication.delayCall += () =>
             {
-                InvalidateSceneMainLight();
+                RestorePreviewState();
+                InvalidatePreviewState();
                 UpdatePreviewBySceneCamera();
             };
         }
 
         private static void OnSceneClosing(Scene scene, bool removingScene)
         {
-            RestoreSceneLight();
-            DestroyPreviewLight();
-            InvalidateSceneMainLight();
+            RestorePreviewState();
+            InvalidatePreviewState();
         }
 
         private static void OnSceneSaving(Scene scene, string path)
         {
-            // 保存前恢复场景主光，避免覆盖值写入场景文件
-            RestoreSceneLight();
+            RestorePreviewState();
+            s_CurrentLightVolumeAtCamera = null;
+            s_CurrentEnvironmentVolumeAtCamera = null;
         }
 
         private static void OnSceneLoadedRuntime(Scene scene, LoadSceneMode mode)
@@ -119,7 +140,8 @@ namespace XFramework.Editor
             {
                 EditorApplication.delayCall += () =>
                 {
-                    InvalidateSceneMainLight();
+                    RestorePreviewState();
+                    InvalidatePreviewState();
                     UpdatePreviewBySceneCamera();
                 };
             }
@@ -131,7 +153,8 @@ namespace XFramework.Editor
             {
                 EditorApplication.delayCall += () =>
                 {
-                    InvalidateSceneMainLight();
+                    RestorePreviewState();
+                    InvalidatePreviewState();
                     UpdatePreviewBySceneCamera();
                 };
             }
@@ -141,9 +164,8 @@ namespace XFramework.Editor
         {
             if (state == PlayModeStateChange.ExitingEditMode)
             {
-                RestoreSceneLight();
-                DestroyPreviewLight();
-                InvalidateSceneMainLight();
+                RestorePreviewState();
+                InvalidatePreviewState();
             }
             else if (state == PlayModeStateChange.EnteredEditMode)
             {
@@ -153,16 +175,10 @@ namespace XFramework.Editor
 
         private static void OnEditorUpdate()
         {
-            if (EditorApplication.isPlaying)
+            if (!EditorApplication.isPlaying)
             {
-                return;
+                UpdatePreviewBySceneCamera();
             }
-
-            UpdatePreviewBySceneCamera();
-        }
-
-        private static void OnSelectionChanged()
-        {
         }
 
         [MenuItem("TheWar/Tools/Rendering/Refresh Light Volume Preview", false, 1200)]
@@ -171,11 +187,6 @@ namespace XFramework.Editor
             UpdatePreviewBySceneCamera();
         }
 
-        /// <summary>
-        /// 根据 Scene 摄像机位置更新预览光，双模式：
-        /// - 场景有全局光：进入 Volume 覆盖参数，离开恢复
-        /// - 场景没有全局光：进入 Volume 创建临时光，离开删除
-        /// </summary>
         private static void UpdatePreviewBySceneCamera()
         {
             if (EditorApplication.isPlaying)
@@ -183,49 +194,34 @@ namespace XFramework.Editor
                 return;
             }
 
+            SceneView sceneView = SceneView.lastActiveSceneView;
+            if (sceneView == null || sceneView.camera == null)
+            {
+                return;
+            }
+
             ResolveSceneMainLight();
 
-            Vector3? cameraPos = GetSceneCameraPosition();
-            if (!cameraPos.HasValue)
+            Vector3 cameraPosition = sceneView.camera.transform.position;
+            AreaLightVolume lightVolume = FindVolumeContainingPoint(cameraPosition, false);
+            AreaLightVolume environmentVolume = FindVolumeContainingPoint(cameraPosition, true);
+
+            if (lightVolume != s_CurrentLightVolumeAtCamera)
             {
-                return;
+                RestoreSceneLight();
+                DestroyPreviewLight();
+                s_CurrentLightVolumeAtCamera = lightVolume;
+                ApplyLightPreview(lightVolume);
             }
 
-            AreaLightVolume volumeAtCamera = FindVolumeContainingPoint(cameraPos.Value);
-
-            // 如果当前生效的 Volume 没变，不做任何操作
-            if (volumeAtCamera == s_CurrentVolumeAtCamera)
+            if (environmentVolume != s_CurrentEnvironmentVolumeAtCamera || sceneView != s_EnvironmentSceneView)
             {
-                return;
-            }
-
-            // 切换：先恢复上一个 Volume 和场景主光
-            RestoreSceneLight();
-            DestroyPreviewLight();
-            s_CurrentVolumeAtCamera = volumeAtCamera;
-
-            // 启用新 Volume
-            if (volumeAtCamera != null)
-            {
-                if (s_SceneMainLight != null)
-                {
-                    // 场景有全局光，覆盖参数
-                    EnsureSceneOriginalSettings();
-                    volumeAtCamera.LightSettings.ApplyTo(s_SceneMainLight);
-                    s_IsOverridingSceneLight = true;
-                }
-                else
-                {
-                    // 场景没有全局光，创建临时光并应用参数
-                    EnsurePreviewLight();
-                    volumeAtCamera.LightSettings.ApplyTo(s_PreviewLight);
-                }
+                RestoreEnvironmentPreview();
+                s_CurrentEnvironmentVolumeAtCamera = environmentVolume;
+                ApplyEnvironmentPreview(environmentVolume, sceneView);
             }
         }
 
-        /// <summary>
-        /// 获取编辑模式预览状态快照，供 Debug 窗口查询。
-        /// </summary>
         public static EditModeSnapshot GetEditModeSnapshot()
         {
             return new EditModeSnapshot(
@@ -233,20 +229,59 @@ namespace XFramework.Editor
                 s_SceneMainLight != null ? s_SceneMainLight.name : "<None>",
                 s_IsOverridingSceneLight,
                 s_PreviewLight != null,
-                s_CurrentVolumeAtCamera,
-                s_SceneOriginalSettings);
+                s_CurrentLightVolumeAtCamera,
+                s_SceneOriginalSettings,
+                s_CurrentEnvironmentVolumeAtCamera,
+                s_IsOverridingEnvironment,
+                GetEnvironmentPreviewMode(),
+                s_OriginalSkybox);
         }
 
-        /// <summary>
-        /// 通知某个 Volume 的光设置发生变化。如果该 Volume 正在预览中，立即重新应用参数。
-        /// </summary>
         internal static void NotifyVolumeSettingsChanged(AreaLightVolume volume)
         {
-            if (volume == null || s_CurrentVolumeAtCamera != volume)
+            if (volume == null)
             {
                 return;
             }
 
+            bool wasCurrentEnvironment = s_CurrentEnvironmentVolumeAtCamera == volume;
+            UpdatePreviewBySceneCamera();
+
+            if (s_CurrentLightVolumeAtCamera == volume)
+            {
+                ApplyCurrentLightSettings(volume);
+            }
+
+            if (wasCurrentEnvironment && s_CurrentEnvironmentVolumeAtCamera == volume)
+            {
+                SceneView sceneView = s_EnvironmentSceneView;
+                RestoreEnvironmentPreview();
+                ApplyEnvironmentPreview(volume, sceneView);
+            }
+        }
+
+        private static void ApplyLightPreview(AreaLightVolume volume)
+        {
+            if (volume == null)
+            {
+                return;
+            }
+
+            if (s_SceneMainLight != null)
+            {
+                EnsureSceneOriginalSettings();
+                volume.LightSettings.ApplyTo(s_SceneMainLight);
+                s_IsOverridingSceneLight = true;
+            }
+            else
+            {
+                EnsurePreviewLight();
+                volume.LightSettings.ApplyTo(s_PreviewLight);
+            }
+        }
+
+        private static void ApplyCurrentLightSettings(AreaLightVolume volume)
+        {
             if (s_SceneMainLight != null && s_IsOverridingSceneLight)
             {
                 volume.LightSettings.ApplyTo(s_SceneMainLight);
@@ -257,6 +292,84 @@ namespace XFramework.Editor
             }
         }
 
+        private static void ApplyEnvironmentPreview(AreaLightVolume volume, SceneView sceneView)
+        {
+            if (volume == null || sceneView == null)
+            {
+                return;
+            }
+
+            CameraEnvironmentSettings settings = volume.CameraEnvironmentSettings;
+            s_EnvironmentSceneView = sceneView;
+            s_OriginalSkybox = RenderSettings.skybox;
+            s_OriginalSceneViewSkyboxEnabled = sceneView.sceneViewState.showSkybox;
+            s_IsOverridingEnvironment = true;
+
+            bool useSkybox = settings.BackgroundType == CameraEnvironmentBackgroundType.Skybox;
+            sceneView.sceneViewState.showSkybox = useSkybox;
+            SetSkybox(useSkybox ? settings.SkyboxMaterial : s_OriginalSkybox);
+            SceneView.RepaintAll();
+        }
+
+        private static void RestorePreviewState()
+        {
+            RestoreEnvironmentPreview();
+            RestoreSceneLight();
+            DestroyPreviewLight();
+        }
+
+        private static void RestoreEnvironmentPreview()
+        {
+            if (!s_IsOverridingEnvironment)
+            {
+                return;
+            }
+
+            if (s_EnvironmentSceneView != null)
+            {
+                s_EnvironmentSceneView.sceneViewState.showSkybox = s_OriginalSceneViewSkyboxEnabled;
+            }
+
+            SetSkybox(s_OriginalSkybox);
+            s_EnvironmentSceneView = null;
+            s_OriginalSkybox = null;
+            s_IsOverridingEnvironment = false;
+            SceneView.RepaintAll();
+        }
+
+        private static AreaLightVolume FindVolumeContainingPoint(Vector3 point, bool environment)
+        {
+            AreaLightVolume bestVolume = null;
+            int bestPriority = int.MinValue;
+
+            AreaLightVolume[] volumes = Object.FindObjectsByType<AreaLightVolume>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            for (int i = 0; i < volumes.Length; i++)
+            {
+                AreaLightVolume volume = volumes[i];
+                bool hasSettings = environment ? volume.HasCameraEnvironmentSettings : volume.HasLightSettings;
+                if (!volume.isActiveAndEnabled || !hasSettings)
+                {
+                    continue;
+                }
+
+                Collider collider = volume.GetComponent<Collider>();
+                if (collider == null || !collider.enabled)
+                {
+                    continue;
+                }
+
+                Vector3 closest = collider.ClosestPoint(point);
+                if ((closest - point).sqrMagnitude < 0.0001f &&
+                    (bestVolume == null || volume.Priority > bestPriority))
+                {
+                    bestVolume = volume;
+                    bestPriority = volume.Priority;
+                }
+            }
+
+            return bestVolume;
+        }
+
         private static void EnsurePreviewLight()
         {
             if (s_PreviewLight != null)
@@ -264,7 +377,6 @@ namespace XFramework.Editor
                 return;
             }
 
-            // 先检查场景里是否已有同名对象（域重载后引用丢失但对象可能还在）
             Light[] lights = Object.FindObjectsByType<Light>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             for (int i = 0; i < lights.Length; i++)
             {
@@ -282,11 +394,6 @@ namespace XFramework.Editor
             ApplyPreviewLightHideFlags(s_PreviewLight);
         }
 
-        /// <summary>
-        /// 设置预览光 GameObject 和 Light 组件的 hideFlags：
-        /// - DontSave: 不保存到场景，不序列化
-        /// - NotEditable: 在 Inspector 中不可修改
-        /// </summary>
         private static void ApplyPreviewLightHideFlags(Light light)
         {
             const HideFlags flags = HideFlags.DontSave | HideFlags.NotEditable;
@@ -301,51 +408,6 @@ namespace XFramework.Editor
                 Object.DestroyImmediate(s_PreviewLight.gameObject);
                 s_PreviewLight = null;
             }
-        }
-
-        private static Vector3? GetSceneCameraPosition()
-        {
-            SceneView sceneView = SceneView.lastActiveSceneView;
-            if (sceneView == null || sceneView.camera == null)
-            {
-                return null;
-            }
-
-            return sceneView.camera.transform.position;
-        }
-
-        private static AreaLightVolume FindVolumeContainingPoint(Vector3 point)
-        {
-            AreaLightVolume bestVolume = null;
-            int bestPriority = int.MinValue;
-
-            AreaLightVolume[] volumes = Object.FindObjectsByType<AreaLightVolume>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
-            for (int i = 0; i < volumes.Length; i++)
-            {
-                AreaLightVolume volume = volumes[i];
-                if (volume == null || !volume.isActiveAndEnabled || !volume.HasLightSettings)
-                {
-                    continue;
-                }
-
-                Collider collider = volume.GetComponent<Collider>();
-                if (collider == null || !collider.enabled)
-                {
-                    continue;
-                }
-
-                Vector3 closest = collider.ClosestPoint(point);
-                if ((closest - point).sqrMagnitude < 0.0001f)
-                {
-                    if (bestVolume == null || volume.Priority > bestPriority)
-                    {
-                        bestVolume = volume;
-                        bestPriority = volume.Priority;
-                    }
-                }
-            }
-
-            return bestVolume;
         }
 
         private static void ResolveSceneMainLight()
@@ -393,12 +455,69 @@ namespace XFramework.Editor
             s_IsOverridingSceneLight = false;
         }
 
-        private static void InvalidateSceneMainLight()
+        private static void InvalidatePreviewState()
         {
             s_SceneMainLight = null;
             s_SceneOriginalSettings = null;
             s_IsOverridingSceneLight = false;
-            s_CurrentVolumeAtCamera = null;
+            s_CurrentLightVolumeAtCamera = null;
+            s_CurrentEnvironmentVolumeAtCamera = null;
+            s_EnvironmentSceneView = null;
+            s_OriginalSkybox = null;
+            s_IsOverridingEnvironment = false;
         }
+
+        private static void SetSkybox(Material skybox)
+        {
+            if (RenderSettings.skybox == skybox)
+            {
+                return;
+            }
+
+            RenderSettings.skybox = skybox;
+            DynamicGI.UpdateEnvironment();
+        }
+
+        private static string GetEnvironmentPreviewMode()
+        {
+#if UNITY_6000_0_OR_NEWER
+            return "Unity 6 完整预览";
+#else
+            return "Unity 2022 天空盒预览 / 纯色使用编辑器背景";
+#endif
+        }
+
+#if UNITY_6000_0_OR_NEWER
+        private static void OnBeginCameraRendering(ScriptableRenderContext context, Camera camera)
+        {
+            if (EditorApplication.isPlaying ||
+                camera.cameraType != CameraType.SceneView ||
+                s_CurrentEnvironmentVolumeAtCamera == null ||
+                s_CurrentEnvironmentVolumeAtCamera.CameraEnvironmentSettings.BackgroundType != CameraEnvironmentBackgroundType.SolidColor ||
+                s_EnvironmentSceneView == null ||
+                camera != s_EnvironmentSceneView.camera)
+            {
+                return;
+            }
+
+            s_RenderingSceneViewCamera = camera;
+            s_RenderingOriginalClearFlags = camera.clearFlags;
+            s_RenderingOriginalBackgroundColor = camera.backgroundColor;
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = s_CurrentEnvironmentVolumeAtCamera.CameraEnvironmentSettings.BackgroundColor;
+        }
+
+        private static void OnEndCameraRendering(ScriptableRenderContext context, Camera camera)
+        {
+            if (camera != s_RenderingSceneViewCamera)
+            {
+                return;
+            }
+
+            camera.clearFlags = s_RenderingOriginalClearFlags;
+            camera.backgroundColor = s_RenderingOriginalBackgroundColor;
+            s_RenderingSceneViewCamera = null;
+        }
+#endif
     }
 }
