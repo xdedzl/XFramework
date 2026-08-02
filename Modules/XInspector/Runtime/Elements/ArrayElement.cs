@@ -219,7 +219,7 @@ namespace XFramework.UI
         protected override void OnDepthChange(int depth)
         {
             style.marginLeft = XInspector.TabSize * Math.Max(depth, 0);
-            variableNameText.style.translate = Vector2.zero;
+            variableNameText.style.translate = new Translate(0f, 0f);
         }
 
         private void CreateElements()

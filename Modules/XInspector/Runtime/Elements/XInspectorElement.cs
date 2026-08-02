@@ -235,7 +235,7 @@ namespace XFramework.UI
         protected virtual void OnDepthChange(int depth)
         {
             if (variableNameText != null)
-                variableNameText.style.translate = new Vector2(XInspector.TabSize * Depth, 0f);
+                variableNameText.style.translate = new Translate(XInspector.TabSize * Depth, 0f);
         }
 
         private void UpdateVariableNameText()
