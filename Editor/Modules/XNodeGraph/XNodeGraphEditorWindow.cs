@@ -345,8 +345,8 @@ namespace XFramework.NodeKit.Editor
             // 恢复视图信息
             var pos = UUtility.EditorPrefs.GetVector3($"{GetViewStateKey()}_Position", graphView.contentViewContainer.resolvedStyle.translate);
             var scale = UUtility.EditorPrefs.GetVector3($"{GetViewStateKey()}_Scale", graphView.contentViewContainer.resolvedStyle.scale.value);
-            graphView.contentViewContainer.style.translate = pos;
-            graphView.contentViewContainer.style.scale = scale;
+            graphView.contentViewContainer.style.translate = new Translate(pos.x, pos.y, pos.z);
+            graphView.contentViewContainer.style.scale = new Scale(scale);
             RefreshWindowStatus();
         }
 

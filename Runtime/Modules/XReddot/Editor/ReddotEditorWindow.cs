@@ -193,14 +193,7 @@ namespace XReddot.Editor
             LoadData();
             
             // 恢复视图状态
-            // 用 Translate/Scale 包装，兼容 2022.3、团结引擎与 Unity 6：
-            // 团结引擎的 StyleTranslate/StyleScale 不支持从 Vector3 隐式转换
-            // Unity 6 的 Translate 移除了 Vector3 单参数构造，需改用三个 Length 参数
-#if UNITY_6000_0_OR_NEWER
             graphView.contentViewContainer.style.translate = new Translate(_lastContentViewTranslation.x, _lastContentViewTranslation.y, _lastContentViewTranslation.z);
-#else
-            graphView.contentViewContainer.style.translate = new Translate(_lastContentViewTranslation);
-#endif
             graphView.contentViewContainer.style.scale = new Scale(_lastContentViewScale);
             
             UpdateEditState();
