@@ -81,6 +81,7 @@ namespace XFramework.Entity
         private readonly string m_Key;
         private readonly Type m_EntityType;
         private readonly HashSet<Entity> m_Entities = new();
+        private readonly List<Entity> m_UpdateBuffer = new();
         private readonly GameObject m_Template;
         private readonly Stack<Entity> m_Pool = new();
         private readonly Transform m_EntityRoot;
@@ -157,9 +158,14 @@ namespace XFramework.Entity
 
         public void OnUpdate()
         {
-            foreach (Entity entity in m_Entities)
+            m_UpdateBuffer.Clear();
+            m_UpdateBuffer.AddRange(m_Entities);
+            foreach (Entity entity in m_UpdateBuffer)
             {
-                entity.OnUpdate();
+                if (m_Entities.Contains(entity))
+                {
+                    entity.OnUpdate();
+                }
             }
         }
 
@@ -232,6 +238,7 @@ namespace XFramework.Entity
         private readonly string m_Key;
         private readonly Type m_EntityType;
         private readonly HashSet<Entity> m_Entities = new();
+        private readonly List<Entity> m_UpdateBuffer = new();
         private readonly string m_PrefabPath;
 
         public ResourceEntityViewAllocator(string prefabPath, Type entityType) : this(prefabPath, prefabPath, entityType) { }
@@ -279,9 +286,14 @@ namespace XFramework.Entity
 
         public void OnUpdate()
         {
-            foreach (Entity entity in m_Entities)
+            m_UpdateBuffer.Clear();
+            m_UpdateBuffer.AddRange(m_Entities);
+            foreach (Entity entity in m_UpdateBuffer)
             {
-                entity.OnUpdate();
+                if (m_Entities.Contains(entity))
+                {
+                    entity.OnUpdate();
+                }
             }
         }
 

@@ -14,6 +14,7 @@ namespace XFramework.Entity
         private readonly EntityViewManager m_EntityViewManager = new();
         private readonly Dictionary<string, LogicEntity> m_LogicEntityDic = new();
         private readonly Dictionary<string, LogicEntity> m_EntityAliasDic = new();
+        private readonly List<LogicEntity> m_LogicUpdateBuffer = new();
 
         #region 增删改
 
@@ -396,9 +397,14 @@ namespace XFramework.Entity
 
         public override void Update()
         {
-            foreach (LogicEntity logic in m_LogicEntityDic.Values)
+            m_LogicUpdateBuffer.Clear();
+            m_LogicUpdateBuffer.AddRange(m_LogicEntityDic.Values);
+            foreach (LogicEntity logic in m_LogicUpdateBuffer)
             {
-                logic.OnUpdate();
+                if (m_LogicEntityDic.ContainsValue(logic))
+                {
+                    logic.OnUpdate();
+                }
             }
 
             m_EntityViewManager.Update();
