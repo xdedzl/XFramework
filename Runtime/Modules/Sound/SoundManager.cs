@@ -339,7 +339,7 @@ namespace XFramework
             var clip = GetAudioClip(path);
             return PlaySound(clip, volume, pitch);
         }
-        
+
         public IAudioPlayback PlaySound(AudioClip clip, float volume = 1f, float pitch = 1f)
         {
             if(!clip)

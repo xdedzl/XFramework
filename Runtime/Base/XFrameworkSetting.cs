@@ -68,6 +68,7 @@ namespace XFramework
         public PanelSettings defaultUIToolkitPanelSettings;
         [Tooltip("UI 点击音效配置。")]
         public UIClickSoundSetting[] uiClickSounds;
+        public string UIRootPrefabPath;
 
         [Header("Scene")]
         [Tooltip("项目补充的场景类型。Main 和 Sub 由框架内置，无需重复配置。")]

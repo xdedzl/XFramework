@@ -87,7 +87,7 @@ namespace XFramework.UI
         public string showName;
         public string path;
         public int level;
-        
+
         public PanelInfoAttribute(string name, string path, int level = 0, string showName = null)
         {
             this.name = name;
@@ -158,7 +158,15 @@ namespace XFramework.UI
         /// </summary>
         private void EnsureUGUIRoot()
         {
-            var prefab = ResourceManager.Instance.LoadInResources<GameObject>("UGUI");
+            GameObject prefab; 
+            if (string.IsNullOrEmpty(XApplication.Setting.UIRootPrefabPath))
+            {
+                prefab = ResourceManager.Instance.LoadInResources<GameObject>("UGUI");
+            }
+            else
+            {
+                prefab = ResourceManager.Instance.Load<GameObject>(XApplication.Setting.UIRootPrefabPath);
+            }
             if (prefab == null)
             {
                 throw new XFrameworkException(
@@ -919,7 +927,7 @@ namespace XFramework.UI
                 throw new XFrameworkException($"[UI] The panel you want to load is not exist, path: {path}");
             }
 
-            var panelGo = GameObject.Instantiate(res); 
+            var panelGo = GameObject.Instantiate(res);
             return panelGo;
         }
 

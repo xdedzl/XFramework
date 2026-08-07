@@ -100,6 +100,11 @@ namespace XFramework.Resource
         }
         
         /// <summary>
+        /// Resources 路径前缀，以该前缀开头的路径将走 Resources.Load 加载（去掉前缀，无需后缀）
+        /// </summary>
+        private const string kResourcesPrefix = "Resources/";
+
+        /// <summary>
         /// 同步加载资源
         /// </summary>
         /// <typeparam name="T"></typeparam>
@@ -110,6 +115,12 @@ namespace XFramework.Resource
             if (string.IsNullOrEmpty(assetName))
             {
                 throw new XFrameworkException("load path is null");
+            }
+
+            // 以 "Resources/" 开头的路径走 Resources.Load（去掉前缀，无需后缀）
+            if (assetName.StartsWith(kResourcesPrefix, StringComparison.Ordinal))
+            {
+                return LoadInResources<T>(assetName.Substring(kResourcesPrefix.Length));
             }
 
             assetName = Path2RealPath(assetName);
