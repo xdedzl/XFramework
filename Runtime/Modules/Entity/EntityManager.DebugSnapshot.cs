@@ -9,10 +9,7 @@ namespace XFramework.Entity
     /// </summary>
     public readonly struct EntityManagerDebugSnapshot
     {
-        public EntityManagerDebugSnapshot(
-            IReadOnlyList<EntityContainerDebugSnapshot> containers,
-            IReadOnlyList<EntityDebugSnapshot> entities,
-            int aliasCount)
+        public EntityManagerDebugSnapshot(IReadOnlyList<EntityContainerDebugSnapshot> containers, IReadOnlyList<EntityDebugSnapshot> entities, int aliasCount)
         {
             Containers = containers ?? Array.Empty<EntityContainerDebugSnapshot>();
             Entities = entities ?? Array.Empty<EntityDebugSnapshot>();
@@ -48,25 +45,33 @@ namespace XFramework.Entity
     /// </summary>
     public readonly struct EntityDebugSnapshot
     {
-        public EntityDebugSnapshot(Entity entity)
+        public EntityDebugSnapshot(Entity entity) : this(entity != null ? entity.Logic : null) { }
+
+        public EntityDebugSnapshot(LogicEntity logic)
         {
-            Entity = entity;
-            GameObject = entity != null ? entity.gameObject : null;
-            Id = entity != null ? entity.Id : string.Empty;
-            ContainerName = entity != null ? entity.ContainerName : string.Empty;
-            Alias = entity != null ? entity.Alias : string.Empty;
-            EntityType = entity != null ? entity.GetType() : null;
-            Name = entity != null ? entity.name : string.Empty;
+            Logic = logic;
+            Entity = logic?.View;
+            GameObject = Entity != null ? Entity.gameObject : null;
+            Id = logic?.Id ?? string.Empty;
+            ContainerName = logic?.ContainerName ?? string.Empty;
+            Alias = logic?.Alias ?? string.Empty;
+            LogicType = logic?.GetType();
+            DataType = logic?.Data?.GetType();
+            EntityType = Entity != null ? Entity.GetType() : null;
+            Name = Entity != null ? Entity.name : string.Empty;
             ActiveSelf = GameObject != null && GameObject.activeSelf;
             ActiveInHierarchy = GameObject != null && GameObject.activeInHierarchy;
-            SceneName = GameObject != null && GameObject.scene.IsValid() ? GameObject.scene.name : "<No Scene>";
+            SceneName = GameObject != null && GameObject.scene.IsValid() ? GameObject.scene.name : string.Empty;
         }
 
+        public LogicEntity Logic { get; }
         public Entity Entity { get; }
         public GameObject GameObject { get; }
         public string Id { get; }
         public string ContainerName { get; }
         public string Alias { get; }
+        public Type LogicType { get; }
+        public Type DataType { get; }
         public Type EntityType { get; }
         public string Name { get; }
         public bool ActiveSelf { get; }
@@ -81,40 +86,32 @@ namespace XFramework.Entity
         /// </summary>
         public EntityManagerDebugSnapshot GetDebugSnapshot()
         {
-            var containers = new List<EntityContainerDebugSnapshot>(m_EntityContainerDic.Count);
-            foreach (KeyValuePair<string, EntityContainer> pair in m_EntityContainerDic)
-            {
-                EntityContainer container = pair.Value;
-                containers.Add(new EntityContainerDebugSnapshot(
-                    pair.Key,
-                    container?.EntityType,
-                    container?.Template,
-                    container?.Count ?? 0));
-            }
-
+            var containers = new List<EntityContainerDebugSnapshot>(m_EntityViewManager.GetDebugSnapshots());
             containers.Sort(CompareContainerSnapshots);
 
-            var entities = new List<EntityDebugSnapshot>(m_EntityDic.Count);
-            foreach (Entity entity in m_EntityDic.Values)
+            var entities = new List<EntityDebugSnapshot>(m_LogicEntityDic.Count);
+            foreach (LogicEntity logic in m_LogicEntityDic.Values)
             {
-                if (!IsDebugEntityValid(entity))
+                if (!IsDebugLogicValid(logic))
                 {
                     continue;
                 }
 
-                entities.Add(new EntityDebugSnapshot(entity));
+                entities.Add(new EntityDebugSnapshot(logic));
             }
 
             entities.Sort(CompareEntitySnapshots);
             return new EntityManagerDebugSnapshot(containers, entities, m_EntityAliasDic.Count);
         }
 
-        private bool IsDebugEntityValid(Entity entity)
+        private bool IsDebugLogicValid(LogicEntity logic)
         {
-            return entity != null
-                && !string.IsNullOrEmpty(entity.Id)
-                && m_EntityDic.TryGetValue(entity.Id, out Entity registeredEntity)
-                && registeredEntity == entity;
+            Entity view = logic?.View;
+            return view != null
+                && view.Logic == logic
+                && !string.IsNullOrEmpty(logic.Id)
+                && m_LogicEntityDic.TryGetValue(logic.Id, out LogicEntity registeredLogic)
+                && registeredLogic == logic;
         }
 
         private static int CompareContainerSnapshots(EntityContainerDebugSnapshot left, EntityContainerDebugSnapshot right)

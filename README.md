@@ -278,12 +278,22 @@ ResourceManager.Instance.Release(bullet);
 - 当 AssetBundle 的引用计数归零时，框架会自动调用 `Unload(true)`。
 
 ### 3.2 实体与对象池 (EntityManager)
-为角色、怪物、子弹等提供基于 `GameObject` 的实体分配、回收与池化管理。
-- **分配/回收**：
+为角色、怪物、子弹等提供配对的逻辑实体、`GameObject` View 分配、回收与池化管理。外部只能通过 `Allocate` 创建完整实体，Logic 与 View 作为一个整体管理生命周期。
+
+- **分配和回收**：
   ```csharp
-  var enemy = EntityManager.Instance.Allocate<EnemyEntity>(enemyPrefab);
-  EntityManager.Instance.Recycle(enemy); // 必须回收，不可 Destroy
+  EnemyEntity enemy = EntityManager.Instance.Allocate<EnemyEntity>(entityData);
+  EnemyLogicEntity logic = EntityManager.Instance.GetLogicEntity<EnemyLogicEntity>(enemy.Id);
+  EntityManager.Instance.Recycle(logic); // 也可以传入 enemy
   ```
+  `Allocate` 内部先准备并注册对应的容器与 Template，再创建和注册 Logic，最后创建并绑定 View；任一步骤失败都会回收整个实体。派生 Logic 的 `OnCreate()` 执行时已经可以读取 `ContainerName`，但 View 尚未绑定，因此不应访问 GameObject。
+- **Logic/View 类型配对**：
+  ```csharp
+  public sealed class EnemyLogicEntity : LogicEntity { }
+  public sealed class EnemyEntity : Entity<EnemyLogicEntity> { }
+  ```
+  `Allocate<EnemyEntity>()` 会自动分配 `EnemyLogicEntity`。直接继承非泛型 `Entity` 的 View 使用基础 `LogicEntity`。
+- **Prefab 组件约束**：Prefab 根节点没有 `Entity` 时会添加请求的精确 View 类型；已经存在不同类型或多个 `Entity` 时会直接报错，不会追加、删除或替换组件。
 - **职责边界**：`EntityManager` 不维护 Entity 之间的逻辑父子关系。GameObject 的表现层级直接使用 `Transform` 或业务挂点系统；需要独立于模型存在的逻辑实体关系，应由游戏逻辑层的数据系统维护。
 
 ### 3.3 UI 界面系统 (UIManager)

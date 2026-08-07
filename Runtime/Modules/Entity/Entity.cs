@@ -2,25 +2,49 @@
 
 namespace XFramework.Entity
 {
+    public class LogicEntity
+    {
+        public string Id { get; internal set; }
+
+        public string Alias { get; internal set; }
+
+        public string ContainerName { get; internal set; }
+
+        public IEntityData Data { get; internal set; }
+
+        public Entity View { get; internal set; }
+
+        public bool IsValid => EntityManager.Instance.IsEntityValid(Id);
+
+        public virtual void OnCreate() { }
+
+        public virtual void OnUpdate() { }
+
+        public virtual void OnDestroy() { }
+    }
+
     /// <summary>
     /// 单位实体
     /// </summary>
-    public abstract class Entity : MonoBehaviour, IEntity
+    [DisallowMultipleComponent]
+    public class Entity : MonoBehaviour, IEntity
     {
         /// <summary>
         /// 实体编号
         /// </summary>
-        public string Id { get; internal set; }
+        public string Id => Logic?.Id;
 
         /// <summary>
         /// 所属容器名
         /// </summary>
-        public string ContainerName { get; internal set; }
+        public string ContainerName => Logic?.ContainerName;
 
         /// <summary>
         /// 实体别名
         /// </summary>
-        public string Alias { get; internal set; }
+        public string Alias => Logic?.Alias;
+
+        public LogicEntity Logic { get; internal set; }
 
         public Vector3 position
         {
@@ -28,7 +52,7 @@ namespace XFramework.Entity
             set => transform.position = value;
         }
 
-        public bool IsValid => EntityManager.Instance.IsEntityValid(Id);
+        public bool IsValid => Logic != null && Logic.IsValid;
 
         /// <summary>
         /// 初始化
@@ -66,5 +90,10 @@ namespace XFramework.Entity
         {
             return $"(id:{Id}, name:{name}, containerName:{ContainerName})";
         }
+    }
+
+    public abstract class Entity<TLogic> : Entity where TLogic : LogicEntity, new()
+    {
+        public new TLogic Logic => (TLogic)base.Logic;
     }
 }

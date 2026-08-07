@@ -133,19 +133,13 @@ namespace XFramework.Editor
                 visiblePropertiesByName[visibleProperties[i].name] = visibleProperties[i];
             }
 
-            Dictionary<string, List<SerializedProperty>> groupProperties = CollectGroupProperties(visibleProperties);
-            HashSet<string> drawnGroups = new HashSet<string>();
+            Dictionary<string, PrettyGroupElement> groupElements = new Dictionary<string, PrettyGroupElement>();
             HashSet<string> drawnPropertyPaths = new HashSet<string>();
             XInspector reflectedDrawerFactory = null;
 
             if (visiblePropertiesByName.TryGetValue(ScriptPropertyName, out SerializedProperty scriptProperty))
             {
-                AddSerializedPropertyGUI(
-                    root,
-                    scriptProperty,
-                    groupProperties,
-                    drawnGroups,
-                    drawnPropertyPaths);
+                AddSerializedPropertyGUI(root, scriptProperty, groupElements, drawnPropertyPaths);
             }
 
             for (int i = 0; i < m_inspectorFields.Count; i++)
@@ -153,7 +147,7 @@ namespace XFramework.Editor
                 FieldInfo field = m_inspectorFields[i];
                 if (visiblePropertiesByName.TryGetValue(field.Name, out SerializedProperty property))
                 {
-                    AddSerializedPropertyGUI(root, property, groupProperties, drawnGroups, drawnPropertyPaths);
+                    AddSerializedPropertyGUI(root, property, groupElements, drawnPropertyPaths);
                     continue;
                 }
 
@@ -165,23 +159,25 @@ namespace XFramework.Editor
                 property = serializedObject.FindProperty(field.Name);
                 if (property != null)
                 {
-                    root.Add(CreatePropertyField(property, false));
-                    drawnPropertyPaths.Add(property.propertyPath);
+                    AddSerializedPropertyGUI(root, property, groupElements, drawnPropertyPaths);
                     continue;
                 }
 
                 reflectedDrawerFactory ??= new XInspector(false);
-                root.Add(CreateReflectedField(reflectedDrawerFactory, field));
+                VisualElement reflectedField = CreateReflectedField(reflectedDrawerFactory, field);
+                if (TryGetPrettyGroupTitle(field, out string groupTitle))
+                {
+                    GetOrCreatePrettyGroupElement(root, groupElements, groupTitle).AddChild(reflectedField);
+                }
+                else
+                {
+                    root.Add(reflectedField);
+                }
             }
 
             for (int i = 0; i < visibleProperties.Count; i++)
             {
-                AddSerializedPropertyGUI(
-                    root,
-                    visibleProperties[i],
-                    groupProperties,
-                    drawnGroups,
-                    drawnPropertyPaths);
+                AddSerializedPropertyGUI(root, visibleProperties[i], groupElements, drawnPropertyPaths);
             }
 
             if (m_showInInspectorElements.Count > 0)
@@ -190,12 +186,7 @@ namespace XFramework.Editor
             }
         }
 
-        private void AddSerializedPropertyGUI(
-            VisualElement root,
-            SerializedProperty property,
-            Dictionary<string, List<SerializedProperty>> groupProperties,
-            HashSet<string> drawnGroups,
-            HashSet<string> drawnPropertyPaths)
+        private void AddSerializedPropertyGUI(VisualElement root, SerializedProperty property, Dictionary<string, PrettyGroupElement> groupElements, HashSet<string> drawnPropertyPaths)
         {
             if (!drawnPropertyPaths.Add(property.propertyPath))
             {
@@ -204,25 +195,23 @@ namespace XFramework.Editor
 
             if (TryGetPrettyGroupTitle(property, out string groupTitle))
             {
-                if (drawnGroups.Add(groupTitle))
-                {
-                    List<SerializedProperty> properties = groupProperties[groupTitle];
-                    root.Add(new PrettyGroupElement(
-                        serializedObject,
-                        target.GetType(),
-                        groupTitle,
-                        properties));
-
-                    for (int i = 0; i < properties.Count; i++)
-                    {
-                        drawnPropertyPaths.Add(properties[i].propertyPath);
-                    }
-                }
-
+                GetOrCreatePrettyGroupElement(root, groupElements, groupTitle).AddChild(CreatePropertyField(property, false));
                 return;
             }
 
             root.Add(CreatePropertyField(property, property.name == ScriptPropertyName));
+        }
+
+        private PrettyGroupElement GetOrCreatePrettyGroupElement(VisualElement root, Dictionary<string, PrettyGroupElement> groupElements, string title)
+        {
+            if (!groupElements.TryGetValue(title, out PrettyGroupElement groupElement))
+            {
+                groupElement = new PrettyGroupElement(target.GetType(), title);
+                groupElements.Add(title, groupElement);
+                root.Add(groupElement);
+            }
+
+            return groupElement;
         }
 
         private VisualElement CreateReflectedField(XInspector drawerFactory, FieldInfo field)
@@ -281,29 +270,6 @@ namespace XFramework.Editor
             return properties;
         }
 
-        private Dictionary<string, List<SerializedProperty>> CollectGroupProperties(List<SerializedProperty> properties)
-        {
-            Dictionary<string, List<SerializedProperty>> groupProperties = new Dictionary<string, List<SerializedProperty>>();
-            for (int i = 0; i < properties.Count; i++)
-            {
-                SerializedProperty property = properties[i];
-                if (!TryGetPrettyGroupTitle(property, out string groupTitle))
-                {
-                    continue;
-                }
-
-                if (!groupProperties.TryGetValue(groupTitle, out List<SerializedProperty> list))
-                {
-                    list = new List<SerializedProperty>();
-                    groupProperties[groupTitle] = list;
-                }
-
-                list.Add(property.Copy());
-            }
-
-            return groupProperties;
-        }
-
         private VisualElement CreatePropertyField(SerializedProperty property, bool disabled)
         {
             PropertyField field = new PropertyField(property.Copy());
@@ -318,11 +284,15 @@ namespace XFramework.Editor
 
         private bool TryGetPrettyGroupTitle(SerializedProperty property, out string title)
         {
-            title = null;
-            FieldInfo field = GetField(property);
+            return TryGetPrettyGroupTitle(GetField(property), out title);
+        }
+
+        private static bool TryGetPrettyGroupTitle(FieldInfo field, out string title)
+        {
             PrettyGroupAttribute attribute = field?.GetCustomAttribute<PrettyGroupAttribute>(true);
             if (attribute == null || string.IsNullOrWhiteSpace(attribute.Title))
             {
+                title = null;
                 return false;
             }
 
@@ -450,22 +420,16 @@ namespace XFramework.Editor
 
         private sealed class PrettyGroupElement : VisualElement
         {
-            private readonly SerializedObject m_SerializedObject;
             private readonly Type m_TargetType;
             private readonly string m_Title;
-            private readonly List<SerializedProperty> m_Properties;
+            private readonly VisualElement m_Header;
+            private readonly VisualElement m_Children;
             private Label m_Foldout;
 
-            public PrettyGroupElement(
-                SerializedObject serializedObject,
-                Type targetType,
-                string title,
-                List<SerializedProperty> properties)
+            public PrettyGroupElement(Type targetType, string title)
             {
-                m_SerializedObject = serializedObject;
                 m_TargetType = targetType;
                 m_Title = title;
-                m_Properties = properties;
 
                 style.flexDirection = FlexDirection.Column;
                 style.borderLeftWidth = GroupBorderWidth;
@@ -479,21 +443,9 @@ namespace XFramework.Editor
                 style.marginTop = -GroupBorderWidth;
                 style.marginBottom = 2f;
 
-                Rebuild();
-            }
-
-            private void Rebuild()
-            {
-                Clear();
                 bool expanded = IsExpanded();
-                Add(CreateHeader(expanded));
-
-                if (!expanded)
-                {
-                    return;
-                }
-
-                VisualElement children = new VisualElement
+                m_Header = CreateHeader(expanded);
+                m_Children = new VisualElement
                 {
                     style =
                     {
@@ -505,20 +457,15 @@ namespace XFramework.Editor
                     }
                 };
 
-                for (int i = 0; i < m_Properties.Count; i++)
-                {
-                    PropertyField field = new PropertyField(m_Properties[i].Copy())
-                    {
-                        style =
-                        {
-                            marginBottom = GroupChildSpacing
-                        }
-                    };
-                    field.Bind(m_SerializedObject);
-                    children.Add(field);
-                }
+                Add(m_Header);
+                Add(m_Children);
+                SetExpanded(expanded);
+            }
 
-                Add(children);
+            public void AddChild(VisualElement child)
+            {
+                child.style.marginBottom = GroupChildSpacing;
+                m_Children.Add(child);
             }
 
             private VisualElement CreateHeader(bool expanded)
@@ -589,13 +536,16 @@ namespace XFramework.Editor
 
             private void ToggleExpanded()
             {
-                SessionState.SetBool(GetSessionKey(), !IsExpanded());
-                if (m_Foldout != null)
-                {
-                    m_Foldout.text = IsExpanded() ? "▾" : "▸";
-                }
+                bool expanded = !IsExpanded();
+                SessionState.SetBool(GetSessionKey(), expanded);
+                SetExpanded(expanded);
+            }
 
-                Rebuild();
+            private void SetExpanded(bool expanded)
+            {
+                m_Foldout.text = expanded ? "▾" : "▸";
+                m_Header.style.borderBottomWidth = expanded ? GroupBorderWidth : 0f;
+                m_Children.style.display = expanded ? DisplayStyle.Flex : DisplayStyle.None;
             }
 
             private string GetSessionKey()

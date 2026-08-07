@@ -324,8 +324,9 @@ namespace XFramework.Editor
             }
 
             int aliasCount = m_ManagerSnapshot?.AliasCount ?? 0;
+            int containerCount = m_ManagerSnapshot?.Containers.Count ?? 0;
             string selectedContainer = string.IsNullOrEmpty(m_SelectedContainerName) ? "未选择" : m_SelectedContainerName;
-            m_SummaryLabel.text = $"容器：{m_Containers.Count} | 当前容器：{selectedContainer} | Entity：{m_FilteredEntries.Count} / {m_AllEntries.Count} | Alias：{aliasCount}";
+            m_SummaryLabel.text = $"容器：{containerCount} | 当前容器：{selectedContainer} | Entity：{m_FilteredEntries.Count} / {m_AllEntries.Count} | Alias：{aliasCount}";
         }
 
         private void RefreshInspectorSelection()
@@ -424,7 +425,7 @@ namespace XFramework.Editor
 
             element.Q<Label>("status").text = GetStatusText(entry);
             element.Q<Label>("status").style.color = GetStatusColor(entry);
-            element.Q<Label>("type").text = entry.EntityType != null ? entry.EntityType.Name : "-";
+            element.Q<Label>("type").text = FormatTypePair(entry);
             element.Q<Label>("alias").text = FormatEmpty(entry.Alias);
             element.Q<Label>("name").text = FormatEmpty(entry.Name);
             element.Q<Label>("scene").text = FormatEmpty(entry.SceneName);
@@ -502,9 +503,9 @@ namespace XFramework.Editor
             {
                 XFrameworkInspectorWindow.InspectCustom(
                     this,
-                    string.IsNullOrEmpty(entry.Name) ? "Entity" : entry.Name,
+                    FormatEntityDisplayName(entry),
                     BuildEntityInspectorContent,
-                    entry.EntityType != null ? entry.EntityType.FullName : entry.ContainerName);
+                    entry.LogicType != null ? entry.LogicType.FullName : entry.ContainerName);
                 return;
             }
 
@@ -636,6 +637,8 @@ namespace XFramework.Editor
         private VisualElement BuildObjectSection(EntityDebugSnapshot entry)
         {
             VisualElement section = CreateSection("Object", marginBottom: 12f);
+            section.Add(CreateEntityInfoRow("Logic", entry.LogicType != null ? entry.LogicType.FullName : "-"));
+            section.Add(CreateEntityInfoRow("Data", entry.DataType != null ? entry.DataType.FullName : "-"));
             section.Add(CreateObjectFieldRow("Entity", typeof(EntityComponent), entry.Entity));
             section.Add(CreateObjectFieldRow("GameObject", typeof(GameObject), entry.GameObject));
             section.Add(CreateEntityInfoRow("Hierarchy", entry.GameObject != null ? GetHierarchyPath(entry.GameObject) : "-"));
@@ -648,7 +651,9 @@ namespace XFramework.Editor
             section.Add(CreateEntityInfoRow("Id", entry.Id));
             section.Add(CreateEntityInfoRow("Container", entry.ContainerName));
             section.Add(CreateEntityInfoRow("Alias", FormatEmpty(entry.Alias)));
-            section.Add(CreateEntityInfoRow("Type", entry.EntityType != null ? entry.EntityType.FullName : "-"));
+            section.Add(CreateEntityInfoRow("Logic Type", entry.LogicType != null ? entry.LogicType.FullName : "-"));
+            section.Add(CreateEntityInfoRow("View Type", entry.EntityType != null ? entry.EntityType.FullName : "-"));
+            section.Add(CreateEntityInfoRow("Data Type", entry.DataType != null ? entry.DataType.FullName : "-"));
             section.Add(CreateEntityInfoRow("Name", FormatEmpty(entry.Name)));
             section.Add(CreateEntityInfoRow("Status", GetStatusText(entry)));
             section.Add(CreateEntityInfoRow("ActiveSelf", FormatBool(entry.ActiveSelf)));
@@ -866,6 +871,10 @@ namespace XFramework.Editor
                 || Contains(entry.Alias, search)
                 || Contains(entry.Name, search)
                 || Contains(entry.SceneName, search)
+                || Contains(entry.LogicType != null ? entry.LogicType.Name : string.Empty, search)
+                || Contains(entry.LogicType != null ? entry.LogicType.FullName : string.Empty, search)
+                || Contains(entry.DataType != null ? entry.DataType.Name : string.Empty, search)
+                || Contains(entry.DataType != null ? entry.DataType.FullName : string.Empty, search)
                 || Contains(entry.EntityType != null ? entry.EntityType.Name : string.Empty, search)
                 || Contains(entry.EntityType != null ? entry.EntityType.FullName : string.Empty, search)
                 || Contains(entry.GameObject != null ? entry.GameObject.name : string.Empty, search);
@@ -957,10 +966,18 @@ namespace XFramework.Editor
 
         private static string FormatEntityDisplayName(EntityDebugSnapshot entry)
         {
-            string name = string.IsNullOrEmpty(entry.Name) ? "<No Name>" : entry.Name;
-            string type = entry.EntityType != null ? entry.EntityType.Name : "-";
+            string name = string.IsNullOrEmpty(entry.Name)
+                ? (entry.LogicType != null ? entry.LogicType.Name : "<No Name>")
+                : entry.Name;
+            string type = FormatTypePair(entry);
             string alias = string.IsNullOrEmpty(entry.Alias) ? string.Empty : $" | Alias: {entry.Alias}";
             return $"{name} ({type}){alias}";
+        }
+
+        private static string FormatTypePair(EntityDebugSnapshot entry)
+        {
+            string logicType = entry.LogicType != null ? entry.LogicType.Name : "-";
+            return entry.EntityType != null ? $"{logicType} / {entry.EntityType.Name}" : logicType;
         }
 
         private static string FormatBool(bool value)

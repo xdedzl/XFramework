@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-using XFramework.Resource;
 
 namespace XFramework.Entity
 {
@@ -12,125 +11,71 @@ namespace XFramework.Entity
     [ModuleLifecycle(ModuleLifecycle.RuntimePersistent)]
     public partial class EntityManager : MonoGameModuleBase<EntityManager>
     {
-        /// <summary>
-        /// 存储对应实体容器的字典
-        /// </summary>
-        private readonly Dictionary<string, EntityContainer> m_EntityContainerDic = new();
-        /// <summary>
-        /// Template是在EntityManager加载的，EntityContainer释放时，要同步释放Template
-        /// </summary>
-        private readonly Dictionary<string, string> m_NeedReleaseContainer = new();
-        /// <summary>
-        /// 存储所有在使用的实体字典
-        /// </summary>
-        private readonly Dictionary<string, Entity> m_EntityDic = new();
-        /// <summary>
-        /// 存储所有在使用的实体别名字典
-        /// </summary>
-        private readonly Dictionary<string, Entity> m_EntityAliasDic = new();
+        private readonly EntityViewManager m_EntityViewManager = new();
+        private readonly Dictionary<string, LogicEntity> m_LogicEntityDic = new();
+        private readonly Dictionary<string, LogicEntity> m_EntityAliasDic = new();
 
         #region 增删改
 
-        /// <summary>
-        /// 添加模板
-        /// </summary>
+        public bool AddAllocator(IEntityViewAllocator allocator)
+        {
+            return m_EntityViewManager.AddAllocator(allocator);
+        }
+
         public void AddTemplate<T>(GameObject template) where T : Entity
         {
-            AddTemplate<T>(typeof(T).Name, template);
+            string key = typeof(T).Name;
+            AddAllocator(new GameObjectEntityViewAllocator(key, typeof(T), template, key));
         }
 
-        /// <summary>
-        /// 添加模板
-        /// </summary>
         public void AddTemplate<T>(string key, GameObject template) where T : Entity
         {
-            AddTemplate<T>(key, template, key);
+            AddAllocator(new GameObjectEntityViewAllocator(key, typeof(T), template, key));
         }
 
-        /// <summary>
-        /// 添加模板
-        /// </summary>
         public void AddTemplate<T>(string key, GameObject template, string entityRootName) where T : Entity
         {
-            AddTemplate(key, typeof(T), template, entityRootName);
+            AddAllocator(new GameObjectEntityViewAllocator(key, typeof(T), template, entityRootName));
         }
 
-        /// <summary>
-        /// 设置模板
-        /// </summary>
         public void AddTemplate(string key, Type type, GameObject template)
         {
-            AddTemplate(key, type, template, key);
+            AddAllocator(new GameObjectEntityViewAllocator(key, type, template, key));
         }
 
-        /// <summary>
-        /// 设置模板
-        /// </summary>
-        /// <param name="key">key</param>
-        /// <param name="type">类型</param>
-        /// <param name="template">模板</param>
         public void AddTemplate(string key, Type type, GameObject template, string entityRootName)
         {
-            if (m_EntityContainerDic.ContainsKey(key))
-            {
-                Debug.LogWarning("请勿重复添加");
-                return;
-            }
-            EntityContainer container = new(type, key, template, entityRootName);
-
-            m_EntityContainerDic.Add(key, container);
+            AddAllocator(new GameObjectEntityViewAllocator(key, type, template, entityRootName));
         }
-        
+
         public void AddTemplate<T>(string prefabPath) where T : Entity
         {
-            var key = prefabPath;
-            var template = ResourceManager.Instance.Load<GameObject>(prefabPath);
-            if (template == null)
-            {
-                throw new XFrameworkException($"[EntityError] prefab path is not found. prefabPath:{prefabPath}");
-            }
-            AddTemplate<T>(key, template);
-            m_NeedReleaseContainer.Add(prefabPath, prefabPath);
+            AddAllocator(new ResourceEntityViewAllocator(prefabPath, typeof(T)));
         }
 
-        /// <summary>
-        /// 移除一个模板
-        /// </summary>
-        /// <param name="key">key</param>
         public void RemoveTemplate(string key)
         {
-            if(TryGetContainer(key, out var container))
+            if (key is null || !m_EntityViewManager.ContainsTemplate(key))
             {
-                container.Clean(0);
-                var entities = container.GetEntities();
-                if (entities != null)
-                {
-                    foreach (var item in entities)
-                    {
-                        m_EntityDic.Remove(item.Id);
-                        UnregisterEntityAlias(item);
-                        UnityEngine.Object.Destroy(item.gameObject);
-                    }
-                }
-                m_EntityContainerDic.Remove(key);
-
-                if (m_NeedReleaseContainer.Remove(key))
-                {
-                    ResourceManager.Instance.Release(container.Template);
-                }
+                return;
             }
+
+            Entity[] entities = m_EntityViewManager.GetEntities(key);
+            foreach (Entity entity in entities)
+            {
+                Recycle(entity);
+            }
+
+            m_EntityViewManager.RemoveTemplate(key);
         }
 
-        /// <summary>
-        /// 是否包含一个模板
-        /// </summary>
-        /// <param name="key"></param>
         public bool ContainsTemplate(string key)
         {
-            return m_EntityContainerDic.ContainsKey(key);
+            return m_EntityViewManager.ContainsTemplate(key);
         }
-        
+
         #region Allocate
+
         public T Allocate<T>(Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
             return Allocate<T>(entityData: null, pos, quaternion, parent);
@@ -138,99 +83,62 @@ namespace XFramework.Entity
 
         public T Allocate<T>(IEntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
-            string key = typeof(T).Name;
-            if(!TryGetContainer(key, out EntityContainer _))
-            {
-                var obj = new GameObject(key + "template");
-                AddTemplate<T>(obj);
-            }
-            return Allocate(key, null, entityData, pos, quaternion, parent) as T;
+            return AllocateView(typeof(T), typeof(T).Name, null, entityData, pos, quaternion, parent) as T;
         }
-        
+
         public T Allocate<T>(string key, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
             return Allocate<T>(key, null, null, pos, quaternion, parent);
         }
-        
+
         public T Allocate<T>(string key, string alias, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
-            return Allocate(key, alias, null, pos, quaternion, parent) as T;
+            return AllocateView(typeof(T), key, alias, null, pos, quaternion, parent) as T;
         }
-        
+
         public T Allocate<T>(string key, IEntityData data, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
-            return Allocate(key, null, data, pos, quaternion, parent) as T;
+            return AllocateView(typeof(T), key, null, data, pos, quaternion, parent) as T;
         }
 
-        /// <summary>
-        /// 分配实体
-        /// </summary>
-        /// <typeparam name="T">实体子类型</typeparam>
-        /// <param name="id">实体编号</param>
-        /// <param name="key">键值</param>
-        /// <param name="entityData">实体数据</param>
-        /// <param name="pos">位置</param>
-        /// <param name="quaternion">朝向</param>
-        /// <param name="parent">实体父物体</param>
-        /// <returns>实体</returns>
         public T Allocate<T>(string key, string alias, IEntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
-            return Allocate(key, alias, entityData, pos, quaternion, parent) as T;
+            return AllocateView(typeof(T), key, alias, entityData, pos, quaternion, parent) as T;
         }
 
-        /// <summary>
-        /// 分配实体
-        /// </summary>
-        /// <param name="id">实体Id</param>
-        /// <param name="key">键值</param>
-        /// <param name="entityData">实体数据</param>
-        /// <param name="pos">位置</param>
-        /// <param name="quaternion">角度</param>
-        /// <param name="parent">实体父物体</param>
-        /// <returns></returns>
         public Entity Allocate(string key, string alias, IEntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null)
         {
-            if (!TryGetContainer(key, out EntityContainer _))
-            {
-                var obj = new GameObject(key + "template");
-                AddTemplate<CommonEntity>(obj);
-            }
-            var entityContainer = GetContainer(key);
-            var id = Guid.NewGuid().ToString();
+            return AllocateView(null, key, alias, entityData, pos, quaternion, parent);
+        }
 
-            if (m_EntityDic.ContainsKey(id))
-            {
-                Entity e = m_EntityDic[id];
-                throw new XFrameworkException($"[EntityError] id is already occupied.  Entity {e}");
-            }
-
-            var entity = entityContainer.Allocate(id, pos, quaternion, entityData, parent);
-            m_EntityDic.Add(entity.Id, entity);
+        private Entity AllocateView(Type entityType, string key, string alias, IEntityData entityData, Vector3 pos, Quaternion quaternion, Transform parent)
+        {
+            LogicEntity logic = AllocateLogic(entityType, key, alias, entityData, out Type resolvedEntityType);
             try
             {
-                RegisterEntityAlias(entity, alias);
+                return AllocateAndBindView(logic, key, resolvedEntityType, pos, quaternion, parent);
             }
             catch
             {
-                m_EntityDic.Remove(entity.Id);
-                entityContainer.Recycle(entity);
+                Recycle(logic);
                 throw;
             }
-            return entity;
         }
+
         #endregion
-        
+
         #region Allocate With Prefab
+
         public T AllocateWithPrefab<T>(string prefabPath, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
             return AllocateWithPrefab<T>(prefabPath, null, null, pos, quaternion, parent);
         }
-        
+
         public T AllocateWithPrefab<T>(string prefabPath, IEntityData data, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
             return AllocateWithPrefab<T>(prefabPath, null, data, pos, quaternion, parent);
         }
-        
+
         private T AllocateWithPrefab<T>(string prefabPath, string alias, IEntityData data, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null) where T : Entity
         {
             return AllocateWithPrefab(prefabPath, typeof(T), alias, data, pos, quaternion, parent) as T;
@@ -246,80 +154,75 @@ namespace XFramework.Entity
             return AllocateWithPrefab(prefabPath, entityType, null, data, pos, quaternion, parent);
         }
 
-        private Entity AllocateWithPrefab(string prefabPath, Type entityType, string alias, IEntityData data, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null)
+        private Entity AllocateWithPrefab(string prefabPath, Type entityType, string alias, IEntityData entityData, Vector3 pos = default, Quaternion quaternion = default, Transform parent = null)
         {
-            if (string.IsNullOrEmpty(prefabPath))
+            LogicEntity logic = AllocateLogicWithPrefab(prefabPath, entityType, alias, entityData, out Type resolvedEntityType);
+            try
             {
-                throw new XFrameworkException("[EntityError] prefab path is null");
+                return AllocateAndBindView(logic, prefabPath, resolvedEntityType, pos, quaternion, parent);
             }
-            
-            if (!TryGetContainer(prefabPath, out EntityContainer container))
+            catch
             {
-                GameObject template = ResourceManager.Instance.Load<GameObject>(prefabPath);
-                if (template == null)
-                {
-                    throw new XFrameworkException($"[EntityError] prefab path is not found. prefabPath:{prefabPath}");
-                }
-
-                Type resolvedType = ResolvePrefabEntityType(prefabPath, entityType, template);
-                AddTemplate(prefabPath, resolvedType, template);
-                m_NeedReleaseContainer.Add(prefabPath, prefabPath);
+                Recycle(logic);
+                throw;
             }
-            else
-            {
-                Type resolvedType = entityType ?? container.EntityType;
-                ValidateTemplateEntityType(prefabPath, resolvedType, container);
-            }
-            
-            return Allocate(prefabPath, alias, data, pos, quaternion, parent);
         }
 
         #endregion
-        
-        internal void RegisterExistEntity(string templateKey, GameObject entityObj)
+
+        private Entity AllocateAndBindView(LogicEntity logic, string key, Type entityType, Vector3 pos, Quaternion quaternion, Transform parent)
         {
-            var container = GetContainer(templateKey);
-            var id = Guid.NewGuid().ToString();
-            var entity = container.RegisterExistEntity(id, entityObj);
-            m_EntityDic.Add(entity.Id, entity);
-            entity.Alias = null;
-        }
-        
-        /// <summary>
-        /// 回收实体
-        /// </summary>
-        /// <param name="entity">目标实体</param>
-        public bool Recycle(Entity entity)
-        {
-            if (entity != null)
+            Entity view = m_EntityViewManager.Allocate(key, entityType, pos, quaternion, parent);
+
+            try
             {
-                EntityContainer container = GetContainer(entity.ContainerName);
-                if (container != null)
-                {
-                    m_EntityDic.Remove(entity.Id);
-                    UnregisterEntityAlias(entity);
-                    return container.Recycle(entity);
-                }
-                else
-                {
-                    throw new XFrameworkException("[Entity] this entity is not created by manager");
-                }
+                BindView(logic, view);
+                view.gameObject.SetActive(true);
+                view.OnAllocate(logic.Data);
+                return view;
             }
-            return false;
+            catch
+            {
+                view.gameObject.SetActive(false);
+                m_EntityViewManager.Recycle(view);
+                if (view.Logic == logic)
+                {
+                    UnbindView(logic, view);
+                }
+
+                throw;
+            }
         }
 
-        /// <summary>
-        /// 回收实体
-        /// </summary>
-        /// <param name="id">目标实体Id</param>
+        public bool Recycle(Entity entity)
+        {
+            return entity != null && Recycle(entity.Logic);
+        }
+
+        public bool Recycle(LogicEntity logic)
+        {
+            if (!IsRegisteredLogic(logic))
+            {
+                return false;
+            }
+
+            if (logic.View != null)
+            {
+                Entity view = logic.View;
+                view.OnRecycle();
+                view.gameObject.SetActive(false);
+                m_EntityViewManager.Recycle(view);
+                UnbindView(logic, view);
+            }
+
+            UnregisterLogic(logic);
+            logic.OnDestroy();
+            return true;
+        }
+
         public bool Recycle(string id)
         {
-            Entity entity = GetEntity(id);
-            if (entity != null)
-            {
-                return Recycle(entity);
-            }
-            return false;
+            return !string.IsNullOrEmpty(id) && m_LogicEntityDic.TryGetValue(id, out LogicEntity logic) && Recycle(logic);
         }
 
         public void RecycleContainer<T>() where T : Entity
@@ -329,112 +232,32 @@ namespace XFramework.Entity
 
         public void RecycleContainer(string containerName)
         {
-            if (TryGetContainer(containerName, out var container))
+            if (containerName is null || !m_EntityViewManager.ContainsTemplate(containerName))
             {
-                foreach (var entity in container.GetEntities())
-                {
-                    Recycle(entity);
-                }
+                return;
+            }
+
+            foreach (Entity entity in m_EntityViewManager.GetEntities(containerName))
+            {
+                Recycle(entity);
             }
         }
 
-        /// <summary>
-        /// 回收所有实体
-        /// </summary>
         public void RecycleAll()
         {
-            foreach (var item in m_EntityDic.Values.ToList())
+            foreach (LogicEntity logic in m_LogicEntityDic.Values.ToList())
             {
-                Recycle(item);
+                Recycle(logic);
             }
         }
-
 
         #endregion
 
         #region 查
 
-        /// <summary>
-        /// 获取实体容器
-        /// </summary>
-        /// <param name="containerName">实体名</param>
-        private EntityContainer GetContainer(string containerName)
-        {
-            if (TryGetContainer(containerName, out EntityContainer entityContainer))
-            {
-                return entityContainer;
-            }
-            else
-            {
-                throw new XFrameworkException($"[EntityError] There is no entity container named {containerName}");
-            }
-        }
-
-        private bool TryGetContainer(string containerName, out EntityContainer entityContainer)
-        {
-            if (containerName is null)
-            {
-                entityContainer = null;
-                return false;
-            }
-            
-            if (m_EntityContainerDic.TryGetValue(containerName, out entityContainer))
-            {
-                return true;
-            }
-            else
-            {
-                return false;
-            }
-        }
-
-        private static void ValidateTemplateEntityType<T>(string key, EntityContainer container) where T : Entity
-        {
-            ValidateTemplateEntityType(key, typeof(T), container);
-        }
-
-        private static void ValidateTemplateEntityType(string key, Type requestType, EntityContainer container)
-        {
-            ValidateEntityType(key, requestType);
-            if (container.EntityType != requestType)
-            {
-                throw new XFrameworkException($"[EntityError] template {key} is already registered with entity type {container.EntityType.FullName}, but requested {requestType.FullName}");
-            }
-        }
-
-        private static Type ResolvePrefabEntityType(string prefabPath, Type entityType, GameObject prefab)
-        {
-            if (entityType != null)
-            {
-                ValidateEntityType(prefabPath, entityType);
-                return entityType;
-            }
-
-            Entity entity = prefab.GetComponent<Entity>();
-            if (entity == null)
-            {
-                throw new XFrameworkException($"[EntityError] prefab root does not contain an Entity component and entity type is not set. prefabPath:{prefabPath}");
-            }
-
-            return entity.GetType();
-        }
-
-        private static void ValidateEntityType(string key, Type entityType)
-        {
-            if (entityType == null)
-            {
-                throw new XFrameworkException($"[EntityError] entity type is null. key:{key}");
-            }
-
-            if (!typeof(Entity).IsAssignableFrom(entityType) || entityType.IsAbstract)
-            {
-                throw new XFrameworkException($"[EntityError] entity type must be a non-abstract Entity subtype. key:{key}, type:{entityType.FullName}");
-            }
-        }
-
         public bool IsEntityValid(string id)
         {
-            return m_EntityDic.ContainsKey(id);
+            return !string.IsNullOrEmpty(id) && m_LogicEntityDic.ContainsKey(id);
         }
 
         public bool IsEntityAliasValid(string alias)
@@ -442,9 +265,6 @@ namespace XFramework.Entity
             return !string.IsNullOrEmpty(alias) && m_EntityAliasDic.ContainsKey(alias);
         }
 
-        /// <summary>
-        /// 获取实体
-        /// </summary>
         public Entity GetEntity(GameObject gameObject)
         {
             Entity entity = null;
@@ -452,58 +272,77 @@ namespace XFramework.Entity
             {
                 entity = gameObject.GetComponent<Entity>();
                 if (entity == null)
+                {
                     Debug.LogWarning($"{gameObject.name}不是由实体管理器创建的");
+                }
             }
 
             return entity;
         }
 
-        /// <summary>
-        /// 获取实体
-        /// </summary>
-        /// <param name="entityId">实体Id</param>
         public Entity GetEntity(string entityId)
         {
-            if (m_EntityDic.TryGetValue(entityId, out Entity entity))
-            {
-                return entity;
-            }
-            else
-            {
-                throw new XFrameworkException($"[Entity] There is no entity with an id of {entityId}");
-            }
+            return GetLogicEntity(entityId).View;
         }
 
-        /// <summary>
-        /// 通过别名获取实体
-        /// </summary>
-        /// <param name="alias">实体别名</param>
+        public LogicEntity GetLogicEntity(string entityId)
+        {
+            if (!string.IsNullOrEmpty(entityId) && m_LogicEntityDic.TryGetValue(entityId, out LogicEntity logic))
+            {
+                return logic;
+            }
+
+            throw new XFrameworkException($"[Entity] There is no logic entity with an id of {entityId}");
+        }
+
+        public TLogic GetLogicEntity<TLogic>(string entityId) where TLogic : LogicEntity
+        {
+            LogicEntity logic = GetLogicEntity(entityId);
+            if (logic is TLogic typedLogic)
+            {
+                return typedLogic;
+            }
+
+            throw new XFrameworkException($"[Entity] logic entity type mismatch. id:{entityId}, expectedType:{typeof(TLogic).FullName}, actualType:{logic.GetType().FullName}");
+        }
+
+        public bool TryGetLogicEntity(string entityId, out LogicEntity logic)
+        {
+            logic = null;
+            return !string.IsNullOrEmpty(entityId) && m_LogicEntityDic.TryGetValue(entityId, out logic);
+        }
+
         public Entity GetEntityByAlias(string alias)
         {
             if (TryGetEntityByAlias(alias, out Entity entity))
             {
                 return entity;
             }
-            else
-            {
-                throw new XFrameworkException($"[Entity] There is no entity with an alias of {alias}");
-            }
+
+            throw new XFrameworkException($"[Entity] There is no entity with an alias of {alias}");
         }
 
-        /// <summary>
-        /// 通过别名获取实体
-        /// </summary>
-        /// <param name="alias">实体别名</param>
         public T GetEntityByAlias<T>(string alias) where T : Entity
         {
             return GetEntityByAlias(alias) as T;
         }
 
-        /// <summary>
-        /// 尝试通过别名获取实体
-        /// </summary>
-        /// <param name="alias">实体别名</param>
-        /// <param name="entity">实体</param>
+        public LogicEntity GetLogicEntityByAlias(string alias)
+        {
+            if (TryGetLogicEntityByAlias(alias, out LogicEntity logic))
+            {
+                return logic;
+            }
+
+            throw new XFrameworkException($"[Entity] There is no logic entity with an alias of {alias}");
+        }
+
+        public bool TryGetLogicEntityByAlias(string alias, out LogicEntity logic)
+        {
+            logic = null;
+            return !string.IsNullOrEmpty(alias) && m_EntityAliasDic.TryGetValue(alias, out logic);
+        }
+
         public bool TryGetEntityByAlias(string alias, out Entity entity)
         {
             if (string.IsNullOrEmpty(alias))
@@ -512,50 +351,33 @@ namespace XFramework.Entity
                 return false;
             }
 
-            return m_EntityAliasDic.TryGetValue(alias, out entity);
+            if (m_EntityAliasDic.TryGetValue(alias, out LogicEntity logic))
+            {
+                entity = logic.View;
+                return entity != null;
+            }
+
+            entity = null;
+            return false;
         }
 
-        /// <summary>
-        /// 获取同名的所有实体
-        /// </summary>
-        /// <param name="entityName"></param>
         public Entity[] GetEntities(string entityName)
         {
-            return GetContainer(entityName).GetEntities();
+            return m_EntityViewManager.GetEntities(entityName);
         }
 
         #endregion
 
         #region 池的清理
 
-        /// <summary>
-        /// 清理实体池
-        /// </summary>
-        /// <param name="count">容器实体池的最大保留量</param>
         public void Clean(int count = 0)
         {
-            foreach (var item in m_EntityContainerDic.Values)
-            {
-                item.Clean(count);
-            }
+            m_EntityViewManager.Clean(count);
         }
 
-        /// <summary>
-        /// 清理某个容器实体池
-        /// </summary>
-        /// <param name="containerName">容器名</param>
-        /// <param name="count">容器实体池的最大保留量</param>
         public void Clean(string containerName, int count)
         {
-            EntityContainer container = GetContainer(containerName);
-            if (container != null)
-            {
-                container.Clean(count);
-            }
-            else
-            {
-                throw new XFrameworkException("[EntityContainer] null container");
-            }
+            m_EntityViewManager.Clean(containerName, count);
         }
 
         #endregion
@@ -566,53 +388,138 @@ namespace XFramework.Entity
 
         public override void Shutdown()
         {
-            m_EntityContainerDic.Clear();
-            m_EntityDic.Clear();
+            RecycleAll();
+            m_EntityViewManager.Shutdown();
+            m_LogicEntityDic.Clear();
             m_EntityAliasDic.Clear();
         }
 
         public override void Update()
         {
-            foreach (var item in m_EntityContainerDic.Values)
+            foreach (LogicEntity logic in m_LogicEntityDic.Values)
             {
-                item.OnUpdate();
+                logic.OnUpdate();
             }
+
+            m_EntityViewManager.Update();
         }
 
         #endregion
 
-        #region 模板
+        #region Logic 注册与 View 绑定
 
-        #endregion
-
-        #region 别名
-
-        private void RegisterEntityAlias(Entity entity, string alias)
+        private LogicEntity AllocateLogic(Type entityType, string key, string alias, IEntityData entityData, out Type resolvedEntityType)
         {
-            entity.Alias = null;
-            if (string.IsNullOrEmpty(alias))
+            if (m_EntityViewManager.ContainsTemplate(key))
             {
-                return;
+                resolvedEntityType = m_EntityViewManager.ResolveEntityType(key, entityType);
+            }
+            else
+            {
+                resolvedEntityType = entityType ?? typeof(CommonEntity);
+                EntityViewAllocatorUtility.Validate(key, resolvedEntityType);
+                var template = new GameObject(key + "template");
+                AddTemplate(key, resolvedEntityType, template);
             }
 
-            if (m_EntityAliasDic.TryGetValue(alias, out Entity existEntity))
-            {
-                throw new XFrameworkException($"[EntityError] alias is already occupied. Alias {alias}, Entity {existEntity}");
-            }
-
-            entity.Alias = alias;
-            m_EntityAliasDic.Add(alias, entity);
+            return CreateLogic(GetLogicType(resolvedEntityType), key, alias, entityData);
         }
 
-        private void UnregisterEntityAlias(Entity entity)
+        private LogicEntity AllocateLogicWithPrefab(string prefabPath, Type entityType, string alias, IEntityData entityData, out Type resolvedEntityType)
         {
-            if (entity == null || string.IsNullOrEmpty(entity.Alias))
+            resolvedEntityType = m_EntityViewManager.ResolvePrefabEntityType(prefabPath, entityType);
+            if (!m_EntityViewManager.ContainsTemplate(prefabPath))
             {
-                return;
+                AddAllocator(new ResourceEntityViewAllocator(prefabPath, resolvedEntityType));
             }
 
-            m_EntityAliasDic.Remove(entity.Alias);
-            entity.Alias = null;
+            return CreateLogic(GetLogicType(resolvedEntityType), prefabPath, alias, entityData);
+        }
+
+        private LogicEntity CreateLogic(Type logicType, string containerName, string alias, IEntityData entityData)
+        {
+            LogicEntity logic = Activator.CreateInstance(logicType) as LogicEntity;
+            logic.Id = Guid.NewGuid().ToString();
+            logic.Data = entityData;
+            logic.ContainerName = containerName;
+            RegisterLogic(logic, alias);
+            try
+            {
+                logic.OnCreate();
+                return logic;
+            }
+            catch
+            {
+                UnregisterLogic(logic);
+                throw;
+            }
+        }
+
+        private bool IsRegisteredLogic(LogicEntity logic)
+        {
+            return logic != null
+                && !string.IsNullOrEmpty(logic.Id)
+                && m_LogicEntityDic.TryGetValue(logic.Id, out LogicEntity registeredLogic)
+                && registeredLogic == logic;
+        }
+
+        private static Type GetLogicType(Type entityType)
+        {
+            Type currentType = entityType;
+            while (currentType != null && currentType != typeof(Entity))
+            {
+                if (currentType.IsGenericType && currentType.GetGenericTypeDefinition() == typeof(Entity<>))
+                {
+                    return currentType.GetGenericArguments()[0];
+                }
+
+                currentType = currentType.BaseType;
+            }
+
+            return typeof(LogicEntity);
+        }
+
+        private void RegisterLogic(LogicEntity logic, string alias)
+        {
+            if (m_LogicEntityDic.TryGetValue(logic.Id, out LogicEntity existLogic))
+            {
+                throw new XFrameworkException($"[EntityError] id is already occupied.  Entity {existLogic.View}");
+            }
+
+            if (!string.IsNullOrEmpty(alias) && m_EntityAliasDic.TryGetValue(alias, out existLogic))
+            {
+                throw new XFrameworkException($"[EntityError] alias is already occupied. Alias {alias}, Entity {existLogic.View}");
+            }
+
+            logic.Alias = string.IsNullOrEmpty(alias) ? null : alias;
+            m_LogicEntityDic.Add(logic.Id, logic);
+            if (logic.Alias != null)
+            {
+                m_EntityAliasDic.Add(logic.Alias, logic);
+            }
+        }
+
+        private void UnregisterLogic(LogicEntity logic)
+        {
+            m_LogicEntityDic.Remove(logic.Id);
+            if (!string.IsNullOrEmpty(logic.Alias))
+            {
+                m_EntityAliasDic.Remove(logic.Alias);
+            }
+
+            logic.Alias = null;
+        }
+
+        private void BindView(LogicEntity logic, Entity view)
+        {
+            logic.View = view;
+            view.Logic = logic;
+        }
+
+        private void UnbindView(LogicEntity logic, Entity view)
+        {
+            logic.View = null;
+            view.Logic = null;
         }
 
         #endregion

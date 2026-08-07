@@ -182,7 +182,7 @@ namespace XFramework.Editor
                 anyAdded = true;
                 Type capturedType = type;
                 menu.AddItem(new GUIContent($"切换到其他Debug/{displayName}"), false,
-                    () => SwitchToDebugWindow(capturedType));
+                    () => SwitchToDebugWindow(this, capturedType));
             }
 
             if (!anyAdded)
@@ -208,43 +208,25 @@ namespace XFramework.Editor
             return type.Name;
         }
 
-        private static void SwitchToDebugWindow(Type targetType)
+        private static void SwitchToDebugWindow(XFrameworkDebugWindowBase current, Type targetType)
         {
-            XFrameworkDebugWindowBase current = focusedWindow as XFrameworkDebugWindowBase;
+            object currentDockArea = GetWindowDockArea(current);
+            int currentDockIndex = currentDockArea != null ? GetDockedWindowIndex(current, currentDockArea) : -1;
+            Rect savedPosition = current.position;
 
-            // 保存当前窗口的 dock 父节点与屏幕位置，用于切换后恢复
-            object currentDockArea = null;
-            Rect savedPosition = default;
-            if (current != null)
-            {
-                currentDockArea = GetWindowDockArea(current);
-                savedPosition = current.position;
-            }
-
-            // 调用目标类型的 ShowWindow（带 [MenuItem] 的静态方法）打开目标窗口
             InvokeShowWindow(targetType);
-
-            // 找到刚打开的目标窗口实例
             XFrameworkDebugWindowBase target = FindOpenWindow(targetType);
 
-            // 关闭当前窗口（避免与目标同类型时误关）
-            if (current != null && current.GetType() != targetType)
+            if (currentDockArea != null)
             {
-                current.Close();
+                InsertDockedWindow(target, currentDockArea, currentDockIndex);
+            }
+            else
+            {
+                target.position = savedPosition;
             }
 
-            // 把目标窗口放回原窗口的位置：优先 dock 到原 dock area，否则保留屏幕坐标
-            if (target != null && current != null)
-            {
-                if (currentDockArea != null)
-                {
-                    DockWindowToArea(target, currentDockArea);
-                }
-                else
-                {
-                    target.position = savedPosition;
-                }
-            }
+            current.Close();
         }
 
         private static void InvokeShowWindow(Type targetType)
@@ -272,8 +254,6 @@ namespace XFramework.Editor
             return null;
         }
 
-        // 获取 EditorWindow 的 dock 父节点（m_Parent）。
-        // 窗口 docked 时实际类型为 DockArea；浮动窗口返回 null。
         private static object GetWindowDockArea(EditorWindow window)
         {
             FieldInfo parentField = typeof(EditorWindow).GetField("m_Parent",
@@ -283,24 +263,28 @@ namespace XFramework.Editor
             {
                 return null;
             }
-            // 仅当父节点为 DockArea（窗口处于 docked 状态）时才返回，浮动窗口返回 null
             return parent.GetType().Name == "DockArea" ? parent : null;
         }
 
-        // 通过反射调用 DockArea.AddTab(EditorWindow) 把窗口插入到指定 dock area，
-        // 让切换后的窗口占据原窗口的 dock 位置。
-        private static void DockWindowToArea(EditorWindow window, object dockArea)
+        private static int GetDockedWindowIndex(EditorWindow window, object dockArea)
         {
-            try
+            MethodInfo findPaneIndexMethod = dockArea.GetType().GetMethod("FindPaneIndex", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { typeof(EditorWindow) }, null);
+            return (int)findPaneIndexMethod.Invoke(dockArea, new object[] { window });
+        }
+
+        private static void InsertDockedWindow(EditorWindow target, object dockArea, int dockIndex)
+        {
+            // ShowWindow 会先把目标窗口放进一个 DockArea，插入前要先解除这层归属。
+            object targetDockArea = GetWindowDockArea(target);
+            if (targetDockArea != null)
             {
-                MethodInfo addTabMethod = dockArea.GetType().GetMethod("AddTab",
-                    new[] { typeof(EditorWindow) });
-                addTabMethod?.Invoke(dockArea, new object[] { window });
+                MethodInfo removeTabMethod = targetDockArea.GetType().GetMethod("RemoveTab", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { typeof(EditorWindow) }, null);
+                removeTabMethod.Invoke(targetDockArea, new object[] { target });
             }
-            catch
-            {
-                // 反射调用失败时忽略，窗口保留 ShowWindow 后的默认位置
-            }
+
+            // 先插入再正常 Close 旧窗口，既保留 tab index，也让 Unity 完成完整关闭生命周期。
+            MethodInfo addTabMethod = dockArea.GetType().GetMethod("AddTab", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { typeof(int), typeof(EditorWindow), typeof(bool) }, null);
+            addTabMethod.Invoke(dockArea, new object[] { dockIndex, target, true });
         }
 
         private static IEnumerable<XFrameworkDebugWindowBase> GetAllDebugWindows()
