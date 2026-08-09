@@ -100,9 +100,9 @@ namespace XFramework.Resource
         }
         
         /// <summary>
-        /// Resources 路径前缀，以该前缀开头的路径将走 Resources.Load 加载（去掉前缀，无需后缀）
+        /// Resources 路径片段，路径中包含该片段（如 Assets/Resources/xxx）时走 Resources.Load 加载
         /// </summary>
-        private const string kResourcesPrefix = "Resources/";
+        private const string kResourcesSegment = "/Resources/";
 
         /// <summary>
         /// 同步加载资源
@@ -117,10 +117,11 @@ namespace XFramework.Resource
                 throw new XFrameworkException("load path is null");
             }
 
-            // 以 "Resources/" 开头的路径走 Resources.Load（去掉前缀，无需后缀）
-            if (assetName.StartsWith(kResourcesPrefix, StringComparison.Ordinal))
+            // 路径包含 "/Resources/" 时走 Resources.Load（提取 Resources/ 之后的部分，无需后缀）
+            int resIdx = assetName.IndexOf(kResourcesSegment, StringComparison.Ordinal);
+            if (resIdx >= 0)
             {
-                return LoadInResources<T>(assetName.Substring(kResourcesPrefix.Length));
+                return LoadInResources<T>(assetName.Substring(resIdx + kResourcesSegment.Length));
             }
 
             assetName = Path2RealPath(assetName);

@@ -21,6 +21,7 @@ namespace XFramework.UI
         private readonly Label foldoutLabel;
         private bool arrowActive = true;
         private bool m_Initialized;
+        private Type m_MemberType;
 
         public ObjectElement()
         {
@@ -144,13 +145,22 @@ namespace XFramework.UI
         public override void Refresh()
         {
             base.Refresh();
-            if (!m_Initialized)
+            Type memberType = ResolveMemberType();
+            if (!m_Initialized || memberType != m_MemberType || Value == null)
             {
                 ClearElements();
-                CreateElements();
-                m_Initialized = true;
+                m_MemberType = memberType;
+                if (Value != null)
+                {
+                    CreateElements(memberType);
+                    m_Initialized = true;
+                }
+                else
+                {
+                    m_Initialized = false;
+                }
             }
-            else if (Value != null)
+            else
             {
                 RefreshChildren(elementsContent);
             }
@@ -164,11 +174,22 @@ namespace XFramework.UI
             variableNameText.style.translate = new Translate(0f, 0f);
         }
 
-        private void CreateElements()
+        private Type ResolveMemberType()
+        {
+            if (Value != null &&
+                (BoundVariableType.IsInterface || BoundVariableType.IsAbstract))
+            {
+                return Value.GetType();
+            }
+
+            return BoundVariableType;
+        }
+
+        private void CreateElements(Type memberType)
         {
             List<MemberEntry> members = new();
-            CollectMembers(members, BindingFlags.Instance | BindingFlags.Public | BindingFlags.GetField | BindingFlags.GetProperty, false);
-            CollectMembers(members, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.GetField | BindingFlags.GetProperty, true);
+            CollectMembers(memberType, members, BindingFlags.Instance | BindingFlags.Public | BindingFlags.GetField | BindingFlags.GetProperty, false);
+            CollectMembers(memberType, members, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.GetField | BindingFlags.GetProperty, true);
 
             Dictionary<string, PrettyGroupElement> groups = new();
             for (int i = 0; i < members.Count; i++)
@@ -203,9 +224,9 @@ namespace XFramework.UI
             elementsContent.Clear();
         }
 
-        private void CollectMembers(List<MemberEntry> entries, BindingFlags bindingFlags, bool onlyElementProperty)
+        private void CollectMembers(Type memberType, List<MemberEntry> entries, BindingFlags bindingFlags, bool onlyElementProperty)
         {
-            foreach (MemberInfo member in GetMembers(BoundVariableType, bindingFlags))
+            foreach (MemberInfo member in GetMembers(memberType, bindingFlags))
             {
                 if (member.MemberType != MemberTypes.Field && member.MemberType != MemberTypes.Property)
                 {
@@ -322,12 +343,17 @@ namespace XFramework.UI
 
             do
             {
+                if (type == null)
+                {
+                    break;
+                }
+
                 var temp = new List<MemberInfo>(type.GetMembers(bindingFlags | BindingFlags.DeclaredOnly));
                 temp.AddRange(result);
                 result = temp;
                 type = type.BaseType;
             }
-            while (type != typeof(System.Object) && type != typeof(System.ValueType));
+            while (type != null && type != typeof(System.Object) && type != typeof(System.ValueType));
 
             var aa = new List<MemberInfo>();
 
