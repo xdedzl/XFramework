@@ -4,14 +4,35 @@ using XFramework.Event;
 
 namespace XFramework
 {
-    /// <summary>
-    /// 流程基类
-    /// </summary>
-    [System.Serializable]
+    #region 流程基类和接口 
+    public interface IProcedureEnterRequest
+    {
+    }
+
+    public interface IProcedureWithRequest
+    {
+        internal Type RequestType { get; }
+        internal void EnterDefaultRequest();
+        internal void EnterRequestObject(IProcedureEnterRequest request);
+    }
+
+    public interface IProcedureWithRequest<TRequest> : IProcedureWithRequest where TRequest : struct, IProcedureEnterRequest
+    {
+
+    }
+    
+    [Serializable]
     public abstract class ProcedureBase
     {
         private List<SubProcedureBase> m_subProcedureBases;
         private SubProcedureBase m_currentSubProcedure;
+        private readonly EventRegisterHelper m_EventRegisterHelper;
+
+        protected ProcedureBase()
+        {
+            m_EventRegisterHelper = EventRegisterHelper.Create(this);
+        }
+
         public SubProcedureBase CurrentSubProcedure
         {
             get
@@ -21,6 +42,18 @@ namespace XFramework
         }
 
         public virtual void OnInit() { }
+
+        internal void Enter(ProcedureBase preProcedure)
+        {
+            m_EventRegisterHelper.Register();
+            OnEnter(preProcedure);
+        }
+
+        internal void Exit()
+        {
+            OnExit();
+            m_EventRegisterHelper.UnRegister();
+        }
 
         public virtual void OnEnter(ProcedureBase preProcedure)
         {
@@ -44,7 +77,7 @@ namespace XFramework
 
         public virtual void OnExit()
         {
-            m_currentSubProcedure?.OnExit();
+            m_currentSubProcedure?.Exit();
             m_currentSubProcedure = null;
         }
 
@@ -62,13 +95,13 @@ namespace XFramework
                 return;
             }
 
-            m_currentSubProcedure?.OnExit();
+            m_currentSubProcedure?.Exit();
             foreach (var item in m_subProcedureBases)
             {
                 if(item.GetType() == typeof(T))
                 {
                     m_currentSubProcedure = item;
-                    m_currentSubProcedure.OnEnter(args);
+                    m_currentSubProcedure.Enter(args);
                     ProcedureManager.Instance.RefreshProcedureState();
                     return;
                 }
@@ -77,7 +110,7 @@ namespace XFramework
             m_currentSubProcedure = new T();
             m_currentSubProcedure._parent = this;
             m_currentSubProcedure.OnInit();
-            m_currentSubProcedure.OnEnter(args);
+            m_currentSubProcedure.Enter(args);
             m_subProcedureBases.Add(m_currentSubProcedure);
             ProcedureManager.Instance.RefreshProcedureState();
         }
@@ -87,7 +120,7 @@ namespace XFramework
         /// </summary>
         public void ChangeSubProcedure2None()
         {
-            m_currentSubProcedure?.OnExit();
+            m_currentSubProcedure?.Exit();
             m_currentSubProcedure = null;
             ProcedureManager.Instance.RefreshProcedureState();
         }
@@ -99,28 +132,43 @@ namespace XFramework
                 : m_subProcedureBases.ToArray();
         }
     }
+    #endregion
 
-    public abstract class ProcedureWithEvent : ProcedureBase
+    #region 主流程
+    public abstract class MainProcedure : ProcedureBase
     {
-        private readonly EventRegisterHelper _registerHelper;
-
-        public ProcedureWithEvent()
-        {
-            _registerHelper = EventRegisterHelper.Create(this);
-        }
-
-        public override void OnEnter(ProcedureBase preProcedure)
-        {
-            _registerHelper.Register();
-        }
-
-        public override void OnExit()
-        {
-            base.OnExit();
-            _registerHelper.UnRegister();
-        }
     }
 
+    public abstract class MainProcedure<TRequest> : MainProcedure, IProcedureWithRequest<TRequest> where TRequest : struct, IProcedureEnterRequest
+    {
+        Type IProcedureWithRequest.RequestType => typeof(TRequest);
+
+        void IProcedureWithRequest.EnterDefaultRequest()
+        {
+            TRequest request = CreateDefaultEnterRequest();
+            OnEnter(in request);
+        }
+
+        void IProcedureWithRequest.EnterRequestObject(IProcedureEnterRequest request)
+        {
+            if (request is not TRequest typedRequest)
+            {
+                throw new XFrameworkException($"[Procedure] Invalid enter request for {GetType().Name}. Expected: {typeof(TRequest).Name}.");
+            }
+
+            OnEnter(in typedRequest);
+        }
+
+        protected virtual TRequest CreateDefaultEnterRequest()
+        {
+            return default;
+        }
+
+        protected abstract void OnEnter(in TRequest request);
+    }
+    #endregion
+
+    #region 并行流程
     /// <summary>
     /// 并行根流程基类。并行根流程与主流程同时运行，但不隶属于主流程。
     /// </summary>
@@ -202,7 +250,9 @@ namespace XFramework
             Priority = priority;
         }
     }
+    #endregion
 
+    #region 覆盖流程
     /// <summary>
     /// 流程覆盖层基类，用于在当前主流程之上临时叠加短生命周期玩法或交互。
     /// </summary>
@@ -221,16 +271,36 @@ namespace XFramework
 
         public virtual void OnExit() { }
     }
-
-
+    #endregion
+    
+    #region 子流程
     /// <summary>
     /// 子流程基类
     /// </summary>
     public abstract class SubProcedureBase
     {
         internal ProcedureBase _parent;
+        private readonly EventRegisterHelper m_EventRegisterHelper;
+
+        protected SubProcedureBase()
+        {
+            m_EventRegisterHelper = EventRegisterHelper.Create(this);
+        }
 
         public virtual void OnInit() { }
+
+        internal void Enter(params object[] parms)
+        {
+            m_EventRegisterHelper.Register();
+            OnEnter(parms);
+        }
+
+        internal void Exit()
+        {
+            OnExit();
+            m_EventRegisterHelper.UnRegister();
+        }
+
         /// <summary>
         /// 进入该状态
         /// </summary>
@@ -258,24 +328,5 @@ namespace XFramework
             }
         }
     }
-
-    public abstract class SubProcedureWithEvent<T> : SubProcedureBase<T> where T : ProcedureBase
-    {
-        private readonly EventRegisterHelper _registerHelper;
-
-        public SubProcedureWithEvent()
-        {
-            _registerHelper = EventRegisterHelper.Create(this);
-        }
-
-        public override void OnEnter(params object[] parms)
-        {
-            _registerHelper.Register();
-        }
-
-        public override void OnExit()
-        {
-            _registerHelper.UnRegister();
-        }
-    }
+    #endregion
 }

@@ -117,8 +117,8 @@ flowchart TB
 ## 2. 核心驱动 (Core Driver: ProcedureManager)
 `ProcedureManager` 是 XFramework 的灵魂，它不仅是一个状态机，更是驱动整个游戏生命周期的"指挥官"。
 
-### 2.1 基础流程控制 (ProcedureBase)
-所有业务流程的基类，本质上是一个拥有增强生命周期的有限状态机节点。
+### 2.1 基础流程控制 (MainProcedure)
+项目主流程继承 `MainProcedure`。`ProcedureBase` 仅作为主流程与并行根流程共用的生命周期底座，不直接用于项目主流程。
 
 #### 核心生命周期钩子
 - **`OnInit()`**: 流程首次创建时触发（全局仅一次），适合初始化不随状态切换改变的数据。
@@ -131,7 +131,7 @@ flowchart TB
   - **只有在 `onReady` 执行后**，框架才会通过特性加载该流程依赖的 `Module` 和显示 `UI`。
 
 #### 进阶功能
-- **事件自动绑定**: 继承 `ProcedureWithEvent` 可实现类内 `[EventListener]` 特性方法的自动注册与注销。
+- **事件自动绑定**: `ProcedureBase` 和 `SubProcedureBase` 会在进入时自动注册类内的 `[EventListener]` 方法，退出时自动注销。
 - **内置子流程 (SubProcedure)**: 
   - 支持在大流程内部进行二次状态拆分（如：战斗流程中的"部署"、"开战"、"结算"）。
   - 使用 `ChangeSubProcedure<T>(args)` 进行内部切换。
@@ -139,11 +139,49 @@ flowchart TB
 - **全局重置 (ChangeProcedure(null))**: 
   - 当切换到空流程时，框架按 Overlay、并行根、旧主流程的顺序退出，并清理所有 `Procedure` 生命周期绑定的模块及 UI 面板。
 
+#### 强类型进入参数
+
+需要业务参数的普通主流程继承 `MainProcedureWithRequest<TRequest>`。Request 推荐使用实现 `IProcedureEnterRequest` 的 `readonly struct`，流程通过 `OnEnter(in TRequest request)` 接收：
+
+```csharp
+public readonly struct BattleProcedureRequest : IProcedureEnterRequest
+{
+    public BattleProcedureRequest(int levelId)
+    {
+        LevelId = levelId;
+    }
+
+    public int LevelId { get; }
+}
+
+public class BattleProcedure : MainProcedureWithRequest<BattleProcedureRequest>
+{
+    public int LevelId { get; private set; }
+
+    protected override BattleProcedureRequest CreateDefaultEnterRequest()
+    {
+        return new BattleProcedureRequest(1);
+    }
+
+    protected override void OnEnter(in BattleProcedureRequest request)
+    {
+        LevelId = request.LevelId;
+    }
+}
+
+ProcedureManager.Instance.ChangeProcedure<BattleProcedure>(new BattleProcedureRequest(1001));
+ProcedureManager.Instance.ChangeProcedure<BattleProcedure>(); // 使用 CreateDefaultEnterRequest()
+```
+
+显式 Request 会在退出旧流程前校验：目标必须实现 `IProcedureWithRequest`（通常直接继承 `MainProcedureWithRequest<TRequest>`），且 Request 类型必须完全一致。进入顺序为 `OnEnter(ProcedureBase preProcedure)` → `OnEnter(in TRequest request)` → `OnPrepare()`。切换到当前同类型流程仍为幂等操作，不会重新分发 Request。
+
+> 当前强类型 Request 仅支持普通主流程，不与 `SceneProcedureBase` 组合。
+
 #### 三层流程模型
 
 `ProcedureManager` 同时管理三类互相独立的活跃流程：
 
-1. **主流程 (`ProcedureBase`)**：始终最多一个，优先级固定为 `0`，通过 `ChangeProcedure<T>()` 切换。请求切换到当前主流程类型是幂等操作，不会清理并行根或 Overlay。
+1. **主流程 (`MainProcedure`)**：始终最多一个，优先级固定为 `0`，通过 `ChangeProcedure<T>()` 切换。`ChangeProcedure` 只接受 `MainProcedure`；请求切换到当前主流程类型是幂等操作，不会清理并行根或 Overlay。
 2. **并行根 (`ParallelProcedureBase`)**：可同时存在多个，不是主流程的子流程。每个类型必须显式声明正数 `[ParallelProcedurePriority(priority)]`，运行期间优先级不可重复。
 3. **Overlay (`ProcedureOverlayBase`)**：始终最多一个，拥有最高优先级，适合可从任意主流程临时进入的小游戏或覆盖玩法。
 
@@ -334,7 +372,7 @@ private void HandlePlayerDead(string playerName, int score)
 `EventRegisterHelper` 会在内部扫描目标类的所有方法，并将其包装为高效的 `Delegate`。
 - **框架基类支持**：
   - `PanelBase`：在 `OnBeforeOpen` 时注册，`OnBeforeClose` 时注销。
-  - `ProcedureWithEvent`：进入流程时注册，离开时注销。
+  - `ProcedureBase` / `SubProcedureBase`：进入流程时注册，离开时注销。
   - `GameModuleWithEvent`：模块初始化时注册，销毁时注销。
 - **如果你在普通类中使用**：
   需手动持有 `EventRegisterHelper` 实例，在合适时机调用 `Register()` 和 `UnRegister()`。
@@ -351,7 +389,7 @@ MessageManager.Instance.BroadCast("OnUpdate", arg1, arg2);
 ```
 
 > [!IMPORTANT]
-> **开发指南**：如果你的类继承自 XFramework 的系统基类，请优先查找对应的 `WithEvent` 版本（如 `SubProcedureWithEvent`），它们能够确保事件在正确的生命周期内被清理，有效规避内存泄露风险。
+> **开发指南**：流程和子流程可直接在基类中使用 `[EventListener]`，无需选择额外的 `WithEvent` 基类。其他系统仍按各自生命周期类型管理事件绑定。
 
 ### 3.5 异步与并发处理 (XTask)
 
@@ -859,7 +897,7 @@ public class BattleProcedure : SceneProcedureBase { ... }
    }
    ```
 2. **场景挂载**：在初始场景中创建一个空的 GameObject，挂载该 `Game` 脚本。
-3. **编写首个流程**：编写您的 `EntryProcedure` 继承 `ProcedureBase` 或 `SceneProcedureBase`。
+3. **编写首个流程**：编写您的 `EntryProcedure` 继承 `MainProcedure` 或 `SceneProcedureBase`。
 4. **绑定流程**：在 Inspector 面板中，通过 `Game` 组件上的 `Start Procedure` 下拉框直接选择您编写的初始流程（框架会自动扫描 `Assembly-CSharp` 中的所有流程类）。
 5. **开启开发之旅**：按下运行键，畅享极速游戏开发体验！
 

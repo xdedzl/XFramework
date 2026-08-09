@@ -37,7 +37,7 @@ namespace XFramework
     public readonly struct ProcedureManagerDebugSnapshot
     {
         public ProcedureManagerDebugSnapshot(
-            ProcedureBase currentProcedure,
+            MainProcedure currentProcedure,
             SubProcedureBase currentSubProcedure,
             ProcedureOverlayBase currentOverlay,
             IReadOnlyList<ProcedureCacheDebugSnapshot> cachedProcedures,
@@ -57,7 +57,7 @@ namespace XFramework
         }
 
         public ProcedureManagerDebugSnapshot(
-            ProcedureBase currentProcedure,
+            MainProcedure currentProcedure,
             SubProcedureBase currentSubProcedure,
             ProcedureOverlayBase currentOverlay,
             IReadOnlyList<ParallelProcedureDebugSnapshot> parallelProcedures,
@@ -76,7 +76,7 @@ namespace XFramework
             ProcessorTypes = processorTypes;
         }
 
-        public ProcedureBase CurrentProcedure { get; }
+        public MainProcedure CurrentProcedure { get; }
         public SubProcedureBase CurrentSubProcedure { get; }
         public ProcedureOverlayBase CurrentOverlay { get; }
         public IReadOnlyList<ParallelProcedureDebugSnapshot> ParallelProcedures { get; }

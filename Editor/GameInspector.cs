@@ -41,7 +41,7 @@ public class GameInspector : Editor
             entranceProcedureIndex = 0;
 
         gameInstance.startTypeName = typeNames[entranceProcedureIndex];
-        gameInstance.startProcedure = Utility.Reflection.CreateInstance<ProcedureBase>(GetType(typeNames[entranceProcedureIndex]));
+        gameInstance.startProcedure = Utility.Reflection.CreateInstance<MainProcedure>(GetType(typeNames[entranceProcedureIndex]));
 
         savePath = Application.persistentDataPath + "/" + UnityEngine.SceneManagement.SceneManager.GetActiveScene().name + "Procedure";
 
@@ -73,7 +73,7 @@ public class GameInspector : Editor
         RefreshTypeNames();
         if (typeNames.Length == 0)
         {
-            EditorGUILayout.HelpBox("未找到任何 ProcedureBase 子类", MessageType.Warning);
+            EditorGUILayout.HelpBox("未找到任何 MainProcedure 子类", MessageType.Warning);
             return;
         }
 
@@ -184,14 +184,14 @@ public class GameInspector : Editor
             return;
         }
         gameInstance.startTypeName = typeNames[entranceProcedureIndex];
-        gameInstance.startProcedure = Utility.Reflection.CreateInstance<ProcedureBase>(GetType(typeNames[entranceProcedureIndex]));
+        gameInstance.startProcedure = Utility.Reflection.CreateInstance<MainProcedure>(GetType(typeNames[entranceProcedureIndex]));
     }
 
     private void RefreshTypeNames()
     {
         var fullNames = new List<string>();
         var shortNames = new List<string>();
-        Type typeBase = typeof(ProcedureBase);
+        Type typeBase = typeof(MainProcedure);
         Assembly assembly;
         try { assembly = Assembly.Load("Assembly-CSharp"); }
         catch { typeNames = new string[0]; displayNames = new string[0]; return; }
@@ -203,7 +203,6 @@ public class GameInspector : Editor
             if (type.IsClass &&
                 !type.IsAbstract &&
                 type.IsSubclassOf(typeBase) &&
-                !type.IsSubclassOf(typeof(ParallelProcedureBase)) &&
                 type.GetCustomAttribute<HideInEditor>() == null)
             {
                 fullNames.Add(type.FullName);

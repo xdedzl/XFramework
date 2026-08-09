@@ -16,7 +16,7 @@ namespace XFramework
         /// <summary>
         /// 当前流程
         /// </summary>
-        private ProcedureBase m_CurrentProcedure;
+        private MainProcedure m_CurrentProcedure;
 
         private ProcedureOverlayBase m_CurrentOverlay;
 
@@ -28,7 +28,7 @@ namespace XFramework
         /// <summary>
         /// 当前流程
         /// </summary>
-        public ProcedureBase CurrentProcedure => m_CurrentProcedure;
+        public MainProcedure CurrentProcedure => m_CurrentProcedure;
 
         public ProcedureOverlayBase CurrentOverlay => m_CurrentOverlay;
 
@@ -45,9 +45,17 @@ namespace XFramework
         /// 切换流程
         /// </summary>
         /// <typeparam name="TProcedure">流程类型</typeparam>
-        public void ChangeProcedure<TProcedure>() where TProcedure : ProcedureBase
+        public void ChangeProcedure<TProcedure>() where TProcedure : MainProcedure
         {
             ChangeProcedure(typeof(TProcedure));
+        }
+
+        /// <summary>
+        /// 使用强类型 Request 切换流程
+        /// </summary>
+        public void ChangeProcedure<TProcedure>(IProcedureEnterRequest request) where TProcedure : MainProcedure
+        {
+            ChangeProcedure(typeof(TProcedure), request);
         }
 
         /// <summary>
@@ -56,12 +64,46 @@ namespace XFramework
         /// <param name="type">流程类型</param>
         public void ChangeProcedure(Type type)
         {
-            if (type != null && typeof(ParallelProcedureBase).IsAssignableFrom(type))
+            ChangeProcedure(type, null, false);
+        }
+
+        /// <summary>
+        /// 使用强类型 Request 切换流程
+        /// </summary>
+        public void ChangeProcedure(Type type, IProcedureEnterRequest request)
+        {
+            ChangeProcedure(type, request, true);
+        }
+
+        private void ChangeProcedure(Type type, IProcedureEnterRequest request, bool hasRequest)
+        {
+            if (hasRequest && type == null)
             {
-                throw new XFrameworkException($"[Procedure] {type.Name} is a parallel procedure and cannot be used as the main procedure.");
+                throw new XFrameworkException("[Procedure] Cannot enter a null procedure with a request.");
             }
 
-            ProcedureBase newProcedure = type is null ? null : GetOrCreateProcedure(type);
+            if (hasRequest && request == null)
+            {
+                throw new XFrameworkException($"[Procedure] Invalid enter request. Procedure: {type.Name}, Request is null.");
+            }
+
+            if (type != null && !typeof(MainProcedure).IsAssignableFrom(type))
+            {
+                throw new XFrameworkException($"[Procedure] {type.Name} is not a MainProcedure and cannot be used as the main procedure.");
+            }
+
+            MainProcedure newProcedure = type is null ? null : (MainProcedure)GetOrCreateProcedure(type);
+            IProcedureWithRequest requestProcedure = newProcedure as IProcedureWithRequest;
+            if (hasRequest && requestProcedure == null)
+            {
+                throw new XFrameworkException($"[Procedure] Invalid enter request for {type.Name}. Expected procedure implementing IProcedureWithRequest.");
+            }
+
+            if (hasRequest && requestProcedure.RequestType != request.GetType())
+            {
+                throw new XFrameworkException($"[Procedure] Invalid enter request for {type.Name}. Expected: {requestProcedure.RequestType.Name}, Actual: {request.GetType().Name}.");
+            }
+
             if (m_CurrentProcedure == newProcedure)
             {
                 return;
@@ -71,11 +113,23 @@ namespace XFramework
             StopAllParallelProcedures(false);
 
             var oldProcedure = m_CurrentProcedure;
-            oldProcedure?.OnExit();
+            oldProcedure?.Exit();
 
             m_CurrentProcedure = newProcedure;
 
-            newProcedure?.OnEnter(oldProcedure);
+            newProcedure?.Enter(oldProcedure);
+            if (requestProcedure != null)
+            {
+                if (hasRequest)
+                {
+                    requestProcedure.EnterRequestObject(request);
+                }
+                else
+                {
+                    requestProcedure.EnterDefaultRequest();
+                }
+            }
+
             if (newProcedure == null)
             {
                 RefreshProcedureState();
@@ -104,7 +158,12 @@ namespace XFramework
 
             if (m_CurrentProcedure != null && key == m_CurrentProcedure.GetType().Name)
             {
-                m_CurrentProcedure = procedure;
+                if (procedure is not MainProcedure mainProcedure)
+                {
+                    throw new XFrameworkException($"[Procedure] {key} is active as the main procedure and must be updated with a MainProcedure instance.");
+                }
+
+                m_CurrentProcedure = mainProcedure;
             }
 
             for (int i = 0; i < m_ParallelProcedures.Count; i++)
@@ -129,7 +188,7 @@ namespace XFramework
         /// </summary>
         /// <typeparam name="TProcedure">流程类型</typeparam>
         /// <returns>当前流程</returns>
-        public TProcedure GetCurrentProcedure<TProcedure>() where TProcedure : ProcedureBase
+        public TProcedure GetCurrentProcedure<TProcedure>() where TProcedure : MainProcedure
         {
             if (TryGetCurrentProcedure<TProcedure>(out var procedure))
             {
@@ -144,7 +203,7 @@ namespace XFramework
         /// <summary>
         /// 获取当前流程
         /// </summary>
-        public bool TryGetCurrentProcedure<TProcedure>(out TProcedure procedure) where TProcedure : ProcedureBase
+        public bool TryGetCurrentProcedure<TProcedure>(out TProcedure procedure) where TProcedure : MainProcedure
         {
             if (m_CurrentProcedure is TProcedure p)
             {
@@ -235,7 +294,7 @@ namespace XFramework
             }
 
             m_ParallelProcedures.Insert(insertIndex, procedure);
-            procedure.OnEnter(null);
+            procedure.Enter(null);
             if (!m_ParallelProcedures.Contains(procedure))
             {
                 return false;
@@ -263,7 +322,7 @@ namespace XFramework
                 }
 
                 m_ParallelProcedures.RemoveAt(i);
-                procedure.OnExit();
+                procedure.Exit();
                 RefreshProcedureState();
                 return true;
             }
@@ -304,7 +363,7 @@ namespace XFramework
             }
 
             m_ParallelProcedures.Insert(insertIndex, procedure);
-            procedure.OnEnter(null);
+            procedure.Enter(null);
             if (!m_ParallelProcedures.Contains(procedure))
             {
                 return false;
@@ -333,7 +392,7 @@ namespace XFramework
 
                 var procedure = m_ParallelProcedures[i];
                 m_ParallelProcedures.RemoveAt(i);
-                procedure.OnExit();
+                procedure.Exit();
                 RefreshProcedureState();
                 return true;
             }
@@ -387,7 +446,7 @@ namespace XFramework
             {
                 var procedure = m_ParallelProcedures[i];
                 m_ParallelProcedures.RemoveAt(i);
-                procedure.OnExit();
+                procedure.Exit();
             }
 
             if (refreshState)

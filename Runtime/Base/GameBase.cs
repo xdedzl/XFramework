@@ -16,7 +16,7 @@ namespace XFramework
     {
         // 初始流程
         [HideInInspector] public string startTypeName;
-        public ProcedureBase startProcedure;
+        public MainProcedure startProcedure;
 
         public static GameBase activeGame { get; private set; }
         

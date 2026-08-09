@@ -239,10 +239,7 @@ namespace XFramework.Editor
             m_PanelTypesByName.Clear();
 
             ScanPanelDefinitions();
-            AddTypes(
-                TypeCache.GetTypesDerivedFrom<ProcedureBase>()
-                    .Where(type => !typeof(ParallelProcedureBase).IsAssignableFrom(type)),
-                ProcedureDebugKind.Procedure);
+            AddTypes(TypeCache.GetTypesDerivedFrom<MainProcedure>(), ProcedureDebugKind.Procedure);
             AddTypes(TypeCache.GetTypesDerivedFrom<ParallelProcedureBase>(), ProcedureDebugKind.Parallel);
             AddTypes(TypeCache.GetTypesDerivedFrom<SubProcedureBase>(), ProcedureDebugKind.SubProcedure);
             AddTypes(TypeCache.GetTypesDerivedFrom<ProcedureOverlayBase>(), ProcedureDebugKind.Overlay);
@@ -526,9 +523,9 @@ namespace XFramework.Editor
                 }
             }
 
-            if (resolvedType != null && (!typeof(ProcedureBase).IsAssignableFrom(resolvedType) || !IsConcreteType(resolvedType)))
+            if (resolvedType != null && (!typeof(MainProcedure).IsAssignableFrom(resolvedType) || !IsConcreteType(resolvedType)))
             {
-                error = $"GameBase '{GetHierarchyPath(gameBase.transform)}' 的启动类型不是可创建的 Procedure。";
+                error = $"GameBase '{GetHierarchyPath(gameBase.transform)}' 的启动类型不是可创建的 MainProcedure。";
             }
 
             return new GameBaseDebugInfo(gameBase, serializedType, resolvedType, error);

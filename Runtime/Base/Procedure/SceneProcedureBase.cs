@@ -7,7 +7,7 @@ namespace XFramework
     /// 带 XScene 的主流程基类，派生类设置 XScene 资源路径。
     /// 流程切换时自动加载 XScene，Module 和 UI 会延迟到加载完成后再处理。
     /// </summary>
-    public abstract class SceneProcedureBase : ProcedureBase
+    public abstract class SceneProcedureBase : MainProcedure
     {
         /// <summary>
         /// XScene 资源路径
