@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 
-namespace XFramework.Console
+namespace XFramework.Command
 {
     public class CodeGenerator
     {

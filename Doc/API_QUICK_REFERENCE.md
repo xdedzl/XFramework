@@ -108,7 +108,7 @@
 - `FsmManager.Instance.CreateInstanceFsm<TContext>(key, context, owner, autoStart)`: 创建并托管一个挂靠业务对象的实例 FSM。
 - `FsmManager.Instance.Unregister(key)`: 取消托管与调试注册，但不会自动销毁 FSM 实例。
 - `FsmManager.Instance.GetDebugEntries()`: 获取调试窗口与控制台可用的只读快照。
-- `fsm_list`: 通过 `XConsole` 输出当前所有已注册 FSM。
+- `fsm_list`: 通过 `XCommand` 输出当前所有已注册 FSM。
 
 > 旧版 `FsmOld` API 已迁移至 `XFramework.FsmOld`，仅用于未迁移业务的过渡期保留。
 

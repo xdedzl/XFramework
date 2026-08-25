@@ -1,17 +1,17 @@
 using System.Text;
-using XFramework.Console;
+using XFramework.Command;
 
 namespace XFramework.Fsm
 {
-    public class FsmConsoleCommands : GMCommand
+    public class FsmConsoleCommands : XCommandGroup
     {
-        [GMCommand("fsm_list")]
+        [XCommandEntry("fsm_list", mode = XCommandMode.Both)]
         public static string ListFsms()
         {
             if (!GameEntry.IsModuleLoaded<FsmManager>())
             {
                 string unloaded = "[FSM] FsmManager is not loaded.";
-                XConsole.Log(unloaded);
+                XCommand.Log(unloaded);
                 return unloaded;
             }
 
@@ -34,7 +34,7 @@ namespace XFramework.Fsm
             }
 
             string text = builder.ToString().TrimEnd();
-            XConsole.Log(text);
+            XCommand.Log(text);
             return text;
         }
     }

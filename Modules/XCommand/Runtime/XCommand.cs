@@ -1,33 +1,30 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Text;
 using System.Threading;
 using UnityEngine;
 using System.Linq;
 
-namespace XFramework.Console
+namespace XFramework.Command
 {
     public delegate bool CommandDelegate(string cmd, out object result);
     
-    public static partial class XConsole
+    public static partial class XCommand
     {
         private static Action<Message> LogMessageReceived;
 
-        private static readonly Queue<Message> m_messages = new ();
         private static IConsole console = new UGUIConsole();
         
         private static readonly Dictionary<string, CommandDelegate> m_ExecuteFunctions = new ();
         private static readonly List<CommandDelegate> m_AutoFunctions = new ();
+        private static readonly CommandDelegate s_CommandRegistryDelegate = ExecuteRegisteredCommand;
         private static string m_CurrentExecuteKey = "";
             
         private static bool m_isOpen;
         private static bool m_isInit;
         private static CancellationTokenRegistration s_ExitRegistration;
-        
-        
-        private static readonly LinkedList<string> cmdCache = new ();
-        private static LinkedListNode<string> currentCmd;
+        private static XCommandSource s_CurrentCommandSource = XCommandSource.Api;
+        private static int s_CommandHistoryIndex = -1;
 
         public static bool IsOpen
         {
@@ -63,10 +60,11 @@ namespace XFramework.Console
         
         public static IReadOnlyList<string> CommandKeys => m_ExecuteFunctions.Keys.ToList();
         
-        static XConsole()
+        static XCommand()
         {
             AddCommand("Auto", ExecuteAutoCommand);
-            AddCommand("GM", ExecuteGMCommand, true);
+            AddCommand("Command", s_CommandRegistryDelegate, true);
+            XCommandHub.CommandHistoryChanged += ResetCommandHistoryNavigation;
         }
 
         
@@ -82,13 +80,13 @@ namespace XFramework.Console
         private static void ResetStaticState()
         {
             DisConnetHunter();
+            (console as UGUIConsole)?.Dispose();
             LogMessageReceived = null;
-            m_messages.Clear();
             m_CurrentExecuteKey = "Auto";
             m_isOpen = false;
             m_isInit = false;
-            cmdCache.Clear();
-            currentCmd = null;
+            s_CurrentCommandSource = XCommandSource.Api;
+            s_CommandHistoryIndex = -1;
             console = new UGUIConsole();
 
             Message.defaultColor = Color.white;
@@ -103,7 +101,7 @@ namespace XFramework.Console
 
         private static void OnInit()
         {
-            XConsole.LogMessage(Message.System("start XConsole"));
+            XCommand.LogMessage(Message.System("start XCommand"));
         }
 
         public static void LogMessage(Message message)
@@ -175,7 +173,7 @@ namespace XFramework.Console
             if (m_ExecuteFunctions.ContainsKey(executeKey))
             {
                 m_CurrentExecuteKey = executeKey;
-                XConsole.LogMessage(Message.System("change execute commander to " + executeKey));
+                XCommand.LogMessage(Message.System("change execute commander to " + executeKey));
 
                 OnCommandChange();
                 return true;
@@ -194,12 +192,16 @@ namespace XFramework.Console
 
         public static bool Execute(string cmd)
         {
-            return Execute(cmd, out var result);
+            return Execute(cmd, out var result, XCommandSource.Api);
         }
-        
+
         public static bool Execute(string cmd, out object result)
         {
-            LogMessage(Message.Input(cmd));
+            return Execute(cmd, out result, XCommandSource.Api);
+        }
+
+        internal static bool Execute(string cmd, out object result, XCommandSource source)
+        {
             result = null;
             m_ExecuteFunctions.TryGetValue(m_CurrentExecuteKey, out var executeFun);
             if (executeFun == null)
@@ -207,27 +209,58 @@ namespace XFramework.Console
                 LogError($"Execute function {m_CurrentExecuteKey} not found.");
                 return false;
             }
-            executeFun(cmd, out result);
 
-            if (result != null)
+            XCommandSource previousSource = s_CurrentCommandSource;
+            s_CurrentCommandSource = source;
+            try
             {
-                Log(result);
+                if (m_CurrentExecuteKey == "Command" || m_CurrentExecuteKey == "Auto")
+                {
+                    executeFun(cmd, out result);
+                }
+                else
+                {
+                    XCommandHub.ExecuteLegacy(cmd, source, executeFun, out result);
+                }
+                console.OnExecuteCmd(cmd, result);
+                s_CommandHistoryIndex = -1;
+                return true;
             }
-            console.OnExecuteCmd(cmd, result);
-            cmdCache.AddLast(cmd);
-            currentCmd = null;
-            return true;
+            finally
+            {
+                s_CurrentCommandSource = previousSource;
+            }
         }
-        
-        private static bool ExecuteGMCommand(string cmd, out object result)
+
+        private static bool ExecuteRegisteredCommand(string cmd, out object result)
         {
-            return GMCommand.Execute(cmd, out result);
+            XCommandExecutionResult executionResult = XCommandHub.Execute(cmd, s_CurrentCommandSource);
+            result = executionResult.Value;
+            if (executionResult.Status == XCommandExecutionStatus.Failed)
+            {
+                Debug.LogException(executionResult.Exception);
+            }
+            return executionResult.Succeeded;
         }
-        
+
         private static bool ExecuteAutoCommand(string cmd, out object result)
+        {
+            if (XCommandRegistry.TryGetCommand(cmd, out _))
+            {
+                return ExecuteRegisteredCommand(cmd, out result);
+            }
+
+            return XCommandHub.ExecuteLegacy(cmd, s_CurrentCommandSource, ExecuteRegisteredAutoCommand, out result);
+        }
+
+        private static bool ExecuteRegisteredAutoCommand(string cmd, out object result)
         {
             foreach (var func in m_AutoFunctions)
             {
+                if (func == s_CommandRegistryDelegate)
+                {
+                    continue;
+                }
                 if (func.Invoke(cmd, out result))
                 {
                     return true;
@@ -240,33 +273,39 @@ namespace XFramework.Console
         
         public static void JumpToPreviousCmd()
         {
-            if (currentCmd == null)
-            {
-                currentCmd = cmdCache.Last;
-            }
-            else if (currentCmd.Previous != null)
-            {
-                currentCmd = currentCmd.Previous;
-            }
-            else
+            IReadOnlyList<string> commandHistory = XCommandHub.CommandHistory;
+            if (commandHistory.Count == 0)
             {
                 return;
             }
-            console.OnCurrentCmdChanged(currentCmd?.Value);
+
+            if (s_CommandHistoryIndex < commandHistory.Count - 1)
+            {
+                s_CommandHistoryIndex++;
+            }
+            console.OnCurrentCmdChanged(commandHistory[s_CommandHistoryIndex]);
         }
 
         public static void JumpToNextCmd()
         {
-            if (currentCmd != null && currentCmd.Next != null)
+            if (s_CommandHistoryIndex > 0)
             {
-                currentCmd = currentCmd.Next;
+                s_CommandHistoryIndex--;
+                console.OnCurrentCmdChanged(XCommandHub.CommandHistory[s_CommandHistoryIndex]);
+                return;
             }
-            console.OnCurrentCmdChanged(currentCmd?.Value);
+
+            s_CommandHistoryIndex = -1;
+            console.OnCurrentCmdChanged(string.Empty);
         }
-        
+
+        private static void ResetCommandHistoryNavigation()
+        {
+            s_CommandHistoryIndex = -1;
+        }
+
         public static void Clear()
         {
-            cmdCache.Clear();
             console.OnClear();
         }
     }

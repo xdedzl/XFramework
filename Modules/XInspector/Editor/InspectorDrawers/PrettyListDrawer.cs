@@ -299,6 +299,7 @@ namespace XFramework.Editor
         {
             private readonly SerializedObject m_SerializedObject;
             private readonly string m_PropertyPath;
+            private readonly string m_ExpansionStateKey;
             private readonly ListState m_State;
             private readonly List<VisualElement> m_RowElements = new List<VisualElement>();
             private VisualElement m_RowsContainer;
@@ -310,6 +311,9 @@ namespace XFramework.Editor
                 m_PropertyPath = propertyPath;
                 SerializedProperty property = GetProperty();
                 m_State = property == null ? new ListState() : GetState(GetStateKey(property));
+                m_ExpansionStateKey = property == null ? string.Empty : $"{nameof(PrettyListElement)}.{GetStateKey(property)}";
+                if (property != null)
+                    property.isExpanded = SessionState.GetBool(m_ExpansionStateKey, false);
 
                 style.flexDirection = FlexDirection.Column;
                 style.borderLeftWidth = BorderWidth;
@@ -613,6 +617,7 @@ namespace XFramework.Editor
                 WithProperty(property =>
                 {
                     property.isExpanded = expanded;
+                    SessionState.SetBool(m_ExpansionStateKey, expanded);
                     property.serializedObject.ApplyModifiedProperties();
                 });
             }

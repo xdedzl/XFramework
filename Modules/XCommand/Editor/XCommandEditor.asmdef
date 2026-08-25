@@ -1,12 +1,9 @@
 {
-    "name": "XFrameworkEditor",
+    "name": "XCommandEditor",
     "rootNamespace": "",
     "references": [
-        "XFrameworkRuntime",
-        "Unity.TextMeshPro",
-        "Unity.TextMeshPro.Editor",
-        "XFrameworkCore",
-        "XInspector"
+        "XCommandRuntime",
+        "XFrameworkEditor"
     ],
     "includePlatforms": [
         "Editor"

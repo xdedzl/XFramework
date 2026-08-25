@@ -8,7 +8,7 @@ using System.Text.RegularExpressions;
 using UnityEngine;
 
 
-namespace XFramework.Console
+namespace XFramework.Command
 {
     /// <summary>
     /// c#解释器

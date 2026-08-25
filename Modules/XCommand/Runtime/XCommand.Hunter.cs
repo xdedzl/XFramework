@@ -1,25 +1,26 @@
 ﻿using System;
-using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using UnityEngine;
 
-namespace XFramework.Console
+namespace XFramework.Command
 {
     enum MessageSource
     {
-        XConsole = 0,
+        XCommand = 0,
         Unity = 1
     }
 
-    public partial class XConsole
+    public partial class XCommand
     {
         private static UdpClient client;
         private static UdpClient sendClient;
         private static IPEndPoint hunterEndPoint;
+        private static readonly ConcurrentQueue<string> s_PendingHunterCommands = new ConcurrentQueue<string>();
+        private static XCommandHunterRunner s_HunterRunner;
         private static readonly string HUNTER_IP = "192.168.199.105";
         private static readonly string HUNTER_PORT = "10001";
 
@@ -57,6 +58,7 @@ namespace XFramework.Console
 
             LogMessageReceived += OnLogMessageReceived;
             Application.logMessageReceived += OnUnityLogMessageReceived;
+            EnsureHunterRunner();
 
             SendInitData();
             AsyncReceive();
@@ -79,22 +81,45 @@ namespace XFramework.Console
             hunterEndPoint = null;
             LogMessageReceived -= OnLogMessageReceived;
             Application.logMessageReceived -= OnUnityLogMessageReceived;
+            if (s_HunterRunner != null)
+            {
+                UnityEngine.Object.Destroy(s_HunterRunner.gameObject);
+                s_HunterRunner = null;
+            }
+            while (s_PendingHunterCommands.TryDequeue(out _))
+            {
+            }
+        }
+
+        private static void EnsureHunterRunner()
+        {
+            if (s_HunterRunner != null)
+                return;
+            var gameObject = new GameObject("XCommand Hunter Runner") {
+                hideFlags = HideFlags.HideAndDontSave,
+            };
+            UnityEngine.Object.DontDestroyOnLoad(gameObject);
+            s_HunterRunner = gameObject.AddComponent<XCommandHunterRunner>();
         }
 
         static async void AsyncReceive()
         {
+            UdpClient receiveClient = client;
+            if (receiveClient == null)
+                return;
             UdpReceiveResult result;
             try
             {
-                result = await client.ReceiveAsync();
+                result = await receiveClient.ReceiveAsync();
             }
             catch (Exception e)
             {
-                if (!(e is SocketException))
-                {
-                    return;
-                }
+                if (!(e is SocketException) && !(e is ObjectDisposedException))
+                    Debug.LogException(e);
+                return;
             }
+            if (receiveClient != client)
+                return;
             OnHunterMessageRecived(result.Buffer);
             AsyncReceive();
 
@@ -102,23 +127,23 @@ namespace XFramework.Console
 
         private static void SendInitData()
         {
-            XBinaryWriter xBinaryWriter = new XBinaryWriter();
-            xBinaryWriter.AddInt32(-1);
-            xBinaryWriter.AddInt32(-1);
-            xBinaryWriter.AddString(GetLocalIP());
+            HunterPacketWriter writer = new HunterPacketWriter();
+            writer.AddInt32(-1);
+            writer.AddInt32(-1);
+            writer.AddString(GetLocalIP());
 
-            var buffer = xBinaryWriter.Encode();
+            var buffer = writer.Encode();
             client.Send(buffer, buffer.Length, hunterEndPoint);
         }
 
         private static void OnLogMessageReceived(Message message)
         {
-            XBinaryWriter xBinaryWriter = new XBinaryWriter();
-            xBinaryWriter.AddInt32((int)message.type);
-            xBinaryWriter.AddInt32((int)MessageSource.XConsole);
-            xBinaryWriter.AddString(message.text);
+            HunterPacketWriter writer = new HunterPacketWriter();
+            writer.AddInt32((int)message.type);
+            writer.AddInt32((int)MessageSource.XCommand);
+            writer.AddString(message.text);
 
-            var buffer = xBinaryWriter.Encode();
+            var buffer = writer.Encode();
             client.Send(buffer, buffer.Length, hunterEndPoint);
         }
 
@@ -126,12 +151,12 @@ namespace XFramework.Console
         {
             var messageType = LogType_To_MessageType[type];
 
-            XBinaryWriter xBinaryWriter = new XBinaryWriter();
-            xBinaryWriter.AddInt32((int)messageType);
-            xBinaryWriter.AddInt32((int)MessageSource.Unity);
+            HunterPacketWriter writer = new HunterPacketWriter();
+            writer.AddInt32((int)messageType);
+            writer.AddInt32((int)MessageSource.Unity);
             string message = messageType != MessageType.ERROR ? condition : $"{condition}\n{stackTrace}";
-            xBinaryWriter.AddString(message);
-            var buffer = xBinaryWriter.Encode();
+            writer.AddString(message);
+            var buffer = writer.Encode();
             client.Send(buffer, buffer.Length, hunterEndPoint);
         }
 
@@ -141,8 +166,20 @@ namespace XFramework.Console
                 return;
             var command = Encoding.UTF8.GetString(buffer);
             if (!string.IsNullOrEmpty(command))
+                s_PendingHunterCommands.Enqueue(command);
+        }
+
+        private static void ExecutePendingHunterCommands()
+        {
+            while (s_PendingHunterCommands.TryDequeue(out string command))
+                Execute(command, out _, XCommandSource.Hunter);
+        }
+
+        private sealed class XCommandHunterRunner : MonoBehaviour
+        {
+            private void Update()
             {
-                Execute(command);
+                ExecutePendingHunterCommands();
             }
         }
 
@@ -162,6 +199,31 @@ namespace XFramework.Console
                 }
             }
             return "";
+        }
+
+        private sealed class HunterPacketWriter
+        {
+            private readonly List<byte> buffer = new List<byte>();
+
+            public void AddInt32(int value)
+            {
+                buffer.Add((byte)value);
+                buffer.Add((byte)(value >> 8));
+                buffer.Add((byte)(value >> 16));
+                buffer.Add((byte)(value >> 24));
+            }
+
+            public void AddString(string value)
+            {
+                byte[] bytes = Encoding.UTF8.GetBytes(value);
+                AddInt32(bytes.Length);
+                buffer.AddRange(bytes);
+            }
+
+            public byte[] Encode()
+            {
+                return buffer.ToArray();
+            }
         }
     }
 

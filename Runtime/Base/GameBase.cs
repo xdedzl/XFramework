@@ -2,7 +2,7 @@ using System;
 using System.Reflection;
 using UnityEngine;
 using XAnimationEngine;
-using XFramework.Console;
+using XFramework.Command;
 using XFramework.Json;
 
 namespace XFramework
@@ -128,19 +128,19 @@ namespace XFramework
         {
             if (GUI.Button(new Rect(10, Screen.height - 60, 100, 50), "调试"))
             {
-                XConsole.IsOpen = !XConsole.IsOpen;
+                XCommand.IsOpen = !XCommand.IsOpen;
             }
 
-            string buttonName = XConsole.IsHunterEnable ? "关闭Hunter" : "打开Hunter";
+            string buttonName = XCommand.IsHunterEnable ? "关闭Hunter" : "打开Hunter";
             if (GUI.Button(new Rect(120, Screen.height - 60, 100, 50), buttonName))
             {
-                if (XConsole.IsHunterEnable)
+                if (XCommand.IsHunterEnable)
                 {
-                    XConsole.Execute("disable_hunter");
+                    XCommand.Execute("disable_hunter");
                 }
                 else
                 {
-                    XConsole.Execute("enable_hunter");
+                    XCommand.Execute("enable_hunter");
                 }
             }
         }

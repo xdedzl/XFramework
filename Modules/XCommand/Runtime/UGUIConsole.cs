@@ -1,10 +1,11 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace XFramework.Console
+namespace XFramework.Command
 {
     /// <summary>
     /// UGUI版控制台
@@ -17,6 +18,13 @@ namespace XFramework.Console
         private ScrollRect m_ScrollViewContent = null;
         private InputField m_InputField = null;
         private Dropdown m_Dropdown = null;
+        private Text m_ExceptionDetailsButtonText;
+        private readonly List<DisplayEntry> m_DisplayEntries = new List<DisplayEntry>();
+        private readonly HashSet<long> m_DisplayedCommandIds = new HashSet<long>();
+        private long m_VisibleAfterRecordId;
+        private bool m_HasOpened;
+        private bool m_IsSubscribed;
+        private bool m_ShowExceptionDetails;
 
         public UGUIConsole()
         {
@@ -25,7 +33,7 @@ namespace XFramework.Console
 
         private void CreateConsoleWindow()
         {
-            var root = new GameObject("XConsole").transform;
+            var root = new GameObject("XCommand").transform;
             Object.DontDestroyOnLoad(root);
             consoleRoot = new GameObject("UGUIConsole");
             consoleRoot.transform.SetParent(root);
@@ -35,15 +43,15 @@ namespace XFramework.Console
             canvas.pixelPerfect = false;
             canvas.sortingOrder = 6553;
             canvas.overrideSorting = true;
-        
+
             CanvasScaler cs = consoleRoot.AddComponent<CanvasScaler>();
 
             cs.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             cs.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
             cs.referenceResolution = new Vector2(960f, 640f);
             cs.matchWidthOrHeight = 1.0f;
-        
-        
+
+
             GraphicRaycaster gr = consoleRoot.AddComponent<GraphicRaycaster>();
             gr.blockingObjects = GraphicRaycaster.BlockingObjects.All;
 
@@ -159,14 +167,50 @@ namespace XFramework.Console
             text_input.font = Resources.GetBuiltinResource(typeof(Font), "LegacyRuntime.ttf") as Font;
             text_input.color = Color.white;
             text_input.supportRichText = false;
+            text_input.rectTransform.offsetMax = new Vector2(-200f, text_input.rectTransform.offsetMax.y);
 
             m_InputField = input_obj.AddComponent<InputField>();
             m_InputField.textComponent = text_input;
 
             // Init event
             m_InputField.onEndEdit.AddListener(ProcessInput);
-            
+
+            CreateInputButton(input_obj, "历史", 130f, 70f, LoadHistory);
+            m_ExceptionDetailsButtonText = CreateInputButton(input_obj, "异常:关", 60f, 70f, ToggleExceptionDetails);
             InitDropDown(input_obj);
+        }
+
+        private static Text CreateInputButton(GameObject parent, string label, float rightOffset, float width, System.Action callback)
+        {
+            GameObject buttonObject = new GameObject(label);
+            buttonObject.transform.SetParent(parent.transform, false);
+            Image image = buttonObject.AddComponent<Image>();
+            image.color = new Color(0.15f, 0.15f, 0.15f, 0.95f);
+            var button = buttonObject.AddComponent<Button>();
+            button.targetGraphic = image;
+            button.onClick.AddListener(() => callback.Invoke());
+
+            RectTransform rectTransform = buttonObject.GetComponent<RectTransform>();
+            rectTransform.anchorMin = new Vector2(1f, 0.5f);
+            rectTransform.anchorMax = new Vector2(1f, 0.5f);
+            rectTransform.pivot = new Vector2(1f, 0.5f);
+            rectTransform.anchoredPosition = new Vector2(-rightOffset, 0f);
+            rectTransform.sizeDelta = new Vector2(width, 30f);
+
+            GameObject textObject = new GameObject("Label");
+            textObject.transform.SetParent(buttonObject.transform, false);
+            Text text = textObject.AddComponent<Text>();
+            text.text = label;
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.fontSize = 12;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.color = Color.green;
+            RectTransform textRect = textObject.GetComponent<RectTransform>();
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.offsetMin = Vector2.zero;
+            textRect.offsetMax = Vector2.zero;
+            return text;
         }
 
         public void InitDropDown(GameObject parent)
@@ -327,17 +371,24 @@ namespace XFramework.Console
         {
             if (!string.IsNullOrEmpty(str))
             {
-                XConsole.Execute(str, out object value);
+                XCommand.Execute(str, out object value, XCommandSource.Ugui);
             }
         }
 
         public void OnInit()
         {
             CreateConsoleWindow();
+            m_VisibleAfterRecordId = XCommandHub.LatestRecordId;
         }
 
         public void OnOpen()
         {
+            if (m_HasOpened)
+            {
+                ResetVisibleOutput();
+            }
+            m_HasOpened = true;
+            Subscribe();
             consoleRoot.SetActive(true);
             UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(m_InputField.gameObject);
             m_InputField.ActivateInputField();
@@ -345,6 +396,7 @@ namespace XFramework.Console
 
         public void OnClose()
         {
+            Unsubscribe();
             consoleRoot.SetActive(false);
         }
 
@@ -354,9 +406,9 @@ namespace XFramework.Console
             {
                 return;
             }
-            
-            var text = m_TextContent.text + message.ToGUIString();
-            m_TextContent.text = text;
+
+            m_DisplayEntries.Add(DisplayEntry.FromLog(message));
+            RenderOutput();
         }
 
         public void OnExecuteCmd(string cmd, object value)
@@ -376,8 +428,8 @@ namespace XFramework.Console
             {
                 return;
             }
-            var keys = XConsole.CommandKeys;
-            var key = XConsole.CurrentCommandKey;
+            var keys = XCommand.CommandKeys;
+            var key = XCommand.CurrentCommandKey;
             var index = keys.ToList().IndexOf(key);
             m_Dropdown.onValueChanged.RemoveAllListeners();
             m_Dropdown.ClearOptions();
@@ -386,20 +438,203 @@ namespace XFramework.Console
             m_Dropdown.RefreshShownValue();
             m_Dropdown.onValueChanged.AddListener((idx) =>
             {
-                var key = XConsole.CommandKeys[idx];
-                XConsole.ChangeCommand(key);
+                var key = XCommand.CommandKeys[idx];
+                XCommand.ChangeCommand(key);
             });
         }
 
         public void OnClear()
         {
-            m_TextContent.text = "";
+            ResetVisibleOutput();
         }
 
         public void OnCurrentCmdChanged(string cmd)
         {
             m_InputField.text = cmd;
             m_InputField.caretPosition = cmd.Length;
+        }
+
+        internal void Dispose()
+        {
+            Unsubscribe();
+        }
+
+        private void Subscribe()
+        {
+            if (m_IsSubscribed)
+            {
+                return;
+            }
+            XCommandHub.RecordAdded += OnCommandRecordAdded;
+            XCommandHub.RecordUpdated += OnCommandRecordUpdated;
+            XCommandHub.RecordsTrimmed += OnCommandRecordTrimmed;
+            XCommandHub.DisplayClearRequested += OnDisplayClearRequested;
+            XCommandHub.DisplayHistoryRequested += OnDisplayHistoryRequested;
+            m_IsSubscribed = true;
+        }
+
+        private void Unsubscribe()
+        {
+            if (!m_IsSubscribed)
+            {
+                return;
+            }
+            XCommandHub.RecordAdded -= OnCommandRecordAdded;
+            XCommandHub.RecordUpdated -= OnCommandRecordUpdated;
+            XCommandHub.RecordsTrimmed -= OnCommandRecordTrimmed;
+            XCommandHub.DisplayClearRequested -= OnDisplayClearRequested;
+            XCommandHub.DisplayHistoryRequested -= OnDisplayHistoryRequested;
+            m_IsSubscribed = false;
+        }
+
+        private void OnDisplayClearRequested(XCommandSource source)
+        {
+            if (source == XCommandSource.Ugui)
+            {
+                ResetVisibleOutput();
+            }
+        }
+
+        private void OnDisplayHistoryRequested(XCommandSource source)
+        {
+            if (source == XCommandSource.Ugui)
+            {
+                LoadHistory();
+            }
+        }
+
+        private void OnCommandRecordAdded(XCommandRecord record)
+        {
+            if (record.Id <= m_VisibleAfterRecordId)
+            {
+                return;
+            }
+            m_DisplayEntries.Add(DisplayEntry.FromCommand(record));
+            m_DisplayedCommandIds.Add(record.Id);
+            RenderOutput();
+        }
+
+        private void OnCommandRecordUpdated(XCommandRecord record)
+        {
+            if (m_DisplayedCommandIds.Contains(record.Id))
+            {
+                RenderOutput();
+            }
+        }
+
+        private void OnCommandRecordTrimmed(long recordId)
+        {
+            if (!m_DisplayedCommandIds.Remove(recordId))
+            {
+                return;
+            }
+            m_DisplayEntries.RemoveAll(entry => entry.Command?.Id == recordId);
+            RenderOutput();
+        }
+
+        private void ResetVisibleOutput()
+        {
+            m_VisibleAfterRecordId = XCommandHub.LatestRecordId;
+            m_DisplayEntries.Clear();
+            m_DisplayedCommandIds.Clear();
+            RenderOutput();
+        }
+
+        private void LoadHistory()
+        {
+            var history = new List<DisplayEntry>();
+            IReadOnlyList<XCommandRecord> records = XCommandHub.Records;
+            for (int i = 0; i < records.Count; i++)
+            {
+                XCommandRecord record = records[i];
+                if (m_DisplayedCommandIds.Add(record.Id))
+                {
+                    history.Add(DisplayEntry.FromCommand(record));
+                }
+            }
+            m_DisplayEntries.InsertRange(0, history);
+            m_VisibleAfterRecordId = records.Count == 0 ? XCommandHub.LatestRecordId : records[0].Id - 1;
+            RenderOutput();
+        }
+
+        private void ToggleExceptionDetails()
+        {
+            m_ShowExceptionDetails = !m_ShowExceptionDetails;
+            m_ExceptionDetailsButtonText.text = m_ShowExceptionDetails ? "异常:开" : "异常:关";
+            m_ExceptionDetailsButtonText.color = m_ShowExceptionDetails ? Color.cyan : Color.green;
+            RenderOutput();
+        }
+
+        private void RenderOutput()
+        {
+            if (m_TextContent == null)
+            {
+                return;
+            }
+
+            var builder = new StringBuilder();
+            for (int i = 0; i < m_DisplayEntries.Count; i++)
+            {
+                DisplayEntry entry = m_DisplayEntries[i];
+                if (entry.Command == null)
+                {
+                    builder.Append(entry.LogMessage.ToGUIString());
+                    continue;
+                }
+
+                XCommandRecord command = entry.Command;
+                builder.Append(Message.Input($"[{FormatSource(command.Source)}] {command.CommandLine}").ToGUIString());
+                if (command.State != XCommandRecordState.Completed)
+                {
+                    continue;
+                }
+                if (command.Succeeded)
+                {
+                    builder.Append(Message.Output(command.Output).ToGUIString());
+                    continue;
+                }
+
+                string failure = $"[{command.Status}] {command.Message}";
+                if (m_ShowExceptionDetails && !string.IsNullOrEmpty(command.Exception))
+                {
+                    failure += $"\n{command.Exception}";
+                }
+                builder.Append(Message.Error(failure, string.Empty).ToGUIString());
+            }
+            m_TextContent.text = builder.ToString();
+        }
+
+        private static string FormatSource(XCommandSource source)
+        {
+            switch (source)
+            {
+                case XCommandSource.Api: return "API";
+                case XCommandSource.Ugui: return "UGUI";
+                case XCommandSource.Cli: return "CLI";
+                default: return source.ToString();
+            }
+        }
+
+        private sealed class DisplayEntry
+        {
+            private DisplayEntry(Message logMessage, XCommandRecord command)
+            {
+                LogMessage = logMessage;
+                Command = command;
+            }
+
+            public Message LogMessage;
+            public XCommandRecord Command { get; }
+
+            public static DisplayEntry FromLog(Message message)
+            {
+                return new DisplayEntry(message, null);
+            }
+
+            public static DisplayEntry FromCommand(XCommandRecord command)
+            {
+                return new DisplayEntry(default, command);
+            }
         }
     }
 }

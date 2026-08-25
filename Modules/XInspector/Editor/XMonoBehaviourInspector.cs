@@ -531,7 +531,7 @@ namespace XFramework.Editor
 
             private bool IsExpanded()
             {
-                return SessionState.GetBool(GetSessionKey(), true);
+                return SessionState.GetBool(GetSessionKey(), false);
             }
 
             private void ToggleExpanded()

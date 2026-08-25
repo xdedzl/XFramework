@@ -65,7 +65,7 @@ flowchart TB
             direction LR
             UUtil("UUtility 高级物理/网格算法"):::c_tool
             Finder("UObjectFinder GUI安全组件查找"):::c_tool
-            Console("XConsole 运行时内嵌控制台"):::c_tool
+            Console("XCommand 运行时内嵌控制台"):::c_tool
         end
         
         GameEntry ==>|"轮询帧推演"| PM
@@ -110,7 +110,7 @@ flowchart TB
 | **工具库 (Unity)** | [Runtime/Tools/](./Runtime/Tools/)                       | [引擎工具 (`UUtility`)](#52-引擎特定高级工具-uutility)                            |
 | **检查面板**       | [Modules/XInspector/](./Modules/XInspector/)             | [XInspector 数据检查面板](#46-xinspector-数据检查面板)                            |
 | **动画工具**       | [XAnimation/Runtime/](./XAnimation/Runtime/)             | [XAnimation 播放系统](./XAnimation/Doc/XAnimation.md)                             |
-| **控制台**         | [Runtime/Tools/XConsole/](./Runtime/Tools/XConsole/)     | [XConsole 运行时控制台](#55-xconsole-运行时控制台)                                |
+| **控制台**         | [Modules/XCommand/](./Modules/XCommand/)             | [XCommand 运行时控制台](#45-xcommand-运行时控制台)                                |
 
 ---
 
@@ -480,7 +480,7 @@ actorFsm.Start<IdleState>();
 
 #### 4. 调试与观察
 - 菜单 **`XFramework/Debug/FSM Debuger`**：查看当前所有 Global / Instance FSM 的 key、scope、context、当前状态、上一次切换与 payload 摘要。
-- 控制台命令 **`fsm_list`**：通过 `XConsole` 输出当前所有活动 FSM 的文本快照。
+- 控制台命令 **`fsm_list`**：通过 `XCommand` 输出当前所有活动 FSM 的文本快照。
 
 #### 5. 迁移说明
 - 旧实现已整体迁移到 `XFramework.FsmOld` 命名空间，仅作为过渡保留。
@@ -579,10 +579,10 @@ IReadOnlyList<Transform> spawnPoints = UObjectFinder.FindList<Transform>("NpcSpa
 ### 4.4 C# 原生高效序列化 (`Serialize`)
 通过 `unsafe` 关键字突破性能瓶颈的 `UBinaryReader/UBinaryWriter`。在海量网络包传输及存档加解密上，带来越级性能提升。
 
-### 4.5 XConsole 运行时控制台
+### 4.5 XCommand 运行时控制台
 强大的、通过游戏中输入快捷键 `~` 拉起的前端控制台。
 - 具有实时运行时日志系统(Log输出与筛选)。
-- 支持添加并使用 GM 指令 (通过 `[XConsoleCommand]` 标记)。
+- 支持添加并使用 XCommand 命令（通过 `[XCommandEntry]` 标记）。
 - **最强特性**: 内置微型 C# 解释器驱动，支持游戏进程中执行动态 C# 代码调整变量。
 
 ### 4.6 XInspector 数据检查面板
