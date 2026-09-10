@@ -18,6 +18,22 @@ namespace XFramework.Command
         Completed
     }
 
+    [Serializable]
+    public sealed class XCommandRecordSnapshot
+    {
+        public long Id;
+        public long ExecutedAtUtcTicks;
+        public long CompletedAtUtcTicks;
+        public XCommandSource Source;
+        public XCommandRecordState State;
+        public string CommandLine;
+        public XCommandExecutionStatus Status;
+        public double DurationMilliseconds;
+        public string Message;
+        public string Output;
+        public string Exception;
+    }
+
     public sealed class XCommandRecord
     {
         internal XCommandRecord(long id, DateTime executedAtUtc, XCommandSource source, string commandLine)
@@ -27,6 +43,34 @@ namespace XFramework.Command
             Source = source;
             CommandLine = commandLine;
             State = XCommandRecordState.Running;
+        }
+
+        internal XCommandRecord(XCommandRecordSnapshot snapshot)
+        {
+            Id = snapshot.Id;
+            ExecutedAtUtc = new DateTime(snapshot.ExecutedAtUtcTicks, DateTimeKind.Utc);
+            CompletedAtUtc = snapshot.CompletedAtUtcTicks == 0 ? null : new DateTime(snapshot.CompletedAtUtcTicks, DateTimeKind.Utc);
+            Source = snapshot.Source;
+            State = snapshot.State;
+            CommandLine = snapshot.CommandLine;
+            Status = snapshot.Status;
+            DurationMilliseconds = snapshot.DurationMilliseconds;
+            Message = snapshot.Message;
+            Output = snapshot.Output;
+            Exception = snapshot.Exception;
+            XCommandRegistry.TryGetCommand(CommandLine, out XCommandDescriptor command);
+            Command = command;
+
+            if (State == XCommandRecordState.Running)
+            {
+                CompletedAtUtc = DateTime.UtcNow;
+                State = XCommandRecordState.Completed;
+                Status = XCommandExecutionStatus.Failed;
+                DurationMilliseconds = (CompletedAtUtc.Value - ExecutedAtUtc).TotalMilliseconds;
+                Message = "命令执行因脚本重载中断。";
+                Output = string.Empty;
+                Exception = string.Empty;
+            }
         }
 
         public long Id { get; }
@@ -141,6 +185,50 @@ namespace XFramework.Command
                 }
             }
             CommandHistoryChanged?.Invoke();
+        }
+
+        public static IReadOnlyList<XCommandRecordSnapshot> CaptureRecordSnapshots()
+        {
+            var snapshots = new List<XCommandRecordSnapshot>(s_Records.Count);
+            for (int i = 0; i < s_Records.Count; i++)
+            {
+                XCommandRecord record = s_Records[i];
+                snapshots.Add(new XCommandRecordSnapshot
+                {
+                    Id = record.Id,
+                    ExecutedAtUtcTicks = record.ExecutedAtUtc.Ticks,
+                    CompletedAtUtcTicks = record.CompletedAtUtc?.Ticks ?? 0,
+                    Source = record.Source,
+                    State = record.State,
+                    CommandLine = record.CommandLine,
+                    Status = record.Status,
+                    DurationMilliseconds = record.DurationMilliseconds,
+                    Message = record.Message,
+                    Output = record.Output,
+                    Exception = record.Exception
+                });
+            }
+            return snapshots;
+        }
+
+        public static void RestoreRecords(IEnumerable<XCommandRecordSnapshot> snapshots)
+        {
+            s_Records.Clear();
+            long latestRecordId = 0;
+            foreach (XCommandRecordSnapshot snapshot in snapshots)
+            {
+                var record = new XCommandRecord(snapshot);
+                s_Records.Add(record);
+                if (s_Records.Count > RecordLimit)
+                {
+                    s_Records.RemoveAt(0);
+                }
+                if (record.Id > latestRecordId)
+                {
+                    latestRecordId = record.Id;
+                }
+            }
+            s_NextRecordId = latestRecordId + 1;
         }
 
         internal static bool ExecuteLegacy(string commandLine, XCommandSource source, CommandDelegate execute, out object value)

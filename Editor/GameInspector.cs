@@ -7,7 +7,7 @@ using System.Reflection;
 using System.Collections.Generic;
 using Object = UnityEngine.Object;
 
-[CustomEditor(typeof(GameBase), true)]
+[CustomEditor(typeof(XGame), true)]
 public class GameInspector : Editor
 {
     private string[] typeNames = null;      // full names (for storage)
@@ -16,11 +16,11 @@ public class GameInspector : Editor
     
     private string savePath;
 
-    private GameBase gameInstance
+    private XGame gameInstance
     {
         get
         {
-            return target as GameBase;
+            return target as XGame;
         }
     }
 

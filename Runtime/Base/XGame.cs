@@ -12,18 +12,33 @@ namespace XFramework
     /// </summary>
     [DisallowMultipleComponent]
     [DefaultExecutionOrder(XFrameworkConst.GameExecutionOrder)]
-    public class GameBase : MonoBehaviour
+    public class XGame : MonoBehaviour
     {
         // 初始流程
         [HideInInspector] public string startTypeName;
         public MainProcedure startProcedure;
 
-        public static GameBase activeGame { get; private set; }
-        
+        private static GameObject m_MainPlayer;
+
+        public static XGame activeGame { get; private set; }
+
+        /// <summary>
+        /// 玩家当前在世界中的主要对象。未显式设置时返回主相机对象。
+        /// </summary>
+        public static GameObject MainPlayer => m_MainPlayer != null ? m_MainPlayer : Camera.main?.gameObject;
+
+        /// <summary>
+        /// 设置玩家当前在世界中的主要对象。传入 null 时恢复使用主相机对象。
+        /// </summary>
+        public static void SetMainPlayer(GameObject mainPlayer)
+        {
+            m_MainPlayer = mainPlayer;
+        }
+
         private void Awake()
         {
-            var a = XApplication.Setting; 
-            
+            var a = XApplication.Setting;
+
             if (activeGame != null)
             {
                 DestroyImmediate(this);

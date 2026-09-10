@@ -65,8 +65,9 @@ namespace XFramework.Editor
         private bool m_ApplyingCommandHistory;
         private bool m_ShowingCommandSuggestions;
         private bool m_CommandHubSubscribed;
-        private long m_VisibleAfterRecordId;
         private IVisualElementScheduledItem m_CliServerStatusSchedule;
+        [SerializeField] private long m_VisibleAfterRecordId;
+        [SerializeField] private bool m_ShowHiddenCommandRecords = true;
         [SerializeField] private string m_SelectedCommandName;
 
         [MenuItem(MenuPath)]
@@ -82,6 +83,7 @@ namespace XFramework.Editor
         protected override void OnEnable()
         {
             base.OnEnable();
+            XCommandEditorHistory.EnsureInitialized();
             LoadPreferences();
             XCommandRegistry.Refresh();
             EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
@@ -102,7 +104,7 @@ namespace XFramework.Editor
             m_CliServerStatusSchedule?.Pause();
             UnsubscribeCommandHub();
             BuildUI();
-            ResetVisibleCommandRecords();
+            RestoreVisibleCommandRecords();
             SubscribeCommandHub();
             RefreshCliServerStatus();
             m_CliServerStatusSchedule = rootVisualElement.schedule.Execute(RefreshCliServerStatus).Every(500);
@@ -300,12 +302,13 @@ namespace XFramework.Editor
 
             m_ShowHiddenCommandRecordsToggle = new Toggle("显示隐藏命令")
             {
-                value = true
+                value = m_ShowHiddenCommandRecords
             };
             m_ShowHiddenCommandRecordsToggle.style.marginRight = 8f;
             m_ShowHiddenCommandRecordsToggle.tooltip = "控制当前 Editor Terminal 是否显示 Hidden 命令的执行记录，不删除 Hub 记录。";
-            m_ShowHiddenCommandRecordsToggle.RegisterValueChangedCallback(_ =>
+            m_ShowHiddenCommandRecordsToggle.RegisterValueChangedCallback(evt =>
             {
+                m_ShowHiddenCommandRecords = evt.newValue;
                 RefreshTerminalSummary();
                 RenderConsole();
             });
@@ -1405,6 +1408,26 @@ namespace XFramework.Editor
             m_VisibleCommandRecordIds.Clear();
         }
 
+        private void RestoreVisibleCommandRecords()
+        {
+            m_VisibleCommandRecords.Clear();
+            m_VisibleCommandRecordIds.Clear();
+            IReadOnlyList<XCommandRecord> records = XCommandHub.Records;
+            if (records.Count == 0 || m_VisibleAfterRecordId > XCommandHub.LatestRecordId)
+            {
+                m_VisibleAfterRecordId = 0;
+            }
+            for (int i = 0; i < records.Count; i++)
+            {
+                XCommandRecord record = records[i];
+                if (record.Id > m_VisibleAfterRecordId)
+                {
+                    m_VisibleCommandRecordIds.Add(record.Id);
+                    m_VisibleCommandRecords.Add(record);
+                }
+            }
+        }
+
         private void SubscribeCommandHub()
         {
             if (m_CommandHubSubscribed)
@@ -1500,7 +1523,7 @@ namespace XFramework.Editor
 
         private bool ShouldDisplayCommandRecord(XCommandRecord record)
         {
-            if (m_ShowHiddenCommandRecordsToggle.value)
+            if (m_ShowHiddenCommandRecords)
             {
                 return true;
             }

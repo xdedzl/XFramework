@@ -45,7 +45,7 @@ namespace XFramework.AutoTest
             }
         }
 
-        private static string ResolvePath(string path)
+        internal static string ResolvePath(string path)
         {
             if (string.IsNullOrWhiteSpace(path))
                 throw new ArgumentException("截图路径不能为空。", nameof(path));

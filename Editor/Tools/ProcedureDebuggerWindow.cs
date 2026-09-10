@@ -26,7 +26,7 @@ namespace XFramework.Editor
         private readonly List<ProcedureDebugItem> m_FilteredItems = new();
         private readonly Dictionary<Type, ProcedureDebugItem> m_ItemByType = new();
         private readonly Dictionary<string, List<Type>> m_PanelTypesByName = new(StringComparer.Ordinal);
-        private readonly List<GameBaseDebugInfo> m_GameBases = new();
+        private readonly List<XGameDebugInfo> m_XGames = new();
         private readonly List<UObjectReference> m_ObjectReferences = new();
         private readonly List<ProcedureDiagnostic> m_SceneDiagnostics = new();
         private readonly List<ProcedureDiagnostic> m_RuntimeDiagnostics = new();
@@ -439,7 +439,7 @@ namespace XFramework.Editor
 
         private void ScanOpenScenes()
         {
-            m_GameBases.Clear();
+            m_XGames.Clear();
             m_ObjectReferences.Clear();
             m_SceneDiagnostics.Clear();
             foreach (ProcedureDebugItem item in m_AllItems)
@@ -457,24 +457,24 @@ namespace XFramework.Editor
 
                 foreach (GameObject root in scene.GetRootGameObjects())
                 {
-                    foreach (GameBase gameBase in root.GetComponentsInChildren<GameBase>(true))
+                    foreach (XGame xGame in root.GetComponentsInChildren<XGame>(true))
                     {
-                        m_GameBases.Add(BuildGameBaseInfo(gameBase));
+                        m_XGames.Add(BuildXGameInfo(xGame));
                     }
 
                     m_ObjectReferences.AddRange(root.GetComponentsInChildren<UObjectReference>(true));
                 }
             }
 
-            int activeGameCount = m_GameBases.Count(info => info.GameBase.isActiveAndEnabled);
+            int activeGameCount = m_XGames.Count(info => info.XGame.isActiveAndEnabled);
             if (activeGameCount > 1)
             {
                 m_SceneDiagnostics.Add(new ProcedureDiagnostic(
                     DiagnosticSeverity.Warning,
-                    $"当前已加载场景中存在 {activeGameCount} 个启用状态的 GameBase。"));
+                    $"当前已加载场景中存在 {activeGameCount} 个启用状态的 XGame。"));
             }
 
-            foreach (GameBaseDebugInfo info in m_GameBases)
+            foreach (XGameDebugInfo info in m_XGames)
             {
                 if (!string.IsNullOrEmpty(info.Error))
                 {
@@ -488,24 +488,24 @@ namespace XFramework.Editor
             }
         }
 
-        private GameBaseDebugInfo BuildGameBaseInfo(GameBase gameBase)
+        private XGameDebugInfo BuildXGameInfo(XGame xGame)
         {
-            Type serializedType = gameBase.startProcedure?.GetType();
+            Type serializedType = xGame.startProcedure?.GetType();
             Type resolvedType = null;
             string error = null;
 
-            if (serializedType != null && serializedType.Name == gameBase.startTypeName)
+            if (serializedType != null && serializedType.Name == xGame.startTypeName)
             {
                 resolvedType = serializedType;
             }
-            else if (string.IsNullOrWhiteSpace(gameBase.startTypeName))
+            else if (string.IsNullOrWhiteSpace(xGame.startTypeName))
             {
-                error = $"GameBase '{GetHierarchyPath(gameBase.transform)}' 未配置 startTypeName。";
+                error = $"XGame '{GetHierarchyPath(xGame.transform)}' 未配置 startTypeName。";
             }
             else
             {
                 List<Type> matches = m_AllItems
-                    .Where(item => item.Kind == ProcedureDebugKind.Procedure && item.Type.FullName == gameBase.startTypeName)
+                    .Where(item => item.Kind == ProcedureDebugKind.Procedure && item.Type.FullName == xGame.startTypeName)
                     .Select(item => item.Type)
                     .ToList();
 
@@ -515,20 +515,20 @@ namespace XFramework.Editor
                 }
                 else if (matches.Count == 0)
                 {
-                    error = $"GameBase '{GetHierarchyPath(gameBase.transform)}' 的启动流程 '{gameBase.startTypeName}' 无法解析。";
+                    error = $"XGame '{GetHierarchyPath(xGame.transform)}' 的启动流程 '{xGame.startTypeName}' 无法解析。";
                 }
                 else
                 {
-                    error = $"GameBase '{GetHierarchyPath(gameBase.transform)}' 的启动流程 '{gameBase.startTypeName}' 在多个程序集中存在。";
+                    error = $"XGame '{GetHierarchyPath(xGame.transform)}' 的启动流程 '{xGame.startTypeName}' 在多个程序集中存在。";
                 }
             }
 
             if (resolvedType != null && (!typeof(MainProcedure).IsAssignableFrom(resolvedType) || !IsConcreteType(resolvedType)))
             {
-                error = $"GameBase '{GetHierarchyPath(gameBase.transform)}' 的启动类型不是可创建的 MainProcedure。";
+                error = $"XGame '{GetHierarchyPath(xGame.transform)}' 的启动类型不是可创建的 MainProcedure。";
             }
 
-            return new GameBaseDebugInfo(gameBase, serializedType, resolvedType, error);
+            return new XGameDebugInfo(xGame, serializedType, resolvedType, error);
         }
 
         private void ValidateSceneCamera(ProcedureDebugItem item)
@@ -844,7 +844,7 @@ namespace XFramework.Editor
             }
 
             m_SummaryLabel.text =
-                $"{mode} | 类型 {m_AllItems.Count} | 当前显示 {m_FilteredItems.Count} | GameBase {m_GameBases.Count} | " +
+                $"{mode} | 类型 {m_AllItems.Count} | 当前显示 {m_FilteredItems.Count} | XGame {m_XGames.Count} | " +
                 $"类型 Error {errorCount} / Warning {warningCount} | 场景 Error {sceneErrorCount} / Warning {sceneWarningCount}{runtimeText}";
         }
 
@@ -990,20 +990,20 @@ namespace XFramework.Editor
                     GetDiagnosticColor(diagnostic.Severity)));
             }
 
-            if (m_GameBases.Count == 0)
+            if (m_XGames.Count == 0)
             {
-                scene.Add(CreateMutedLabel("未找到 GameBase。"));
+                scene.Add(CreateMutedLabel("未找到 XGame。"));
             }
             else
             {
-                foreach (GameBaseDebugInfo info in m_GameBases)
+                foreach (XGameDebugInfo info in m_XGames)
                 {
                     string value =
-                        $"{GetHierarchyPath(info.GameBase.transform)} | startTypeName={info.GameBase.startTypeName} | " +
+                        $"{GetHierarchyPath(info.XGame.transform)} | startTypeName={info.XGame.startTypeName} | " +
                         $"Serialized={info.SerializedType?.FullName ?? "None"} | Resolved={info.ResolvedType?.FullName ?? "None"}";
                     scene.Add(CreateMutedLabel(value, true, 2f));
 
-                    if (info.GameBase.startProcedure is SceneProcedureBase sceneProcedure)
+                    if (info.XGame.startProcedure is SceneProcedureBase sceneProcedure)
                     {
                         scene.Add(CreateMutedLabel(
                             $"XScenePath={sceneProcedure.XScenePath}",
@@ -1500,17 +1500,17 @@ namespace XFramework.Editor
 
         }
 
-        private readonly struct GameBaseDebugInfo
+        private readonly struct XGameDebugInfo
         {
-            public GameBaseDebugInfo(GameBase gameBase, Type serializedType, Type resolvedType, string error)
+            public XGameDebugInfo(XGame xGame, Type serializedType, Type resolvedType, string error)
             {
-                GameBase = gameBase;
+                XGame = xGame;
                 SerializedType = serializedType;
                 ResolvedType = resolvedType;
                 Error = error;
             }
 
-            public GameBase GameBase { get; }
+            public XGame XGame { get; }
             public Type SerializedType { get; }
             public Type ResolvedType { get; }
             public string Error { get; }

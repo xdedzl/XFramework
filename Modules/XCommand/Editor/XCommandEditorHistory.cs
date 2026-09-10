@@ -9,7 +9,9 @@ namespace XFramework.Editor
     [InitializeOnLoad]
     internal static class XCommandEditorHistory
     {
-        private static readonly string s_HistoryKey = $"XFramework.XCommand.{Hash128.Compute(Application.dataPath)}.History";
+        private static readonly string s_ProjectKey = $"XFramework.XCommand.{Hash128.Compute(Application.dataPath)}";
+        private static readonly string s_HistoryKey = $"{s_ProjectKey}.History";
+        private static readonly string s_RecordsKey = $"{s_ProjectKey}.Records";
 
         static XCommandEditorHistory()
         {
@@ -18,13 +20,18 @@ namespace XFramework.Editor
                 return;
             }
 
-            XCommandHub.RestoreCommandHistory(Load());
-            XCommandHub.CommandHistoryChanged += Save;
-            AssemblyReloadEvents.beforeAssemblyReload += Shutdown;
-            EditorApplication.quitting += Shutdown;
+            XCommandHub.RestoreRecords(LoadRecordSnapshots());
+            XCommandHub.RestoreCommandHistory(LoadCommandHistory());
+            XCommandHub.CommandHistoryChanged += SaveCommandHistory;
+            AssemblyReloadEvents.beforeAssemblyReload += BeforeAssemblyReload;
+            EditorApplication.quitting += OnEditorQuitting;
         }
 
-        private static IEnumerable<string> Load()
+        internal static void EnsureInitialized()
+        {
+        }
+
+        private static IEnumerable<string> LoadCommandHistory()
         {
             string json = EditorPrefs.GetString(s_HistoryKey, string.Empty);
             if (string.IsNullOrEmpty(json))
@@ -40,25 +47,67 @@ namespace XFramework.Editor
             return storage.values;
         }
 
-        private static void Save()
+        private static IEnumerable<XCommandRecordSnapshot> LoadRecordSnapshots()
+        {
+            string json = SessionState.GetString(s_RecordsKey, string.Empty);
+            if (string.IsNullOrEmpty(json))
+            {
+                return Array.Empty<XCommandRecordSnapshot>();
+            }
+
+            RecordListStorage storage = JsonUtility.FromJson<RecordListStorage>(json);
+            if (storage == null || storage.records == null)
+            {
+                return Array.Empty<XCommandRecordSnapshot>();
+            }
+            return storage.records;
+        }
+
+        private static void SaveCommandHistory()
         {
             var storage = new StringListStorage();
             storage.values.AddRange(XCommandHub.CommandHistory);
             EditorPrefs.SetString(s_HistoryKey, JsonUtility.ToJson(storage));
         }
 
-        private static void Shutdown()
+        private static void SaveRecordSnapshots()
         {
-            Save();
-            XCommandHub.CommandHistoryChanged -= Save;
-            AssemblyReloadEvents.beforeAssemblyReload -= Shutdown;
-            EditorApplication.quitting -= Shutdown;
+            var storage = new RecordListStorage();
+            storage.records.AddRange(XCommandHub.CaptureRecordSnapshots());
+            SessionState.SetString(s_RecordsKey, JsonUtility.ToJson(storage));
+        }
+
+        private static void BeforeAssemblyReload()
+        {
+            SaveCommandHistory();
+            SaveRecordSnapshots();
+            Unsubscribe();
+        }
+
+        private static void OnEditorQuitting()
+        {
+            SaveCommandHistory();
+            SessionState.EraseString(s_RecordsKey);
+            Unsubscribe();
+        }
+
+        private static void Unsubscribe()
+        {
+            XCommandHub.CommandHistoryChanged -= SaveCommandHistory;
+            AssemblyReloadEvents.beforeAssemblyReload -= BeforeAssemblyReload;
+            EditorApplication.quitting -= OnEditorQuitting;
         }
 
         [Serializable]
         private sealed class StringListStorage
         {
             public List<string> values = new List<string>();
+        }
+
+        [Serializable]
+        private sealed class RecordListStorage
+        {
+            public List<XCommandRecordSnapshot> records = new List<XCommandRecordSnapshot>();
         }
     }
 }

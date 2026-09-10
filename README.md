@@ -583,6 +583,7 @@ IReadOnlyList<Transform> spawnPoints = UObjectFinder.FindList<Transform>("NpcSpa
 强大的、通过游戏中输入快捷键 `~` 拉起的前端控制台。
 - 具有实时运行时日志系统(Log输出与筛选)。
 - 支持添加并使用 XCommand 命令（通过 `[XCommandEntry]` 标记）。
+- 编辑器命令 **`preview-prefab`（预览Prefab）**：离屏渲染 UI 或模型 Prefab 并导出 PNG，支持输出尺寸和透明背景。用法：`preview-prefab [--width W --height H] [--background #RRGGBB[AA]] PREFAB_PATH PNG_PATH`，默认 1920 × 1080；输出路径支持绝对路径及 `temp:/`、`data:/`、`persistent:/` 前缀。
 - **最强特性**: 内置微型 C# 解释器驱动，支持游戏进程中执行动态 C# 代码调整变量。
 
 ### 4.6 XInspector 数据检查面板
@@ -889,17 +890,29 @@ public class BattleProcedure : SceneProcedureBase { ... }
 ## 6. 项目起步与新手指南 (Getting Started)
 
 ### 6.1 如何构建自己的第一个游戏：
-1. **创建启动脚本**：新建一个 C# 脚本（通常命名为 `Game.cs`），继承自 `XFramework.GameBase`。
+1. **创建启动脚本**：新建一个 C# 脚本（通常命名为 `Game.cs`），继承自 `XFramework.XGame`。
    ```csharp
-   public class Game : XFramework.GameBase
+   public class Game : XFramework.XGame
    {
-       // 通常不需要重写任何方法，GameBase 已处理好了模块初始化与流程驱动
+       // 通常不需要重写任何方法，XGame 已处理好了模块初始化与流程驱动
    }
    ```
 2. **场景挂载**：在初始场景中创建一个空的 GameObject，挂载该 `Game` 脚本。
 3. **编写首个流程**：编写您的 `EntryProcedure` 继承 `MainProcedure` 或 `SceneProcedureBase`。
 4. **绑定流程**：在 Inspector 面板中，通过 `Game` 组件上的 `Start Procedure` 下拉框直接选择您编写的初始流程（框架会自动扫描 `Assembly-CSharp` 中的所有流程类）。
 5. **开启开发之旅**：按下运行键，畅享极速游戏开发体验！
+
+### 6.2 设置主玩家对象
+
+`XGame` 可以保存玩家当前在世界中的主要化身。该对象可以是角色、动物、载具或自由相机；未设置时自动使用主相机对象。
+
+```csharp
+XGame.SetMainPlayer(playerGameObject);
+GameObject mainPlayer = XGame.MainPlayer;
+
+// 清除显式设置，恢复使用主相机对象
+XGame.SetMainPlayer(null);
+```
 
 ---
 *Created carefully by Antigravity AI.*
