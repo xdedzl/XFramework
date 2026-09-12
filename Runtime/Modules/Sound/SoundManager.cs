@@ -164,6 +164,9 @@ namespace XFramework
         {
             var res = new GameObject("audio-templete");
             res.AddComponent<AudioSource>();
+            // SoundManager is a runtime-persistent module. Keep its entity template
+            // outside the lobby/battle scene lifecycle so scene switches cannot destroy it.
+            GameObject.DontDestroyOnLoad(res);
             EntityManager.Instance.AddTemplate<AudioEntity>("SoundManager_Audio", res);
         }
 
@@ -622,6 +625,7 @@ namespace XFramework
         private void CreateBgmSources()
         {
             var res = new GameObject("audio-bgm");
+            GameObject.DontDestroyOnLoad(res);
             m_BGM = res.AddComponent<AudioSource>();
             m_BGM.loop = true;
             m_BGM.volume = 0f;

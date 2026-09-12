@@ -125,6 +125,7 @@ namespace XFramework
 
             string lockedSceneType = null;
             bool scenePathsReserved = false;
+            LoadedXScene deferredMainScene = null;
             try
             {
                 CaptureFallbackScene();
@@ -158,7 +159,15 @@ namespace XFramework
                     return false;
                 }
 
-                if (!await MakeRoomForSceneAsync(sceneType))
+                // Unity 不允许卸载唯一已加载的场景。Main 类型切换时先保留最旧场景，
+                // 等新场景以 Additive 方式加载完成后再卸载，避免把旧场景提前卸掉。
+                if (sceneType.Name == XSceneType.MainName &&
+                    GetLoadedSceneCount(XSceneType.MainName) >= sceneType.MaxLoadedSceneCount)
+                {
+                    deferredMainScene = GetOldestLoadedScene(XSceneType.MainName);
+                }
+
+                if (deferredMainScene == null && !await MakeRoomForSceneAsync(sceneType))
                 {
                     return false;
                 }
@@ -210,6 +219,14 @@ namespace XFramework
                     ++s_LoadOrder);
                 s_LoadedXScenes.Add(xScenePath, loadedXScene);
                 scenePathsReserved = false;
+
+                if (deferredMainScene != null && !await UnloadLoadedXSceneAsync(deferredMainScene))
+                {
+                    Debug.LogError(
+                        $"[XSceneManager] Deferred unload of Main XScene failed. xScenePath:{deferredMainScene.XScenePath}.");
+                    await UnloadLoadedXSceneAsync(loadedXScene);
+                    return false;
+                }
 
                 // 加载 Main 类型 XScene 后，卸载不属于它的 orphan fallback scene（如编辑器启动场景）
                 if (sceneType.Name == XSceneType.MainName && !await UnloadOrphanFallbackSceneAsync(xScene))

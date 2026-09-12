@@ -17,6 +17,9 @@ namespace XFramework
         public PanelSettings defaultUIToolkitPanelSettings;
         [Tooltip("UI 点击音效配置。")]
         public UIClickSoundSetting[] uiClickSounds;
+        
+        [Tooltip("UI 根节点预制体路径。")]
+        [AssetPath(typeof(GameObject))]
         public string UIRootPrefabPath;
 
         [Header("Scene")]
