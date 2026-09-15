@@ -3,7 +3,8 @@
     "rootNamespace": "",
     "references": [
         "XCommandRuntime",
-        "XFrameworkEditor"
+        "XFrameworkEditor",
+        "Unity.TextMeshPro"
     ],
     "includePlatforms": [
         "Editor"
