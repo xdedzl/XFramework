@@ -5,10 +5,10 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-namespace XFramework.AutoTest
+namespace XFramework.Command
 {
     [Serializable]
-    public sealed class AutoTestGameObjectQuery
+    public sealed class XCommandGameObjectQuery
     {
         public int instanceId;
         public string name;
@@ -23,7 +23,7 @@ namespace XFramework.AutoTest
     }
 
     [Serializable]
-    public sealed class AutoTestGameObjectListQuery
+    public sealed class XCommandGameObjectListQuery
     {
         public string name;
         public string path;
@@ -35,7 +35,19 @@ namespace XFramework.AutoTest
         public bool compact;
     }
 
-    internal static class AutoTestGameObjects
+    [Serializable]
+    public sealed class XCommandGameObjectWaitRequest
+    {
+        public string state = "exists";
+        public XCommandGameObjectQuery query = new XCommandGameObjectQuery();
+        public int stableFrames = 2;
+        public float positionEpsilon = 0.001f;
+        public float rotationEpsilon = 0.1f;
+        public float timeoutSeconds = 30f;
+        public bool compact;
+    }
+
+    internal static class XCommandGameObjects
     {
         [Serializable]
         private sealed class GameObjectStateResult
@@ -174,7 +186,7 @@ namespace XFramework.AutoTest
             public bool activeAndEnabled;
         }
 
-        internal static string GetState(AutoTestGameObjectQuery query)
+        internal static string GetState(XCommandGameObjectQuery query)
         {
             if (query == null)
                 throw new ArgumentNullException(nameof(query));
@@ -213,7 +225,7 @@ namespace XFramework.AutoTest
             return JsonUtility.ToJson(result, !query.compact);
         }
 
-        internal static string List(AutoTestGameObjectListQuery query)
+        internal static string List(XCommandGameObjectListQuery query)
         {
             if (query == null)
                 throw new ArgumentNullException(nameof(query));
@@ -222,14 +234,14 @@ namespace XFramework.AutoTest
                 throw new ArgumentException($"未知 active 筛选：{query.active}");
             int? layer = ResolveLayer(query.layer);
             List<GameObject> matches = GetLoadedSceneGameObjects()
-                .Where(gameObject => ContainsIgnoreCase(gameObject.name, query.name))
-                .Where(gameObject => ContainsIgnoreCase(GetGameObjectPath(gameObject), query.path))
+                .Where(gameObject => XCommandUtility.Text.ContainsIgnoreCase(gameObject.name, query.name))
+                .Where(gameObject => XCommandUtility.Text.ContainsIgnoreCase(XCommandUtility.GameObject.GetGameObjectPath(gameObject), query.path))
                 .Where(gameObject => HasComponent(gameObject, query.component))
                 .Where(gameObject => string.IsNullOrEmpty(query.tag) || string.Equals(gameObject.tag, query.tag, StringComparison.OrdinalIgnoreCase))
                 .Where(gameObject => !layer.HasValue || gameObject.layer == layer.Value)
                 .Where(gameObject => active == "any" || (active == "active") == gameObject.activeInHierarchy)
                 .OrderBy(gameObject => gameObject.scene.name, StringComparer.Ordinal)
-                .ThenBy(GetIndexedGameObjectPath, StringComparer.Ordinal)
+                .ThenBy(XCommandUtility.GameObject.GetIndexedGameObjectPath, StringComparer.Ordinal)
                 .ToList();
             int limit = Mathf.Clamp(query.maxResults, 1, 1000);
             var result = new GameObjectListResult {
@@ -243,7 +255,7 @@ namespace XFramework.AutoTest
             return JsonUtility.ToJson(result, !query.compact);
         }
 
-        internal static IEnumerator Wait(AutoTestGameObjectWaitRequest request, AutoTestOperationContext context)
+        internal static IEnumerator Wait(XCommandGameObjectWaitRequest request, Action<string> setOutput)
         {
             if (request.query == null)
                 throw new ArgumentException("wait-for go 缺少 query。", nameof(request));
@@ -292,7 +304,7 @@ namespace XFramework.AutoTest
                         matchCount = matches.Count,
                         objects = matches.Take(16).Select(CreateBriefState).ToList(),
                     };
-                    context.SetOutput(JsonUtility.ToJson(result, !request.compact));
+                    setOutput(JsonUtility.ToJson(result, !request.compact));
                     yield break;
                 }
                 yield return null;
@@ -300,23 +312,23 @@ namespace XFramework.AutoTest
             throw new TimeoutException($"wait-for go 等待 {state} 超时（{request.timeoutSeconds.ToString("0.###")} 秒）。");
         }
 
-        private static void EnsureSelector(AutoTestGameObjectQuery query, string command)
+        private static void EnsureSelector(XCommandGameObjectQuery query, string command)
         {
             if (query.instanceId == 0 && string.IsNullOrEmpty(query.name) && string.IsNullOrEmpty(query.path) && string.IsNullOrEmpty(query.indexedPath) && string.IsNullOrEmpty(query.component))
                 throw new ArgumentException($"{command} 至少需要 instance-id、name、path、indexed-path 或 component 选择器之一。", nameof(query));
         }
 
-        private static List<GameObject> FindExact(AutoTestGameObjectQuery query, bool includeInactive)
+        private static List<GameObject> FindExact(XCommandGameObjectQuery query, bool includeInactive)
         {
             return GetLoadedSceneGameObjects()
                 .Where(gameObject => includeInactive || gameObject.activeInHierarchy)
                 .Where(gameObject => query.instanceId == 0 || gameObject.GetInstanceID() == query.instanceId)
                 .Where(gameObject => string.IsNullOrEmpty(query.name) || string.Equals(gameObject.name, query.name, StringComparison.Ordinal))
-                .Where(gameObject => string.IsNullOrEmpty(query.path) || string.Equals(GetGameObjectPath(gameObject), query.path, StringComparison.Ordinal))
-                .Where(gameObject => string.IsNullOrEmpty(query.indexedPath) || string.Equals(GetIndexedGameObjectPath(gameObject), query.indexedPath, StringComparison.Ordinal))
+                .Where(gameObject => string.IsNullOrEmpty(query.path) || string.Equals(XCommandUtility.GameObject.GetGameObjectPath(gameObject), query.path, StringComparison.Ordinal))
+                .Where(gameObject => string.IsNullOrEmpty(query.indexedPath) || string.Equals(XCommandUtility.GameObject.GetIndexedGameObjectPath(gameObject), query.indexedPath, StringComparison.Ordinal))
                 .Where(gameObject => HasComponent(gameObject, query.component))
                 .OrderBy(gameObject => gameObject.scene.name, StringComparer.Ordinal)
-                .ThenBy(GetIndexedGameObjectPath, StringComparer.Ordinal)
+                .ThenBy(XCommandUtility.GameObject.GetIndexedGameObjectPath, StringComparer.Ordinal)
                 .ToList();
         }
 
@@ -326,7 +338,7 @@ namespace XFramework.AutoTest
             return Resources.FindObjectsOfTypeAll<GameObject>().Where(gameObject => IsLoadedSceneObject(gameObject, loadedSceneHandles));
         }
 
-        private static bool IsStable(List<GameObject> matches, AutoTestGameObjectWaitRequest request, ref int previousInstanceId, ref Vector3 previousPosition, ref Quaternion previousRotation, ref Vector3 previousScale)
+        private static bool IsStable(List<GameObject> matches, XCommandGameObjectWaitRequest request, ref int previousInstanceId, ref Vector3 previousPosition, ref Quaternion previousRotation, ref Vector3 previousScale)
         {
             if (matches.Count == 0)
             {
@@ -360,18 +372,13 @@ namespace XFramework.AutoTest
             return layer;
         }
 
-        private static bool ContainsIgnoreCase(string value, string expected)
-        {
-            return string.IsNullOrEmpty(expected) || value.IndexOf(expected, StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
         private static GameObjectListItem CreateListItem(GameObject gameObject)
         {
             return new GameObjectListItem {
                 instanceId = gameObject.GetInstanceID(),
                 name = gameObject.name,
-                path = GetGameObjectPath(gameObject),
-                indexedPath = GetIndexedGameObjectPath(gameObject),
+                path = XCommandUtility.GameObject.GetGameObjectPath(gameObject),
+                indexedPath = XCommandUtility.GameObject.GetIndexedGameObjectPath(gameObject),
                 sceneName = gameObject.scene.name,
                 activeSelf = gameObject.activeSelf,
                 activeInHierarchy = gameObject.activeInHierarchy,
@@ -407,8 +414,8 @@ namespace XFramework.AutoTest
             return new GameObjectBriefState {
                 instanceId = gameObject.GetInstanceID(),
                 name = gameObject.name,
-                path = GetGameObjectPath(gameObject),
-                indexedPath = GetIndexedGameObjectPath(gameObject),
+                path = XCommandUtility.GameObject.GetGameObjectPath(gameObject),
+                indexedPath = XCommandUtility.GameObject.GetIndexedGameObjectPath(gameObject),
                 sceneName = gameObject.scene.name,
                 activeSelf = gameObject.activeSelf,
                 activeInHierarchy = gameObject.activeInHierarchy,
@@ -423,8 +430,8 @@ namespace XFramework.AutoTest
             var state = new GameObjectState {
                 instanceId = gameObject.GetInstanceID(),
                 name = gameObject.name,
-                path = GetGameObjectPath(gameObject),
-                indexedPath = GetIndexedGameObjectPath(gameObject),
+                path = XCommandUtility.GameObject.GetGameObjectPath(gameObject),
+                indexedPath = XCommandUtility.GameObject.GetIndexedGameObjectPath(gameObject),
                 sceneName = gameObject.scene.name,
                 scenePath = gameObject.scene.path,
                 activeSelf = gameObject.activeSelf,
@@ -514,23 +521,7 @@ namespace XFramework.AutoTest
 
         private static string FormatCandidate(GameObject gameObject)
         {
-            return $"{gameObject.scene.name}:{GetIndexedGameObjectPath(gameObject)}";
-        }
-
-        private static string GetGameObjectPath(GameObject gameObject)
-        {
-            var names = new Stack<string>();
-            for (Transform current = gameObject.transform; current != null; current = current.parent)
-                names.Push(current.name);
-            return string.Join("/", names);
-        }
-
-        private static string GetIndexedGameObjectPath(GameObject gameObject)
-        {
-            var names = new Stack<string>();
-            for (Transform current = gameObject.transform; current != null; current = current.parent)
-                names.Push($"{current.name}[{current.GetSiblingIndex()}]");
-            return string.Join("/", names);
+            return $"{gameObject.scene.name}:{XCommandUtility.GameObject.GetIndexedGameObjectPath(gameObject)}";
         }
     }
 }

@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -128,7 +127,7 @@ namespace XFramework.Editor
 
             if (!string.IsNullOrEmpty(options.Chars))
             {
-                int added = AddCharacters(collected, Unescape(options.Chars));
+                int added = AddCharacters(collected, XCommandUtility.Text.Unescape(options.Chars));
                 log.AppendLine($"命令行指定字符：新增 {added} 个");
             }
 
@@ -270,7 +269,7 @@ namespace XFramework.Editor
                 foreach (Match match in TextValueRegex.Matches(content))
                 {
                     string raw = match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value;
-                    AddCharacters(characters, Unescape(raw));
+                    AddCharacters(characters, XCommandUtility.Text.Unescape(raw));
                 }
             }
 
@@ -301,7 +300,7 @@ namespace XFramework.Editor
 
                 foreach (Match match in CodeStringRegex.Matches(content))
                 {
-                    string literal = Unescape(match.Groups[1].Value);
+                    string literal = XCommandUtility.Text.Unescape(match.Groups[1].Value);
                     for (int c = 0; c < literal.Length; c++)
                     {
                         if (IsWideCharacter(literal[c]) && characters.Add(literal[c]))
@@ -480,69 +479,6 @@ namespace XFramework.Editor
 
             DirectoryInfo projectRoot = Directory.GetParent(Application.dataPath);
             return projectRoot == null ? normalized : projectRoot.FullName.Replace('\\', '/') + "/" + normalized;
-        }
-
-        /// <summary>把 YAML / C# 字符串里的转义还原成实际字符（\uXXXX、\n、\" 等）。</summary>
-        private static string Unescape(string value)
-        {
-            if (string.IsNullOrEmpty(value) || value.IndexOf('\\') < 0)
-            {
-                return value;
-            }
-
-            var builder = new StringBuilder(value.Length);
-            for (int i = 0; i < value.Length; i++)
-            {
-                char c = value[i];
-                if (c != '\\' || i + 1 >= value.Length)
-                {
-                    builder.Append(c);
-                    continue;
-                }
-
-                char next = value[i + 1];
-                switch (next)
-                {
-                    case 'u':
-                        if (i + 5 < value.Length && ushort.TryParse(value.Substring(i + 2, 4), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out ushort code))
-                        {
-                            builder.Append((char)code);
-                            i += 5;
-                        }
-                        else
-                        {
-                            builder.Append(next);
-                            i++;
-                        }
-                        break;
-                    case 'n':
-                        builder.Append('\n');
-                        i++;
-                        break;
-                    case 'r':
-                        builder.Append('\r');
-                        i++;
-                        break;
-                    case 't':
-                        builder.Append('\t');
-                        i++;
-                        break;
-                    case '"':
-                        builder.Append('"');
-                        i++;
-                        break;
-                    case '\\':
-                        builder.Append('\\');
-                        i++;
-                        break;
-                    default:
-                        builder.Append(next);
-                        i++;
-                        break;
-                }
-            }
-
-            return builder.ToString();
         }
 
         private static string DescribeCharacters(IReadOnlyList<char> characters)

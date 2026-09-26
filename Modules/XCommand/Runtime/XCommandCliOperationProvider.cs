@@ -1,13 +1,13 @@
+using System;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
-using XFramework.Command;
 
-namespace XFramework.AutoTest
+namespace XFramework.Command
 {
-    internal sealed class AutoTestCliOperationProvider : IXFrameworkCliOperationProvider
+    internal sealed class XCommandCliOperationProvider : IXFrameworkCliOperationProvider
     {
-        private static readonly AutoTestCliOperationProvider s_Instance = new AutoTestCliOperationProvider();
+        private static readonly XCommandCliOperationProvider s_Instance = new XCommandCliOperationProvider();
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterAssembliesLoaded)]
         private static void Register()
@@ -26,7 +26,7 @@ namespace XFramework.AutoTest
                 if (idToken == null || idToken.Type != JTokenType.Integer)
                     return false;
                 operationId = idToken.Value<long>();
-                return AutoTestPipeline.TryGetOperation(operationId, out _);
+                return XCommandPipeline.TryGetOperation(operationId, out _);
             }
             catch (JsonException)
             {
@@ -37,28 +37,28 @@ namespace XFramework.AutoTest
         public bool TryGetOperation(long operationId, out XFrameworkCliOperationInfo operation)
         {
             operation = null;
-            if (!AutoTestPipeline.TryGetOperation(operationId, out AutoTestOperationInfo autoTestOperation))
+            if (!XCommandPipeline.TryGetOperation(operationId, out XCommandOperationInfo pipelineOperation))
                 return false;
-            operation = new XFrameworkCliOperationInfo(autoTestOperation.Id, autoTestOperation.Name, ConvertState(autoTestOperation.State), autoTestOperation.CreatedTimeUtc, autoTestOperation.StartedTimeUtc, autoTestOperation.CompletedTimeUtc, autoTestOperation.DurationMilliseconds, autoTestOperation.Output, autoTestOperation.Error);
+            operation = new XFrameworkCliOperationInfo(pipelineOperation.Id, pipelineOperation.Name, ConvertState(pipelineOperation.State), pipelineOperation.CreatedTimeUtc, pipelineOperation.StartedTimeUtc, pipelineOperation.CompletedTimeUtc, pipelineOperation.DurationMilliseconds, pipelineOperation.Output, pipelineOperation.Error);
             return true;
         }
 
-        private static XFrameworkCliOperationState ConvertState(AutoTestOperationState state)
+        private static XFrameworkCliOperationState ConvertState(XCommandOperationState state)
         {
             switch (state)
             {
-                case AutoTestOperationState.Queued:
+                case XCommandOperationState.Queued:
                     return XFrameworkCliOperationState.Queued;
-                case AutoTestOperationState.Running:
+                case XCommandOperationState.Running:
                     return XFrameworkCliOperationState.Running;
-                case AutoTestOperationState.Succeeded:
+                case XCommandOperationState.Succeeded:
                     return XFrameworkCliOperationState.Succeeded;
-                case AutoTestOperationState.Failed:
+                case XCommandOperationState.Failed:
                     return XFrameworkCliOperationState.Failed;
-                case AutoTestOperationState.Cancelled:
+                case XCommandOperationState.Cancelled:
                     return XFrameworkCliOperationState.Cancelled;
                 default:
-                    throw new System.ArgumentOutOfRangeException(nameof(state), state, null);
+                    throw new ArgumentOutOfRangeException(nameof(state), state, null);
             }
         }
     }

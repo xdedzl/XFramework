@@ -2,10 +2,11 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
-namespace XFramework.AutoTest
+namespace XFramework.Command
 {
-    public enum AutoTestOperationState
+    public enum XCommandOperationState
     {
         Queued,
         Running,
@@ -14,20 +15,20 @@ namespace XFramework.AutoTest
         Cancelled
     }
 
-    public sealed class AutoTestOperationInfo
+    public sealed class XCommandOperationInfo
     {
-        internal AutoTestOperationInfo(long id, string name, Func<AutoTestOperationContext, IEnumerator> routineFactory)
+        internal XCommandOperationInfo(long id, string name, Func<XCommandOperationContext, IEnumerator> routineFactory)
         {
             Id = id;
             Name = name;
-            State = AutoTestOperationState.Queued;
+            State = XCommandOperationState.Queued;
             CreatedTimeUtc = DateTime.UtcNow;
             RoutineFactory = routineFactory;
         }
 
         public long Id { get; }
         public string Name { get; }
-        public AutoTestOperationState State { get; internal set; }
+        public XCommandOperationState State { get; internal set; }
         public DateTime CreatedTimeUtc { get; }
         public DateTime? StartedTimeUtc { get; internal set; }
         public DateTime? CompletedTimeUtc { get; internal set; }
@@ -35,162 +36,15 @@ namespace XFramework.AutoTest
         public string Output { get; internal set; } = string.Empty;
         public string Error { get; internal set; } = string.Empty;
 
-        internal Func<AutoTestOperationContext, IEnumerator> RoutineFactory { get; }
+        internal Func<XCommandOperationContext, IEnumerator> RoutineFactory { get; }
         internal bool CancellationRequested { get; set; }
     }
 
-    [Serializable]
-    public sealed class AutoTestUISelector
+    internal sealed class XCommandOperationContext
     {
-        public string name;
-        public string path;
-        public string indexedPath;
-        public string text;
-        public string action;
-    }
+        private readonly XCommandOperationInfo m_Operation;
 
-    [Serializable]
-    public sealed class AutoTestUIQuery
-    {
-        public AutoTestUISelector selector = new AutoTestUISelector();
-        public int sampleGrid = 5;
-        public int textLimit = 512;
-        public int maxResults;
-        public long changedSince;
-        public bool compact;
-    }
-
-    [Serializable]
-    public sealed class AutoTestUIActionRequest
-    {
-        public string pointerAction;
-        public AutoTestUISelector selector = new AutoTestUISelector();
-        public string button = "left";
-        public float scrollX;
-        public float scrollY;
-        public int sampleGrid = 5;
-        public int stableFrames = 2;
-        public float timeoutSeconds = 10f;
-    }
-
-    [Serializable]
-    public sealed class AutoTestUIWaitRequest
-    {
-        public string state = "visible";
-        public bool interactable;
-        public AutoTestUISelector selector = new AutoTestUISelector();
-        public int sampleGrid = 5;
-        public int stableFrames = 2;
-        public float timeoutSeconds = 30f;
-    }
-
-    [Serializable]
-    public sealed class AutoTestInputSequence
-    {
-        public List<AutoTestInputStep> steps = new List<AutoTestInputStep>();
-        public bool resetAfter;
-    }
-
-    [Serializable]
-    public sealed class AutoTestInputStep
-    {
-        public string type;
-        public string action;
-        public string button;
-        public string key;
-        public string text;
-        public float x;
-        public float y;
-        public float deltaX;
-        public float deltaY;
-        public float scrollX;
-        public float scrollY;
-        public int touchId;
-        public float pressure;
-        public int tapCount;
-        public int frames;
-        public List<AutoTestTouchPoint> touches;
-    }
-
-    [Serializable]
-    public sealed class AutoTestTouchPoint
-    {
-        public int id;
-        public string phase;
-        public float x;
-        public float y;
-        public float deltaX;
-        public float deltaY;
-        public float pressure;
-        public float radiusX;
-        public float radiusY;
-        public int tapCount;
-    }
-
-    [Serializable]
-    public sealed class AutoTestLogQuery
-    {
-        public long since;
-        public string level = "all";
-        public string contains;
-        public int limit = 200;
-        public int messageLimit = 2048;
-        public int stackLimit = 4096;
-        public bool includeStack;
-        public bool compact;
-    }
-
-    [Serializable]
-    public sealed class AutoTestGameObjectWaitRequest
-    {
-        public string state = "exists";
-        public AutoTestGameObjectQuery query = new AutoTestGameObjectQuery();
-        public int stableFrames = 2;
-        public float positionEpsilon = 0.001f;
-        public float rotationEpsilon = 0.1f;
-        public float timeoutSeconds = 30f;
-        public bool compact;
-    }
-
-    [Serializable]
-    public sealed class AutoTestLogWaitRequest
-    {
-        public long since = -1;
-        public string level = "all";
-        public string contains;
-        public int count = 1;
-        public int messageLimit = 2048;
-        public int stackLimit = 4096;
-        public bool includeStack;
-        public float timeoutSeconds = 30f;
-        public bool compact;
-    }
-
-    [Serializable]
-    public sealed class AutoTestWaitRequest
-    {
-        public float realSeconds;
-        public float gameSeconds;
-        public int frames;
-        public bool compact;
-    }
-
-    [Serializable]
-    public sealed class AutoTestScreenshotRequest
-    {
-        public string path;
-        public int width;
-        public int height;
-        public RectInt region;
-        public bool uiOnly;
-        public float timeoutSeconds = 10f;
-    }
-
-    internal sealed class AutoTestOperationContext
-    {
-        private readonly AutoTestOperationInfo m_Operation;
-
-        public AutoTestOperationContext(AutoTestOperationInfo operation)
+        public XCommandOperationContext(XCommandOperationInfo operation)
         {
             m_Operation = operation;
         }
@@ -203,18 +57,18 @@ namespace XFramework.AutoTest
         }
     }
 
-    public static partial class AutoTestPipeline
+    public static class XCommandPipeline
     {
         private const int OperationHistoryLimit = 100;
-        private static readonly Queue<AutoTestOperationInfo> s_PendingOperations = new Queue<AutoTestOperationInfo>();
-        private static readonly List<AutoTestOperationInfo> s_Operations = new List<AutoTestOperationInfo>();
+        private static readonly Queue<XCommandOperationInfo> s_PendingOperations = new Queue<XCommandOperationInfo>();
+        private static readonly List<XCommandOperationInfo> s_Operations = new List<XCommandOperationInfo>();
         private static long s_NextOperationId = 1;
-        private static AutoTestPipelineRunner s_Runner;
+        private static XCommandPipelineRunner s_Runner;
         private static Coroutine s_OperationCoroutine;
         private static bool s_IsRunnerActive;
         private static Action s_EditorStopHandler;
 
-        public static IReadOnlyList<AutoTestOperationInfo> Operations => s_Operations;
+        public static IReadOnlyList<XCommandOperationInfo> Operations => s_Operations;
 
         public static void SetEditorStopHandler(Action handler)
         {
@@ -226,7 +80,7 @@ namespace XFramework.AutoTest
             if (Application.isEditor)
             {
                 if (s_EditorStopHandler == null)
-                    throw new InvalidOperationException("AutoTest Editor stop handler is not registered.");
+                    throw new InvalidOperationException("XCommand Editor stop handler is not registered.");
                 s_EditorStopHandler.Invoke();
                 return;
             }
@@ -240,7 +94,7 @@ namespace XFramework.AutoTest
             {
                 if (s_OperationCoroutine != null)
                     s_Runner.StopCoroutine(s_OperationCoroutine);
-                UnityEngine.Object.Destroy(s_Runner.gameObject);
+                Object.Destroy(s_Runner.gameObject);
             }
             s_PendingOperations.Clear();
             s_Operations.Clear();
@@ -248,106 +102,91 @@ namespace XFramework.AutoTest
             s_Runner = null;
             s_OperationCoroutine = null;
             s_IsRunnerActive = false;
-            AutoTestInput.ResetState();
-            AutoTestUI.ResetSnapshots();
+            XCommandUtility.Input.ResetState();
+            XCommandUI.ResetSnapshots();
         }
 
-        public static string ListUI(AutoTestUIQuery query)
+        public static string ListUI(XCommandUIQuery query)
         {
-            return AutoTestUI.List(query ?? new AutoTestUIQuery());
+            return XCommandUI.List(query ?? new XCommandUIQuery());
         }
 
-        public static string GetGameObjectState(AutoTestGameObjectQuery query)
+        public static string GetGameObjectState(XCommandGameObjectQuery query)
         {
-            return AutoTestGameObjects.GetState(query);
+            return XCommandGameObjects.GetState(query);
         }
 
-        public static string ListGameObjects(AutoTestGameObjectListQuery query)
+        public static string ListGameObjects(XCommandGameObjectListQuery query)
         {
-            return AutoTestGameObjects.List(query ?? new AutoTestGameObjectListQuery());
+            return XCommandGameObjects.List(query ?? new XCommandGameObjectListQuery());
         }
 
-        public static string GetSceneState(bool compact = false)
-        {
-            return AutoTestState.GetScenes(compact);
-        }
-
-        public static string GetApplicationState(bool compact = false)
-        {
-            return AutoTestState.GetApplication(compact);
-        }
-
-        public static long ActOnUI(AutoTestUIActionRequest request)
+        public static long ActOnUI(XCommandUIActionRequest request)
         {
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
-            return EnqueueOperation("ui-act", context => AutoTestUI.Act(request, context));
+            return EnqueueOperation("ui-act", context => XCommandUI.Act(request, () => context.IsCancellationRequested, context.SetOutput));
         }
 
-        public static long WaitForUI(AutoTestUIWaitRequest request)
+        public static long WaitForUI(XCommandUIWaitRequest request)
         {
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
-            return EnqueueOperation("wait-for", context => AutoTestUI.Wait(request, context));
+            return EnqueueOperation("wait-for", context => XCommandUI.Wait(request, () => context.IsCancellationRequested, context.SetOutput));
         }
 
-        public static long WaitForGameObject(AutoTestGameObjectWaitRequest request)
+        public static long WaitForGameObject(XCommandGameObjectWaitRequest request)
         {
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
-            return EnqueueOperation("wait-for", context => AutoTestGameObjects.Wait(request, context));
+            return EnqueueOperation("wait-for", context => XCommandGameObjects.Wait(request, context.SetOutput));
         }
 
-        public static long WaitForLog(AutoTestLogWaitRequest request)
+        public static long WaitForLog(XCommandLogWaitRequest request)
         {
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
-            return EnqueueOperation("wait-for", context => AutoTestLogs.Wait(request, context));
+            return EnqueueOperation("wait-for", context => XCommandUtility.Logs.Wait(request, context.SetOutput));
         }
 
-        public static long Wait(AutoTestWaitRequest request)
+        public static long Wait(XCommandWaitRequest request)
         {
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
-            return EnqueueOperation("wait", context => AutoTestWait.Run(request, context));
+            return EnqueueOperation("wait", context => XCommandUtility.Wait.Run(request, context.SetOutput));
         }
 
-        public static long RunInput(AutoTestInputSequence sequence)
+        public static long RunInput(XCommandInputSequence sequence)
         {
             if (sequence == null || sequence.steps == null || sequence.steps.Count == 0)
                 throw new ArgumentException("输入序列必须包含非空 steps 数组。", nameof(sequence));
-            return EnqueueOperation("ui-input", context => AutoTestInput.Run(sequence, context));
+            return EnqueueOperation("ui-input", context => XCommandUtility.Input.Run(sequence, () => context.IsCancellationRequested, context.SetOutput));
         }
 
         public static string GetInputState(bool compact = false)
         {
-            return AutoTestInput.GetState(compact);
+            return XCommandUtility.Input.GetState(compact);
         }
 
         public static string ResetInput(bool compact = false)
         {
-            AutoTestInput.ResetInterruptedInput();
-            return AutoTestInput.GetState(compact);
+            XCommandUtility.Input.ResetInterruptedInput();
+            return XCommandUtility.Input.GetState(compact);
         }
 
-        public static string GetLogs(AutoTestLogQuery query)
+        public static string GetLogs(XCommandLogQuery query)
         {
-            return AutoTestLogs.Query(query ?? new AutoTestLogQuery());
+            return XCommandUtility.Logs.Query(query ?? new XCommandLogQuery());
         }
 
-        public static void InitializeLogCapture()
-        {
-            AutoTestLogs.InitializeCapture();
-        }
-
-        public static long CaptureScreenshot(AutoTestScreenshotRequest request)
+        public static long CaptureScreenshot(XCommandScreenshotRequest request)
         {
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
-            return EnqueueOperation("screenshot", context => AutoTestCapture.Capture(request, context));
+            return EnqueueOperation("screenshot", context => XCommandUtility.Capture.Run(request, context.SetOutput));
         }
 
-        public static bool TryGetOperation(long operationId, out AutoTestOperationInfo operation)
+        public static bool TryGetOperation(long operationId, out XCommandOperationInfo operation)
         {
             operation = s_Operations.Find(item => item.Id == operationId);
             return operation != null;
@@ -355,11 +194,11 @@ namespace XFramework.AutoTest
 
         public static bool CancelOperation(long operationId)
         {
-            if (!TryGetOperation(operationId, out AutoTestOperationInfo operation) || IsCompleted(operation.State))
+            if (!TryGetOperation(operationId, out XCommandOperationInfo operation) || IsCompleted(operation.State))
                 return false;
             operation.CancellationRequested = true;
-            if (operation.State == AutoTestOperationState.Queued)
-                CompleteOperation(operation, AutoTestOperationState.Cancelled, "操作已取消。");
+            if (operation.State == XCommandOperationState.Queued)
+                CompleteOperation(operation, XCommandOperationState.Cancelled, "操作已取消。");
             return true;
         }
 
@@ -374,24 +213,24 @@ namespace XFramework.AutoTest
             return cancelled;
         }
 
-        internal static string SerializeOperation(AutoTestOperationInfo operation, bool prettyPrint = false)
+        internal static string SerializeOperation(XCommandOperationInfo operation, bool prettyPrint = false)
         {
-            return JsonUtility.ToJson(AutoTestOperationJson.From(operation), prettyPrint);
+            return JsonUtility.ToJson(XCommandOperationJson.From(operation), prettyPrint);
         }
 
         internal static string SerializeOperations(int limit, bool prettyPrint = false)
         {
             int count = Mathf.Clamp(limit, 1, OperationHistoryLimit);
-            var output = new AutoTestOperationListJson();
+            var output = new XCommandOperationListJson();
             for (int i = s_Operations.Count - 1; i >= 0 && output.operations.Count < count; i--)
-                output.operations.Add(AutoTestOperationJson.From(s_Operations[i]));
+                output.operations.Add(XCommandOperationJson.From(s_Operations[i]));
             output.count = output.operations.Count;
             return JsonUtility.ToJson(output, prettyPrint);
         }
 
-        private static long EnqueueOperation(string name, Func<AutoTestOperationContext, IEnumerator> routineFactory)
+        private static long EnqueueOperation(string name, Func<XCommandOperationContext, IEnumerator> routineFactory)
         {
-            var operation = new AutoTestOperationInfo(s_NextOperationId++, name, routineFactory);
+            var operation = new XCommandOperationInfo(s_NextOperationId++, name, routineFactory);
             s_Operations.Add(operation);
             s_PendingOperations.Enqueue(operation);
             if (!s_IsRunnerActive)
@@ -409,11 +248,11 @@ namespace XFramework.AutoTest
         {
             if (s_Runner != null)
                 return;
-            var gameObject = new GameObject("[XFramework AutoTest Pipeline]") {
+            var gameObject = new GameObject("[XFramework XCommand Pipeline]") {
                 hideFlags = HideFlags.HideAndDontSave,
             };
-            UnityEngine.Object.DontDestroyOnLoad(gameObject);
-            s_Runner = gameObject.AddComponent<AutoTestPipelineRunner>();
+            Object.DontDestroyOnLoad(gameObject);
+            s_Runner = gameObject.AddComponent<XCommandPipelineRunner>();
         }
 
         private static IEnumerator RunOperations()
@@ -422,13 +261,13 @@ namespace XFramework.AutoTest
             {
                 while (s_PendingOperations.Count > 0)
                 {
-                    AutoTestOperationInfo operation = s_PendingOperations.Dequeue();
-                    if (operation.State == AutoTestOperationState.Cancelled)
+                    XCommandOperationInfo operation = s_PendingOperations.Dequeue();
+                    if (operation.State == XCommandOperationState.Cancelled)
                         continue;
 
-                    operation.State = AutoTestOperationState.Running;
+                    operation.State = XCommandOperationState.Running;
                     operation.StartedTimeUtc = DateTime.UtcNow;
-                    var context = new AutoTestOperationContext(operation);
+                    var context = new XCommandOperationContext(operation);
                     Exception failure = null;
                     var enumerators = new Stack<IEnumerator>();
                     try
@@ -494,19 +333,19 @@ namespace XFramework.AutoTest
                         {
                             try
                             {
-                                AutoTestInput.ResetInterruptedInput();
+                                XCommandUtility.Input.ResetInterruptedInput();
                             }
                             catch (Exception exception)
                             {
                                 cancellationError += $" 输入重置失败：{exception}";
                             }
                         }
-                        CompleteOperation(operation, AutoTestOperationState.Cancelled, cancellationError);
+                        CompleteOperation(operation, XCommandOperationState.Cancelled, cancellationError);
                     }
                     else if (failure != null)
-                        CompleteOperation(operation, AutoTestOperationState.Failed, failure.ToString());
+                        CompleteOperation(operation, XCommandOperationState.Failed, failure.ToString());
                     else
-                        CompleteOperation(operation, AutoTestOperationState.Succeeded, string.Empty);
+                        CompleteOperation(operation, XCommandOperationState.Succeeded, string.Empty);
                 }
             }
             finally
@@ -516,7 +355,7 @@ namespace XFramework.AutoTest
             }
         }
 
-        private static void CompleteOperation(AutoTestOperationInfo operation, AutoTestOperationState state, string error)
+        private static void CompleteOperation(XCommandOperationInfo operation, XCommandOperationState state, string error)
         {
             if (IsCompleted(operation.State))
                 return;
@@ -525,7 +364,7 @@ namespace XFramework.AutoTest
             operation.CompletedTimeUtc = DateTime.UtcNow;
             DateTime started = operation.StartedTimeUtc ?? operation.CreatedTimeUtc;
             operation.DurationMilliseconds = (operation.CompletedTimeUtc.Value - started).TotalMilliseconds;
-            Debug.Log($"[AutoTest] {SerializeOperation(operation)}");
+            Debug.Log($"[XCommand] {SerializeOperation(operation)}");
             TrimOperationHistory();
         }
 
@@ -535,13 +374,13 @@ namespace XFramework.AutoTest
                 s_Operations.RemoveAt(0);
         }
 
-        private static bool IsCompleted(AutoTestOperationState state)
+        private static bool IsCompleted(XCommandOperationState state)
         {
-            return state == AutoTestOperationState.Succeeded || state == AutoTestOperationState.Failed || state == AutoTestOperationState.Cancelled;
+            return state == XCommandOperationState.Succeeded || state == XCommandOperationState.Failed || state == XCommandOperationState.Cancelled;
         }
 
         [Serializable]
-        private sealed class AutoTestOperationJson
+        private sealed class XCommandOperationJson
         {
             public long id;
             public string name;
@@ -553,9 +392,9 @@ namespace XFramework.AutoTest
             public string output;
             public string error;
 
-            public static AutoTestOperationJson From(AutoTestOperationInfo operation)
+            public static XCommandOperationJson From(XCommandOperationInfo operation)
             {
-                return new AutoTestOperationJson {
+                return new XCommandOperationJson {
                     id = operation.Id,
                     name = operation.Name,
                     state = operation.State.ToString(),
@@ -570,13 +409,13 @@ namespace XFramework.AutoTest
         }
 
         [Serializable]
-        private sealed class AutoTestOperationListJson
+        private sealed class XCommandOperationListJson
         {
             public int count;
-            public List<AutoTestOperationJson> operations = new List<AutoTestOperationJson>();
+            public List<XCommandOperationJson> operations = new List<XCommandOperationJson>();
         }
 
-        private sealed class AutoTestPipelineRunner : MonoBehaviour
+        private sealed class XCommandPipelineRunner : MonoBehaviour
         {
         }
     }

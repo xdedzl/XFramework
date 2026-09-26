@@ -279,7 +279,7 @@ function Write-CliHelp {
             "xframeworkcli.ps1 exec 'play-start'",
             "xframeworkcli.ps1 exec 'ui-list --compact'",
             "xframeworkcli.ps1 exec 'ui-act --name StartButton click'",
-            "xframeworkcli.ps1 exec 'screenshot temp:/autotest.png'"
+            "xframeworkcli.ps1 exec 'screenshot temp:/xcommand.png'"
         )
     }
     [Console]::Out.WriteLine((ConvertTo-CliJson $help $false))

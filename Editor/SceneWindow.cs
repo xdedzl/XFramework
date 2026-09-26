@@ -75,7 +75,14 @@ namespace XFramework.Editor
         private void OnEnable()
         {
             SetWindowTitle();
+            displayMode = DisplayMode.XScene;
             RefreshSceneList();
+            if (sceneInfos.Count == 0)
+            {
+                displayMode = DisplayMode.UnityScene;
+                RefreshSceneList();
+            }
+
             CreateUI();
             EditorSceneManager.sceneOpened += OnEditorSceneOpened;
         }

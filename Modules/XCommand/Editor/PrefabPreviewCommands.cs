@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
-using XFramework.AutoTest;
 using XFramework.Command;
 
 namespace XFramework.Editor
@@ -23,7 +22,7 @@ namespace XFramework.Editor
         [XCommandEntry("preview-prefab", name = "预览Prefab", order = 20, mode = XCommandMode.Editor, category = "Editor", description = "在临时场景中离屏渲染 UI 或模型 Prefab 并导出 PNG，完成后恢复活动场景。", usage = "preview-prefab [--width W --height H] [--background #RRGGBB[AA]] PREFAB_PATH PNG_PATH")]
         private static object PreviewPrefab(string argument)
         {
-            AutoTestCommandArguments args = AutoTestCommandArguments.Parse(argument, new[] { "width", "height", "background" }, Array.Empty<string>());
+            XCommandArguments args = XCommandArguments.Parse(argument, new[] { "width", "height", "background" }, Array.Empty<string>());
             args.RequireValueCount(2, "usage: preview-prefab [--width W --height H] [--background #RRGGBB[AA]] PREFAB_PATH PNG_PATH");
             if (EditorApplication.isCompiling || EditorApplication.isUpdating || EditorApplication.isPlayingOrWillChangePlaymode)
                 throw new InvalidOperationException("请等待 Unity 完成编译和资源导入，并退出 Play Mode 后再预览 Prefab。");
@@ -41,7 +40,7 @@ namespace XFramework.Editor
             GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
             if (prefab == null || !PrefabUtility.IsPartOfPrefabAsset(prefab))
                 throw new ArgumentException($"找不到 Prefab 资源：{prefabPath}，请使用 Assets/ 或 Packages/ 开头的资源路径。");
-            string outputPath = AutoTestCapture.ResolvePath(args.Values[1]);
+            string outputPath = XCommandUtility.Path.ResolvePath(args.Values[1]);
             if (!string.Equals(Path.GetExtension(outputPath), ".png", StringComparison.OrdinalIgnoreCase))
                 throw new ArgumentException("预览输出路径必须以 .png 结尾。");
 

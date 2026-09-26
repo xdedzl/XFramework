@@ -8,9 +8,54 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-namespace XFramework.AutoTest
+namespace XFramework.Command
 {
-    internal static class AutoTestUI
+    [Serializable]
+    public sealed class XCommandUISelector
+    {
+        public string name;
+        public string path;
+        public string indexedPath;
+        public string text;
+        public string action;
+    }
+
+    [Serializable]
+    public sealed class XCommandUIQuery
+    {
+        public XCommandUISelector selector = new XCommandUISelector();
+        public int sampleGrid = 5;
+        public int textLimit = 512;
+        public int maxResults;
+        public long changedSince;
+        public bool compact;
+    }
+
+    [Serializable]
+    public sealed class XCommandUIActionRequest
+    {
+        public string pointerAction;
+        public XCommandUISelector selector = new XCommandUISelector();
+        public string button = "left";
+        public float scrollX;
+        public float scrollY;
+        public int sampleGrid = 5;
+        public int stableFrames = 2;
+        public float timeoutSeconds = 10f;
+    }
+
+    [Serializable]
+    public sealed class XCommandUIWaitRequest
+    {
+        public string state = "visible";
+        public bool interactable;
+        public XCommandUISelector selector = new XCommandUISelector();
+        public int sampleGrid = 5;
+        public int stableFrames = 2;
+        public float timeoutSeconds = 30f;
+    }
+
+    internal static class XCommandUI
     {
         [Serializable]
         private sealed class UIElementList
@@ -162,9 +207,9 @@ namespace XFramework.AutoTest
             s_NextSnapshotId = 1;
         }
 
-        internal static string List(AutoTestUIQuery query)
+        internal static string List(XCommandUIQuery query)
         {
-            AutoTestUISelector selector = query.selector ?? new AutoTestUISelector();
+            XCommandUISelector selector = query.selector ?? new XCommandUISelector();
             UISnapshot snapshot = CaptureSnapshot(query.sampleGrid);
             UISnapshot baseSnapshot = null;
             if (query.changedSince > 0 && !s_SnapshotHistory.TryGetValue(query.changedSince, out baseSnapshot))
@@ -187,7 +232,7 @@ namespace XFramework.AutoTest
                 unchanged = baseSnapshot != null && baseSnapshot.ContentHash == snapshot.ContentHash,
                 screenWidth = Screen.width,
                 screenHeight = Screen.height,
-                eventSystemPath = GetGameObjectPath(EventSystem.current?.gameObject),
+                eventSystemPath = XCommandUtility.GameObject.GetGameObjectPath(EventSystem.current?.gameObject),
                 totalCount = snapshot.Elements.Count,
                 matchedCount = matchedCount,
                 count = matched.Count,
@@ -201,9 +246,9 @@ namespace XFramework.AutoTest
             return JsonUtility.ToJson(result, !query.compact);
         }
 
-        internal static IEnumerator Act(AutoTestUIActionRequest request, AutoTestOperationContext context)
+        internal static IEnumerator Act(XCommandUIActionRequest request, Func<bool> isCancellationRequested, Action<string> setOutput)
         {
-            AutoTestUISelector selector = request.selector ?? new AutoTestUISelector();
+            XCommandUISelector selector = request.selector ?? new XCommandUISelector();
             if (string.IsNullOrEmpty(selector.name) && string.IsNullOrEmpty(selector.path) && string.IsNullOrEmpty(selector.indexedPath) && string.IsNullOrEmpty(selector.text))
                 throw new ArgumentException("ui-act 至少需要 name、path、indexed-path 或 text 选择器之一。");
             string requiredAction = GetRequiredUIAction(request.pointerAction);
@@ -218,6 +263,8 @@ namespace XFramework.AutoTest
 
             while (Time.realtimeSinceStartup <= deadline)
             {
+                if (isCancellationRequested())
+                    yield break;
                 lastSnapshot = CaptureSnapshot(request.sampleGrid);
                 List<UIElementInfo> matches = lastSnapshot.Elements.Where(element => MatchesSelector(element, selector)).ToList();
                 lastMatchCount = matches.Count;
@@ -230,7 +277,7 @@ namespace XFramework.AutoTest
                     if (observedStableFrames >= stableFrames)
                     {
                         UIActionPoint actionPoint = target.actionPoints.First(point => point.actions.Contains(requiredAction));
-                        yield return AutoTestInput.RunPointerAction(request.pointerAction, actionPoint.screenPoint.x, actionPoint.screenPoint.y, request.button, request.scrollX, request.scrollY);
+                        yield return XCommandUtility.Input.RunPointerAction(request.pointerAction, actionPoint.screenPoint.x, actionPoint.screenPoint.y, request.button, request.scrollX, request.scrollY);
                         var receipt = new UIActionReceipt {
                             success = true,
                             action = request.pointerAction,
@@ -243,7 +290,7 @@ namespace XFramework.AutoTest
                             stableFrames = observedStableFrames,
                             matchCount = 1,
                         };
-                        context.SetOutput(JsonUtility.ToJson(receipt));
+                        setOutput(JsonUtility.ToJson(receipt));
                         yield break;
                     }
                 }
@@ -265,16 +312,16 @@ namespace XFramework.AutoTest
                 stableFrames = observedStableFrames,
                 matchCount = lastMatchCount,
             };
-            context.SetOutput(JsonUtility.ToJson(failure));
+            setOutput(JsonUtility.ToJson(failure));
             throw new TimeoutException(error);
         }
 
-        internal static IEnumerator Wait(AutoTestUIWaitRequest request, AutoTestOperationContext context)
+        internal static IEnumerator Wait(XCommandUIWaitRequest request, Func<bool> isCancellationRequested, Action<string> setOutput)
         {
             string state = (request.state ?? string.Empty).ToLowerInvariant();
             if (state != "visible" && state != "hidden" && state != "stable")
                 throw new ArgumentException($"未知 UI 等待状态：{request.state}");
-            AutoTestUISelector selector = request.selector ?? new AutoTestUISelector();
+            XCommandUISelector selector = request.selector ?? new XCommandUISelector();
             if (state != "stable" && string.IsNullOrEmpty(selector.name) && string.IsNullOrEmpty(selector.path) && string.IsNullOrEmpty(selector.indexedPath) && string.IsNullOrEmpty(selector.text))
                 throw new ArgumentException("等待 UI 出现或消失时至少需要 name、path、indexed-path 或 text 之一。");
 
@@ -290,6 +337,8 @@ namespace XFramework.AutoTest
 
             while (Time.realtimeSinceStartup <= deadline)
             {
+                if (isCancellationRequested())
+                    yield break;
                 if (request.interactable || state == "stable")
                 {
                     UISnapshot snapshot = CaptureSnapshot(request.sampleGrid);
@@ -331,7 +380,7 @@ namespace XFramework.AutoTest
                         contentHash = contentHash,
                         paths = matchedPaths,
                     };
-                    context.SetOutput(JsonUtility.ToJson(receipt));
+                    setOutput(JsonUtility.ToJson(receipt));
                     yield break;
                 }
                 yield return null;
@@ -349,7 +398,7 @@ namespace XFramework.AutoTest
                 contentHash = contentHash,
                 paths = matchedPaths,
             };
-            context.SetOutput(JsonUtility.ToJson(failure));
+            setOutput(JsonUtility.ToJson(failure));
             throw new TimeoutException(failure.error);
         }
 
@@ -380,7 +429,7 @@ namespace XFramework.AutoTest
             var result = new UIElementList {
                 screenWidth = Screen.width,
                 screenHeight = Screen.height,
-                eventSystemPath = GetGameObjectPath(eventSystem.gameObject),
+                eventSystemPath = XCommandUtility.GameObject.GetGameObjectPath(eventSystem.gameObject),
             };
             var raycastResults = new List<RaycastResult>();
             foreach (UIElementCandidate candidate in FindCandidates())
@@ -522,8 +571,8 @@ namespace XFramework.AutoTest
             return new UIElementInfo {
                 instanceId = gameObject.GetInstanceID(),
                 name = gameObject.name,
-                path = GetGameObjectPath(gameObject),
-                indexedPath = GetIndexedGameObjectPath(gameObject),
+                path = XCommandUtility.GameObject.GetGameObjectPath(gameObject),
+                indexedPath = XCommandUtility.GameObject.GetIndexedGameObjectPath(gameObject),
                 scene = gameObject.scene.path,
                 text = text,
                 textLength = text.Length,
@@ -532,7 +581,7 @@ namespace XFramework.AutoTest
                 handlerTypes = candidate.HandlerTypes.OrderBy(type => type, StringComparer.Ordinal).ToArray(),
                 screenRect = ToFloatRect(screenRect),
                 visibleRect = ToFloatRect(visibleRect),
-                canvasPath = canvas != null ? GetGameObjectPath(canvas.gameObject) : string.Empty,
+                canvasPath = canvas != null ? XCommandUtility.GameObject.GetGameObjectPath(canvas.gameObject) : string.Empty,
                 renderMode = canvas != null ? canvas.rootCanvas.renderMode.ToString() : string.Empty,
                 sortingOrder = canvas != null ? canvas.rootCanvas.sortingOrder : 0,
                 selected = eventSystem.currentSelectedGameObject == gameObject,
@@ -556,7 +605,7 @@ namespace XFramework.AutoTest
                     points.Add(new UIActionPoint {
                         actions = new[] { pair.Key },
                         screenPoint = new FloatPoint { x = pair.Value.Point.x, y = pair.Value.Point.y },
-                        raycastTargetPath = GetGameObjectPath(pair.Value.Raycast.gameObject),
+                        raycastTargetPath = XCommandUtility.GameObject.GetGameObjectPath(pair.Value.Raycast.gameObject),
                         raycastTargetType = pair.Value.Raycast.gameObject.GetComponent<Graphic>()?.GetType().FullName ?? string.Empty,
                     });
                 }
@@ -595,7 +644,7 @@ namespace XFramework.AutoTest
             return NormalizeText(string.Join(" | ", legacyTexts.Concat(tmpTexts).Distinct()));
         }
 
-        private static List<RenderedUITarget> FindRenderedUITargets(AutoTestUISelector selector)
+        private static List<RenderedUITarget> FindRenderedUITargets(XCommandUISelector selector)
         {
             var results = new List<RenderedUITarget>();
             foreach (RectTransform rectTransform in UnityEngine.Object.FindObjectsOfType<RectTransform>())
@@ -603,13 +652,13 @@ namespace XFramework.AutoTest
                 GameObject gameObject = rectTransform.gameObject;
                 if (!gameObject.activeInHierarchy || !string.IsNullOrEmpty(selector.name) && !string.Equals(gameObject.name, selector.name, StringComparison.Ordinal))
                     continue;
-                string path = GetGameObjectPath(gameObject);
+                string path = XCommandUtility.GameObject.GetGameObjectPath(gameObject);
                 if (!string.IsNullOrEmpty(selector.path) && !string.Equals(path, selector.path, StringComparison.Ordinal))
                     continue;
-                string indexedPath = GetIndexedGameObjectPath(gameObject);
+                string indexedPath = XCommandUtility.GameObject.GetIndexedGameObjectPath(gameObject);
                 if (!string.IsNullOrEmpty(selector.indexedPath) && !string.Equals(indexedPath, selector.indexedPath, StringComparison.Ordinal))
                     continue;
-                if (!string.IsNullOrEmpty(selector.text) && !ContainsIgnoreCase(GetElementText(rectTransform), selector.text))
+                if (!string.IsNullOrEmpty(selector.text) && !XCommandUtility.Text.ContainsIgnoreCase(GetElementText(rectTransform), selector.text))
                     continue;
                 if (IsRenderedUI(rectTransform))
                     results.Add(new RenderedUITarget { Path = path, IndexedPath = indexedPath });
@@ -638,12 +687,12 @@ namespace XFramework.AutoTest
             return false;
         }
 
-        private static bool MatchesSelector(UIElementInfo element, AutoTestUISelector selector)
+        private static bool MatchesSelector(UIElementInfo element, XCommandUISelector selector)
         {
             return (string.IsNullOrEmpty(selector.name) || string.Equals(element.name, selector.name, StringComparison.Ordinal)) &&
                    (string.IsNullOrEmpty(selector.path) || string.Equals(element.path, selector.path, StringComparison.Ordinal)) &&
                    (string.IsNullOrEmpty(selector.indexedPath) || string.Equals(element.indexedPath, selector.indexedPath, StringComparison.Ordinal)) &&
-                   (string.IsNullOrEmpty(selector.text) || ContainsIgnoreCase(element.text, selector.text)) &&
+                   (string.IsNullOrEmpty(selector.text) || XCommandUtility.Text.ContainsIgnoreCase(element.text, selector.text)) &&
                    (string.IsNullOrEmpty(selector.action) || element.actions.Any(action => string.Equals(action, selector.action, StringComparison.OrdinalIgnoreCase)));
         }
 
@@ -766,34 +815,9 @@ namespace XFramework.AutoTest
             }
         }
 
-        private static string GetGameObjectPath(GameObject gameObject)
-        {
-            if (gameObject == null)
-                return string.Empty;
-            var names = new Stack<string>();
-            for (Transform current = gameObject.transform; current != null; current = current.parent)
-                names.Push(current.name);
-            return string.Join("/", names);
-        }
-
-        private static string GetIndexedGameObjectPath(GameObject gameObject)
-        {
-            if (gameObject == null)
-                return string.Empty;
-            var names = new Stack<string>();
-            for (Transform current = gameObject.transform; current != null; current = current.parent)
-                names.Push($"{current.name}[{current.GetSiblingIndex()}]");
-            return string.Join("/", names);
-        }
-
         private static string NormalizeText(string value)
         {
             return (value ?? string.Empty).Replace('\n', ' ').Trim();
-        }
-
-        private static bool ContainsIgnoreCase(string value, string expected)
-        {
-            return (value ?? string.Empty).IndexOf(expected ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static FloatRect ToFloatRect(Rect rect)
