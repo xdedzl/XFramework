@@ -110,7 +110,7 @@ flowchart TB
 | **工具库 (Unity)** | [Runtime/Tools/](./Runtime/Tools/)                       | [引擎工具 (`UUtility`)](#52-引擎特定高级工具-uutility)                            |
 | **检查面板**       | [Modules/XInspector/](./Modules/XInspector/)             | [XInspector 数据检查面板](#46-xinspector-数据检查面板)                            |
 | **动画工具**       | [XAnimation/Runtime/](./XAnimation/Runtime/)             | [XAnimation 播放系统](./XAnimation/Doc/XAnimation.md)                             |
-| **控制台**         | [Modules/XCommand/](./Modules/XCommand/)             | [XCommand 运行时控制台](#45-xcommand-运行时控制台)                                |
+| **控制台**         | [Modules/XCommand/](./Modules/XCommand/)                 | [XCommand 控制台与自动化调试](./Modules/XCommand/README.md)                       |
 
 ---
 
@@ -580,11 +580,18 @@ IReadOnlyList<Transform> spawnPoints = UObjectFinder.FindList<Transform>("NpcSpa
 通过 `unsafe` 关键字突破性能瓶颈的 `UBinaryReader/UBinaryWriter`。在海量网络包传输及存档加解密上，带来越级性能提升。
 
 ### 4.5 XCommand 运行时控制台
-强大的、通过游戏中输入快捷键 `~` 拉起的前端控制台。
-- 具有实时运行时日志系统(Log输出与筛选)。
-- 支持添加并使用 XCommand 命令（通过 `[XCommandEntry]` 标记）。
-- 编辑器命令 **`preview-prefab`（预览Prefab）**：离屏渲染 UI 或模型 Prefab 并导出 PNG，支持输出尺寸和透明背景。用法：`preview-prefab [--width W --height H] [--background #RRGGBB[AA]] PREFAB_PATH PNG_PATH`，默认 1920 × 1080；输出路径支持绝对路径及 `temp:/`、`data:/`、`persistent:/` 前缀。
-- **最强特性**: 内置微型 C# 解释器驱动，支持游戏进程中执行动态 C# 代码调整变量。
+
+一套命令注册与执行链路，同时服务**游戏内 UGUI 控制台、编辑器窗口、C# API、外部 CLI、远程 Hunter** 五种入口。
+
+- **游戏内控制台**：在 `XGame` 左下角「调试」按钮切换 `XCommand.IsOpen` 拉起（首次打开才初始化）。内置实时日志着色、执行器下拉、历史加载与异常详情开关。
+- **编辑器窗口**：菜单 **`XFramework/Debug/XCommand`**，包含终端、命令手册（搜索 / 模式与分类筛选 / 收藏 / 诊断）以及 CLI Server 状态菜单。
+- **命令声明**：继承 `XCommandGroup` 的类中，静态方法标记 `[XCommandEntry]` 即可被自动扫描；泛型或参数不合法的方法只会产生诊断，不会注册。
+- **内置能力**：GameObject 与 UGUI 查询、`ui-act` 点击注入、`wait-for` 条件等待、`logs` 日志查询、`screenshot` 截图、`scene-state` / `app-state` 状态快照，以及异步 operation 的查询与取消。
+- **对外 CLI**：Editor 与 Development Player 会自动启动 loopback 服务，可用 `xframeworkcli.ps1 exec '<命令>'` 从外部进程驱动 Unity，支持 operation 等待、超时与确认机制。
+- **编辑器命令**：`recompile`（触发脚本编译）、`play-start`（进入 Play Mode）、`preview-prefab`（离屏渲染 Prefab 导出 PNG）、`font_bake`（补齐 TMP 字体缺字）。
+- **其他模块贡献的命令**：`fsm_list`（FSM 快照）、`procedure-switch`（切换主流程）、`ui-open` / `ui-close`（按面板名开关 UI）。
+
+完整的命令清单、特性字段、CLI 协议与自动化管道说明见 [XCommand 模块文档](./Modules/XCommand/README.md)。
 
 ### 4.6 XInspector 数据检查面板
 
