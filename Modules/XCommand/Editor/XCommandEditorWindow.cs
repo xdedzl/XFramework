@@ -9,7 +9,7 @@ using XFramework.Command;
 
 namespace XFramework.Editor
 {
-    public sealed class XCommandEditorWindow : XFrameworkDebugWindowBase
+    public sealed class XCommandEditorWindow : EditorWindow
     {
         private const string MenuPath = "XFramework/Debug/XCommand";
         private const string AllModeFilter = "全部";
@@ -80,23 +80,21 @@ namespace XFramework.Editor
             window.Focus();
         }
 
-        protected override void OnEnable()
+        private void OnEnable()
         {
-            base.OnEnable();
             XCommandEditorHistory.EnsureInitialized();
             LoadPreferences();
             XCommandRegistry.Refresh();
             EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
         }
 
-        protected override void OnDisable()
+        private void OnDisable()
         {
             m_CliServerStatusSchedule?.Pause();
             m_CliServerStatusSchedule = null;
             UnsubscribeCommandHub();
             SavePreferences();
             EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
-            base.OnDisable();
         }
 
         public void CreateGUI()

@@ -378,41 +378,6 @@ namespace XFramework.Command
         }
     }
 
-    public sealed class XCommandBuiltInCommands : XCommandGroup
-    {
-        [XCommandEntry("clear", name = "清空 XCommand", order = 0, mode = XCommandMode.Both, category = "XCommand", description = "清空当前 XCommand 终端的显示内容，不删除 Hub 历史。", usage = "clear", recordExecution = false)]
-        public static void ClearConsole()
-        {
-            XCommandHub.RequestDisplayClear();
-        }
-
-        [XCommandEntry("load_history", name = "加载 XCommand 历史", order = 1, mode = XCommandMode.Both, category = "XCommand", description = "在当前 XCommand 终端重新加载 Hub 历史。", usage = "load_history", recordExecution = false)]
-        public static void LoadHistory()
-        {
-            XCommandHub.RequestDisplayHistory();
-        }
-
-        [XCommandEntry("enable_hunter", name = "连接 Hunter", order = 10, mode = XCommandMode.Runtime, category = "XCommand", description = "连接远程 Hunter 调试端。", usage = "enable_hunter")]
-        public static void StartHunter()
-        {
-            XCommand.Log("已成功连接 Hunter");
-            XCommand.ConnetHunter();
-        }
-
-        [XCommandEntry("disable_hunter", name = "断开 Hunter", order = 20, mode = XCommandMode.Runtime, category = "XCommand", description = "断开远程 Hunter 调试端。", usage = "disable_hunter")]
-        public static void StopHunter()
-        {
-            XCommand.Log("已成功断开 Hunter");
-            XCommand.DisConnetHunter();
-        }
-
-        [XCommandEntry("log", name = "输出 Unity 日志", order = 30, mode = XCommandMode.Both, category = "XCommand", description = "向 Unity Console 输出一条日志。", usage = "log <content>")]
-        public static void UnityLog(string content)
-        {
-            Debug.Log(content);
-        }
-    }
-
     [AttributeUsage(AttributeTargets.Method, Inherited = true, AllowMultiple = false)]
     public sealed class XCommandEntryAttribute : Attribute
     {

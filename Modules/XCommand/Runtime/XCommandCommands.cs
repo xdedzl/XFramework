@@ -4,10 +4,52 @@ using UnityEngine;
 
 namespace XFramework.Command
 {
-    public sealed class XCommandRuntimeCommands : XCommandGroup
+    /// <summary>
+    /// XCommand 模块 Runtime 程序集内的全部命令入口（内置命令 + 运行时/自动化命令）。
+    /// 命令入口按功能使用 #region 分类，不再拆分到多个文件。
+    /// </summary>
+    public sealed class XCommandCommands : XCommandGroup
     {
         private const string Category = "XCommand";
         private const string StateCategory = "State";
+
+        #region 内置命令
+
+        [XCommandEntry("clear", name = "清空 XCommand", order = 0, mode = XCommandMode.Both, category = "XCommand", description = "清空当前 XCommand 终端的显示内容，不删除 Hub 历史。", usage = "clear", recordExecution = false)]
+        public static void ClearConsole()
+        {
+            XCommandHub.RequestDisplayClear();
+        }
+
+        [XCommandEntry("load_history", name = "加载 XCommand 历史", order = 1, mode = XCommandMode.Both, category = "XCommand", description = "在当前 XCommand 终端重新加载 Hub 历史。", usage = "load_history", recordExecution = false)]
+        public static void LoadHistory()
+        {
+            XCommandHub.RequestDisplayHistory();
+        }
+
+        [XCommandEntry("enable_hunter", name = "连接 Hunter", order = 10, mode = XCommandMode.Runtime, category = "XCommand", description = "连接远程 Hunter 调试端。", usage = "enable_hunter")]
+        public static void StartHunter()
+        {
+            XCommand.Log("已成功连接 Hunter");
+            XCommand.ConnetHunter();
+        }
+
+        [XCommandEntry("disable_hunter", name = "断开 Hunter", order = 20, mode = XCommandMode.Runtime, category = "XCommand", description = "断开远程 Hunter 调试端。", usage = "disable_hunter")]
+        public static void StopHunter()
+        {
+            XCommand.Log("已成功断开 Hunter");
+            XCommand.DisConnetHunter();
+        }
+
+        [XCommandEntry("log", name = "输出 Unity 日志", order = 30, mode = XCommandMode.Both, category = "XCommand", description = "向 Unity Console 输出一条日志。", usage = "log <content>")]
+        public static void UnityLog(string content)
+        {
+            Debug.Log(content);
+        }
+
+        #endregion
+
+        #region 运行控制
 
         [XCommandEntry("play-stop", name = "结束运行", order = 10, mode = XCommandMode.Runtime, category = Category, description = "Editor 中退出 Play Mode；Development Player 中请求退出应用。", usage = "play-stop", displayType = XCommandDisplayType.Hidden)]
         private static object StopRunning()
@@ -15,6 +57,10 @@ namespace XFramework.Command
             XCommandPipeline.StopRunning();
             return "Stop requested.";
         }
+
+        #endregion
+
+        #region GameObject 查询
 
         [XCommandEntry("go-list", name = "列出 GameObject", order = 16, mode = XCommandMode.Both, category = Category, description = "列出真实已加载场景中的 GameObject；name/path 使用不区分大小写的包含匹配，支持组件、Tag、Layer 和激活状态筛选。", usage = "go-list [--name TEXT] [--path TEXT] [--component TYPE] [--tag TAG] [--layer NAME|INDEX] [--active any|active|inactive] [--max-results N] [--compact]", displayType = XCommandDisplayType.Hidden)]
         private static object ListGameObjects(string argument)
@@ -52,6 +98,10 @@ namespace XFramework.Command
             });
         }
 
+        #endregion
+
+        #region UI 查询与操作
+
         [XCommandEntry("ui-list", name = "列出可操作 UGUI", order = 20, mode = XCommandMode.Runtime, category = Category, description = "列出射线可达且存在事件处理器的 UGUI 元素，支持选择器、采样和增量快照。", usage = "ui-list [--sample-grid N] [--name NAME] [--path PATH] [--indexed-path PATH] [--text TEXT] [--action ACTION] [--text-limit N] [--max-results N] [--changed-since ID] [--compact]", displayType = XCommandDisplayType.Hidden)]
         private static object ListUI(string argument)
         {
@@ -87,6 +137,10 @@ namespace XFramework.Command
             XCommandPipeline.TryGetOperation(operationId, out XCommandOperationInfo operation);
             return XCommandPipeline.SerializeOperation(operation);
         }
+
+        #endregion
+
+        #region 等待
 
         [XCommandEntry("wait-for", name = "等待状态", order = 40, mode = XCommandMode.Runtime, category = Category, description = "等待 UGUI、GameObject 或日志条件满足。默认只等待命令开始后产生的新日志；所有等待均返回 operation ID。", usage = "wait-for [UI_OPTIONS] ui | wait-for [--state exists|missing|active|inactive|stable] [--instance-id ID|--name NAME|--path PATH|--indexed-path PATH|--component TYPE] [--stable-frames N] [--position-epsilon N] [--rotation-epsilon N] [--timeout S] [--compact] go | wait-for [--since CURSOR] [--level all|log|warning|error] [--contains TEXT] [--count N] [--stack] [--timeout S] [--compact] log", displayType = XCommandDisplayType.Hidden)]
         private static object WaitFor(string argument)
@@ -160,6 +214,10 @@ namespace XFramework.Command
             return XCommandPipeline.SerializeOperation(operation);
         }
 
+        #endregion
+
+        #region 日志
+
         [XCommandEntry("logs", name = "查询日志", order = 50, mode = XCommandMode.Both, category = Category, description = "按游标查询 50MB 环形缓冲区中的 Unity 日志，支持级别、正文、条数和堆栈筛选。", usage = "logs [--since CURSOR] [--level all|log|warning|error] [--contains TEXT] [--limit N] [--message-limit N] [--stack-limit N] [--stack] [--compact]", displayType = XCommandDisplayType.Hidden)]
         private static object GetLogs(string argument)
         {
@@ -176,6 +234,10 @@ namespace XFramework.Command
                 compact = args.HasFlag("compact"),
             });
         }
+
+        #endregion
+
+        #region 输入注入
 
         [XCommandEntry("input-state", name = "查询自动化输入状态", order = 55, mode = XCommandMode.Both, category = Category, description = "返回自动化键盘、鼠标、触摸保持状态，以及注入设备和当前设备信息。", usage = "input-state [--compact]", displayType = XCommandDisplayType.Hidden)]
         private static object GetInputState(string argument)
@@ -202,6 +264,10 @@ namespace XFramework.Command
             return XCommandPipeline.SerializeOperation(operation);
         }
 
+        #endregion
+
+        #region 截图
+
         [XCommandEntry("screenshot", name = "运行时截图", order = 70, mode = XCommandMode.Runtime, category = Category, description = "在帧末截图，支持输出尺寸、屏幕区域和仅 UI 模式。返回 operation ID。", usage = "screenshot [--width W --height H] [--region X,Y,W,H] [--ui-only] [--timeout S] PATH", displayType = XCommandDisplayType.Hidden)]
         private static object CaptureScreenshot(string argument)
         {
@@ -219,6 +285,10 @@ namespace XFramework.Command
             XCommandPipeline.TryGetOperation(operationId, out XCommandOperationInfo operation);
             return XCommandPipeline.SerializeOperation(operation);
         }
+
+        #endregion
+
+        #region 异步操作
 
         [XCommandEntry("operation-list", name = "列出自动化操作", order = 80, mode = XCommandMode.Both, category = Category, description = "列出最近的 XCommand 异步操作及其状态。", usage = "operation-list [--limit N] [--compact]", displayType = XCommandDisplayType.Hidden)]
         private static object ListOperations(string argument)
@@ -252,6 +322,10 @@ namespace XFramework.Command
             return XCommandPipeline.SerializeOperation(operation);
         }
 
+        #endregion
+
+        #region 状态查询
+
         [XCommandEntry("scene-state", name = "查询场景状态", order = 15, mode = XCommandMode.Both, category = StateCategory, description = "返回当前已加载场景、活动场景、Dirty 状态以及根 GameObject 摘要。", usage = "scene-state [--compact]", displayType = XCommandDisplayType.Hidden)]
         private static object GetSceneState(string argument)
         {
@@ -267,6 +341,8 @@ namespace XFramework.Command
             args.RequireValueCount(0, "app-state 不接受位置参数。");
             return XCommandUtility.State.GetApplication(args.HasFlag("compact"));
         }
+
+        #endregion
 
         private static XCommandUISelector CreateSelector(XCommandArguments args)
         {

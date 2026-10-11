@@ -587,7 +587,7 @@ IReadOnlyList<Transform> spawnPoints = UObjectFinder.FindList<Transform>("NpcSpa
 - **编辑器窗口**：菜单 **`XFramework/Debug/XCommand`**，包含终端、命令手册（搜索 / 模式与分类筛选 / 收藏 / 诊断）以及 CLI Server 状态菜单。
 - **命令声明**：继承 `XCommandGroup` 的类中，静态方法标记 `[XCommandEntry]` 即可被自动扫描；泛型或参数不合法的方法只会产生诊断，不会注册。
 - **内置能力**：GameObject 与 UGUI 查询、`ui-act` 点击注入、`wait-for` 条件等待、`logs` 日志查询、`screenshot` 截图、`scene-state` / `app-state` 状态快照，以及异步 operation 的查询与取消。
-- **对外 CLI**：Editor 与 Development Player 会自动启动 loopback 服务，可用 `xframeworkcli.ps1 exec '<命令>'` 从外部进程驱动 Unity，支持 operation 等待、超时与确认机制。
+- **对外 CLI**：Editor 与 Development Player 会自动启动 loopback 服务，可用 `xcli.ps1 exec '<命令>'` 从外部进程驱动 Unity，支持 operation 等待、超时与确认机制。
 - **编辑器命令**：`recompile`（触发脚本编译）、`play-start`（进入 Play Mode）、`preview-prefab`（离屏渲染 Prefab 导出 PNG）、`font_bake`（补齐 TMP 字体缺字）。
 - **其他模块贡献的命令**：`fsm_list`（FSM 快照）、`procedure-switch`（切换主流程）、`ui-open` / `ui-close`（按面板名开关 UI）。
 

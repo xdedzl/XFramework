@@ -5,7 +5,7 @@
 > 本文档聚焦命令注册、执行链路、CLI 协议与自动化管道，适合作为编写调试命令和接入外部自动化时的专题说明。
 
 - 核心源码目录：[`Modules/XCommand/`](./)
-- CLI 客户端脚本：[`Modules/XCommand/Tools/cli/xframeworkcli.ps1`](./Tools/cli/xframeworkcli.ps1)
+- CLI 客户端脚本：[`Modules/XCommand/Tools/cli/xcli.ps1`](./Tools/cli/xcli.ps1)
 - 框架总览：[`XFramework README`](../../README.md)
 
 ---
@@ -18,7 +18,7 @@
 - **来源可追溯**：`Api` / `Editor` / `Ugui` / `Cli` / `Hunter` 五种来源会被写入记录。
 - **异步操作管道**：UI 操作、条件等待、输入注入、截图以 operation 形式排队执行，返回 operation ID，可查询 / 取消 / 超时。
 - **运行时日志缓冲**：50MB 环形缓冲，按游标增量查询，支持级别、关键字与堆栈筛选。
-- **外部进程自动化**：Editor 与 Development Player 自动启动 loopback TCP Server，配合 `xframeworkcli.ps1` 让脚本 / CI / AI 直接驱动 Unity。
+- **外部进程自动化**：Editor 与 Development Player 自动启动 loopback TCP Server，配合 `xcli.ps1` 让脚本 / CI / AI 直接驱动 Unity。
 
 ---
 
@@ -32,13 +32,13 @@
 | `XCommandPipeline`（`Runtime/XCommandPipeline.cs`） | 协程驱动的异步操作队列，UI / GameObject / 日志 / 等待 / 输入 / 截图的统一入口 |
 | `XCommandArguments` + `XCommandUtility.CommandLine` | 命令行参数解析（值与标记选项、引号、位置参数） |
 | `XCommandUI` / `XCommandGameObjects` | UGUI 与 GameObject 的查询、操作与等待实现 |
-| `XCommandUtility.*`（`State` / `Logs` / `Capture` / `Input` / `Wait` / `Path` / `Text` / `GameObject`） | 无状态工具集合 |
+| `XCommandUtility.*`（`State` / `Logs` / `Capture` / `Input` / `Wait` / `Path` / `Text` / `GameObject` / `PrefabPreview` / `FontBake` / `ScreenRecord` / `GameViewCapture`） | 无状态工具集合（`PrefabPreview` / `FontBake` / `ScreenRecord` / `GameViewCapture` 为编辑器专用，用 `#if UNITY_EDITOR` 包裹） |
 | `UGUIConsole`（`Runtime/UGUIConsole.cs`） | 游戏内 UGUI 控制台实现 |
 | `XFrameworkCliServer` / `XFrameworkCliOperation` / `XCommandCliOperationProvider` | 对外 CLI Server、operation 数据契约与桥接 |
 | `XCommandEditorWindow`（`Editor/`） | 编辑器终端窗口 + 命令手册 + CLI 状态菜单 |
 | `XCommandEditorHistory`（`Editor/`） | 编辑器侧记录 / 历史持久化 |
-| `Editor/*Commands.cs` | 编辑器与 PlayMode 命令集 |
-| `Tools/cli/xframeworkcli.ps1` | 外部命令行客户端 |
+| `Editor/*Commands.cs` | 编辑器与 PlayMode 命令**入口**（薄入口；复杂命令的实现位于 `XCommandUtility.*`） |
+| `Tools/cli/xcli.ps1` | 外部命令行客户端 |
 
 ---
 
@@ -128,7 +128,11 @@ XCommandRegistry.AddCommand("my-dynamic", argument => $"received: {argument}", X
 
 ## 4. 命令清单
 
-### 4.1 内置命令（`XCommandBuiltInCommands`，category = `XCommand`）
+> 命令入口按程序集集中：Runtime 侧全部位于 `Runtime/XCommandCommands.cs`（`XCommandCommands`），Editor 侧全部位于 `Editor/XCommandEditorCommands.cs`（`XCommandEditorCommands`）；各命令通过类内 `#region` 按功能分类。
+>
+> 复杂命令只保留「入口」：`[XCommandEntry]` 方法是一行委托，参数解析与实现位于 `Runtime/XCommandUtility.{FontBake,ScreenRecord,GameViewCapture}.cs`（`XCommandUtility` 的嵌套 `internal static` 类，`#if UNITY_EDITOR` 包裹）。
+
+### 4.1 内置命令（`XCommandCommands`，category = `XCommand`）
 
 | 命令 | 显示名 | Mode | 说明 |
 | :--- | :----- | :--- | :--- |
@@ -137,7 +141,7 @@ XCommandRegistry.AddCommand("my-dynamic", argument => $"received: {argument}", X
 | `log` | 输出 Unity 日志 | Both | 向 Unity Console 输出一条日志 |
 | `enable_hunter` / `disable_hunter` | 连接 / 断开 Hunter | Runtime | 连接或断开远程 UDP 调试端 |
 
-### 4.2 运行时与自动化命令（`XCommandRuntimeCommands`）
+### 4.2 运行时与自动化命令（`XCommandCommands`）
 
 | 命令 | Mode | 用途 |
 | :--- | :--- | :--- |
@@ -156,7 +160,7 @@ XCommandRegistry.AddCommand("my-dynamic", argument => $"received: {argument}", X
 | `scene-state` | Both | 当前已加载场景、活动场景、Dirty 状态与根物体摘要 |
 | `app-state` | Both | 应用、时间、屏幕、设备与常用路径状态 |
 
-### 4.3 编辑器命令
+### 4.3 编辑器命令（`XCommandEditorCommands`）
 
 | 命令 | Mode | 说明 |
 | :--- | :--- | :--- |
@@ -164,7 +168,36 @@ XCommandRegistry.AddCommand("my-dynamic", argument => $"received: {argument}", X
 | `recompile` | Editor | 刷新 AssetDatabase 并请求重新编译脚本（延迟 0.5 秒执行） |
 | `play-start` | Editor | 让 Unity 进入 Play Mode |
 | `preview-prefab` | Editor | 在临时场景离屏渲染 UI / 模型 Prefab 并导出 PNG，完成后恢复活动场景 |
+| `gameview-screenshot` | Editor | 非 Play 模式下把当前场景视图相机离屏渲染成 PNG；仅含相机渲染内容，Screen Space Overlay 的 UI 不含在内 |
 | `font_bake` | Editor | 扫描 TMP 文本用字并补齐字体图集缺字，默认 dry-run，加 `--apply` 才写入 |
+| `record` | Both | 调用 ffmpeg 录制屏幕指定秒数后自动停止并输出 MP4，默认录 GameView 区域 |
+| `record-start` / `record-stop` | Both | 开始 / 停止录屏，用于录不确定时长的过程（可在 Play 模式中录制游戏画面） |
+| `record-offscreen` | Both | 离屏逐帧录制 GameView 并输出 MP4，用 Unity 内置 `MediaEncoder`（硬件 H.264），不落 PNG、不依赖物理桌面是否可见；需要 Play 模式。返回 operation ID |
+
+> 上表中 `font_bake`、`record` / `record-start` / `record-stop`、`record-offscreen`、`gameview-screenshot` 的入口在 `XCommandEditorCommands`，参数解析与实现分别位于 `Runtime/XCommandUtility.FontBake.cs`、`XCommandUtility.ScreenRecord.cs`、`XCommandUtility.OffscreenRecord.cs`、`XCommandUtility.GameViewCapture.cs`。字体烘焙的无头批处理入口 `-executeMethod XFramework.Editor.XCommandEditorCommands.BakeFontAtlasInBatchMode` 保持不变。
+
+> [!IMPORTANT]
+> `record` / `record-start` 依赖外部 **ffmpeg**。使用前请先安装，未安装时命令会返回安装提示：
+>
+> ```powershell
+> winget install --id Gyan.FFmpeg -e
+> ```
+>
+> 安装后若命令仍提示找不到 ffmpeg，重启一次 Unity 让新的 PATH 生效（命令也会自动到 WinGet 包目录里兜底查找）。
+> 另外 gdigrab 采集的是屏幕像素，录制期间需保持 Unity 窗口可见、不要最小化或被遮挡。桌面锁定（锁屏）时 gdigrab 只能抓到锁屏，这种场景请改用下面的 `record-offscreen`。
+
+> [!TIP]
+> `record-offscreen` 录的是 Unity 内部渲染帧，不走屏幕抓取，所以桌面锁屏也能录，且帧率稳定（实测 RTX 5080 上 2054x1156@30fps 实时录制约 29.8fps）。用法：
+>
+> ```text
+> record-offscreen PATH [--fps N] [--duration S] [--frames N] [--width W --height H] [--frame-step] [--no-fallback]
+> ```
+>
+> - 必须在 Play 模式下运行，且 GameView 正在渲染；输出路径必须以 `.mp4` 结尾。
+> - 默认实时录制（30fps / 10 秒，按目标帧率节流），输入时序与真实时间一致。
+> - 加 `--frame-step` 改用确定性帧步进（每帧固定推进 1/fps 游戏时间），视频恒定帧率且录制通常快于实时，但输入时序会与墙上时间脱钩。
+> - 默认优先用 Unity 内置 `MediaEncoder`（平台硬件编码，不含音频）；创建失败时自动回退到 ffmpeg rawvideo 管道，可用 `--no-fallback` 禁止回退。
+> - 返回 operation ID，用 `operation-status ID` 查结果，`operation-cancel ID` 可提前结束录制（已写入的分片仍可播放）。
 
 ### 4.4 其他模块贡献的命令
 
@@ -230,7 +263,7 @@ XCommandExecutionResult result = XCommandHub.Execute("screenshot temp:/shot.png"
 
 ---
 
-## 6. 对外 CLI（`xframeworkcli.ps1`）
+## 6. 对外 CLI（`xcli.ps1`）
 
 ### 6.1 构成与生命周期
 
@@ -243,12 +276,12 @@ XCommandExecutionResult result = XCommandHub.Execute("screenshot temp:/shot.png"
 ### 6.2 客户端命令
 
 ```
-xframeworkcli.ps1 help
-xframeworkcli.ps1 servers [--pretty]
-xframeworkcli.ps1 ping        [--pid PID|--port PORT] [--target editor|player] [--pretty]
-xframeworkcli.ps1 commands    [--available] [--pid PID|--port PORT] [--target editor|player] [--pretty]
-xframeworkcli.ps1 diagnostics [--pid PID|--port PORT] [--target editor|player] [--pretty]
-xframeworkcli.ps1 exec '<完整命令行>' [--no-wait] [--timeout SECONDS] [--confirm] [--pid PID|--port PORT] [--target editor|player] [--pretty]
+xcli.ps1 help
+xcli.ps1 servers [--pretty]
+xcli.ps1 ping        [--pid PID|--port PORT] [--target editor|player] [--pretty]
+xcli.ps1 commands    [--available] [--pid PID|--port PORT] [--target editor|player] [--pretty]
+xcli.ps1 diagnostics [--pid PID|--port PORT] [--target editor|player] [--pretty]
+xcli.ps1 exec '<完整命令行>' [--no-wait] [--timeout SECONDS] [--confirm] [--pid PID|--port PORT] [--target editor|player] [--pretty]
 ```
 
 选项：
@@ -280,13 +313,14 @@ Server 选择规则：指定 `--port` 直接使用；否则先按 `--target` 过
 ### 6.4 典型示例
 
 ```powershell
-$cli = '.\UnityClient\Packages\com.xdedzl.xframework\Modules\XCommand\Tools\cli\xframeworkcli.ps1'
+$cli = '.\UnityClient\Packages\com.xdedzl.xframework\Modules\XCommand\Tools\cli\xcli.ps1'
 
 & $cli exec 'recompile' --target editor
 & $cli exec 'play-start'
 & $cli exec 'ui-list --compact'
 & $cli exec 'ui-act --name StartButton click'
 & $cli exec 'screenshot temp:/xcommand.png'
+& $cli exec 'record temp:/fight.mp4 --duration 10'
 & $cli exec 'logs --level error --stack --limit 20 --compact'
 & $cli exec 'font_bake --apply' --timeout 900
 & $cli commands --available --pretty
@@ -339,6 +373,44 @@ $cli = '.\UnityClient\Packages\com.xdedzl.xframework\Modules\XCommand\Tools\cli\
 
 > [!NOTE]
 > `--ui-only` 会临时把所有非 UI 相机的 `cullingMask` 置 0，并在结束时（含异常路径）于 `finally` 中还原；若场景中没有可用相机，框架会自建一个清屏相机。
+
+### 7.3 输入注入（`ui-input`）的正确用法
+
+`ui-input {json}` 注入一段输入序列，返回 operation ID（`exec` 默认等待其完成）。JSON 结构：
+
+```json
+{ "steps": [ ... ], "resetAfter": true }
+```
+
+- `steps`：按顺序执行的输入步骤。
+- `resetAfter`：序列结束后是否重置所有按键 / 指针状态，建议置 `true`，避免残留按住状态。
+
+支持的 step（`type`）：
+
+| `type` | 关键字段 | 说明 |
+| :--- | :--- | :--- |
+| `key` / `keyboard` | `action` = `down` / `up` / `press` / `text`，`key`，`frames` | 键盘；`key` 用 `Key` 枚举名（如 `W`、`Space`、`LeftShift`） |
+| `mouse` | `action` = `move` / `down` / `up` / `click` / `scroll`，`button`，`x` / `y` | 鼠标 |
+| `touch` | `action` 为触控 phase，`touchId`，`x` / `y`，或 `touches` 数组 | 触控，支持多点 |
+| `wait` | `frames` | 等待 N 帧 |
+| `reset` | — | 立即重置输入状态 |
+
+> [!IMPORTANT]
+> **连续按键（走路、蓄力、长按等）必须放在同一个 `ui-input` 操作内，用 `down → wait → up` 表达；不要用 `press`，也不要把按键拆到多个操作、中间夹独立的 `wait` 命令。**
+>
+> 原因有两个：
+> 1. `ui-input` 的 `Run` 协程只在**整个操作期间**临时把 `InputSettings.editorInputBehaviorInPlayMode` 设为 `AllDeviceInputAlwaysGoesToGameView`、把 `backgroundBehavior` 设为 `IgnoreFocus`，操作一结束就在 `finally` 里还原。若把按键拆到多个操作、中间用 `wait` 命令等待，等待期间这两个开关已失效；加上 CLI 驱动时 GameView 通常没有焦点，按键不会送进游戏（表现为「录了视频但角色原地不动」）。
+> 2. `press` 只按住 1 帧就松开，无法产生持续位移，必须用 `down` + `wait` + `up`。
+>
+> 正确示例（按住 W 连续移动 N 帧）：
+>
+> ```json
+> {"steps":[
+>   {"type":"key","action":"down","key":"W","frames":2},
+>   {"type":"wait","frames":300},
+>   {"type":"key","action":"up","key":"W","frames":2}
+> ],"resetAfter":true}
+> ```
 
 ---
 

@@ -267,19 +267,19 @@ function Write-CliHelp {
         exitCode = 0
         status = 'Succeeded'
         usage = @(
-            'xframeworkcli.ps1 help',
-            'xframeworkcli.ps1 servers [--pretty]',
-            'xframeworkcli.ps1 ping [--pid PID|--port PORT] [--target editor|player] [--pretty]',
-            'xframeworkcli.ps1 commands [--available] [--pid PID|--port PORT] [--target editor|player] [--pretty]',
-            'xframeworkcli.ps1 diagnostics [--pid PID|--port PORT] [--target editor|player] [--pretty]',
-            "xframeworkcli.ps1 exec '<complete GM command line>' [--no-wait] [--timeout SECONDS] [--confirm] [--pid PID|--port PORT] [--target editor|player] [--pretty]"
+            'xcli.ps1 help',
+            'xcli.ps1 servers [--pretty]',
+            'xcli.ps1 ping [--pid PID|--port PORT] [--target editor|player] [--pretty]',
+            'xcli.ps1 commands [--available] [--pid PID|--port PORT] [--target editor|player] [--pretty]',
+            'xcli.ps1 diagnostics [--pid PID|--port PORT] [--target editor|player] [--pretty]',
+            "xcli.ps1 exec '<complete GM command line>' [--no-wait] [--timeout SECONDS] [--confirm] [--pid PID|--port PORT] [--target editor|player] [--pretty]"
         )
         examples = @(
-            "xframeworkcli.ps1 exec 'recompile' --target editor",
-            "xframeworkcli.ps1 exec 'play-start'",
-            "xframeworkcli.ps1 exec 'ui-list --compact'",
-            "xframeworkcli.ps1 exec 'ui-act --name StartButton click'",
-            "xframeworkcli.ps1 exec 'screenshot temp:/xcommand.png'"
+            "xcli.ps1 exec 'recompile' --target editor",
+            "xcli.ps1 exec 'play-start'",
+            "xcli.ps1 exec 'ui-list --compact'",
+            "xcli.ps1 exec 'ui-act --name StartButton click'",
+            "xcli.ps1 exec 'screenshot temp:/xcommand.png'"
         )
     }
     [Console]::Out.WriteLine((ConvertTo-CliJson $help $false))

@@ -10,13 +10,13 @@ namespace XFramework.Command
             internal static string ResolvePath(string path)
             {
                 if (string.IsNullOrWhiteSpace(path))
-                    throw new ArgumentException("截图路径不能为空。", nameof(path));
+                    throw new ArgumentException("输出路径不能为空。", nameof(path));
                 if (TryResolvePrefix(path, "persistent:/", Application.persistentDataPath, out string resolved) ||
                     TryResolvePrefix(path, "data:/", Application.dataPath, out resolved) ||
                     TryResolvePrefix(path, "temp:/", Application.temporaryCachePath, out resolved))
                     return System.IO.Path.GetFullPath(resolved);
                 if (!System.IO.Path.IsPathRooted(path))
-                    throw new ArgumentException("截图路径必须是绝对路径，或使用 persistent:/、data:/、temp:/ 前缀。", nameof(path));
+                    throw new ArgumentException("输出路径必须是绝对路径，或使用 persistent:/、data:/、temp:/ 前缀。", nameof(path));
                 return System.IO.Path.GetFullPath(path);
             }
 
