@@ -31,7 +31,7 @@ namespace XFramework.Command
             /// <summary>报告里最多列出的字符数。</summary>
             private const int PreviewLimit = 200;
 
-            private static readonly string[] ScanExtensions = { ".prefab", ".unity", ".asset", ".json" };
+            private static readonly string[] ScanExtensions = { ".prefab", ".unity", ".asset", ".json", ".xasset" };
 
             /// <summary>默认跳过的第三方/非文案目录，避免把无关字符烘进图集。</summary>
             private static readonly string[] ExcludedFolders =
@@ -44,6 +44,10 @@ namespace XFramework.Command
             /// <summary>匹配 YAML 里的 m_text / m_Text 取值（带引号或裸值）。</summary>
             private static readonly Regex TextValueRegex =
                 new Regex("m_[tT]ext:[ \\t]*(?:\"((?:[^\"\\\\]|\\\\.)*)\"|([^\\r\\n]*))", RegexOptions.Compiled);
+
+            /// <summary>匹配 JSON 数据表里的字符串取值。键名也会命中，多扫 ASCII 比漏掉文案缺字划算。</summary>
+            private static readonly Regex JsonStringRegex =
+                new Regex("\"((?:[^\"\\\\]|\\\\.)*)\"", RegexOptions.Compiled);
 
             /// <summary>匹配 C# 里的字符串字面量。</summary>
             private static readonly Regex CodeStringRegex =
@@ -82,8 +86,8 @@ namespace XFramework.Command
 
                 if (!options.NoScan)
                 {
-                    int scannedFiles = ScanProjectText(collected, options.IncludeAll);
-                    log.AppendLine($"扫描 YAML 资源：{scannedFiles} 个文件");
+                    int scannedFiles = ScanProjectText(collected, options.IncludeAll, out int scannedDataFiles);
+                    log.AppendLine($"扫描资源文本：{scannedFiles - scannedDataFiles} 个序列化资源 + {scannedDataFiles} 个 JSON 数据表");
                 }
 
                 string charsFile = options.CharsFile;
@@ -211,8 +215,9 @@ namespace XFramework.Command
                 }
             }
 
-            private static int ScanProjectText(SortedSet<char> characters, bool includeAll)
+            private static int ScanProjectText(SortedSet<char> characters, bool includeAll, out int dataFileCount)
             {
+                dataFileCount = 0;
                 if (!Directory.Exists("Assets"))
                 {
                     return 0;
@@ -239,6 +244,17 @@ namespace XFramework.Command
                     }
 
                     fileCount++;
+                    // .xasset 数据表是 JSON，没有 m_text 字段，按字符串取值提取。
+                    if (path.EndsWith(".xasset", StringComparison.OrdinalIgnoreCase))
+                    {
+                        dataFileCount++;
+                        foreach (Match match in JsonStringRegex.Matches(content))
+                        {
+                            AddCharacters(characters, XCommandUtility.Text.Unescape(match.Groups[1].Value));
+                        }
+                        continue;
+                    }
+
                     foreach (Match match in TextValueRegex.Matches(content))
                     {
                         string raw = match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value;
