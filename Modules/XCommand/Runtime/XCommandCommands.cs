@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;   // 新增：help 的 List<> 需要
 using System.Globalization;
 using UnityEngine;
 
@@ -25,6 +26,117 @@ namespace XFramework.Command
         public static void LoadHistory()
         {
             XCommandHub.RequestDisplayHistory();
+        }
+
+        [XCommandEntry("help", name = "查看 XCommand 帮助", order = 2, mode = XCommandMode.Both, category = Category, description = "查看全部命令分类，或查看指定分类下的全部命令。", usage = "help [--category CATEGORY] [--all]", recordExecution = false)]
+        public static string GetHelp(string argument)
+        {
+            XCommandArguments args = XCommandArguments.Parse(argument, new[] { "category" }, new[] { "all" });
+            args.RequireValueCount(0, "help 不接受位置参数。usage: help [--category CATEGORY] [--all]");
+
+            string requestedCategory = args.GetString("category");
+            bool includeCommands = args.HasFlag("all");
+            if (requestedCategory != null && string.IsNullOrWhiteSpace(requestedCategory))
+            {
+                throw new ArgumentException("--category 的分类不能为空。");
+            }
+            if (requestedCategory != null && includeCommands)
+            {
+                throw new ArgumentException("--category 和 --all 不能同时使用。");
+            }
+
+            IReadOnlyList<XCommandDescriptor> commands = XCommandRegistry.Commands;
+            string category = FindHelpCategory(commands, requestedCategory);
+            var result = new XCommandHelpResult {
+                category = category ?? string.Empty,
+            };
+            AddHelpCategories(result, commands);
+
+            if (requestedCategory != null)
+            {
+                AddHelpCommands(result, commands, category);
+            }
+            else if (includeCommands)
+            {
+                AddHelpCommands(result, commands, null);
+            }
+            return JsonUtility.ToJson(result);
+        }
+
+        private static string FindHelpCategory(IReadOnlyList<XCommandDescriptor> commands, string requestedCategory)
+        {
+            if (requestedCategory == null)
+            {
+                return null;
+            }
+
+            string normalizedCategory = requestedCategory.Trim();
+            for (int i = 0; i < commands.Count; i++)
+            {
+                if (string.Equals(commands[i].Category, normalizedCategory, StringComparison.OrdinalIgnoreCase))
+                {
+                    return commands[i].Category;
+                }
+            }
+            throw new ArgumentException($"未找到命令分类：{requestedCategory}");
+        }
+
+        private static void AddHelpCategories(XCommandHelpResult result, IReadOnlyList<XCommandDescriptor> commands)
+        {
+            for (int i = 0; i < commands.Count; i++)
+            {
+                string category = commands[i].Category;
+                bool exists = false;
+                for (int j = 0; j < result.categories.Count; j++)
+                {
+                    if (string.Equals(result.categories[j], category, StringComparison.OrdinalIgnoreCase))
+                    {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists)
+                {
+                    result.categories.Add(category);
+                }
+            }
+        }
+
+        private static void AddHelpCommands(XCommandHelpResult result, IReadOnlyList<XCommandDescriptor> commands, string category)
+        {
+            for (int i = 0; i < commands.Count; i++)
+            {
+                XCommandDescriptor command = commands[i];
+                if (category != null && !string.Equals(command.Category, category, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                result.commands.Add(new XCommandHelpCommand {
+                    command = command.Command,
+                    name = command.Name,
+                    mode = command.Mode.ToString(),
+                    usage = command.Usage,
+                    description = command.Description,
+                });
+            }
+        }
+
+        [Serializable]
+        private sealed class XCommandHelpResult
+        {
+            public List<string> categories = new List<string>();
+            public string category;
+            public List<XCommandHelpCommand> commands = new List<XCommandHelpCommand>();
+        }
+
+        [Serializable]
+        private sealed class XCommandHelpCommand
+        {
+            public string command;
+            public string name;
+            public string mode;
+            public string usage;
+            public string description;
         }
 
         [XCommandEntry("enable_hunter", name = "连接 Hunter", order = 10, mode = XCommandMode.Runtime, category = "XCommand", description = "连接远程 Hunter 调试端。", usage = "enable_hunter")]

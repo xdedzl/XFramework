@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;   // 新增：window-focus 的 DllImport 需要
 using UnityEditor;
 using UnityEditor.Compilation;
 using UnityEngine;
@@ -118,12 +119,6 @@ namespace XFramework.Editor
         private static object BakeTmpFont(string argument)
         {
             return XCommandUtility.FontBake.Execute(argument);
-        }
-
-        [MenuItem("XFramework/Tools/烘焙 TMP 字体图集（仅报告）")]
-        private static void BakeFontAtlasMenu()
-        {
-            Debug.Log(XCommandUtility.FontBake.Execute(string.Empty));
         }
 
         /// <summary>
@@ -263,6 +258,132 @@ namespace XFramework.Editor
         private static object ResizeGameView(string argument)
         {
             return XCommandUtility.GameViewSize.Execute(argument);
+        }
+
+        #endregion
+
+        #region 前置窗口
+
+        private const int SW_RESTORE = 9;
+        private const byte VK_MENU = 0x12;
+        private const uint KEYEVENTF_KEYUP = 0x0002;
+
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [DllImport("user32.dll")]
+        private static extern bool BringWindowToTop(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+        [DllImport("user32.dll")]
+        private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
+        [DllImport("kernel32.dll")]
+        private static extern uint GetCurrentThreadId();
+
+        [DllImport("user32.dll")]
+        private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+
+        /// <summary>
+        /// 把 Unity Editor 主窗口恢复到前台并聚焦 GameView。模拟鼠标/键盘（ui-input）之前调用，
+        /// 可显著降低「GameView 不在前台导致点击被吞」的概率。Windows 前台锁可能拒绝抢占，
+        /// 因此返回 broughtToFront 供调用方判定；isFocused 可能滞后一帧，可稍后用 app-state 复核。
+        /// </summary>
+        [XCommandEntry("window-focus", name = "前置 Unity/Game 窗口", order = 12, mode = XCommandMode.Both, displayType = XCommandDisplayType.Hidden, category = Category,
+            description = "把 Unity Editor 主窗口恢复到前台并聚焦 GameView，供 ui-input 注入真实鼠标/键盘前调用；Windows 前台锁可能阻止抢占，返回 broughtToFront 供调用方判定。",
+            usage = "window-focus")]
+        private static object FocusWindow()
+        {
+            bool gameViewFocused = TryFocusGameView(out string gameViewDetail);
+
+            IntPtr hwnd = System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle;
+            if (hwnd == IntPtr.Zero)
+            {
+                return $"前置窗口失败：未取得 Unity 主窗口句柄。{gameViewDetail}";
+            }
+
+            ShowWindow(hwnd, SW_RESTORE);
+
+            IntPtr foreground = GetForegroundWindow();
+            uint foregroundThread = foreground == IntPtr.Zero ? 0u : GetWindowThreadProcessId(foreground, out _);
+            uint currentThread = GetCurrentThreadId();
+            bool attached = foregroundThread != 0 && foregroundThread != currentThread
+                && AttachThreadInput(foregroundThread, currentThread, true);
+
+            bool broughtToFront;
+            try
+            {
+                // 模拟一次 ALT 按键，满足 Windows「最近有输入」条件，降低前台锁拒绝 SetForegroundWindow 的概率。
+                keybd_event(VK_MENU, 0, 0, UIntPtr.Zero);
+                keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                broughtToFront = SetForegroundWindow(hwnd);
+                if (!broughtToFront)
+                {
+                    broughtToFront = BringWindowToTop(hwnd);
+                }
+            }
+            finally
+            {
+                if (attached)
+                {
+                    AttachThreadInput(foregroundThread, currentThread, false);
+                }
+            }
+
+            return $"前置窗口请求完成：broughtToFront={broughtToFront}, gameViewFocused={gameViewFocused}, isFocused={Application.isFocused}。{gameViewDetail}";
+        }
+
+        /// <summary>
+        /// 反射定位（必要时创建）GameView 窗口并聚焦；停靠时切到该标签页，浮动时激活其窗口。
+        /// </summary>
+        private static bool TryFocusGameView(out string detail)
+        {
+            detail = string.Empty;
+            try
+            {
+                Type gameViewType = Type.GetType("UnityEditor.GameView,UnityEditor");
+                if (gameViewType == null)
+                {
+                    detail = "未找到 UnityEditor.GameView 类型。";
+                    return false;
+                }
+
+                EditorWindow gameView = null;
+                Object[] found = Resources.FindObjectsOfTypeAll(gameViewType);
+                if (found != null && found.Length > 0)
+                {
+                    gameView = found[0] as EditorWindow;
+                }
+
+                if (gameView == null)
+                {
+                    gameView = EditorWindow.GetWindow(gameViewType);
+                }
+
+                if (gameView == null)
+                {
+                    detail = "未能获取 GameView 窗口。";
+                    return false;
+                }
+
+                gameView.Show();
+                gameView.Focus();
+                detail = "GameView 已聚焦。";
+                return true;
+            }
+            catch (Exception exception)
+            {
+                detail = "聚焦 GameView 失败：" + exception.Message;
+                return false;
+            }
         }
 
         #endregion

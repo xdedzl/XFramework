@@ -11,23 +11,33 @@ namespace XFramework.Editor
 {
     public sealed class XCommandEditorWindow : EditorWindow
     {
-        private const string MenuPath = "XFramework/Debug/XCommand";
+        private const string MenuPath = "XFramework/Tools/XCommand";
         private const string AllModeFilter = "全部";
         private const string AvailableModeFilter = "当前可用";
         private const string AllCategoryFilter = "全部分类";
+        private const int MAX_CONSOLE_TEXT_LENGTH = 8000;
+        private const int MAX_CONSOLE_TEXT_LINES = 60;
+        private const int MAX_COPY_ALL_TEXT_LENGTH = 512000;
+        private const string COPY_ALL_TRUNCATION_NOTICE = "\n… [复制已截断：总长度超过限制；请用单条记录的复制按钮获取完整内容]";
 
         private static readonly Color TerminalBackground = new Color(0.055f, 0.06f, 0.065f);
         private static readonly Color TerminalBorder = new Color(0.20f, 0.23f, 0.25f);
         private static readonly Color TerminalText = new Color(0.78f, 0.82f, 0.84f);
         private static readonly Color CommandColor = new Color(0.37f, 0.82f, 0.94f);
         private static readonly Color PromptColor = new Color(0.38f, 0.92f, 0.52f);
+        private static readonly Color FavoriteStarColor = new Color(1f, 0.78f, 0.18f);
+        private static readonly Color FavoriteStarInactiveColor = new Color(0.58f, 0.61f, 0.63f);
         private readonly List<XCommandDescriptor> m_AllCommands = new List<XCommandDescriptor>();
         private readonly List<XCommandDescriptor> m_FilteredCommands = new List<XCommandDescriptor>();
         private readonly List<XCommandDescriptor> m_CommandSuggestions = new List<XCommandDescriptor>();
         private readonly List<XCommandDiagnostic> m_Diagnostics = new List<XCommandDiagnostic>();
         private readonly HashSet<string> m_Favorites = new HashSet<string>(StringComparer.Ordinal);
-        private readonly List<XCommandRecord> m_VisibleCommandRecords = new List<XCommandRecord>();
-        private readonly HashSet<long> m_VisibleCommandRecordIds = new HashSet<long>();
+        private readonly List<XWorkflowEntry> m_Workflows = new List<XWorkflowEntry>();
+        private readonly List<XCommandRecord> loadedCommandRecords = new List<XCommandRecord>();
+        private readonly HashSet<long> loadedCommandRecordIds = new HashSet<long>();
+        private readonly List<XCommandRecord> displayedCommandRecords = new List<XCommandRecord>();
+        private readonly Dictionary<long, int> displayedRecordIndices = new Dictionary<long, int>();
+        private readonly Dictionary<long, XCommandRecord> pendingConsoleRecords = new Dictionary<long, XCommandRecord>();
 
         private Label m_EnvironmentLabel;
         private Label m_TerminalSummaryLabel;
@@ -36,7 +46,12 @@ namespace XFramework.Editor
         private Toggle m_ShowHiddenCommandRecordsToggle;
         private Toggle m_CommandReferenceToggle;
         private TwoPaneSplitView m_MainSplitView;
-        private ScrollView m_ConsoleScroll;
+        private ListView consoleList;
+        private VisualElement consoleEmptyState;
+        private IVisualElementScheduledItem consoleRefreshSchedule;
+        private IVisualElementScheduledItem consoleScrollSchedule;
+        private bool consoleStructureDirty;
+        private bool consoleScrollPending;
         private TextField m_CommandLineField;
         private Button m_ExecuteButton;
         private Label m_PromptHintLabel;
@@ -46,7 +61,8 @@ namespace XFramework.Editor
         private TextField m_SearchField;
         private DropdownField m_ModeFilter;
         private DropdownField m_CategoryFilter;
-        private Toggle m_FavoritesOnlyToggle;
+        private Button m_FavoritesOnlyButton;
+        private bool m_FavoritesOnly;
         private Label m_CommandSummaryLabel;
         private ListView m_CommandList;
         private Label m_DetailTitleLabel;
@@ -58,8 +74,19 @@ namespace XFramework.Editor
         private Button m_FillCommandButton;
         private Foldout m_DiagnosticsFoldout;
         private VisualElement m_DiagnosticsContainer;
+        private Button m_CommandTabButton;
+        private Button m_WorkflowTabButton;
+        private VisualElement m_CommandTabContent;
+        private VisualElement m_WorkflowTabContent;
+        private ListView m_WorkflowList;
+        private Label m_WorkflowDetailTitleLabel;
+        private Label m_WorkflowDetailPathLabel;
+        private Label m_WorkflowDetailContentLabel;
 
         private XCommandDescriptor m_SelectedCommand;
+        private XWorkflowEntry m_SelectedWorkflow;
+        private string m_CommandSummaryText = string.Empty;
+        private string m_WorkflowScanMessage = string.Empty;
         private int m_CommandHistoryIndex = -1;
         private int m_CommandSuggestionIndex = -1;
         private bool m_ApplyingCommandHistory;
@@ -69,6 +96,9 @@ namespace XFramework.Editor
         [SerializeField] private long m_VisibleAfterRecordId;
         [SerializeField] private bool m_ShowHiddenCommandRecords = true;
         [SerializeField] private string m_SelectedCommandName;
+        [SerializeField] private bool m_VisibleCommandRecordsInitialized;
+        [SerializeField] private int m_ActiveReferenceTab;
+        [SerializeField] private string m_SelectedWorkflowName;
 
         [MenuItem(MenuPath)]
         public static void ShowWindow()
@@ -90,6 +120,7 @@ namespace XFramework.Editor
 
         private void OnDisable()
         {
+            StopConsoleUpdates();
             m_CliServerStatusSchedule?.Pause();
             m_CliServerStatusSchedule = null;
             UnsubscribeCommandHub();
@@ -99,15 +130,27 @@ namespace XFramework.Editor
 
         public void CreateGUI()
         {
+            StopConsoleUpdates();
+            displayedCommandRecords.Clear();
+            displayedRecordIndices.Clear();
             m_CliServerStatusSchedule?.Pause();
             UnsubscribeCommandHub();
             BuildUI();
-            RestoreVisibleCommandRecords();
+            if (m_VisibleCommandRecordsInitialized)
+            {
+                RestoreVisibleCommandRecords();
+            }
+            else
+            {
+                m_VisibleCommandRecordsInitialized = true;
+                ResetVisibleCommandRecords();
+            }
             SubscribeCommandHub();
             RefreshCliServerStatus();
             m_CliServerStatusSchedule = rootVisualElement.schedule.Execute(RefreshCliServerStatus).Every(500);
             RefreshRegistry();
-            RenderConsole();
+            RefreshWorkflows();
+            ApplyReferenceTabState();
             FocusCommandLine();
         }
 
@@ -172,6 +215,7 @@ namespace XFramework.Editor
             {
                 value = true
             };
+            m_AutoScrollToggle.RegisterValueChangedCallback(OnConsoleAutoScrollChanged);
             m_AutoScrollToggle.style.marginRight = 8f;
             toolbar.Add(m_AutoScrollToggle);
 
@@ -180,12 +224,11 @@ namespace XFramework.Editor
                 value = false
             };
             m_CommandReferenceToggle.style.marginRight = 8f;
-            m_CommandReferenceToggle.tooltip = "显示或隐藏右侧命令手册。";
+            m_CommandReferenceToggle.tooltip = "显示或隐藏右侧命令手册与 Workflow 列表。";
             m_CommandReferenceToggle.RegisterValueChangedCallback(evt => SetCommandReferenceVisible(evt.newValue));
             toolbar.Add(m_CommandReferenceToggle);
 
             toolbar.Add(CreateToolbarButton("复制全部", CopyAllConsoleOutput, 72f));
-            toolbar.Add(CreateToolbarButton("清空输出", ClearConsoleOutput, 72f));
             toolbar.Add(CreateToolbarButton("刷新命令", RefreshCommands, 72f));
             return toolbar;
         }
@@ -204,7 +247,7 @@ namespace XFramework.Editor
         {
             bool running = XFrameworkCliServer.IsRunning;
             var menu = new GenericMenu();
-            menu.AddDisabledItem(new GUIContent(running ? $"运行中 · 127.0.0.1:{XFrameworkCliServer.Port}" : "Server 已停止"));
+            menu.AddDisabledItem(new GUIContent(running ? $"运行中 · PID {System.Diagnostics.Process.GetCurrentProcess().Id} · 127.0.0.1:{XFrameworkCliServer.Port}" : "Server 已停止"));
             menu.AddSeparator(string.Empty);
             if (running)
             {
@@ -307,25 +350,19 @@ namespace XFramework.Editor
             m_ShowHiddenCommandRecordsToggle.RegisterValueChangedCallback(evt =>
             {
                 m_ShowHiddenCommandRecords = evt.newValue;
-                RefreshTerminalSummary();
-                RenderConsole();
+                RequestConsoleRefresh(true);
             });
             terminalHeader.Add(m_ShowHiddenCommandRecordsToggle);
 
             terminalHeader.Add(CreateEntryButton("加载历史", LoadCommandHistory));
+            terminalHeader.Add(CreateEntryButton("清空输出", ClearConsoleOutput));
             var keyboardHint = new Label("Enter 执行  ·  Tab 预测  ·  ↑↓ 候选/历史  ·  Esc 关闭/清空");
             keyboardHint.style.marginLeft = 8f;
             keyboardHint.style.color = new Color(0.43f, 0.47f, 0.49f);
             terminalHeader.Add(keyboardHint);
             pane.Add(terminalHeader);
 
-            m_ConsoleScroll = new ScrollView(ScrollViewMode.Vertical);
-            m_ConsoleScroll.style.flexGrow = 1f;
-            m_ConsoleScroll.style.paddingLeft = 10f;
-            m_ConsoleScroll.style.paddingRight = 10f;
-            m_ConsoleScroll.style.paddingTop = 8f;
-            m_ConsoleScroll.style.paddingBottom = 8f;
-            pane.Add(m_ConsoleScroll);
+            pane.Add(BuildConsoleContent());
 
             pane.Add(BuildPromptArea());
             return pane;
@@ -454,6 +491,7 @@ namespace XFramework.Editor
 
             var titleRow = new VisualElement();
             titleRow.style.height = 26f;
+            titleRow.style.flexShrink = 0f;
             titleRow.style.flexDirection = FlexDirection.Row;
             titleRow.style.alignItems = Align.Center;
 
@@ -469,34 +507,65 @@ namespace XFramework.Editor
             titleRow.Add(m_CommandSummaryLabel);
             pane.Add(titleRow);
 
+            var tabBar = new VisualElement();
+            tabBar.style.flexShrink = 0f;
+            tabBar.style.flexDirection = FlexDirection.Row;
+            tabBar.style.alignItems = Align.Center;
+            tabBar.style.marginTop = 6f;
+            tabBar.style.marginBottom = 2f;
+
+            m_CommandTabButton = CreateReferenceTabButton("命令", () => SetActiveReferenceTab(0));
+            tabBar.Add(m_CommandTabButton);
+
+            m_WorkflowTabButton = CreateReferenceTabButton("Workflow", () => SetActiveReferenceTab(1));
+            m_WorkflowTabButton.style.marginLeft = 4f;
+            tabBar.Add(m_WorkflowTabButton);
+            pane.Add(tabBar);
+
+            m_CommandTabContent = new VisualElement();
+            m_CommandTabContent.style.flexGrow = 1f;
+            m_CommandTabContent.style.flexBasis = 0f;
+            m_CommandTabContent.style.minHeight = 0f;
+            pane.Add(m_CommandTabContent);
+
             m_SearchField = new TextField("搜索");
+            m_SearchField.style.flexShrink = 0f;
             m_SearchField.tooltip = "匹配命令名、显示名、分类、说明和声明类型；空格分词后全部命中。";
             m_SearchField.RegisterValueChangedCallback(_ => RefreshCommandView());
-            pane.Add(m_SearchField);
+            m_CommandTabContent.Add(m_SearchField);
 
             var filterRow = new VisualElement();
+            filterRow.style.flexShrink = 0f;
             filterRow.style.flexDirection = FlexDirection.Row;
             filterRow.style.alignItems = Align.Center;
             filterRow.style.marginTop = 4f;
 
             m_ModeFilter = new DropdownField(new List<string> { AllModeFilter, AvailableModeFilter, XCommandMode.Runtime.ToString(), XCommandMode.Editor.ToString(), XCommandMode.Both.ToString() }, 0);
             m_ModeFilter.style.width = 112f;
+            m_ModeFilter.style.flexShrink = 0f;
             m_ModeFilter.tooltip = "按命令作用域筛选。";
             m_ModeFilter.RegisterValueChangedCallback(_ => RefreshCommandView());
             filterRow.Add(m_ModeFilter);
 
             m_CategoryFilter = new DropdownField(new List<string> { AllCategoryFilter }, 0);
             m_CategoryFilter.style.flexGrow = 1f;
+            m_CategoryFilter.style.flexShrink = 1f;
+            m_CategoryFilter.style.minWidth = 65f;
             m_CategoryFilter.style.marginLeft = 5f;
             m_CategoryFilter.tooltip = "按命令分类筛选。";
             m_CategoryFilter.RegisterValueChangedCallback(_ => RefreshCommandView());
             filterRow.Add(m_CategoryFilter);
 
-            m_FavoritesOnlyToggle = new Toggle("仅收藏");
-            m_FavoritesOnlyToggle.style.marginLeft = 6f;
-            m_FavoritesOnlyToggle.RegisterValueChangedCallback(_ => RefreshCommandView());
-            filterRow.Add(m_FavoritesOnlyToggle);
-            pane.Add(filterRow);
+            m_FavoritesOnlyButton = new Button(ToggleFavoritesOnly)
+            {
+                text = "[ ] 仅收藏"
+            };
+            m_FavoritesOnlyButton.style.width = 86f;
+            m_FavoritesOnlyButton.style.flexShrink = 0f;
+            m_FavoritesOnlyButton.style.marginLeft = 6f;
+            m_FavoritesOnlyButton.tooltip = "只显示已收藏命令。再次点击后恢复全部筛选结果。";
+            filterRow.Add(m_FavoritesOnlyButton);
+            m_CommandTabContent.Add(filterRow);
 
             m_CommandList = new ListView
             {
@@ -507,16 +576,46 @@ namespace XFramework.Editor
                 bindItem = BindCommandItem
             };
             m_CommandList.style.height = 270f;
-            m_CommandList.style.flexShrink = 0f;
+            m_CommandList.style.minHeight = 88f;
+            m_CommandList.style.flexShrink = 1f;
             m_CommandList.style.marginTop = 6f;
             m_CommandList.style.marginBottom = 6f;
             m_CommandList.selectionChanged += OnCommandSelectionChanged;
             m_CommandList.itemsChosen += OnCommandItemsChosen;
-            pane.Add(m_CommandList);
+            m_CommandTabContent.Add(m_CommandList);
 
             ScrollView detailsScroll = BuildCommandDetails();
             detailsScroll.style.flexGrow = 1f;
-            pane.Add(detailsScroll);
+            detailsScroll.style.minHeight = 0f;
+            m_CommandTabContent.Add(detailsScroll);
+
+            m_WorkflowTabContent = new VisualElement();
+            m_WorkflowTabContent.style.flexGrow = 1f;
+            m_WorkflowTabContent.style.flexBasis = 0f;
+            m_WorkflowTabContent.style.minHeight = 0f;
+            m_WorkflowTabContent.style.display = DisplayStyle.None;
+            pane.Add(m_WorkflowTabContent);
+
+            m_WorkflowList = new ListView
+            {
+                itemsSource = m_Workflows,
+                fixedItemHeight = 44f,
+                selectionType = SelectionType.Single,
+                makeItem = MakeWorkflowItem,
+                bindItem = BindWorkflowItem
+            };
+            m_WorkflowList.style.height = 270f;
+            m_WorkflowList.style.minHeight = 88f;
+            m_WorkflowList.style.flexShrink = 1f;
+            m_WorkflowList.style.marginTop = 6f;
+            m_WorkflowList.style.marginBottom = 6f;
+            m_WorkflowList.selectionChanged += OnWorkflowSelectionChanged;
+            m_WorkflowTabContent.Add(m_WorkflowList);
+
+            ScrollView workflowDetailsScroll = BuildWorkflowDetails();
+            workflowDetailsScroll.style.flexGrow = 1f;
+            workflowDetailsScroll.style.minHeight = 0f;
+            m_WorkflowTabContent.Add(workflowDetailsScroll);
             return pane;
         }
 
@@ -659,6 +758,7 @@ namespace XFramework.Editor
             };
             favoriteButton.style.width = 26f;
             favoriteButton.style.height = 22f;
+            favoriteButton.style.fontSize = 16f;
             favoriteButton.style.marginRight = 5f;
             row.Add(favoriteButton);
 
@@ -700,6 +800,12 @@ namespace XFramework.Editor
             state.style.unityTextAlign = TextAnchor.MiddleCenter;
             state.style.fontSize = 15f;
             row.Add(state);
+
+            Button quickRunButton = CreateEntryButton("执行", () => QuickRunCommand((XCommandDescriptor)row.userData));
+            quickRunButton.name = "quickRun";
+            quickRunButton.style.width = 46f;
+            quickRunButton.style.flexShrink = 0f;
+            row.Add(quickRunButton);
             return row;
         }
 
@@ -708,7 +814,11 @@ namespace XFramework.Editor
             XCommandDescriptor command = m_FilteredCommands[index];
             bool available = XCommandRegistry.CanExecute(command);
             element.userData = command;
-            element.Q<Button>("favorite").text = m_Favorites.Contains(command.Command) ? "★" : "☆";
+            Button favoriteButton = element.Q<Button>("favorite");
+            bool isFavorite = m_Favorites.Contains(command.Command);
+            favoriteButton.text = isFavorite ? "★" : "☆";
+            favoriteButton.style.color = isFavorite ? FavoriteStarColor : FavoriteStarInactiveColor;
+            favoriteButton.tooltip = isFavorite ? "取消收藏" : "收藏命令";
             element.Q<Label>("command").text = command.Command;
             element.Q<Label>("displayName").text = $"{command.Name}  ·  {command.Category}";
             Label modeLabel = element.Q<Label>("mode");
@@ -717,6 +827,13 @@ namespace XFramework.Editor
             Label stateLabel = element.Q<Label>("state");
             stateLabel.text = available ? "●" : "○";
             stateLabel.style.color = available ? PromptColor : new Color(0.75f, 0.42f, 0.32f);
+            bool requiresArguments = RequiresArguments(command);
+            Button quickRunButton = element.Q<Button>("quickRun");
+            quickRunButton.text = requiresArguments ? "填入" : "执行";
+            quickRunButton.SetEnabled(available);
+            quickRunButton.tooltip = available
+                ? (requiresArguments ? "该命令需要参数，点击后填入命令栏。" : "点击直接执行该命令。")
+                : GetUnavailableReason(command);
             element.style.opacity = available ? 1f : 0.48f;
             element.tooltip = available ? command.Description : GetUnavailableReason(command);
         }
@@ -725,6 +842,8 @@ namespace XFramework.Editor
         {
             XCommandRegistry.Refresh();
             RefreshRegistry();
+            RefreshWorkflows();
+            ApplyReferenceTabState();
         }
 
         private void RefreshRegistry()
@@ -750,7 +869,7 @@ namespace XFramework.Editor
             RefreshCommandView();
             RefreshCommandDetail();
             RefreshDiagnosticsView();
-            RefreshTerminalSummary();
+            RequestConsoleRefresh(true);
         }
 
         private void RefreshCategoryChoices()
@@ -782,7 +901,7 @@ namespace XFramework.Editor
             string[] searchTerms = search.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             string modeFilter = m_ModeFilter?.value ?? AllModeFilter;
             string categoryFilter = m_CategoryFilter?.value ?? AllCategoryFilter;
-            bool favoritesOnly = m_FavoritesOnlyToggle?.value ?? false;
+            bool favoritesOnly = m_FavoritesOnly;
 
             for (int i = 0; i < m_AllCommands.Count; i++)
             {
@@ -801,23 +920,7 @@ namespace XFramework.Editor
                 m_CommandList.selectedIndex = m_SelectedCommand == null ? -1 : m_FilteredCommands.IndexOf(m_SelectedCommand);
             }
 
-            if (m_CommandSummaryLabel != null)
-            {
-                int availableCount = 0;
-                int favoriteCount = 0;
-                for (int i = 0; i < m_AllCommands.Count; i++)
-                {
-                    if (XCommandRegistry.CanExecute(m_AllCommands[i]))
-                    {
-                        availableCount++;
-                    }
-                    if (m_Favorites.Contains(m_AllCommands[i].Command))
-                    {
-                        favoriteCount++;
-                    }
-                }
-                m_CommandSummaryLabel.text = $"{m_FilteredCommands.Count}/{m_AllCommands.Count}  ·  可用 {availableCount}  ·  ★ {favoriteCount}";
-            }
+            UpdateCommandSummary();
 
             RefreshExecuteButton();
         }
@@ -886,7 +989,7 @@ namespace XFramework.Editor
             if (m_SelectedCommand == null)
             {
                 m_DetailTitleLabel.text = "请选择一条命令";
-                m_DetailAvailabilityLabel.text = "单击命令查看完整信息，双击可填入终端。";
+                m_DetailAvailabilityLabel.text = "单击命令查看完整信息；双击可填入，行内按钮可直接执行或填入参数。";
                 m_DetailAvailabilityLabel.style.color = new Color(0.55f, 0.59f, 0.61f);
                 m_DetailDescriptionLabel.text = string.Empty;
                 m_DetailUsageLabel.text = string.Empty;
@@ -1244,34 +1347,6 @@ namespace XFramework.Editor
             }
         }
 
-        private void RenderConsole()
-        {
-            if (m_ConsoleScroll == null)
-            {
-                return;
-            }
-
-            VisualElement content = m_ConsoleScroll.contentContainer;
-            content.Clear();
-            int displayedCount = 0;
-            for (int i = 0; i < m_VisibleCommandRecords.Count; i++)
-            {
-                XCommandRecord record = m_VisibleCommandRecords[i];
-                if (!ShouldDisplayCommandRecord(record))
-                {
-                    continue;
-                }
-                content.Add(CreateConsoleEntry(record));
-                displayedCount++;
-            }
-            if (displayedCount == 0)
-            {
-                content.Add(CreateWelcomeMessage());
-                return;
-            }
-            ScrollConsoleToBottom();
-        }
-
         private VisualElement CreateWelcomeMessage()
         {
             var welcome = new VisualElement();
@@ -1283,7 +1358,7 @@ namespace XFramework.Editor
             ready.style.color = PromptColor;
             welcome.Add(ready);
 
-            var description = new Label("在下方提示符输入完整命令行，或从右侧 Command Reference 选择命令。\n当前窗口默认只接收新命令；点击“加载历史”可查看共享命令记录。 ");
+            var description = new Label("在下方提示符输入完整命令行，或使用右侧 Command Reference 的快捷按钮执行/填入。\n当前窗口默认只接收新命令；点击“加载历史”可查看共享命令记录。 ");
             description.style.marginTop = 6f;
             description.style.whiteSpace = WhiteSpace.Normal;
             description.style.color = TerminalText;
@@ -1291,84 +1366,35 @@ namespace XFramework.Editor
             return welcome;
         }
 
-        private VisualElement CreateConsoleEntry(XCommandRecord record)
-        {
-            Color statusColor = record.State == XCommandRecordState.Running ? CommandColor : GetStatusColor(record.Status);
-            var card = new VisualElement();
-            card.style.marginBottom = 8f;
-            card.style.paddingLeft = 9f;
-            card.style.paddingRight = 7f;
-            card.style.paddingTop = 6f;
-            card.style.paddingBottom = 7f;
-            card.style.backgroundColor = new Color(0.075f, 0.08f, 0.085f);
-            card.style.borderLeftWidth = 2f;
-            card.style.borderLeftColor = statusColor;
-
-            var header = new VisualElement();
-            header.style.height = 22f;
-            header.style.flexDirection = FlexDirection.Row;
-            header.style.alignItems = Align.Center;
-
-            string duration = record.State == XCommandRecordState.Running ? "执行中" : $"{record.DurationMilliseconds:F2} ms";
-            var status = new Label($"[{record.ExecutedAtUtc.ToLocalTime():HH:mm:ss}]  {FormatSource(record.Source)}  ·  {FormatRecordStatus(record)}  ·  {duration}");
-            status.style.flexGrow = 1f;
-            status.style.unityFontStyleAndWeight = FontStyle.Bold;
-            status.style.color = statusColor;
-            header.Add(status);
-
-            header.Add(CreateEntryButton("重跑", () => ExecuteCommandLine(record.CommandLine)));
-            header.Add(CreateEntryButton("复制命令", () => EditorGUIUtility.systemCopyBuffer = record.CommandLine));
-            header.Add(CreateEntryButton("复制输出", () => EditorGUIUtility.systemCopyBuffer = FormatCommandRecordOutput(record)));
-            card.Add(header);
-
-            var command = new Label($"> {record.CommandLine}");
-            command.style.marginTop = 3f;
-            command.style.unityFontStyleAndWeight = FontStyle.Bold;
-            command.style.whiteSpace = WhiteSpace.Normal;
-            command.style.color = CommandColor;
-            card.Add(command);
-
-            var output = new Label(FormatCommandRecordOutput(record));
-            output.style.marginTop = 5f;
-            output.style.whiteSpace = WhiteSpace.Normal;
-            output.style.color = record.State == XCommandRecordState.Running || record.Succeeded ? TerminalText : statusColor;
-            card.Add(output);
-            return card;
-        }
-
         private void ScrollConsoleToBottom()
         {
-            if (m_AutoScrollToggle == null || !m_AutoScrollToggle.value || m_ConsoleScroll.contentContainer.childCount == 0)
+            consoleScrollSchedule?.Pause();
+            if (!consoleScrollPending || m_AutoScrollToggle == null || !m_AutoScrollToggle.value || displayedCommandRecords.Count == 0)
+            {
+                consoleScrollPending = false;
+                return;
+            }
+            if (consoleList == null || consoleList.panel == null || !(consoleList.layout.height > 0f))
             {
                 return;
             }
-
-            m_ConsoleScroll.schedule.Execute(() =>
-            {
-                VisualElement last = m_ConsoleScroll.contentContainer.ElementAt(m_ConsoleScroll.contentContainer.childCount - 1);
-                m_ConsoleScroll.ScrollTo(last);
-            });
+            consoleScrollPending = false;
+            // -1 表示末尾，动态高度列表会在后续测量完成时继续校正到底部。
+            consoleList.ScrollToItem(-1);
         }
 
         private void CopyAllConsoleOutput()
         {
-            var builder = new StringBuilder();
-            for (int i = 0; i < m_VisibleCommandRecords.Count; i++)
+            StringBuilder builder = new StringBuilder();
+            int limit = MAX_COPY_ALL_TEXT_LENGTH - COPY_ALL_TRUNCATION_NOTICE.Length;
+            for (int i = 0; i < loadedCommandRecords.Count; i++)
             {
-                XCommandRecord record = m_VisibleCommandRecords[i];
-                if (!ShouldDisplayCommandRecord(record))
+                XCommandRecord record = loadedCommandRecords[i];
+                if (ShouldDisplayCommandRecord(record) && !AppendConsoleRecordForCopy(builder, record, limit))
                 {
-                    continue;
+                    builder.Append(COPY_ALL_TRUNCATION_NOTICE);
+                    break;
                 }
-                builder.Append('[').Append(record.ExecutedAtUtc.ToLocalTime().ToString("HH:mm:ss")).Append("] ").Append(FormatSource(record.Source)).Append(" · ").Append(FormatRecordStatus(record));
-                if (record.State == XCommandRecordState.Completed)
-                {
-                    builder.Append(" · ").Append(record.DurationMilliseconds.ToString("F2")).Append(" ms");
-                }
-                builder.AppendLine();
-                builder.Append("> ").AppendLine(record.CommandLine);
-                builder.AppendLine(FormatCommandRecordOutput(record));
-                builder.AppendLine();
             }
             EditorGUIUtility.systemCopyBuffer = builder.ToString();
         }
@@ -1376,40 +1402,42 @@ namespace XFramework.Editor
         private void ClearConsoleOutput()
         {
             ResetVisibleCommandRecords();
-            RefreshTerminalSummary();
-            RenderConsole();
+            RequestConsoleRefresh(true);
             FocusCommandLine();
         }
 
         private void LoadCommandHistory()
         {
+            CancelPendingConsoleWork();
+            loadedCommandRecords.Clear();
+            loadedCommandRecordIds.Clear();
             IReadOnlyList<XCommandRecord> records = XCommandHub.Records;
             for (int i = 0; i < records.Count; i++)
             {
                 XCommandRecord record = records[i];
-                if (m_VisibleCommandRecordIds.Add(record.Id))
+                if (loadedCommandRecordIds.Add(record.Id))
                 {
-                    m_VisibleCommandRecords.Add(record);
+                    loadedCommandRecords.Add(record);
                 }
             }
-            m_VisibleCommandRecords.Sort((left, right) => left.Id.CompareTo(right.Id));
-            m_VisibleAfterRecordId = records.Count == 0 ? XCommandHub.LatestRecordId : records[0].Id - 1;
-            RefreshTerminalSummary();
-            RenderConsole();
+            loadedCommandRecords.Sort(CompareConsoleRecords);
+            m_VisibleAfterRecordId = loadedCommandRecords.Count == 0 ? XCommandHub.LatestRecordId : loadedCommandRecords[0].Id - 1;
+            RequestConsoleRefresh(true);
             FocusCommandLine();
         }
 
         private void ResetVisibleCommandRecords()
         {
+            CancelPendingConsoleWork();
             m_VisibleAfterRecordId = XCommandHub.LatestRecordId;
-            m_VisibleCommandRecords.Clear();
-            m_VisibleCommandRecordIds.Clear();
+            loadedCommandRecords.Clear();
+            loadedCommandRecordIds.Clear();
         }
 
         private void RestoreVisibleCommandRecords()
         {
-            m_VisibleCommandRecords.Clear();
-            m_VisibleCommandRecordIds.Clear();
+            loadedCommandRecords.Clear();
+            loadedCommandRecordIds.Clear();
             IReadOnlyList<XCommandRecord> records = XCommandHub.Records;
             if (records.Count == 0 || m_VisibleAfterRecordId > XCommandHub.LatestRecordId)
             {
@@ -1418,10 +1446,9 @@ namespace XFramework.Editor
             for (int i = 0; i < records.Count; i++)
             {
                 XCommandRecord record = records[i];
-                if (record.Id > m_VisibleAfterRecordId)
+                if (record.Id > m_VisibleAfterRecordId && loadedCommandRecordIds.Add(record.Id))
                 {
-                    m_VisibleCommandRecordIds.Add(record.Id);
-                    m_VisibleCommandRecords.Add(record);
+                    loadedCommandRecords.Add(record);
                 }
             }
         }
@@ -1473,49 +1500,46 @@ namespace XFramework.Editor
         private void OnCommandRecordAdded(XCommandRecord record)
         {
             m_CommandHistoryIndex = -1;
-            if (record.Id <= m_VisibleAfterRecordId)
+            if (record.Id <= m_VisibleAfterRecordId || !loadedCommandRecordIds.Add(record.Id))
             {
                 return;
             }
-            m_VisibleCommandRecordIds.Add(record.Id);
-            m_VisibleCommandRecords.Add(record);
-            RefreshTerminalSummary();
-            RenderConsole();
+            loadedCommandRecords.Add(record);
+            RequestConsoleRefresh(true);
         }
 
         private void OnCommandRecordUpdated(XCommandRecord record)
         {
-            if (m_VisibleCommandRecordIds.Contains(record.Id))
+            if (!loadedCommandRecordIds.Contains(record.Id))
             {
-                RefreshTerminalSummary();
-                RenderConsole();
+                return;
             }
+            pendingConsoleRecords[record.Id] = record;
+            RequestConsoleRefresh(false);
         }
 
         private void OnCommandRecordTrimmed(long recordId)
         {
-            if (!m_VisibleCommandRecordIds.Remove(recordId))
+            if (loadedCommandRecordIds.Remove(recordId))
             {
-                return;
+                for (int i = 0; i < loadedCommandRecords.Count; i++)
+                {
+                    if (loadedCommandRecords[i].Id == recordId)
+                    {
+                        loadedCommandRecords.RemoveAt(i);
+                        break;
+                    }
+                }
+                pendingConsoleRecords.Remove(recordId);
+                RequestConsoleRefresh(true);
             }
-            m_VisibleCommandRecords.RemoveAll(record => record.Id == recordId);
-            RefreshTerminalSummary();
-            RenderConsole();
         }
 
         private void RefreshTerminalSummary()
         {
             if (m_TerminalSummaryLabel != null)
             {
-                int displayedCount = 0;
-                for (int i = 0; i < m_VisibleCommandRecords.Count; i++)
-                {
-                    if (ShouldDisplayCommandRecord(m_VisibleCommandRecords[i]))
-                    {
-                        displayedCount++;
-                    }
-                }
-                m_TerminalSummaryLabel.text = $"visible {displayedCount}  ·  retained {XCommandHub.Records.Count}/{XCommandHub.RecordLimit}  ·  diagnostics {m_Diagnostics.Count}";
+                m_TerminalSummaryLabel.text = $"visible {displayedCommandRecords.Count}  ·  retained {XCommandHub.Records.Count}/{XCommandHub.RecordLimit}  ·  diagnostics {m_Diagnostics.Count}";
             }
         }
 
@@ -1760,6 +1784,725 @@ namespace XFramework.Editor
         private static string GetPreferencesKey(string suffix)
         {
             return $"XFramework.XCommand.{Hash128.Compute(Application.dataPath)}.{suffix}";
+        }
+
+        private ScrollView BuildWorkflowDetails()
+        {
+            var scroll = new ScrollView(ScrollViewMode.Vertical);
+            scroll.style.borderTopWidth = 1f;
+            scroll.style.borderTopColor = TerminalBorder;
+            scroll.style.paddingTop = 7f;
+
+            m_WorkflowDetailTitleLabel = new Label("请选择一个 Workflow");
+            m_WorkflowDetailTitleLabel.style.fontSize = 14f;
+            m_WorkflowDetailTitleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            m_WorkflowDetailTitleLabel.style.color = CommandColor;
+            scroll.Add(m_WorkflowDetailTitleLabel);
+
+            m_WorkflowDetailPathLabel = CreateDetailLabel(false);
+            scroll.Add(m_WorkflowDetailPathLabel);
+
+            m_WorkflowDetailContentLabel = CreateDetailLabel(false);
+            scroll.Add(m_WorkflowDetailContentLabel);
+            return scroll;
+        }
+
+        private VisualElement MakeWorkflowItem()
+        {
+            var row = new VisualElement();
+            row.style.height = 44f;
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.paddingLeft = 4f;
+            row.style.paddingRight = 4f;
+
+            var name = new Label
+            {
+                name = "workflowName"
+            };
+            name.style.flexGrow = 1f;
+            name.style.minWidth = 0f;
+            name.style.unityFontStyleAndWeight = FontStyle.Bold;
+            name.style.color = CommandColor;
+            row.Add(name);
+            return row;
+        }
+
+        private void BindWorkflowItem(VisualElement element, int index)
+        {
+            XWorkflowEntry entry = m_Workflows[index];
+            element.Q<Label>("workflowName").text = entry.Name;
+            element.tooltip = entry.RelativeDirectoryPath;
+        }
+
+        private void SetActiveReferenceTab(int index)
+        {
+            m_ActiveReferenceTab = index == 1 ? 1 : 0;
+            if (m_ActiveReferenceTab == 1)
+            {
+                RefreshWorkflows();
+            }
+            ApplyReferenceTabState();
+        }
+
+        private void ApplyReferenceTabState()
+        {
+            bool commandsActive = m_ActiveReferenceTab != 1;
+            if (m_CommandTabContent != null)
+            {
+                m_CommandTabContent.style.display = commandsActive ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+            if (m_WorkflowTabContent != null)
+            {
+                m_WorkflowTabContent.style.display = commandsActive ? DisplayStyle.None : DisplayStyle.Flex;
+            }
+            ApplyReferenceTabButtonStyle(m_CommandTabButton, commandsActive);
+            ApplyReferenceTabButtonStyle(m_WorkflowTabButton, !commandsActive);
+            ApplyReferenceSummary();
+        }
+
+        private void UpdateCommandSummary()
+        {
+            int availableCount = 0;
+            int favoriteCount = 0;
+            for (int i = 0; i < m_AllCommands.Count; i++)
+            {
+                if (XCommandRegistry.CanExecute(m_AllCommands[i]))
+                {
+                    availableCount++;
+                }
+                if (m_Favorites.Contains(m_AllCommands[i].Command))
+                {
+                    favoriteCount++;
+                }
+            }
+            m_CommandSummaryText = $"{m_FilteredCommands.Count}/{m_AllCommands.Count}  ·  可用 {availableCount}  ·  ★ {favoriteCount}";
+            ApplyReferenceSummary();
+        }
+
+        private void ApplyReferenceSummary()
+        {
+            if (m_CommandSummaryLabel == null)
+            {
+                return;
+            }
+            m_CommandSummaryLabel.text = m_ActiveReferenceTab == 1 ? $"{m_Workflows.Count} 个 Workflow" : m_CommandSummaryText;
+        }
+
+        private void RefreshWorkflows()
+        {
+            string selectedName = m_SelectedWorkflow?.Name ?? m_SelectedWorkflowName;
+            m_Workflows.Clear();
+            m_Workflows.AddRange(XWorkflowCatalog.Discover(out string message));
+            m_WorkflowScanMessage = message;
+            m_SelectedWorkflow = FindWorkflowByName(selectedName);
+            m_SelectedWorkflowName = m_SelectedWorkflow?.Name;
+            RefreshWorkflowList();
+            RefreshWorkflowDetail();
+        }
+
+        private void RefreshWorkflowList()
+        {
+            if (m_WorkflowList != null)
+            {
+                m_WorkflowList.itemsSource = m_Workflows;
+                m_WorkflowList.Rebuild();
+                m_WorkflowList.selectedIndex = m_SelectedWorkflow == null ? -1 : m_Workflows.IndexOf(m_SelectedWorkflow);
+            }
+            ApplyReferenceSummary();
+        }
+
+        private void OnWorkflowSelectionChanged(IEnumerable<object> selectedItems)
+        {
+            foreach (object item in selectedItems)
+            {
+                m_SelectedWorkflow = item as XWorkflowEntry;
+                m_SelectedWorkflowName = m_SelectedWorkflow?.Name;
+                RefreshWorkflowDetail();
+                return;
+            }
+        }
+
+        private void RefreshWorkflowDetail()
+        {
+            if (m_WorkflowDetailTitleLabel == null)
+            {
+                return;
+            }
+
+            if (m_SelectedWorkflow == null)
+            {
+                m_WorkflowDetailTitleLabel.text = "请选择一个 Workflow";
+                m_WorkflowDetailPathLabel.text = m_WorkflowScanMessage;
+                m_WorkflowDetailPathLabel.style.color = new Color(0.55f, 0.59f, 0.61f);
+                m_WorkflowDetailContentLabel.text = string.Empty;
+                return;
+            }
+
+            m_WorkflowDetailTitleLabel.text = m_SelectedWorkflow.Name;
+            m_WorkflowDetailPathLabel.text = m_SelectedWorkflow.RelativeDirectoryPath;
+            m_WorkflowDetailPathLabel.style.color = new Color(0.55f, 0.59f, 0.61f);
+
+            string error;
+            string content = XWorkflowCatalog.ReadReadme(m_SelectedWorkflow, out error);
+            if (!string.IsNullOrEmpty(error))
+            {
+                m_WorkflowDetailContentLabel.text = error;
+                m_WorkflowDetailContentLabel.style.color = new Color(0.95f, 0.55f, 0.40f);
+                return;
+            }
+
+            m_WorkflowDetailContentLabel.text = content;
+            m_WorkflowDetailContentLabel.style.color = new Color(0.75f, 0.78f, 0.80f);
+        }
+
+        private XWorkflowEntry FindWorkflowByName(string workflowName)
+        {
+            if (string.IsNullOrEmpty(workflowName))
+            {
+                return null;
+            }
+            for (int i = 0; i < m_Workflows.Count; i++)
+            {
+                if (m_Workflows[i].Name == workflowName)
+                {
+                    return m_Workflows[i];
+                }
+            }
+            return null;
+        }
+
+        private static Button CreateReferenceTabButton(string text, Action callback)
+        {
+            var button = new Button(callback)
+            {
+                text = text
+            };
+            button.style.height = 24f;
+            button.style.paddingLeft = 10f;
+            button.style.paddingRight = 10f;
+            button.style.unityFontStyleAndWeight = FontStyle.Bold;
+            button.style.borderBottomWidth = 2f;
+            return button;
+        }
+
+        private static void ApplyReferenceTabButtonStyle(Button button, bool active)
+        {
+            if (button == null)
+            {
+                return;
+            }
+            button.style.color = active ? CommandColor : new Color(0.55f, 0.59f, 0.61f);
+            button.style.borderBottomColor = active ? CommandColor : Color.clear;
+        }
+
+        private void ToggleFavoritesOnly()
+        {
+            m_FavoritesOnly = !m_FavoritesOnly;
+            m_FavoritesOnlyButton.text = m_FavoritesOnly ? "[√] 仅收藏" : "[ ] 仅收藏";
+            m_FavoritesOnlyButton.style.color = m_FavoritesOnly ? FavoriteStarColor : TerminalText;
+            RefreshCommandView();
+        }
+
+        private void QuickRunCommand(XCommandDescriptor command)
+        {
+            if (command == null || !XCommandRegistry.CanExecute(command))
+            {
+                return;
+            }
+
+            SelectCommand(command);
+            if (RequiresArguments(command))
+            {
+                FillCommandLine(command);
+                return;
+            }
+
+            ExecuteCommandLine(command.Command);
+        }
+
+        private static bool RequiresArguments(XCommandDescriptor command)
+        {
+            if (command == null || !command.HasArgument)
+            {
+                return false;
+            }
+
+            string usage = command.Usage ?? string.Empty;
+            if (usage.StartsWith(command.Command, StringComparison.OrdinalIgnoreCase))
+            {
+                usage = usage.Substring(command.Command.Length);
+            }
+
+            var requiredText = new StringBuilder();
+            int bracketDepth = 0;
+            for (int i = 0; i < usage.Length; i++)
+            {
+                char character = usage[i];
+                if (character == '[')
+                {
+                    bracketDepth++;
+                    continue;
+                }
+                if (character == ']' && bracketDepth > 0)
+                {
+                    bracketDepth--;
+                    continue;
+                }
+                if (bracketDepth == 0)
+                {
+                    requiredText.Append(character);
+                }
+            }
+
+            string remaining = requiredText.ToString().Trim();
+            return remaining.Trim('[', ']', '(', ')', '|', ',', ';', ' ').Length > 0;
+        }
+
+        private VisualElement BuildConsoleContent()
+        {
+            VisualElement container = new VisualElement();
+            container.style.flexGrow = 1f;
+            container.style.flexBasis = 0f;
+            container.style.minHeight = 0f;
+            container.style.minWidth = 0f;
+            container.style.paddingLeft = 10f;
+            container.style.paddingRight = 10f;
+            container.style.paddingTop = 8f;
+            container.style.paddingBottom = 8f;
+
+            consoleList = new ListView
+            {
+                name = "command-console",
+                virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight,
+                fixedItemHeight = 80f,
+                selectionType = SelectionType.None,
+                showBoundCollectionSize = false,
+                makeItem = MakeConsoleEntry,
+                bindItem = BindConsoleEntry,
+                unbindItem = UnbindConsoleEntry,
+                itemsSource = displayedCommandRecords
+            };
+            consoleList.style.flexGrow = 1f;
+            consoleList.style.flexBasis = 0f;
+            consoleList.style.minHeight = 0f;
+            consoleList.style.minWidth = 0f;
+            consoleList.style.display = DisplayStyle.None;
+            consoleList.RegisterCallback<GeometryChangedEvent>(OnConsoleGeometryChanged);
+            container.Add(consoleList);
+
+            consoleEmptyState = CreateWelcomeMessage();
+            consoleEmptyState.style.flexGrow = 1f;
+            container.Add(consoleEmptyState);
+
+            // 使用窗口根节点调度；空列表隐藏时仍需处理新记录。
+            consoleRefreshSchedule = rootVisualElement.schedule.Execute(FlushConsoleUpdates);
+            consoleRefreshSchedule.Pause();
+            consoleScrollSchedule = rootVisualElement.schedule.Execute(ScrollConsoleToBottom);
+            consoleScrollSchedule.Pause();
+            return container;
+        }
+
+        private void RequestConsoleRefresh(bool structureChanged)
+        {
+            consoleScrollSchedule?.Pause();
+            consoleScrollPending = false;
+            consoleStructureDirty |= structureChanged;
+            if (consoleRefreshSchedule != null && !consoleRefreshSchedule.isActive)
+            {
+                consoleRefreshSchedule.ExecuteLater(0);
+            }
+        }
+
+        private void FlushConsoleUpdates()
+        {
+            consoleRefreshSchedule?.Pause();
+            if (consoleList == null)
+            {
+                return;
+            }
+
+            bool refreshItems = consoleStructureDirty || HasConsoleVisibilityChanges();
+            consoleStructureDirty = false;
+            if (refreshItems)
+            {
+                RebuildDisplayedCommandRecords();
+            }
+            bool hasRecords = displayedCommandRecords.Count > 0;
+            consoleList.style.display = hasRecords ? DisplayStyle.Flex : DisplayStyle.None;
+            consoleEmptyState.style.display = hasRecords ? DisplayStyle.None : DisplayStyle.Flex;
+
+            bool visibleContentChanged = refreshItems;
+            if (refreshItems)
+            {
+                consoleList.RefreshItems();
+            }
+            else
+            {
+                foreach (long recordId in pendingConsoleRecords.Keys)
+                {
+                    if (displayedRecordIndices.TryGetValue(recordId, out int index))
+                    {
+                        consoleList.RefreshItem(index);
+                        visibleContentChanged = true;
+                    }
+                }
+            }
+            pendingConsoleRecords.Clear();
+            RefreshTerminalSummary();
+            if (hasRecords && visibleContentChanged)
+            {
+                RequestConsoleScroll();
+            }
+        }
+
+        private bool HasConsoleVisibilityChanges()
+        {
+            foreach (XCommandRecord record in pendingConsoleRecords.Values)
+            {
+                if (ShouldDisplayCommandRecord(record) != displayedRecordIndices.ContainsKey(record.Id))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private void RebuildDisplayedCommandRecords()
+        {
+            displayedCommandRecords.Clear();
+            displayedRecordIndices.Clear();
+            for (int i = 0; i < loadedCommandRecords.Count; i++)
+            {
+                XCommandRecord record = loadedCommandRecords[i];
+                if (ShouldDisplayCommandRecord(record))
+                {
+                    displayedRecordIndices.Add(record.Id, displayedCommandRecords.Count);
+                    displayedCommandRecords.Add(record);
+                }
+            }
+        }
+
+        private void CancelPendingConsoleWork()
+        {
+            consoleRefreshSchedule?.Pause();
+            consoleScrollSchedule?.Pause();
+            consoleScrollPending = false;
+            consoleStructureDirty = false;
+            pendingConsoleRecords.Clear();
+        }
+
+        private void StopConsoleUpdates()
+        {
+            CancelPendingConsoleWork();
+            consoleRefreshSchedule = null;
+            consoleScrollSchedule = null;
+            if (consoleList != null)
+            {
+                consoleList.UnregisterCallback<GeometryChangedEvent>(OnConsoleGeometryChanged);
+            }
+            if (m_AutoScrollToggle != null)
+            {
+                m_AutoScrollToggle.UnregisterValueChangedCallback(OnConsoleAutoScrollChanged);
+            }
+        }
+
+        private VisualElement MakeConsoleEntry()
+        {
+            return new ConsoleEntryView(this);
+        }
+
+        private void BindConsoleEntry(VisualElement element, int index)
+        {
+            ConsoleEntryView view = (ConsoleEntryView)element;
+            if (index < 0 || index >= displayedCommandRecords.Count)
+            {
+                view.Unbind();
+                return;
+            }
+            view.Bind(displayedCommandRecords[index]);
+        }
+
+        private static void UnbindConsoleEntry(VisualElement element, int index)
+        {
+            ((ConsoleEntryView)element).Unbind();
+        }
+
+        private void RequestConsoleScroll()
+        {
+            if (m_AutoScrollToggle == null || !m_AutoScrollToggle.value || consoleScrollSchedule == null || displayedCommandRecords.Count == 0)
+            {
+                return;
+            }
+            consoleScrollPending = true;
+            if (!consoleScrollSchedule.isActive)
+            {
+                consoleScrollSchedule.ExecuteLater(0);
+            }
+        }
+
+        private void OnConsoleGeometryChanged(GeometryChangedEvent evt)
+        {
+            if (consoleScrollPending && evt.newRect.height > 0f)
+            {
+                RequestConsoleScroll();
+            }
+        }
+
+        private void OnConsoleAutoScrollChanged(ChangeEvent<bool> evt)
+        {
+            if (evt.newValue)
+            {
+                RequestConsoleScroll();
+            }
+            else
+            {
+                consoleScrollPending = false;
+                consoleScrollSchedule?.Pause();
+            }
+        }
+
+        private static bool AppendConsoleRecordForCopy(StringBuilder builder, XCommandRecord record, int limit)
+        {
+            string duration = record.State == XCommandRecordState.Completed ? $" · {record.DurationMilliseconds:F2} ms" : string.Empty;
+            string header = $"[{record.ExecutedAtUtc.ToLocalTime():HH:mm:ss}] {FormatSource(record.Source)} · {FormatRecordStatus(record)}{duration}";
+            GetConsoleOutputParts(record, out string first, out string separator, out string last);
+            return AppendCopyText(builder, header, limit)
+                && AppendCopyText(builder, Environment.NewLine, limit)
+                && AppendCopyText(builder, "> ", limit)
+                && AppendCopyText(builder, record.CommandLine, limit)
+                && AppendCopyText(builder, Environment.NewLine, limit)
+                && AppendCopyText(builder, first, limit)
+                && AppendCopyText(builder, separator, limit)
+                && AppendCopyText(builder, last, limit)
+                && AppendCopyText(builder, Environment.NewLine, limit)
+                && AppendCopyText(builder, Environment.NewLine, limit);
+        }
+
+        private static bool AppendCopyText(StringBuilder builder, string text, int limit)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return true;
+            }
+            int length = Math.Min(text.Length, limit - builder.Length);
+            if (length < text.Length && length > 0)
+            {
+                if (char.IsHighSurrogate(text[length - 1]) || text[length - 1] == '\r')
+                {
+                    length--;
+                }
+            }
+            builder.Append(text, 0, length);
+            return length == text.Length;
+        }
+
+        private static void GetConsoleOutputParts(XCommandRecord record, out string first, out string separator, out string last)
+        {
+            separator = string.Empty;
+            last = string.Empty;
+            if (record.State == XCommandRecordState.Running)
+            {
+                first = "执行中...";
+            }
+            else if (record.Succeeded)
+            {
+                first = record.Output ?? string.Empty;
+            }
+            else
+            {
+                first = record.Message ?? string.Empty;
+                if (!string.IsNullOrEmpty(record.Exception))
+                {
+                    separator = "\n\n";
+                    last = record.Exception;
+                }
+            }
+        }
+
+        private static string BuildConsolePreview(string first, string separator, string last, out long originalLength)
+        {
+            originalLength = (long)(first?.Length ?? 0) + (separator?.Length ?? 0) + (last?.Length ?? 0);
+            StringBuilder builder = new StringBuilder((int)Math.Min(MAX_CONSOLE_TEXT_LENGTH, originalLength));
+            int lineCount = 1;
+            bool previousCarriageReturn = false;
+            if (AppendConsolePreviewPart(builder, first, ref lineCount, ref previousCarriageReturn)
+                && AppendConsolePreviewPart(builder, separator, ref lineCount, ref previousCarriageReturn))
+            {
+                AppendConsolePreviewPart(builder, last, ref lineCount, ref previousCarriageReturn);
+            }
+            if (builder.Length < originalLength && builder.Length > 0)
+            {
+                char finalCharacter = builder[builder.Length - 1];
+                if (char.IsHighSurrogate(finalCharacter) || finalCharacter == '\r')
+                {
+                    builder.Length--;
+                }
+            }
+            return builder.ToString();
+        }
+
+        private static bool AppendConsolePreviewPart(StringBuilder builder, string text, ref int lineCount, ref bool previousCarriageReturn)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return true;
+            }
+            int limit = Math.Min(text.Length, MAX_CONSOLE_TEXT_LENGTH - builder.Length);
+            int length = 0;
+            while (length < limit)
+            {
+                char character = text[length];
+                bool startsLine = character == '\r' || character == '\n' && !previousCarriageReturn;
+                if (startsLine)
+                {
+                    if (lineCount == MAX_CONSOLE_TEXT_LINES)
+                    {
+                        break;
+                    }
+                    lineCount++;
+                }
+                previousCarriageReturn = character == '\r';
+                length++;
+            }
+            builder.Append(text, 0, length);
+            return length == text.Length;
+        }
+
+        private static int CompareConsoleRecords(XCommandRecord left, XCommandRecord right)
+        {
+            return left.Id.CompareTo(right.Id);
+        }
+
+        private sealed class ConsoleEntryView : VisualElement
+        {
+            private readonly XCommandEditorWindow owner;
+            private readonly VisualElement card;
+            private readonly Label status;
+            private readonly Label command;
+            private readonly Label commandNotice;
+            private readonly Label output;
+            private readonly Label outputNotice;
+            private XCommandRecord record;
+
+            public ConsoleEntryView(XCommandEditorWindow owner)
+            {
+                this.owner = owner;
+                // 行间距放入条目自身高度，避免动态高度虚拟化遗漏外边距。
+                style.paddingBottom = 8f;
+                style.flexShrink = 0f;
+                style.minWidth = 0f;
+                card = new VisualElement();
+                card.style.paddingLeft = 9f;
+                card.style.paddingRight = 7f;
+                card.style.paddingTop = 6f;
+                card.style.paddingBottom = 7f;
+                card.style.backgroundColor = new Color(0.075f, 0.08f, 0.085f);
+                card.style.borderLeftWidth = 2f;
+                Add(card);
+
+                VisualElement header = new VisualElement();
+                header.style.height = 22f;
+                header.style.flexShrink = 0f;
+                header.style.flexDirection = FlexDirection.Row;
+                header.style.alignItems = Align.Center;
+                status = new Label { enableRichText = false };
+                status.style.flexGrow = 1f;
+                status.style.minWidth = 0f;
+                status.style.unityFontStyleAndWeight = FontStyle.Bold;
+                header.Add(status);
+                header.Add(CreateEntryButton("重跑", Rerun));
+                header.Add(CreateEntryButton("复制命令", CopyCommand));
+                header.Add(CreateEntryButton("复制输出", CopyOutput));
+                card.Add(header);
+
+                command = AddTextLabel(3f, CommandColor);
+                command.style.unityFontStyleAndWeight = FontStyle.Bold;
+                commandNotice = AddNoticeLabel();
+                output = AddTextLabel(5f, TerminalText);
+                outputNotice = AddNoticeLabel();
+            }
+
+            private Label AddTextLabel(float marginTop, Color color)
+            {
+                Label label = new Label { enableRichText = false };
+                label.style.marginTop = marginTop;
+                label.style.whiteSpace = WhiteSpace.Normal;
+                label.style.color = color;
+                card.Add(label);
+                return label;
+            }
+
+            private Label AddNoticeLabel()
+            {
+                Label label = AddTextLabel(3f, new Color(0.95f, 0.70f, 0.30f));
+                label.style.display = DisplayStyle.None;
+                return label;
+            }
+
+            public void Bind(XCommandRecord value)
+            {
+                record = value;
+                Color statusColor = record.State == XCommandRecordState.Running ? CommandColor : GetStatusColor(record.Status);
+                string duration = record.State == XCommandRecordState.Running ? "执行中" : $"{record.DurationMilliseconds:F2} ms";
+                card.style.borderLeftColor = statusColor;
+                status.text = $"[{record.ExecutedAtUtc.ToLocalTime():HH:mm:ss}]  {FormatSource(record.Source)}  ·  {FormatRecordStatus(record)}  ·  {duration}";
+                status.style.color = statusColor;
+                BindPreview(command, commandNotice, record.CommandLine, string.Empty, string.Empty, "> ", "复制命令");
+                GetConsoleOutputParts(record, out string first, out string separator, out string last);
+                BindPreview(output, outputNotice, first, separator, last, string.Empty, "复制输出");
+                output.style.color = record.State == XCommandRecordState.Running || record.Succeeded ? TerminalText : statusColor;
+            }
+
+            private static void BindPreview(Label label, Label notice, string first, string separator, string last, string prefix, string copyAction)
+            {
+                string preview = BuildConsolePreview(first, separator, last, out long originalLength);
+                label.text = prefix + preview;
+                bool truncated = preview.Length < originalLength;
+                notice.text = truncated ? $"… [已截断显示：原文 {originalLength} 个 UTF-16 单元；“{copyAction}”可获取完整内容]" : string.Empty;
+                notice.style.display = truncated ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+
+            public void Unbind()
+            {
+                record = null;
+                status.text = string.Empty;
+                command.text = string.Empty;
+                commandNotice.text = string.Empty;
+                output.text = string.Empty;
+                outputNotice.text = string.Empty;
+                commandNotice.style.display = DisplayStyle.None;
+                outputNotice.style.display = DisplayStyle.None;
+            }
+
+            private bool HasBoundRecord()
+            {
+                return owner != null && record != null && owner.loadedCommandRecordIds.Contains(record.Id);
+            }
+
+            private void Rerun()
+            {
+                if (HasBoundRecord())
+                {
+                    owner.ExecuteCommandLine(record.CommandLine);
+                }
+            }
+
+            private void CopyCommand()
+            {
+                if (HasBoundRecord())
+                {
+                    EditorGUIUtility.systemCopyBuffer = record.CommandLine;
+                }
+            }
+
+            private void CopyOutput()
+            {
+                if (HasBoundRecord())
+                {
+                    EditorGUIUtility.systemCopyBuffer = FormatCommandRecordOutput(record) ?? string.Empty;
+                }
+            }
         }
 
         [Serializable]
