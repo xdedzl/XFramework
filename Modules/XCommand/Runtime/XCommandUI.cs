@@ -44,18 +44,7 @@ namespace XFramework.Command
         public float timeoutSeconds = 10f;
     }
 
-    [Serializable]
-    public sealed class XCommandUIWaitRequest
-    {
-        public string state = "visible";
-        public bool interactable;
-        public XCommandUISelector selector = new XCommandUISelector();
-        public int sampleGrid = 5;
-        public int stableFrames = 2;
-        public float timeoutSeconds = 30f;
-    }
-
-    internal static class XCommandUI
+    public static class XCommandUI
     {
         [Serializable]
         private sealed class UIElementList
@@ -76,7 +65,7 @@ namespace XFramework.Command
         }
 
         [Serializable]
-        private sealed class UIElementInfo
+        public sealed class UIElementInfo
         {
             public int instanceId;
             public string name;
@@ -99,7 +88,7 @@ namespace XFramework.Command
         }
 
         [Serializable]
-        private sealed class FloatRect
+        public sealed class FloatRect
         {
             public float x;
             public float y;
@@ -108,14 +97,14 @@ namespace XFramework.Command
         }
 
         [Serializable]
-        private sealed class FloatPoint
+        public sealed class FloatPoint
         {
             public float x;
             public float y;
         }
 
         [Serializable]
-        private sealed class UIActionPoint
+        public sealed class UIActionPoint
         {
             public string[] actions;
             public FloatPoint screenPoint;
@@ -124,43 +113,12 @@ namespace XFramework.Command
         }
 
         [Serializable]
-        private sealed class ScrollInfo
+        public sealed class ScrollInfo
         {
             public bool horizontal;
             public bool vertical;
             public float horizontalNormalizedPosition;
             public float verticalNormalizedPosition;
-        }
-
-        [Serializable]
-        private sealed class UIActionReceipt
-        {
-            public bool success;
-            public string action;
-            public string error;
-            public long snapshotId;
-            public string contentHash;
-            public string path;
-            public string indexedPath;
-            public string raycastTargetPath;
-            public FloatPoint screenPoint;
-            public int stableFrames;
-            public int matchCount;
-        }
-
-        [Serializable]
-        private sealed class UIWaitReceipt
-        {
-            public bool success;
-            public string state;
-            public string error;
-            public bool interactable;
-            public float elapsedSeconds;
-            public int stableFrames;
-            public int matchCount;
-            public long snapshotId;
-            public string contentHash;
-            public string[] paths;
         }
 
         private sealed class UIElementCandidate
@@ -181,7 +139,7 @@ namespace XFramework.Command
             public RaycastResult Raycast;
         }
 
-        private sealed class UISnapshot
+        public sealed class UISnapshot
         {
             public long Id;
             public string ContentHash;
@@ -189,7 +147,7 @@ namespace XFramework.Command
             public Dictionary<string, string> Fingerprints;
         }
 
-        private sealed class RenderedUITarget
+        public sealed class RenderedUITarget
         {
             public string Path;
             public string IndexedPath;
@@ -232,7 +190,7 @@ namespace XFramework.Command
                 unchanged = baseSnapshot != null && baseSnapshot.ContentHash == snapshot.ContentHash,
                 screenWidth = Screen.width,
                 screenHeight = Screen.height,
-                eventSystemPath = XCommandUtility.GameObject.GetGameObjectPath(EventSystem.current?.gameObject),
+                eventSystemPath = XCommandUtility.GameObjects.GetGameObjectPath(EventSystem.current?.gameObject),
                 totalCount = snapshot.Elements.Count,
                 matchedCount = matchedCount,
                 count = matched.Count,
@@ -246,163 +204,7 @@ namespace XFramework.Command
             return JsonUtility.ToJson(result, !query.compact);
         }
 
-        internal static IEnumerator Act(XCommandUIActionRequest request, Func<bool> isCancellationRequested, Action<string> setOutput)
-        {
-            XCommandUISelector selector = request.selector ?? new XCommandUISelector();
-            if (string.IsNullOrEmpty(selector.name) && string.IsNullOrEmpty(selector.path) && string.IsNullOrEmpty(selector.indexedPath) && string.IsNullOrEmpty(selector.text))
-                throw new ArgumentException("ui-act 至少需要 name、path、indexed-path 或 text 选择器之一。");
-            string requiredAction = GetRequiredUIAction(request.pointerAction);
-            selector.action = requiredAction;
-            int stableFrames = Mathf.Max(1, request.stableFrames);
-            float startedAt = Time.realtimeSinceStartup;
-            float deadline = startedAt + Mathf.Max(0.1f, request.timeoutSeconds);
-            int observedStableFrames = 0;
-            string previousFingerprint = null;
-            int lastMatchCount = 0;
-            UISnapshot lastSnapshot = null;
-
-            while (Time.realtimeSinceStartup <= deadline)
-            {
-                if (isCancellationRequested())
-                    yield break;
-                lastSnapshot = CaptureSnapshot(request.sampleGrid);
-                List<UIElementInfo> matches = lastSnapshot.Elements.Where(element => MatchesSelector(element, selector)).ToList();
-                lastMatchCount = matches.Count;
-                if (matches.Count == 1)
-                {
-                    UIElementInfo target = matches[0];
-                    string fingerprint = lastSnapshot.Fingerprints[target.indexedPath];
-                    observedStableFrames = fingerprint == previousFingerprint ? observedStableFrames + 1 : 1;
-                    previousFingerprint = fingerprint;
-                    if (observedStableFrames >= stableFrames)
-                    {
-                        UIActionPoint actionPoint = target.actionPoints.First(point => point.actions.Contains(requiredAction));
-                        yield return XCommandUtility.Input.RunPointerAction(request.pointerAction, actionPoint.screenPoint.x, actionPoint.screenPoint.y, request.button, request.scrollX, request.scrollY);
-                        var receipt = new UIActionReceipt {
-                            success = true,
-                            action = request.pointerAction,
-                            snapshotId = lastSnapshot.Id,
-                            contentHash = lastSnapshot.ContentHash,
-                            path = target.path,
-                            indexedPath = target.indexedPath,
-                            raycastTargetPath = actionPoint.raycastTargetPath,
-                            screenPoint = actionPoint.screenPoint,
-                            stableFrames = observedStableFrames,
-                            matchCount = 1,
-                        };
-                        setOutput(JsonUtility.ToJson(receipt));
-                        yield break;
-                    }
-                }
-                else
-                {
-                    observedStableFrames = 0;
-                    previousFingerprint = null;
-                }
-                yield return null;
-            }
-
-            string error = lastMatchCount > 1 ? $"UI 选择器匹配到 {lastMatchCount} 个元素，请使用 path 或 indexed-path 消歧。" : "等待可操作 UI 元素超时。";
-            var failure = new UIActionReceipt {
-                success = false,
-                action = request.pointerAction,
-                error = error,
-                snapshotId = lastSnapshot?.Id ?? 0,
-                contentHash = lastSnapshot?.ContentHash ?? string.Empty,
-                stableFrames = observedStableFrames,
-                matchCount = lastMatchCount,
-            };
-            setOutput(JsonUtility.ToJson(failure));
-            throw new TimeoutException(error);
-        }
-
-        internal static IEnumerator Wait(XCommandUIWaitRequest request, Func<bool> isCancellationRequested, Action<string> setOutput)
-        {
-            string state = (request.state ?? string.Empty).ToLowerInvariant();
-            if (state != "visible" && state != "hidden" && state != "stable")
-                throw new ArgumentException($"未知 UI 等待状态：{request.state}");
-            XCommandUISelector selector = request.selector ?? new XCommandUISelector();
-            if (state != "stable" && string.IsNullOrEmpty(selector.name) && string.IsNullOrEmpty(selector.path) && string.IsNullOrEmpty(selector.indexedPath) && string.IsNullOrEmpty(selector.text))
-                throw new ArgumentException("等待 UI 出现或消失时至少需要 name、path、indexed-path 或 text 之一。");
-
-            int stableFrames = Mathf.Max(1, request.stableFrames);
-            float startedAt = Time.realtimeSinceStartup;
-            float deadline = startedAt + Mathf.Max(0.1f, request.timeoutSeconds);
-            int observedStableFrames = 0;
-            string previousHash = null;
-            int matchCount = 0;
-            long snapshotId = 0;
-            string contentHash = string.Empty;
-            string[] matchedPaths = Array.Empty<string>();
-
-            while (Time.realtimeSinceStartup <= deadline)
-            {
-                if (isCancellationRequested())
-                    yield break;
-                if (request.interactable || state == "stable")
-                {
-                    UISnapshot snapshot = CaptureSnapshot(request.sampleGrid);
-                    snapshotId = snapshot.Id;
-                    List<UIElementInfo> matches = snapshot.Elements.Where(element => MatchesSelector(element, selector)).ToList();
-                    matchCount = matches.Count;
-                    matchedPaths = matches.Select(element => element.path).Take(16).ToArray();
-                    contentHash = ComputeHash(matches.Select(element => snapshot.Fingerprints[element.indexedPath]));
-                }
-                else
-                {
-                    List<RenderedUITarget> matches = FindRenderedUITargets(selector);
-                    matchCount = matches.Count;
-                    matchedPaths = matches.Select(target => target.Path).Take(16).ToArray();
-                    contentHash = ComputeHash(matches.Select(target => target.IndexedPath));
-                }
-
-                bool conditionMet;
-                if (state == "stable")
-                {
-                    conditionMet = previousHash != null && previousHash == contentHash;
-                    previousHash = contentHash;
-                }
-                else
-                {
-                    conditionMet = state == "visible" ? matchCount > 0 : matchCount == 0;
-                }
-                observedStableFrames = conditionMet ? observedStableFrames + 1 : 0;
-                if (observedStableFrames >= stableFrames)
-                {
-                    var receipt = new UIWaitReceipt {
-                        success = true,
-                        state = state,
-                        interactable = request.interactable || state == "stable",
-                        elapsedSeconds = Time.realtimeSinceStartup - startedAt,
-                        stableFrames = observedStableFrames,
-                        matchCount = matchCount,
-                        snapshotId = snapshotId,
-                        contentHash = contentHash,
-                        paths = matchedPaths,
-                    };
-                    setOutput(JsonUtility.ToJson(receipt));
-                    yield break;
-                }
-                yield return null;
-            }
-
-            var failure = new UIWaitReceipt {
-                success = false,
-                state = state,
-                error = "等待 UI 状态超时。",
-                interactable = request.interactable || state == "stable",
-                elapsedSeconds = Time.realtimeSinceStartup - startedAt,
-                stableFrames = observedStableFrames,
-                matchCount = matchCount,
-                snapshotId = snapshotId,
-                contentHash = contentHash,
-                paths = matchedPaths,
-            };
-            setOutput(JsonUtility.ToJson(failure));
-            throw new TimeoutException(failure.error);
-        }
-
-        private static UISnapshot CaptureSnapshot(int sampleGrid)
+        public static UISnapshot CaptureSnapshot(int sampleGrid)
         {
             UIElementList captured = CaptureInteractableUI(sampleGrid);
             var fingerprints = captured.elements.ToDictionary(element => element.indexedPath, CreateElementFingerprint, StringComparer.Ordinal);
@@ -429,7 +231,7 @@ namespace XFramework.Command
             var result = new UIElementList {
                 screenWidth = Screen.width,
                 screenHeight = Screen.height,
-                eventSystemPath = XCommandUtility.GameObject.GetGameObjectPath(eventSystem.gameObject),
+                eventSystemPath = XCommandUtility.GameObjects.GetGameObjectPath(eventSystem.gameObject),
             };
             var raycastResults = new List<RaycastResult>();
             foreach (UIElementCandidate candidate in FindCandidates())
@@ -571,8 +373,8 @@ namespace XFramework.Command
             return new UIElementInfo {
                 instanceId = gameObject.GetInstanceID(),
                 name = gameObject.name,
-                path = XCommandUtility.GameObject.GetGameObjectPath(gameObject),
-                indexedPath = XCommandUtility.GameObject.GetIndexedGameObjectPath(gameObject),
+                path = XCommandUtility.GameObjects.GetGameObjectPath(gameObject),
+                indexedPath = XCommandUtility.GameObjects.GetIndexedGameObjectPath(gameObject),
                 scene = gameObject.scene.path,
                 text = text,
                 textLength = text.Length,
@@ -581,7 +383,7 @@ namespace XFramework.Command
                 handlerTypes = candidate.HandlerTypes.OrderBy(type => type, StringComparer.Ordinal).ToArray(),
                 screenRect = ToFloatRect(screenRect),
                 visibleRect = ToFloatRect(visibleRect),
-                canvasPath = canvas != null ? XCommandUtility.GameObject.GetGameObjectPath(canvas.gameObject) : string.Empty,
+                canvasPath = canvas != null ? XCommandUtility.GameObjects.GetGameObjectPath(canvas.gameObject) : string.Empty,
                 renderMode = canvas != null ? canvas.rootCanvas.renderMode.ToString() : string.Empty,
                 sortingOrder = canvas != null ? canvas.rootCanvas.sortingOrder : 0,
                 selected = eventSystem.currentSelectedGameObject == gameObject,
@@ -605,7 +407,7 @@ namespace XFramework.Command
                     points.Add(new UIActionPoint {
                         actions = new[] { pair.Key },
                         screenPoint = new FloatPoint { x = pair.Value.Point.x, y = pair.Value.Point.y },
-                        raycastTargetPath = XCommandUtility.GameObject.GetGameObjectPath(pair.Value.Raycast.gameObject),
+                        raycastTargetPath = XCommandUtility.GameObjects.GetGameObjectPath(pair.Value.Raycast.gameObject),
                         raycastTargetType = pair.Value.Raycast.gameObject.GetComponent<Graphic>()?.GetType().FullName ?? string.Empty,
                     });
                 }
@@ -644,7 +446,7 @@ namespace XFramework.Command
             return NormalizeText(string.Join(" | ", legacyTexts.Concat(tmpTexts).Distinct()));
         }
 
-        private static List<RenderedUITarget> FindRenderedUITargets(XCommandUISelector selector)
+        public static List<RenderedUITarget> FindRenderedUITargets(XCommandUISelector selector)
         {
             var results = new List<RenderedUITarget>();
             foreach (RectTransform rectTransform in UnityEngine.Object.FindObjectsOfType<RectTransform>())
@@ -652,10 +454,10 @@ namespace XFramework.Command
                 GameObject gameObject = rectTransform.gameObject;
                 if (!gameObject.activeInHierarchy || !string.IsNullOrEmpty(selector.name) && !string.Equals(gameObject.name, selector.name, StringComparison.Ordinal))
                     continue;
-                string path = XCommandUtility.GameObject.GetGameObjectPath(gameObject);
+                string path = XCommandUtility.GameObjects.GetGameObjectPath(gameObject);
                 if (!string.IsNullOrEmpty(selector.path) && !string.Equals(path, selector.path, StringComparison.Ordinal))
                     continue;
-                string indexedPath = XCommandUtility.GameObject.GetIndexedGameObjectPath(gameObject);
+                string indexedPath = XCommandUtility.GameObjects.GetIndexedGameObjectPath(gameObject);
                 if (!string.IsNullOrEmpty(selector.indexedPath) && !string.Equals(indexedPath, selector.indexedPath, StringComparison.Ordinal))
                     continue;
                 if (!string.IsNullOrEmpty(selector.text) && !XCommandUtility.Text.ContainsIgnoreCase(GetElementText(rectTransform), selector.text))
@@ -687,7 +489,7 @@ namespace XFramework.Command
             return false;
         }
 
-        private static bool MatchesSelector(UIElementInfo element, XCommandUISelector selector)
+        public static bool MatchesSelector(UIElementInfo element, XCommandUISelector selector)
         {
             return (string.IsNullOrEmpty(selector.name) || string.Equals(element.name, selector.name, StringComparison.Ordinal)) &&
                    (string.IsNullOrEmpty(selector.path) || string.Equals(element.path, selector.path, StringComparison.Ordinal)) &&
@@ -722,7 +524,7 @@ namespace XFramework.Command
             });
         }
 
-        private static string ComputeHash(IEnumerable<string> values)
+        public static string ComputeHash(IEnumerable<string> values)
         {
             const ulong offset = 14695981039346656037UL;
             const ulong prime = 1099511628211UL;
@@ -801,18 +603,6 @@ namespace XFramework.Command
                     return results[i];
             }
             return new RaycastResult();
-        }
-
-        private static string GetRequiredUIAction(string pointerAction)
-        {
-            switch ((pointerAction ?? string.Empty).ToLowerInvariant())
-            {
-                case "click": return "pointerClick";
-                case "down": return "pointerDown";
-                case "up": return "pointerUp";
-                case "scroll": return "scroll";
-                default: throw new ArgumentException($"ui-act 不支持操作：{pointerAction}");
-            }
         }
 
         private static string NormalizeText(string value)

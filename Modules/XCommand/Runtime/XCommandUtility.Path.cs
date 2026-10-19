@@ -5,9 +5,9 @@ namespace XFramework.Command
 {
     public static partial class XCommandUtility
     {
-        internal static class Path
+        public static class Path
         {
-            internal static string ResolvePath(string path)
+            public static string ResolvePath(string path)
             {
                 if (string.IsNullOrWhiteSpace(path))
                     throw new ArgumentException("输出路径不能为空。", nameof(path));

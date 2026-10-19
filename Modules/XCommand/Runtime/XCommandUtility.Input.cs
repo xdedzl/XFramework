@@ -190,25 +190,6 @@ namespace XFramework.Command
                 }
             }
     
-            internal static IEnumerator RunPointerAction(string action, float x, float y, string button, float scrollX, float scrollY)
-            {
-                var sequence = new XCommandInputSequence {
-                    steps = new List<XCommandInputStep> {
-                        new XCommandInputStep {
-                            type = "mouse",
-                            action = action,
-                            button = button,
-                            x = x,
-                            y = y,
-                            scrollX = scrollX,
-                            scrollY = scrollY,
-                            frames = 2,
-                        },
-                    },
-                };
-                return Run(sequence, () => false, _ => { });
-            }
-    
             private static IEnumerator ExecuteStep(XCommandInputStep step)
             {
                 if (step == null || string.IsNullOrWhiteSpace(step.type))

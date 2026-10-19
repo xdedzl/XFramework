@@ -179,7 +179,7 @@ namespace XFramework.Command
         {
             XCommandArguments args = XCommandArguments.Parse(argument, new[] { "name", "path", "component", "tag", "layer", "active", "max-results" }, new[] { "compact" });
             args.RequireValueCount(0, "go-list 不接受位置参数。");
-            return XCommandPipeline.ListGameObjects(new XCommandGameObjectListQuery {
+            return XCommandUtility.GameObjects.List(new XCommandGameObjectListQuery {
                 name = args.GetString("name"),
                 path = args.GetString("path"),
                 component = args.GetString("component"),
@@ -196,7 +196,7 @@ namespace XFramework.Command
         {
             XCommandArguments args = XCommandArguments.Parse(argument, new[] { "instance-id", "name", "path", "indexed-path", "component", "max-results" }, new[] { "include-inactive", "all", "brief", "compact" });
             args.RequireValueCount(0, "go-state 不接受位置参数。");
-            return XCommandPipeline.GetGameObjectState(new XCommandGameObjectQuery {
+            return XCommandUtility.GameObjects.GetState(new XCommandGameObjectQuery {
                 instanceId = args.GetInt("instance-id", 0),
                 name = args.GetString("name"),
                 path = args.GetString("path"),
@@ -227,7 +227,7 @@ namespace XFramework.Command
                 changedSince = args.GetLong("changed-since", 0),
                 compact = args.HasFlag("compact"),
             };
-            return XCommandPipeline.ListUI(query);
+            return XCommandUI.List(query);
         }
 
         [XCommandEntry("ui-act", name = "操作 UGUI", order = 30, mode = XCommandMode.Runtime, category = Category, description = "重新定位唯一且稳定的 UGUI 元素，通过 Input System 注入 click、down、up 或 scroll。返回 operation ID。", usage = "ui-act [--name NAME|--path PATH|--indexed-path PATH|--text TEXT] [--button BUTTON] [--scroll-x X] [--scroll-y Y] [--sample-grid N] [--stable-frames N] [--timeout S] click|down|up|scroll", displayType = XCommandDisplayType.Hidden)]
@@ -245,70 +245,71 @@ namespace XFramework.Command
                 stableFrames = args.GetInt("stable-frames", 2),
                 timeoutSeconds = args.GetFloat("timeout", 10f),
             };
-            long operationId = XCommandPipeline.ActOnUI(request);
-            XCommandPipeline.TryGetOperation(operationId, out XCommandOperationInfo operation);
-            return XCommandPipeline.SerializeOperation(operation);
+            return XCommandPipeline.RunOperation(new UIActOperation(request));
         }
 
         #endregion
 
         #region 等待
 
-        [XCommandEntry("wait-for", name = "等待状态", order = 40, mode = XCommandMode.Runtime, category = Category, description = "等待 UGUI、GameObject 或日志条件满足。默认只等待命令开始后产生的新日志；所有等待均返回 operation ID。", usage = "wait-for [UI_OPTIONS] ui | wait-for [--state exists|missing|active|inactive|stable] [--instance-id ID|--name NAME|--path PATH|--indexed-path PATH|--component TYPE] [--stable-frames N] [--position-epsilon N] [--rotation-epsilon N] [--timeout S] [--compact] go | wait-for [--since CURSOR] [--level all|log|warning|error] [--contains TEXT] [--count N] [--stack] [--timeout S] [--compact] log", displayType = XCommandDisplayType.Hidden)]
-        private static object WaitFor(string argument)
+        [XCommandEntry("wait-for-ui", name = "等待 UGUI", order = 40, mode = XCommandMode.Runtime, category = Category, description = "等待 UGUI 元素出现、消失或内容稳定；返回 operation ID。", usage = "wait-for-ui [--state visible|hidden|stable] [--interactable] [--name NAME|--path PATH|--indexed-path PATH|--text TEXT|--action ACTION] [--sample-grid N] [--stable-frames N] [--timeout S] [--compact]", displayType = XCommandDisplayType.Hidden)]
+        private static object WaitForUI(string argument)
         {
-            XCommandArguments args = XCommandArguments.Parse(argument, new[] { "state", "name", "path", "indexed-path", "text", "action", "sample-grid", "stable-frames", "timeout", "instance-id", "component", "position-epsilon", "rotation-epsilon", "since", "level", "contains", "count", "message-limit", "stack-limit" }, new[] { "interactable", "stack", "compact" });
-            args.RequireValueCount(1, "usage: wait-for [OPTIONS] ui|go|log");
-            string target = args.Values[0].ToLowerInvariant();
-            long operationId;
-            if (target == "ui")
-            {
-                operationId = XCommandPipeline.WaitForUI(new XCommandUIWaitRequest {
-                    state = args.GetString("state", "visible"),
-                    interactable = args.HasFlag("interactable"),
-                    selector = CreateSelector(args),
-                    sampleGrid = args.GetInt("sample-grid", 5),
-                    stableFrames = args.GetInt("stable-frames", 2),
-                    timeoutSeconds = args.GetFloat("timeout", 30f),
-                });
-            }
-            else if (target == "go")
-            {
-                operationId = XCommandPipeline.WaitForGameObject(new XCommandGameObjectWaitRequest {
-                    state = args.GetString("state", "exists"),
-                    query = new XCommandGameObjectQuery {
-                        instanceId = args.GetInt("instance-id", 0),
-                        name = args.GetString("name"),
-                        path = args.GetString("path"),
-                        indexedPath = args.GetString("indexed-path"),
-                        component = args.GetString("component"),
-                        includeInactive = true,
-                    },
-                    stableFrames = args.GetInt("stable-frames", 2),
-                    positionEpsilon = args.GetFloat("position-epsilon", 0.001f),
-                    rotationEpsilon = args.GetFloat("rotation-epsilon", 0.1f),
-                    timeoutSeconds = args.GetFloat("timeout", 30f),
-                    compact = args.HasFlag("compact"),
-                });
-            }
-            else if (target == "log")
-            {
-                operationId = XCommandPipeline.WaitForLog(new XCommandLogWaitRequest {
-                    since = args.GetLong("since", -1),
-                    level = args.GetString("level", "all"),
-                    contains = args.GetString("contains"),
-                    count = args.GetInt("count", 1),
-                    messageLimit = args.GetInt("message-limit", 2048),
-                    stackLimit = args.GetInt("stack-limit", 4096),
-                    includeStack = args.HasFlag("stack"),
-                    timeoutSeconds = args.GetFloat("timeout", 30f),
-                    compact = args.HasFlag("compact"),
-                });
-            }
-            else
-                throw new ArgumentException($"wait-for 不支持目标：{args.Values[0]}");
-            XCommandPipeline.TryGetOperation(operationId, out XCommandOperationInfo operation);
-            return XCommandPipeline.SerializeOperation(operation);
+            const string usage = "usage: wait-for-ui [--state visible|hidden|stable] [--interactable] [--name NAME|--path PATH|--indexed-path PATH|--text TEXT|--action ACTION] [--sample-grid N] [--stable-frames N] [--timeout S] [--compact]";
+            XCommandArguments args = XCommandArguments.Parse(argument, new[] { "state", "name", "path", "indexed-path", "text", "action", "sample-grid", "stable-frames", "timeout" }, new[] { "interactable", "compact" });
+            args.RequireValueCount(0, usage);
+            return XCommandPipeline.RunOperation(new WaitOperation("wait-for-ui", new XCommandUIWaitRequest {
+                state = args.GetString("state", "visible"),
+                interactable = args.HasFlag("interactable"),
+                selector = CreateSelector(args),
+                sampleGrid = args.GetInt("sample-grid", 5),
+                stableFrames = args.GetInt("stable-frames", 2),
+                timeoutSeconds = args.GetFloat("timeout", 30f),
+                compact = args.HasFlag("compact"),
+            }));
+        }
+
+        [XCommandEntry("wait-for-go", name = "等待 GameObject", order = 41, mode = XCommandMode.Runtime, category = Category, description = "等待 GameObject 出现、消失、激活、失活或变换稳定；返回 operation ID。", usage = "wait-for-go [--state exists|missing|active|inactive|stable] [--instance-id ID|--name NAME|--path PATH|--indexed-path PATH|--component TYPE] [--stable-frames N] [--position-epsilon N] [--rotation-epsilon N] [--timeout S] [--compact]", displayType = XCommandDisplayType.Hidden)]
+        private static object WaitForGameObject(string argument)
+        {
+            const string usage = "usage: wait-for-go [--state exists|missing|active|inactive|stable] [--instance-id ID|--name NAME|--path PATH|--indexed-path PATH|--component TYPE] [--stable-frames N] [--position-epsilon N] [--rotation-epsilon N] [--timeout S] [--compact]";
+            XCommandArguments args = XCommandArguments.Parse(argument, new[] { "state", "instance-id", "name", "path", "indexed-path", "component", "stable-frames", "position-epsilon", "rotation-epsilon", "timeout" }, new[] { "compact" });
+            args.RequireValueCount(0, usage);
+            return XCommandPipeline.RunOperation(new WaitOperation("wait-for-go", new XCommandGameObjectWaitRequest {
+                state = args.GetString("state", "exists"),
+                query = new XCommandGameObjectQuery {
+                    instanceId = args.GetInt("instance-id", 0),
+                    name = args.GetString("name"),
+                    path = args.GetString("path"),
+                    indexedPath = args.GetString("indexed-path"),
+                    component = args.GetString("component"),
+                    includeInactive = true,
+                },
+                stableFrames = args.GetInt("stable-frames", 2),
+                positionEpsilon = args.GetFloat("position-epsilon", 0.001f),
+                rotationEpsilon = args.GetFloat("rotation-epsilon", 0.1f),
+                timeoutSeconds = args.GetFloat("timeout", 30f),
+                compact = args.HasFlag("compact"),
+            }));
+        }
+
+        [XCommandEntry("wait-for-log", name = "等待日志", order = 42, mode = XCommandMode.Runtime, category = Category, description = "等待指定级别与正文的日志达到条数，默认只等待命令开始后产生的新日志；返回 operation ID。", usage = "wait-for-log [--since CURSOR] [--level all|log|warning|error] [--contains TEXT] [--count N] [--message-limit N] [--stack-limit N] [--stack] [--timeout S] [--compact]", displayType = XCommandDisplayType.Hidden)]
+        private static object WaitForLog(string argument)
+        {
+            const string usage = "usage: wait-for-log [--since CURSOR] [--level all|log|warning|error] [--contains TEXT] [--count N] [--message-limit N] [--stack-limit N] [--stack] [--timeout S] [--compact]";
+            XCommandArguments args = XCommandArguments.Parse(argument, new[] { "since", "level", "contains", "count", "message-limit", "stack-limit", "timeout" }, new[] { "stack", "compact" });
+            args.RequireValueCount(0, usage);
+            return XCommandPipeline.RunOperation(new WaitOperation("wait-for-log", new XCommandLogWaitRequest {
+                since = args.GetLong("since", -1),
+                level = args.GetString("level", "all"),
+                contains = args.GetString("contains"),
+                count = args.GetInt("count", 1),
+                messageLimit = args.GetInt("message-limit", 2048),
+                stackLimit = args.GetInt("stack-limit", 4096),
+                includeStack = args.HasFlag("stack"),
+                timeoutSeconds = args.GetFloat("timeout", 30f),
+                compact = args.HasFlag("compact"),
+            }));
         }
 
         [XCommandEntry("wait", name = "独立等待", order = 45, mode = XCommandMode.Runtime, category = Category, description = "按真实时间、受 timeScale 影响的游戏时间或帧数等待，不依赖 ui-input。返回 operation ID。", usage = "wait (--real-seconds S|--game-seconds S|--frames N) [--compact]", displayType = XCommandDisplayType.Hidden)]
@@ -316,14 +317,12 @@ namespace XFramework.Command
         {
             XCommandArguments args = XCommandArguments.Parse(argument, new[] { "real-seconds", "game-seconds", "frames" }, new[] { "compact" });
             args.RequireValueCount(0, "wait 不接受位置参数。");
-            long operationId = XCommandPipeline.Wait(new XCommandWaitRequest {
+            return XCommandPipeline.RunOperation(new WaitOperation("wait", new XCommandWaitRequest {
                 realSeconds = args.GetFloat("real-seconds", 0f),
                 gameSeconds = args.GetFloat("game-seconds", 0f),
                 frames = args.GetInt("frames", 0),
                 compact = args.HasFlag("compact"),
-            });
-            XCommandPipeline.TryGetOperation(operationId, out XCommandOperationInfo operation);
-            return XCommandPipeline.SerializeOperation(operation);
+            }));
         }
 
         #endregion
@@ -335,7 +334,7 @@ namespace XFramework.Command
         {
             XCommandArguments args = XCommandArguments.Parse(argument, new[] { "since", "level", "contains", "limit", "message-limit", "stack-limit" }, new[] { "stack", "compact" });
             args.RequireValueCount(0, "logs 不接受位置参数。");
-            return XCommandPipeline.GetLogs(new XCommandLogQuery {
+            return XCommandUtility.Logs.Query(new XCommandLogQuery {
                 since = args.GetLong("since", 0),
                 level = args.GetString("level", "all"),
                 contains = args.GetString("contains"),
@@ -356,13 +355,14 @@ namespace XFramework.Command
         {
             XCommandArguments args = XCommandArguments.Parse(argument, Array.Empty<string>(), new[] { "compact" });
             args.RequireValueCount(0, "input-state 不接受位置参数。");
-            return XCommandPipeline.GetInputState(args.HasFlag("compact"));
+            return XCommandUtility.Input.GetState(args.HasFlag("compact"));
         }
 
         [XCommandEntry("input-reset", name = "重置自动化输入", order = 56, mode = XCommandMode.Runtime, category = Category, description = "立即释放自动化键盘、鼠标和触摸的所有保持状态，并返回重置后的输入状态。", usage = "input-reset", displayType = XCommandDisplayType.Hidden)]
         private static object ResetInput()
         {
-            return XCommandPipeline.ResetInput(true);
+            XCommandUtility.Input.ResetInterruptedInput();
+            return XCommandUtility.Input.GetState(true);
         }
 
         [XCommandEntry("ui-input", name = "注入输入序列", order = 60, mode = XCommandMode.Runtime, category = Category, description = "通过 Unity Input System 注入键盘、鼠标和多点触控 JSON 序列。返回 operation ID。", usage = "ui-input {\"steps\":[{\"type\":\"mouse|key|touch|wait|reset\",...}],\"resetAfter\":false}", displayType = XCommandDisplayType.Hidden)]
@@ -371,9 +371,7 @@ namespace XFramework.Command
             if (string.IsNullOrWhiteSpace(argument))
                 throw new ArgumentException("输入序列 JSON 不能为空。", nameof(argument));
             XCommandInputSequence sequence = JsonUtility.FromJson<XCommandInputSequence>(argument);
-            long operationId = XCommandPipeline.RunInput(sequence);
-            XCommandPipeline.TryGetOperation(operationId, out XCommandOperationInfo operation);
-            return XCommandPipeline.SerializeOperation(operation);
+            return XCommandPipeline.RunOperation(new UIInputOperation(sequence));
         }
 
         #endregion
@@ -393,9 +391,7 @@ namespace XFramework.Command
                 uiOnly = args.HasFlag("ui-only"),
                 timeoutSeconds = args.GetFloat("timeout", 10f),
             };
-            long operationId = XCommandPipeline.CaptureScreenshot(request);
-            XCommandPipeline.TryGetOperation(operationId, out XCommandOperationInfo operation);
-            return XCommandPipeline.SerializeOperation(operation);
+            return XCommandPipeline.RunOperation(new ScreenshotOperation(request));
         }
 
         #endregion

@@ -40,7 +40,7 @@ namespace XFramework.Command
         internal bool CancellationRequested { get; set; }
     }
 
-    internal sealed class XCommandOperationContext
+    public sealed class XCommandOperationContext
     {
         private readonly XCommandOperationInfo m_Operation;
 
@@ -55,6 +55,16 @@ namespace XFramework.Command
         {
             m_Operation.Output = output ?? string.Empty;
         }
+    }
+
+    /// <summary>可被 XCommandPipeline 调度执行的跨帧异步操作：提交后立即返回 operation id，结果由调度器逐帧推进。</summary>
+    public interface IXCommandAsyncOperation
+    {
+        /// <summary>操作名称，写入 operation 记录与日志。</summary>
+        string Name { get; }
+
+        /// <summary>在主线程执行的协程体；由调度器逐帧驱动，支持嵌套 IEnumerator。</summary>
+        IEnumerator Run(XCommandOperationContext context);
     }
 
     public static class XCommandPipeline
@@ -106,84 +116,12 @@ namespace XFramework.Command
             XCommandUI.ResetSnapshots();
         }
 
-        public static string ListUI(XCommandUIQuery query)
+        /// <summary>提交一个跨帧操作，返回包含 operation id 与初始状态的 JSON。</summary>
+        public static string RunOperation(IXCommandAsyncOperation operation)
         {
-            return XCommandUI.List(query ?? new XCommandUIQuery());
-        }
-
-        public static string GetGameObjectState(XCommandGameObjectQuery query)
-        {
-            return XCommandGameObjects.GetState(query);
-        }
-
-        public static string ListGameObjects(XCommandGameObjectListQuery query)
-        {
-            return XCommandGameObjects.List(query ?? new XCommandGameObjectListQuery());
-        }
-
-        public static long ActOnUI(XCommandUIActionRequest request)
-        {
-            if (request == null)
-                throw new ArgumentNullException(nameof(request));
-            return EnqueueOperation("ui-act", context => XCommandUI.Act(request, () => context.IsCancellationRequested, context.SetOutput));
-        }
-
-        public static long WaitForUI(XCommandUIWaitRequest request)
-        {
-            if (request == null)
-                throw new ArgumentNullException(nameof(request));
-            return EnqueueOperation("wait-for", context => XCommandUI.Wait(request, () => context.IsCancellationRequested, context.SetOutput));
-        }
-
-        public static long WaitForGameObject(XCommandGameObjectWaitRequest request)
-        {
-            if (request == null)
-                throw new ArgumentNullException(nameof(request));
-            return EnqueueOperation("wait-for", context => XCommandGameObjects.Wait(request, context.SetOutput));
-        }
-
-        public static long WaitForLog(XCommandLogWaitRequest request)
-        {
-            if (request == null)
-                throw new ArgumentNullException(nameof(request));
-            return EnqueueOperation("wait-for", context => XCommandUtility.Logs.Wait(request, context.SetOutput));
-        }
-
-        public static long Wait(XCommandWaitRequest request)
-        {
-            if (request == null)
-                throw new ArgumentNullException(nameof(request));
-            return EnqueueOperation("wait", context => XCommandUtility.Wait.Run(request, context.SetOutput));
-        }
-
-        public static long RunInput(XCommandInputSequence sequence)
-        {
-            if (sequence == null || sequence.steps == null || sequence.steps.Count == 0)
-                throw new ArgumentException("输入序列必须包含非空 steps 数组。", nameof(sequence));
-            return EnqueueOperation("ui-input", context => XCommandUtility.Input.Run(sequence, () => context.IsCancellationRequested, context.SetOutput));
-        }
-
-        public static string GetInputState(bool compact = false)
-        {
-            return XCommandUtility.Input.GetState(compact);
-        }
-
-        public static string ResetInput(bool compact = false)
-        {
-            XCommandUtility.Input.ResetInterruptedInput();
-            return XCommandUtility.Input.GetState(compact);
-        }
-
-        public static string GetLogs(XCommandLogQuery query)
-        {
-            return XCommandUtility.Logs.Query(query ?? new XCommandLogQuery());
-        }
-
-        public static long CaptureScreenshot(XCommandScreenshotRequest request)
-        {
-            if (request == null)
-                throw new ArgumentNullException(nameof(request));
-            return EnqueueOperation("screenshot", context => XCommandUtility.Capture.Run(request, context.SetOutput));
+            long operationId = EnqueueOperation(operation);
+            TryGetOperation(operationId, out XCommandOperationInfo info);
+            return SerializeOperation(info);
         }
 
         public static bool TryGetOperation(long operationId, out XCommandOperationInfo operation)
@@ -228,11 +166,15 @@ namespace XFramework.Command
             return JsonUtility.ToJson(output, prettyPrint);
         }
 
-        private static long EnqueueOperation(string name, Func<XCommandOperationContext, IEnumerator> routineFactory)
+        internal static long EnqueueOperation(IXCommandAsyncOperation operation)
         {
-            var operation = new XCommandOperationInfo(s_NextOperationId++, name, routineFactory);
-            s_Operations.Add(operation);
-            s_PendingOperations.Enqueue(operation);
+            if (operation == null)
+                throw new ArgumentNullException(nameof(operation));
+            if (string.IsNullOrWhiteSpace(operation.Name))
+                throw new ArgumentException("操作名称不能为空。", nameof(operation));
+            var info = new XCommandOperationInfo(s_NextOperationId++, operation.Name, context => operation.Run(context));
+            s_Operations.Add(info);
+            s_PendingOperations.Enqueue(info);
             if (!s_IsRunnerActive)
             {
                 EnsureRunner();
@@ -241,7 +183,28 @@ namespace XFramework.Command
                 if (s_IsRunnerActive)
                     s_OperationCoroutine = runner;
             }
-            return operation.Id;
+            return info.Id;
+        }
+
+        /// <summary>用委托实现 IXCommandAsyncOperation，便于业务程序集快速接入。</summary>
+        public sealed class DelegateOperation : IXCommandAsyncOperation
+        {
+            private readonly Func<XCommandOperationContext, IEnumerator> routineFactory;
+
+            public DelegateOperation(string name, Func<XCommandOperationContext, IEnumerator> routineFactory)
+            {
+                if (string.IsNullOrWhiteSpace(name))
+                    throw new ArgumentException("操作名称不能为空。", nameof(name));
+                Name = name;
+                this.routineFactory = routineFactory ?? throw new ArgumentNullException(nameof(routineFactory));
+            }
+
+            public string Name { get; }
+
+            public IEnumerator Run(XCommandOperationContext context)
+            {
+                return routineFactory(context);
+            }
         }
 
         private static void EnsureRunner()

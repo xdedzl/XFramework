@@ -13,10 +13,22 @@ namespace XFramework.Save
     /// 通过 SaveManager.Instance 访问。
     /// </summary>
     [ModuleLifecycle(ModuleLifecycle.RuntimePersistent)]
-    public partial class SaveManager : GameModuleBase<SaveManager>
+    public partial class SaveManager : MonoGameModuleBase<SaveManager>
     {
         private const string SaveRootFolderName = "Saves";
         private const string MetaFileName = "meta.json";
+
+        /// <summary>
+        /// 合并写盘的最短间隔（秒）。RequestSave() 请求的写盘会合并到该间隔内统一落盘，
+        /// 避免高频事件（如酒馆客人点单、拾取物品）每次都触发全量重写所有数据库文件。
+        /// </summary>
+        public const float AutoSaveFlushIntervalSeconds = 30f;
+
+        // 是否存在等待落盘的写盘请求
+        private bool savePending;
+
+        // 上次实际写盘时的 realtimeSinceStartup
+        private float lastSaveRealtime = float.NegativeInfinity;
 
         /// <summary>
         /// 存档根目录
@@ -61,9 +73,39 @@ namespace XFramework.Save
             }
         }
 
+        public override void Update()
+        {
+            base.Update();
+            if (savePending && Time.realtimeSinceStartup - lastSaveRealtime >= AutoSaveFlushIntervalSeconds)
+            {
+                Save();
+            }
+        }
+
         public override int Priority => (int)GameModulePriority.Save;
 
         #region Public API
+
+        /// <summary>
+        /// 请求写盘。业务数据已经写入内存数据库，这里只负责落盘时机的合并：
+        /// 距上次写盘不足 <see cref="AutoSaveFlushIntervalSeconds"/> 时仅标记待写盘，由 Update() 或后续关键存档点统一落盘；
+        /// 间隔已到时立即写盘。需要立刻落盘的关键节点（例如模块卸载、切换存档）请直接调用 Save()。
+        /// </summary>
+        public void RequestSave()
+        {
+            if (!HasActiveProfile)
+            {
+                return;
+            }
+
+            if (Time.realtimeSinceStartup - lastSaveRealtime >= AutoSaveFlushIntervalSeconds)
+            {
+                Save();
+                return;
+            }
+
+            savePending = true;
+        }
 
         /// <summary>
         /// 创建一个新存档并将其设为活跃存档
@@ -113,6 +155,8 @@ namespace XFramework.Save
             WriteJson(Path.Combine(savePath, MetaFileName), meta);
 
             ActiveProfile = profile;
+            lastSaveRealtime = Time.realtimeSinceStartup;
+            savePending = false;
             Debug.Log($"[SaveManager] Created save '{saveName}'.");
             return profile;
         }
@@ -181,6 +225,8 @@ namespace XFramework.Save
             }
 
             ActiveProfile = profile;
+            lastSaveRealtime = Time.realtimeSinceStartup;
+            savePending = false;
             Debug.Log($"[SaveManager] Loaded save '{saveName}'.");
             return profile;
         }
@@ -198,6 +244,9 @@ namespace XFramework.Save
 
             var profile = ActiveProfile;
             Utility.IO.CreateFolder(profile.DirectoryPath);
+
+            lastSaveRealtime = Time.realtimeSinceStartup;
+            savePending = false;
 
             // 更新元数据时间
             profile.Meta.updatedAt = DateTime.UtcNow.ToString("o");
