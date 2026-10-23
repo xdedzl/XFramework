@@ -1,28 +1,30 @@
 using System;
 using System.IO;
-using System.Runtime.InteropServices;   // 新增：window-focus 的 DllImport 需要
+using System.Runtime.InteropServices;
 using UnityEditor;
-using UnityEditor.Compilation;
 using UnityEngine;
 using XFramework.Command;
-using Debug = UnityEngine.Debug;
 using Object = UnityEngine.Object;
 
 namespace XFramework.Editor
 {
-    /// <summary>XCommand 编辑器命令集合（XFramework CLI）。按 #region 分类组织编辑器选择/重编译、Play 模式、
-    /// TMP 字体图集烘焙、Prefab 预览、屏幕录制和 GameView 截图等命令；复杂命令只保留入口，
-    /// 具体实现位于 Runtime 侧的 XCommandUtility.* partial。</summary>
+    /// <summary>XCommand 编辑器命令集合（XFramework CLI）。按 #region 分类组织编辑器选择、重编译、Play 模式、
+    /// TMP 字体图集烘焙、Prefab 预览、屏幕录制和截图等命令；复杂命令只保留入口，
+    /// 具体实现位于 Runtime 侧的 XCommandUtility.* partial 或 Editor 侧的 Operation/Capture 文件。</summary>
     [InitializeOnLoad]
     public sealed class XCommandEditorCommands : XCommandGroup
     {
+        private const string Category = "Editor";
+
+        static XCommandEditorCommands()
+        {
+            XCommandPipeline.SetEditorStopHandler(XCommandPlayModeOperation.StartStop);
+            XCommandUtility.Logs.InitializeCapture();
+        }
+
         #region 编辑器
 
-        private const double RecompileDelaySeconds = 0.5d;
-        private static bool s_RecompileScheduled;
-        private static double s_RecompileTime;
-
-        [XCommandEntry("editor_selection", name = "查看当前选择", order = 0, mode = XCommandMode.Editor, category = "Editor", description = "返回 Unity Editor 当前选择对象的名称、类型和资源路径。", usage = "editor_selection")]
+        [XCommandEntry("editor_selection", name = "查看当前选择", order = 0, mode = XCommandMode.Editor, displayType = XCommandDisplayType.Hidden, category = Category, description = "返回 Unity Editor 当前选择对象的名称、类型和资源路径。", usage = "editor_selection")]
         private static object GetCurrentSelection()
         {
             Object selectedObject = Selection.activeObject;
@@ -36,73 +38,42 @@ namespace XFramework.Editor
             return $"Name: {selectedObject.name}\nType: {selectedObject.GetType().FullName}\nPath: {pathText}";
         }
 
-        [XCommandEntry("recompile", name = "重新编译脚本", order = 10, mode = XCommandMode.Editor, category = "Editor", description = "刷新 AssetDatabase 并请求 Unity 重新编译脚本；通过 CLI 执行时会先返回响应，再开始编译。", usage = "recompile", displayType = XCommandDisplayType.Hidden)]
-        private static object Recompile()
+        [XCommandEntry("editor-menu", name = "执行编辑器菜单", order = 1, mode = XCommandMode.Both, category = Category,
+            description = "按完整路径执行 Unity Editor 菜单命令，例如 XFramework/Tools/XCommand；菜单不存在、被禁用或执行失败时返回错误。",
+            usage = "editor-menu MENU_PATH")]
+        private static object ExecuteEditorMenu(string argument)
         {
-            if (EditorApplication.isCompiling)
+            XCommandArguments args = XCommandArguments.Parse(argument, Array.Empty<string>(), Array.Empty<string>());
+            args.RequireValueCount(1, "usage: editor-menu MENU_PATH");
+
+            string menuPath = args.Values[0];
+            if (string.IsNullOrWhiteSpace(menuPath))
             {
-                return "Unity 当前正在编译脚本。";
-            }
-            if (s_RecompileScheduled)
-            {
-                return "重新编译请求已在队列中。";
+                throw new ArgumentException("菜单路径不能为空。usage: editor-menu MENU_PATH");
             }
 
-            s_RecompileScheduled = true;
-            s_RecompileTime = EditorApplication.timeSinceStartup + RecompileDelaySeconds;
-            EditorApplication.update += RequestRecompile;
-            return "已提交重新编译请求，Unity 将在短暂延迟后开始编译。";
+            if (!EditorApplication.ExecuteMenuItem(menuPath))
+            {
+                throw new InvalidOperationException($"菜单不存在、当前不可用或执行失败：{menuPath}");
+            }
+
+            return $"已执行编辑器菜单：{menuPath}";
         }
 
-        private static void RequestRecompile()
+        [XCommandEntry("recompile", name = "重新编译脚本", order = 10, mode = XCommandMode.Editor, category = Category, description = "异步刷新 AssetDatabase 并重新编译脚本；CLI 默认等待编译成功或失败，--no-wait 仅返回 operation。", usage = "recompile", displayType = XCommandDisplayType.Hidden)]
+        private static object Recompile()
         {
-            if (EditorApplication.timeSinceStartup < s_RecompileTime)
-            {
-                return;
-            }
-
-            EditorApplication.update -= RequestRecompile;
-            s_RecompileScheduled = false;
-            if (EditorApplication.isCompiling)
-            {
-                Debug.Log("[XCommand] Unity 已开始编译，无需重复提交编译请求。");
-                return;
-            }
-
-            Debug.Log("[XCommand] 刷新 AssetDatabase 并请求重新编译脚本。");
-            AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
-            if (!EditorApplication.isCompiling)
-            {
-                CompilationPipeline.RequestScriptCompilation();
-            }
+            return XCommandCompileOperation.Start();
         }
 
         #endregion
 
         #region Play 模式
 
-        private const string Category = "Editor";
-
-        static XCommandEditorCommands()
-        {
-            XCommandPipeline.SetEditorStopHandler(StopPlayMode);
-            XCommandUtility.Logs.InitializeCapture();
-        }
-
-        [XCommandEntry("play-start", name = "开始运行", order = 0, mode = XCommandMode.Editor, category = Category, description = "让 Unity Editor 进入 Play Mode。", usage = "play-start", displayType = XCommandDisplayType.Hidden)]
+        [XCommandEntry("play-start", name = "开始运行", order = 0, mode = XCommandMode.Editor, category = Category, description = "异步进入 Play Mode；CLI 默认等待 EnteredPlayMode 和 XFramework 服务恢复，--no-wait 返回 operation。", usage = "play-start", displayType = XCommandDisplayType.Hidden)]
         private static object StartPlayMode()
         {
-            if (EditorApplication.isPlayingOrWillChangePlaymode)
-            {
-                throw new InvalidOperationException("Unity is already entering Play Mode.");
-            }
-            EditorApplication.isPlaying = true;
-            return "Entering Play Mode.";
-        }
-
-        private static void StopPlayMode()
-        {
-            EditorApplication.isPlaying = false;
+            return XCommandPlayModeOperation.StartStart();
         }
 
         #endregion
@@ -113,6 +84,7 @@ namespace XFramework.Editor
             name = "烘焙 TMP 字体图集",
             order = 20,
             mode = XCommandMode.Editor,
+            displayType = XCommandDisplayType.Hidden,
             category = "Font",
             description = "扫描项目中 TMP 文本用到的字符，把字体图集里缺失的字补进去。默认只报告（dry-run），加 --apply 才会写入字体资产；字体默认取 TMP Settings 的默认字体。字符很多时请配合 CLI 的 --timeout（例如 --timeout 900）。",
             usage = XCommandUtility.FontBake.Usage)]
@@ -147,7 +119,7 @@ namespace XFramework.Editor
             public int height;
         }
 
-        [XCommandEntry("preview-prefab", name = "预览Prefab", order = 20, mode = XCommandMode.Editor, category = "Editor", description = "在临时场景中离屏渲染 UI 或模型 Prefab 并导出 PNG，完成后恢复活动场景。", usage = "preview-prefab [--width W --height H] [--background #RRGGBB[AA]] PREFAB_PATH PNG_PATH")]
+        [XCommandEntry("preview-prefab", name = "预览Prefab", order = 20, mode = XCommandMode.Editor, displayType = XCommandDisplayType.Hidden, category = Category, description = "在临时场景中离屏渲染 UI 或模型 Prefab 并导出 PNG，完成后恢复活动场景。", usage = "preview-prefab [--width W --height H] [--background #RRGGBB[AA]] PREFAB_PATH PNG_PATH")]
         private static object PreviewPrefab(string argument)
         {
             XCommandArguments args = XCommandArguments.Parse(argument, new[] { "width", "height", "background" }, Array.Empty<string>());
@@ -188,7 +160,7 @@ namespace XFramework.Editor
 
         #region 录屏
 
-        [XCommandEntry("record", name = "录屏（固定时长）", order = 40, mode = XCommandMode.Both, category = "Editor",
+        [XCommandEntry("record", name = "录屏（固定时长）", order = 40, mode = XCommandMode.Both, displayType = XCommandDisplayType.Hidden, category = Category,
             description = "调用 ffmpeg 录制屏幕指定秒数后自动停止并输出 MP4；需要系统已安装 ffmpeg。默认录制 GameView 区域，可用 --region 或 --full 覆盖；录制时需保持 Unity 窗口可见。",
             usage = XCommandUtility.ScreenRecord.Usage)]
         private static object Record(string argument)
@@ -196,7 +168,7 @@ namespace XFramework.Editor
             return XCommandUtility.ScreenRecord.Execute(argument);
         }
 
-        [XCommandEntry("record-start", name = "开始录屏", order = 41, mode = XCommandMode.Both, category = "Editor",
+        [XCommandEntry("record-start", name = "开始录屏", order = 41, mode = XCommandMode.Both, displayType = XCommandDisplayType.Hidden, category = Category,
             description = "开始录屏，需手动执行 record-stop 结束；输出 MP4，需要系统已安装 ffmpeg。默认录制 GameView 区域，可用 --region 或 --full 覆盖。",
             usage = XCommandUtility.ScreenRecord.StartUsage)]
         private static object RecordStart(string argument)
@@ -204,7 +176,7 @@ namespace XFramework.Editor
             return XCommandUtility.ScreenRecord.ExecuteStart(argument);
         }
 
-        [XCommandEntry("record-stop", name = "停止录屏", order = 42, mode = XCommandMode.Both, category = "Editor",
+        [XCommandEntry("record-stop", name = "停止录屏", order = 42, mode = XCommandMode.Both, displayType = XCommandDisplayType.Hidden, category = Category,
             description = "停止当前进行中的录屏，等待 ffmpeg 写完文件后返回输出路径与文件大小。",
             usage = XCommandUtility.ScreenRecord.StopUsage)]
         private static object RecordStop(string argument)
@@ -212,7 +184,7 @@ namespace XFramework.Editor
             return XCommandUtility.ScreenRecord.ExecuteStop(argument);
         }
 
-        [XCommandEntry("record-offscreen", name = "离屏录屏", order = 43, mode = XCommandMode.Both, category = "Editor",
+        [XCommandEntry("record-offscreen", name = "离屏录屏", order = 43, mode = XCommandMode.Both, displayType = XCommandDisplayType.Hidden, category = Category,
             description = "使用 Unity 内置 MediaEncoder 离屏逐帧录制 GameView 并输出 MP4，不落 PNG、不依赖物理桌面是否可见；需要 Play 模式。默认实时录制（默认 30fps、10 秒），加 --frame-step 改用确定性帧步进录制。MediaEncoder 不可用时自动回退到 ffmpeg rawvideo。启动后立即返回，不占用操作队列，因此录制期间可用 ui-input 注入输入；用 record-offscreen-status 查询结果。",
             usage = XCommandUtility.OffscreenRecord.Usage)]
         private static object RecordOffscreen(string argument)
@@ -220,7 +192,7 @@ namespace XFramework.Editor
             return XCommandUtility.OffscreenRecord.Execute(argument);
         }
 
-        [XCommandEntry("record-offscreen-stop", name = "停止离屏录屏", order = 44, mode = XCommandMode.Both, category = "Editor",
+        [XCommandEntry("record-offscreen-stop", name = "停止离屏录屏", order = 44, mode = XCommandMode.Both, displayType = XCommandDisplayType.Hidden, category = Category,
             description = "请求提前结束当前离屏录制；编码器会在下一帧收尾并写出可播放的分片 MP4。",
             usage = XCommandUtility.OffscreenRecord.StopUsage)]
         private static object RecordOffscreenStop(string argument)
@@ -228,7 +200,7 @@ namespace XFramework.Editor
             return XCommandUtility.OffscreenRecord.ExecuteStop(argument);
         }
 
-        [XCommandEntry("record-offscreen-status", name = "查询离屏录屏状态", order = 45, mode = XCommandMode.Both, category = "Editor",
+        [XCommandEntry("record-offscreen-status", name = "查询离屏录屏状态", order = 45, mode = XCommandMode.Both, displayType = XCommandDisplayType.Hidden, category = Category,
             description = "返回最近一次 / 当前离屏录制的状态、已录帧数、编码器与最终文件信息。",
             usage = XCommandUtility.OffscreenRecord.StatusUsage)]
         private static object RecordOffscreenStatus(string argument)
@@ -240,7 +212,7 @@ namespace XFramework.Editor
 
         #region GameView 截图
 
-        [XCommandEntry("gameview-screenshot", name = "截取 GameView", order = 30, mode = XCommandMode.Editor, category = "Editor",
+        [XCommandEntry("gameview-screenshot", name = "截取 GameView", order = 30, mode = XCommandMode.Editor, displayType = XCommandDisplayType.Hidden, category = Category,
             description = "把当前场景的视图相机（GameView 画面）离屏渲染成 PNG，不需要进入 Play 模式。支持 temp:/ data:/ persistent:/ 路径前缀；Screen Space Overlay 的 UI 不在相机渲染内。",
             usage = XCommandUtility.GameViewCapture.Usage)]
         private static object Capture(string argument)
@@ -252,12 +224,32 @@ namespace XFramework.Editor
 
         #region GameView 尺寸
 
-        [XCommandEntry("gameview-size", name = "调整 GameView 尺寸", order = 31, mode = XCommandMode.Editor, category = "Editor",
+        [XCommandEntry("gameview-size", name = "调整 GameView 尺寸", order = 31, mode = XCommandMode.Editor, displayType = XCommandDisplayType.Hidden, category = Category,
             description = "调整 GameView 渲染尺寸：--maximize 最大化窗口、--restore 还原，或 --width/--height 切换为指定固定分辨率。用于让离屏录制的画面足够大；不带参数时仅返回当前尺寸状态。",
             usage = XCommandUtility.GameViewSize.Usage)]
         private static object ResizeGameView(string argument)
         {
             return XCommandUtility.GameViewSize.Execute(argument);
+        }
+
+        #endregion
+
+        #region 编辑器窗口截图
+
+        [XCommandEntry("editor-window-list", name = "列出编辑器窗口", order = 32, mode = XCommandMode.Editor, category = Category,
+            description = "列出当前已打开的 EditorWindow 标题、类型、聚焦和停靠状态，可用 --query 按标题或类型名过滤。",
+            usage = XCommandEditorWindowCapture.ListUsage)]
+        private static object ListEditorWindows(string argument)
+        {
+            return XCommandEditorWindowCapture.ExecuteList(argument);
+        }
+
+        [XCommandEntry("editor-window-screenshot", name = "截取编辑器窗口", order = 33, mode = XCommandMode.Editor, category = Category,
+            description = "直接从指定 EditorWindow 的 GUIView 渲染面截取内容区并保存为 PNG，不依赖桌面可见性，支持锁屏运行；不包含 Dock 标签栏和窗口标题栏。",
+            usage = XCommandEditorWindowCapture.ScreenshotUsage)]
+        private static object CaptureEditorWindow(string argument)
+        {
+            return XCommandEditorWindowCapture.ExecuteScreenshot(argument);
         }
 
         #endregion

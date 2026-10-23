@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -233,13 +232,13 @@ namespace XFramework.Command
                 int? layer = ResolveLayer(query.layer);
                 List<GameObject> matches = GetLoadedSceneGameObjects()
                     .Where(gameObject => XCommandUtility.Text.ContainsIgnoreCase(gameObject.name, query.name))
-                    .Where(gameObject => XCommandUtility.Text.ContainsIgnoreCase(XCommandUtility.GameObjects.GetGameObjectPath(gameObject), query.path))
+                    .Where(gameObject => XCommandUtility.Text.ContainsIgnoreCase(GetGameObjectPath(gameObject), query.path))
                     .Where(gameObject => HasComponent(gameObject, query.component))
                     .Where(gameObject => string.IsNullOrEmpty(query.tag) || string.Equals(gameObject.tag, query.tag, StringComparison.OrdinalIgnoreCase))
                     .Where(gameObject => !layer.HasValue || gameObject.layer == layer.Value)
                     .Where(gameObject => active == "any" || (active == "active") == gameObject.activeInHierarchy)
                     .OrderBy(gameObject => gameObject.scene.name, StringComparer.Ordinal)
-                    .ThenBy(XCommandUtility.GameObjects.GetIndexedGameObjectPath, StringComparer.Ordinal)
+                    .ThenBy(GetIndexedGameObjectPath, StringComparer.Ordinal)
                     .ToList();
                 int limit = Mathf.Clamp(query.maxResults, 1, 1000);
                 var result = new GameObjectListResult {
@@ -265,11 +264,11 @@ namespace XFramework.Command
                     .Where(gameObject => includeInactive || gameObject.activeInHierarchy)
                     .Where(gameObject => query.instanceId == 0 || gameObject.GetInstanceID() == query.instanceId)
                     .Where(gameObject => string.IsNullOrEmpty(query.name) || string.Equals(gameObject.name, query.name, StringComparison.Ordinal))
-                    .Where(gameObject => string.IsNullOrEmpty(query.path) || string.Equals(XCommandUtility.GameObjects.GetGameObjectPath(gameObject), query.path, StringComparison.Ordinal))
-                    .Where(gameObject => string.IsNullOrEmpty(query.indexedPath) || string.Equals(XCommandUtility.GameObjects.GetIndexedGameObjectPath(gameObject), query.indexedPath, StringComparison.Ordinal))
+                    .Where(gameObject => string.IsNullOrEmpty(query.path) || string.Equals(GetGameObjectPath(gameObject), query.path, StringComparison.Ordinal))
+                    .Where(gameObject => string.IsNullOrEmpty(query.indexedPath) || string.Equals(GetIndexedGameObjectPath(gameObject), query.indexedPath, StringComparison.Ordinal))
                     .Where(gameObject => HasComponent(gameObject, query.component))
                     .OrderBy(gameObject => gameObject.scene.name, StringComparer.Ordinal)
-                    .ThenBy(XCommandUtility.GameObjects.GetIndexedGameObjectPath, StringComparer.Ordinal)
+                    .ThenBy(GetIndexedGameObjectPath, StringComparer.Ordinal)
                     .ToList();
             }
 
@@ -318,8 +317,8 @@ namespace XFramework.Command
                 return new GameObjectListItem {
                     instanceId = gameObject.GetInstanceID(),
                     name = gameObject.name,
-                    path = XCommandUtility.GameObjects.GetGameObjectPath(gameObject),
-                    indexedPath = XCommandUtility.GameObjects.GetIndexedGameObjectPath(gameObject),
+                    path = GetGameObjectPath(gameObject),
+                    indexedPath = GetIndexedGameObjectPath(gameObject),
                     sceneName = gameObject.scene.name,
                     activeSelf = gameObject.activeSelf,
                     activeInHierarchy = gameObject.activeInHierarchy,
@@ -355,8 +354,8 @@ namespace XFramework.Command
                 return new GameObjectBriefState {
                     instanceId = gameObject.GetInstanceID(),
                     name = gameObject.name,
-                    path = XCommandUtility.GameObjects.GetGameObjectPath(gameObject),
-                    indexedPath = XCommandUtility.GameObjects.GetIndexedGameObjectPath(gameObject),
+                    path = GetGameObjectPath(gameObject),
+                    indexedPath = GetIndexedGameObjectPath(gameObject),
                     sceneName = gameObject.scene.name,
                     activeSelf = gameObject.activeSelf,
                     activeInHierarchy = gameObject.activeInHierarchy,
@@ -371,8 +370,8 @@ namespace XFramework.Command
                 var state = new GameObjectState {
                     instanceId = gameObject.GetInstanceID(),
                     name = gameObject.name,
-                    path = XCommandUtility.GameObjects.GetGameObjectPath(gameObject),
-                    indexedPath = XCommandUtility.GameObjects.GetIndexedGameObjectPath(gameObject),
+                    path = GetGameObjectPath(gameObject),
+                    indexedPath = GetIndexedGameObjectPath(gameObject),
                     sceneName = gameObject.scene.name,
                     scenePath = gameObject.scene.path,
                     activeSelf = gameObject.activeSelf,
@@ -462,7 +461,7 @@ namespace XFramework.Command
 
             internal static string FormatCandidate(GameObject gameObject)
             {
-                return $"{gameObject.scene.name}:{XCommandUtility.GameObjects.GetIndexedGameObjectPath(gameObject)}";
+                return $"{gameObject.scene.name}:{GetIndexedGameObjectPath(gameObject)}";
             }
         }
     }

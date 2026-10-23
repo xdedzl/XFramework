@@ -16,6 +16,7 @@ namespace XFramework.Command
         }
 
         public string Name => "ui-act";
+        public bool CanCancel => true;
 
         public IEnumerator Run(XCommandOperationContext context)
         {

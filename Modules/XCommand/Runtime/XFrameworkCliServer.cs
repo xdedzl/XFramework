@@ -25,6 +25,7 @@ namespace XFramework.Command
         private const int ProtocolVersion = 1;
         private const int MaxRequestBytes = 4 * 1024 * 1024;
         private const double DefaultOperationTimeoutSeconds = 60d;
+        private const double OperationRestoreGraceSeconds = 5d;
         private static readonly object s_StateLock = new object();
         private static readonly ConcurrentQueue<PendingRequest> s_PendingRequests = new ConcurrentQueue<PendingRequest>();
         private static readonly ConcurrentQueue<Exception> s_BackgroundErrors = new ConcurrentQueue<Exception>();
@@ -301,6 +302,9 @@ namespace XFramework.Command
                 case "execute":
                     ExecuteCommand(pendingRequest);
                     break;
+                case "wait-operation":
+                    WaitOperation(pendingRequest);
+                    break;
                 default:
                     CompleteRequest(pendingRequest, CreateErrorResponse(request.requestId, 4, "ProtocolError", $"Unsupported action: {request.action}"));
                     break;
@@ -374,7 +378,36 @@ namespace XFramework.Command
             }
 
             double timeoutSeconds = request.timeoutSeconds > 0d ? request.timeoutSeconds : DefaultOperationTimeoutSeconds;
-            s_PendingOperations.Add(new PendingOperationResponse(pendingRequest, response, operationProvider, operation.Id, DateTime.UtcNow.AddSeconds(timeoutSeconds)));
+            s_PendingOperations.Add(new PendingOperationResponse(pendingRequest, response, operationProvider, operation.Id, DateTime.UtcNow.AddSeconds(timeoutSeconds), DateTime.MinValue));
+        }
+
+        private static void WaitOperation(PendingRequest pendingRequest)
+        {
+            XFrameworkCliRequest request = pendingRequest.Request;
+            if (request.operationId <= 0)
+            {
+                CompleteRequest(pendingRequest, CreateErrorResponse(request.requestId, 2, "InvalidArguments", "operationId must be greater than zero."));
+                return;
+            }
+
+            IXFrameworkCliOperationProvider provider = s_OperationProvider;
+            if (provider == null)
+            {
+                CompleteRequest(pendingRequest, CreateErrorResponse(request.requestId, 4, "ServerNotReady", "XFramework operation provider is not ready."));
+                return;
+            }
+
+            double timeoutSeconds = request.timeoutSeconds > 0d ? request.timeoutSeconds : DefaultOperationTimeoutSeconds;
+            DateTime now = DateTime.UtcNow;
+            XFrameworkCliResponse response = CreateSuccessResponse(request.requestId, $"Waiting for operation {request.operationId}.");
+            if (provider.TryGetOperation(request.operationId, out XFrameworkCliOperationInfo operation) && IsOperationCompleted(operation.State))
+            {
+                ApplyOperation(response, operation);
+                CompleteRequest(pendingRequest, response);
+                return;
+            }
+
+            s_PendingOperations.Add(new PendingOperationResponse(pendingRequest, response, provider, request.operationId, now.AddSeconds(timeoutSeconds), now.AddSeconds(OperationRestoreGraceSeconds)));
         }
 
         private static void UpdatePendingOperations()
@@ -385,9 +418,23 @@ namespace XFramework.Command
                 PendingOperationResponse pending = s_PendingOperations[i];
                 if (!pending.OperationProvider.TryGetOperation(pending.OperationId, out XFrameworkCliOperationInfo operation))
                 {
-                    pending.Response.exitCode = 1;
-                    pending.Response.status = "Failed";
-                    pending.Response.message = $"Operation no longer exists: {pending.OperationId}.";
+                    if (now < pending.MissingDeadlineUtc && now < pending.DeadlineUtc)
+                    {
+                        continue;
+                    }
+
+                    if (now >= pending.MissingDeadlineUtc)
+                    {
+                        pending.Response.exitCode = 1;
+                        pending.Response.status = "Failed";
+                        pending.Response.message = $"Operation no longer exists: {pending.OperationId}.";
+                    }
+                    else
+                    {
+                        pending.Response.exitCode = 124;
+                        pending.Response.status = "Timeout";
+                        pending.Response.message = $"Timed out waiting for operation {pending.OperationId}. The operation was not cancelled.";
+                    }
                     CompleteRequest(pending.Request, pending.Response);
                     s_PendingOperations.RemoveAt(i);
                     continue;
@@ -626,13 +673,14 @@ namespace XFramework.Command
 
         private sealed class PendingOperationResponse
         {
-            public PendingOperationResponse(PendingRequest request, XFrameworkCliResponse response, IXFrameworkCliOperationProvider operationProvider, long operationId, DateTime deadlineUtc)
+            public PendingOperationResponse(PendingRequest request, XFrameworkCliResponse response, IXFrameworkCliOperationProvider operationProvider, long operationId, DateTime deadlineUtc, DateTime missingDeadlineUtc)
             {
                 Request = request;
                 Response = response;
                 OperationProvider = operationProvider;
                 OperationId = operationId;
                 DeadlineUtc = deadlineUtc;
+                MissingDeadlineUtc = missingDeadlineUtc;
             }
 
             public readonly PendingRequest Request;
@@ -640,6 +688,7 @@ namespace XFramework.Command
             public readonly IXFrameworkCliOperationProvider OperationProvider;
             public readonly long OperationId;
             public readonly DateTime DeadlineUtc;
+            public readonly DateTime MissingDeadlineUtc;
         }
 
         private sealed class XFrameworkCliRequest
@@ -648,6 +697,7 @@ namespace XFramework.Command
             public string requestId;
             public string action;
             public string commandLine;
+            public long operationId;
             public bool waitForOperation;
             public double timeoutSeconds;
             public bool confirm;

@@ -17,6 +17,7 @@ namespace XFramework.Command
         }
 
         public string Name { get; }
+        public bool CanCancel => true;
 
         public IEnumerator Run(XCommandOperationContext context)
         {

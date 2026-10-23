@@ -213,16 +213,7 @@ namespace XFramework.Command
             }
 
             /// <summary>创建编码后端：优先 MediaEncoder，失败时按需回退 ffmpeg rawvideo。</summary>
-            internal static void CreateBackend(
-                string path,
-                int fps,
-                int width,
-                int height,
-                bool noFallback,
-                ref MediaEncoder encoder,
-                ref Process ffmpegProcess,
-                ref Stream ffmpegInput,
-                ref string encoderName)
+            internal static void CreateBackend(string path, int fps, int width, int height, bool noFallback, ref MediaEncoder encoder, ref Process ffmpegProcess, ref Stream ffmpegInput, ref string encoderName)
             {
                 if (TryCreateMediaEncoder(path, fps, width, height, out encoder, out string mediaEncoderError))
                 {
@@ -275,13 +266,7 @@ namespace XFramework.Command
                 encoder = null;
             }
 
-            private static bool TryCreateMediaEncoder(
-                string path,
-                int fps,
-                int width,
-                int height,
-                out MediaEncoder encoder,
-                out string error)
+            private static bool TryCreateMediaEncoder(string path, int fps, int width, int height, out MediaEncoder encoder, out string error)
             {
                 encoder = null;
                 error = null;
@@ -305,14 +290,7 @@ namespace XFramework.Command
                 }
             }
 
-            internal static bool TryStartFfmpegPipe(
-                string path,
-                int fps,
-                int width,
-                int height,
-                out Process process,
-                out Stream input,
-                out string error)
+            internal static bool TryStartFfmpegPipe(string path, int fps, int width, int height, out Process process, out Stream input, out string error)
             {
                 process = null;
                 input = null;

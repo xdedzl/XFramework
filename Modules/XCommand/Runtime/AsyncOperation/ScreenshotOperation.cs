@@ -30,6 +30,7 @@ namespace XFramework.Command
         }
 
         public string Name => "screenshot";
+        public bool CanCancel => true;
 
         public IEnumerator Run(XCommandOperationContext context)
         {

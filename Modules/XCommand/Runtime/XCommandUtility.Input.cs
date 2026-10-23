@@ -189,7 +189,8 @@ namespace XFramework.Command
                     settings.backgroundBehavior = previousBackgroundBehavior;
                 }
             }
-    
+
+
             private static IEnumerator ExecuteStep(XCommandInputStep step)
             {
                 if (step == null || string.IsNullOrWhiteSpace(step.type))

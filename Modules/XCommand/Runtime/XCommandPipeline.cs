@@ -2,6 +2,9 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 using Object = UnityEngine.Object;
 
 namespace XFramework.Command
@@ -26,6 +29,20 @@ namespace XFramework.Command
             RoutineFactory = routineFactory;
         }
 
+        internal XCommandOperationInfo(long id, string name, XCommandOperationState state, DateTime createdTimeUtc, DateTime? startedTimeUtc, DateTime? completedTimeUtc, double durationMilliseconds, string output, string error, bool canCancel)
+        {
+            Id = id;
+            Name = name;
+            State = state;
+            CreatedTimeUtc = createdTimeUtc;
+            StartedTimeUtc = startedTimeUtc;
+            CompletedTimeUtc = completedTimeUtc;
+            DurationMilliseconds = durationMilliseconds;
+            Output = output ?? string.Empty;
+            Error = error ?? string.Empty;
+            CanCancel = canCancel;
+        }
+
         public long Id { get; }
         public string Name { get; }
         public XCommandOperationState State { get; internal set; }
@@ -35,6 +52,7 @@ namespace XFramework.Command
         public double DurationMilliseconds { get; internal set; }
         public string Output { get; internal set; } = string.Empty;
         public string Error { get; internal set; } = string.Empty;
+        internal bool CanCancel { get; set; } = true;
 
         internal Func<XCommandOperationContext, IEnumerator> RoutineFactory { get; }
         internal bool CancellationRequested { get; set; }
@@ -49,6 +67,7 @@ namespace XFramework.Command
             m_Operation = operation;
         }
 
+        public long Id => m_Operation.Id;
         public bool IsCancellationRequested => m_Operation.CancellationRequested;
 
         public void SetOutput(string output)
@@ -63,6 +82,9 @@ namespace XFramework.Command
         /// <summary>操作名称，写入 operation 记录与日志。</summary>
         string Name { get; }
 
+        /// <summary>是否允许通过 operation-cancel 取消。</summary>
+        bool CanCancel { get; }
+
         /// <summary>在主线程执行的协程体；由调度器逐帧驱动，支持嵌套 IEnumerator。</summary>
         IEnumerator Run(XCommandOperationContext context);
     }
@@ -76,42 +98,53 @@ namespace XFramework.Command
         private static XCommandPipelineRunner s_Runner;
         private static Coroutine s_OperationCoroutine;
         private static bool s_IsRunnerActive;
-        private static Action s_EditorStopHandler;
+#if UNITY_EDITOR
+        private static IEnumerator s_EditorOperationEnumerator;
+#endif
+        private static Func<object> s_EditorStopHandler;
 
         public static IReadOnlyList<XCommandOperationInfo> Operations => s_Operations;
 
-        public static void SetEditorStopHandler(Action handler)
+        public static void SetEditorStopHandler(Func<object> handler)
         {
             s_EditorStopHandler = handler;
         }
 
-        public static void StopRunning()
+        public static object StopRunning()
         {
             if (Application.isEditor)
             {
                 if (s_EditorStopHandler == null)
                     throw new InvalidOperationException("XCommand Editor stop handler is not registered.");
-                s_EditorStopHandler.Invoke();
-                return;
+                return s_EditorStopHandler.Invoke();
             }
             Application.Quit();
+            return "Quit requested.";
         }
 
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetOperations()
+        internal static void ResetRunner()
         {
+#if UNITY_EDITOR
+            StopEditorOperations();
+#endif
             if (s_Runner != null)
             {
                 if (s_OperationCoroutine != null)
                     s_Runner.StopCoroutine(s_OperationCoroutine);
                 Object.Destroy(s_Runner.gameObject);
             }
-            s_PendingOperations.Clear();
-            s_Operations.Clear();
-            s_NextOperationId = 1;
             s_Runner = null;
             s_OperationCoroutine = null;
             s_IsRunnerActive = false;
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetOperations()
+        {
+            ResetRunner();
+            s_PendingOperations.Clear();
+            s_Operations.Clear();
+            s_NextOperationId = 1;
             XCommandUtility.Input.ResetState();
             XCommandUI.ResetSnapshots();
         }
@@ -134,6 +167,10 @@ namespace XFramework.Command
         {
             if (!TryGetOperation(operationId, out XCommandOperationInfo operation) || IsCompleted(operation.State))
                 return false;
+            if (!operation.CanCancel)
+            {
+                return false;
+            }
             operation.CancellationRequested = true;
             if (operation.State == XCommandOperationState.Queued)
                 CompleteOperation(operation, XCommandOperationState.Cancelled, "操作已取消。");
@@ -149,6 +186,68 @@ namespace XFramework.Command
                     cancelled++;
             }
             return cancelled;
+        }
+
+        /// <summary>恢复跨程序集重载保留的 operation；仅供 Editor 侧编译/播放模式 operation 使用。</summary>
+        internal static void RestoreOperation(string operationJson, bool canCancel)
+        {
+            if (string.IsNullOrWhiteSpace(operationJson))
+            {
+                return;
+            }
+
+            XCommandOperationJson data;
+            try
+            {
+                data = JsonUtility.FromJson<XCommandOperationJson>(operationJson);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[XCommand] 恢复 operation 失败：{exception.Message}");
+                return;
+            }
+
+            if (data == null || data.id <= 0 || string.IsNullOrWhiteSpace(data.name))
+            {
+                return;
+            }
+            if (!Enum.TryParse(data.state, true, out XCommandOperationState state))
+            {
+                return;
+            }
+            if (!DateTime.TryParse(data.createdTimeUtc, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out DateTime createdTimeUtc))
+            {
+                return;
+            }
+
+            DateTime? startedTimeUtc = null;
+            DateTime? completedTimeUtc = null;
+            if (!string.IsNullOrEmpty(data.startedTimeUtc))
+            {
+                if (!DateTime.TryParse(data.startedTimeUtc, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out DateTime startedTime))
+                {
+                    return;
+                }
+                startedTimeUtc = startedTime;
+            }
+            if (!string.IsNullOrEmpty(data.completedTimeUtc))
+            {
+                if (!DateTime.TryParse(data.completedTimeUtc, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out DateTime completedTime))
+                {
+                    return;
+                }
+                completedTimeUtc = completedTime;
+            }
+
+            s_Operations.RemoveAll(item => item.Id == data.id);
+            XCommandOperationInfo operation = new XCommandOperationInfo(data.id, data.name, state, createdTimeUtc, startedTimeUtc, completedTimeUtc, data.durationMilliseconds, data.output, data.error, canCancel);
+            s_Operations.Add(operation);
+            s_Operations.Sort((left, right) => left.Id.CompareTo(right.Id));
+            if (data.id >= s_NextOperationId)
+            {
+                s_NextOperationId = data.id + 1;
+            }
+            TrimOperationHistory();
         }
 
         internal static string SerializeOperation(XCommandOperationInfo operation, bool prettyPrint = false)
@@ -172,11 +271,43 @@ namespace XFramework.Command
                 throw new ArgumentNullException(nameof(operation));
             if (string.IsNullOrWhiteSpace(operation.Name))
                 throw new ArgumentException("操作名称不能为空。", nameof(operation));
+            bool hasExistingWork = s_PendingOperations.Count > 0;
+            if (!hasExistingWork)
+            {
+                for (int i = 0; i < s_Operations.Count; i++)
+                {
+                    XCommandOperationState state = s_Operations[i].State;
+                    if (state == XCommandOperationState.Queued || state == XCommandOperationState.Running)
+                    {
+                        hasExistingWork = true;
+                        break;
+                    }
+                }
+            }
+            if (!hasExistingWork)
+            {
+                ResetRunner();
+            }
             var info = new XCommandOperationInfo(s_NextOperationId++, operation.Name, context => operation.Run(context));
+            info.CanCancel = operation.CanCancel;
             s_Operations.Add(info);
             s_PendingOperations.Enqueue(info);
-            if (!s_IsRunnerActive)
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
             {
+                StartEditorOperations();
+                return info.Id;
+            }
+#endif
+            if (s_Runner != null && !s_Runner.isActiveAndEnabled)
+            {
+                Object.Destroy(s_Runner.gameObject);
+                s_Runner = null;
+            }
+            if (!s_IsRunnerActive || s_Runner == null || s_OperationCoroutine == null)
+            {
+                s_IsRunnerActive = false;
+                s_OperationCoroutine = null;
                 EnsureRunner();
                 s_IsRunnerActive = true;
                 Coroutine runner = s_Runner.StartCoroutine(RunOperations());
@@ -200,12 +331,63 @@ namespace XFramework.Command
             }
 
             public string Name { get; }
+            public bool CanCancel => true;
 
             public IEnumerator Run(XCommandOperationContext context)
             {
                 return routineFactory(context);
             }
         }
+#if UNITY_EDITOR
+        private static void StartEditorOperations()
+        {
+            if (s_IsRunnerActive)
+            {
+                return;
+            }
+
+            s_EditorOperationEnumerator = RunOperations();
+            s_IsRunnerActive = true;
+            EditorApplication.update -= TickEditorOperations;
+            EditorApplication.update += TickEditorOperations;
+            TickEditorOperations();
+        }
+
+        private static void TickEditorOperations()
+        {
+            if (!s_IsRunnerActive || s_EditorOperationEnumerator == null)
+            {
+                EditorApplication.update -= TickEditorOperations;
+                return;
+            }
+
+            try
+            {
+                if (!s_EditorOperationEnumerator.MoveNext())
+                {
+                    EditorApplication.update -= TickEditorOperations;
+                    s_EditorOperationEnumerator = null;
+                }
+            }
+            catch (Exception exception)
+            {
+                EditorApplication.update -= TickEditorOperations;
+                s_EditorOperationEnumerator = null;
+                s_IsRunnerActive = false;
+                Debug.LogException(exception);
+            }
+        }
+
+        private static void StopEditorOperations()
+        {
+            EditorApplication.update -= TickEditorOperations;
+            if (s_EditorOperationEnumerator is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
+            s_EditorOperationEnumerator = null;
+        }
+#endif
 
         private static void EnsureRunner()
         {
@@ -214,7 +396,10 @@ namespace XFramework.Command
             var gameObject = new GameObject("[XFramework XCommand Pipeline]") {
                 hideFlags = HideFlags.HideAndDontSave,
             };
-            Object.DontDestroyOnLoad(gameObject);
+            if (Application.isPlaying)
+            {
+                Object.DontDestroyOnLoad(gameObject);
+            }
             s_Runner = gameObject.AddComponent<XCommandPipelineRunner>();
         }
 
@@ -343,7 +528,7 @@ namespace XFramework.Command
         }
 
         [Serializable]
-        private sealed class XCommandOperationJson
+        internal sealed class XCommandOperationJson
         {
             public long id;
             public string name;
@@ -355,7 +540,7 @@ namespace XFramework.Command
             public string output;
             public string error;
 
-            public static XCommandOperationJson From(XCommandOperationInfo operation)
+            internal static XCommandOperationJson From(XCommandOperationInfo operation)
             {
                 return new XCommandOperationJson {
                     id = operation.Id,
@@ -378,6 +563,8 @@ namespace XFramework.Command
             public List<XCommandOperationJson> operations = new List<XCommandOperationJson>();
         }
 
+        [ExecuteInEditMode]
+        [ExecuteAlways]
         private sealed class XCommandPipelineRunner : MonoBehaviour
         {
         }

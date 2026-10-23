@@ -312,7 +312,7 @@ namespace XFramework.Editor
         {
             var pane = new VisualElement();
             pane.style.flexGrow = 1f;
-            pane.style.minWidth = 420f;
+            pane.style.minWidth = 0f;
             pane.style.marginRight = 3f;
             pane.style.backgroundColor = TerminalBackground;
             pane.style.borderLeftWidth = 1f;
@@ -474,6 +474,7 @@ namespace XFramework.Editor
             var pane = new VisualElement();
             pane.style.flexGrow = 1f;
             pane.style.minWidth = 300f;
+            pane.style.minHeight = 0f;
             pane.style.marginLeft = 3f;
             pane.style.paddingLeft = 8f;
             pane.style.paddingRight = 8f;

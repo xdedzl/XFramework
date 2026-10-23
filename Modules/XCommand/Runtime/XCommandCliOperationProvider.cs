@@ -10,6 +10,9 @@ namespace XFramework.Command
         private static readonly XCommandCliOperationProvider s_Instance = new XCommandCliOperationProvider();
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterAssembliesLoaded)]
+#if UNITY_EDITOR
+        [UnityEditor.InitializeOnLoadMethod]
+#endif
         private static void Register()
         {
             XFrameworkCliServer.SetOperationProvider(s_Instance);

@@ -15,6 +15,7 @@ namespace XFramework.Command
         }
 
         public string Name => "ui-input";
+        public bool CanCancel => true;
 
         public IEnumerator Run(XCommandOperationContext context)
         {

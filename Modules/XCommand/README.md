@@ -16,7 +16,7 @@
 - **统一执行链路**：所有入口最终都走 `XCommandHub.Execute(...)`，产出统一的 `XCommandExecutionResult`。
 - **执行记录与历史**：环形记录（上限 2000 条）+ 命令历史（上限 50 条），编辑器下可跨脚本重载保留。
 - **来源可追溯**：`Api` / `Editor` / `Ugui` / `Cli` / `Hunter` 五种来源会被写入记录。
-- **异步操作管道**：UI 操作、条件等待、输入注入、截图以 operation 形式排队执行，返回 operation ID，可查询 / 取消 / 超时。
+- **异步操作管道**：UI 操作、条件等待、输入注入、截图和 Editor 重新编译 / Play Mode 切换以 operation 形式排队执行，返回 operation ID，可查询 / 取消 / 超时。
 - **运行时日志缓冲**：50MB 环形缓冲，按游标增量查询，支持级别、关键字与堆栈筛选。
 - **外部进程自动化**：Editor 与 Development Player 自动启动 loopback TCP Server，配合 `xcli.ps1` 让脚本 / CI / AI 直接驱动 Unity。
 
@@ -29,16 +29,21 @@
 | `XCommand`（`Runtime/XCommand.cs`） | 终端门面；`IConsole` 接口、`Message` 消息与着色、执行器（Command Key）管理、Hunter 联动入口 |
 | `XCommandHub`（`Runtime/XCommandHub.cs`） | 执行记录、命令历史、来源标记、显示清空 / 历史请求事件 |
 | `XCommandRegistry`（`Runtime/XCommandRegistry.cs`） | 命令扫描与注册（`[XCommandEntry]` + 动态注册）、可用性判定、命令行拆分、执行内核、诊断收集 |
-| `XCommandPipeline`（`Runtime/XCommandPipeline.cs`） | 协程驱动的异步操作队列，UI / GameObject / 日志 / 等待 / 输入 / 截图的统一入口 |
+| `XCommandPipeline`（`Runtime/XCommandPipeline.cs`） | 协程 / `EditorApplication.update` 驱动的异步操作队列；`RunOperation(IXCommandAsyncOperation)` 统一入口，支持 `CanCancel`、operation 恢复与 EditMode 执行 |
+| `Runtime/WaitRequest/*` | `IXCommandWaitRequest` 契约，以及 `wait` / `wait-for-ui` / `wait-for-go` / `wait-for-log` 的请求实现 |
+| `Runtime/AsyncOperation/*` | `WaitOperation` / `UIActOperation` / `UIInputOperation` / `ScreenshotOperation` |
 | `XCommandArguments` + `XCommandUtility.CommandLine` | 命令行参数解析（值与标记选项、引号、位置参数） |
-| `XCommandUI` / `XCommandGameObjects` | UGUI 与 GameObject 的查询、操作与等待实现 |
-| `XCommandUtility.*`（`State` / `Logs` / `Capture` / `Input` / `Wait` / `Path` / `Text` / `GameObject` / `PrefabPreview` / `FontBake` / `ScreenRecord` / `GameViewCapture`） | 无状态工具集合（`PrefabPreview` / `FontBake` / `ScreenRecord` / `GameViewCapture` 为编辑器专用，用 `#if UNITY_EDITOR` 包裹） |
+| `XCommandUI` / `XCommandUtility.GameObjects` | UGUI 与 GameObject 的查询、操作与稳定判定 |
+| `XCommandUtility.*`（`State` / `Logs` / `Input` / `Path` / `Text` / `GameObjects` / `PrefabPreview` / `FontBake` / `ScreenRecord` / `GameViewCapture` / `GameViewSize` / `OffscreenRecord`） | 无状态工具集合（`PrefabPreview` / `FontBake` / `ScreenRecord` / `GameViewCapture` / `GameViewSize` / `OffscreenRecord` 为编辑器专用，用 `#if UNITY_EDITOR` 包裹） |
 | `UGUIConsole`（`Runtime/UGUIConsole.cs`） | 游戏内 UGUI 控制台实现 |
-| `XFrameworkCliServer` / `XFrameworkCliOperation` / `XCommandCliOperationProvider` | 对外 CLI Server、operation 数据契约与桥接 |
+| `XFrameworkCliServer` / `XFrameworkCliOperation` / `XCommandCliOperationProvider` | 对外 CLI Server、operation 数据契约与桥接（含内部 `wait-operation`） |
 | `XCommandEditorWindow`（`Editor/`） | 编辑器终端窗口 + 命令手册 + CLI 状态菜单 |
 | `XCommandEditorHistory`（`Editor/`） | 编辑器侧记录 / 历史持久化 |
-| `Editor/*Commands.cs` | 编辑器与 PlayMode 命令**入口**（薄入口；复杂命令的实现位于 `XCommandUtility.*`） |
-| `Tools/cli/xcli.ps1` | 外部命令行客户端 |
+| `Editor/XCommandEditorCommands.cs` | 编辑器与 PlayMode 命令**入口**（薄入口） |
+| `Editor/XCommandCompileOperation.cs` | `recompile` 异步 operation；跨 Domain Reload 恢复并收集编译诊断 |
+| `Editor/XCommandPlayModeOperation.cs` | `play-start` / `play-stop` 异步 operation |
+| `Editor/XCommandEditorWindowCapture.cs` | `editor-window-list` / `editor-window-screenshot` 的窗口枚举与离屏截图实现 |
+| `Tools/cli/xcli.ps1` | 外部命令行客户端（含 Domain Reload 重连） |
 
 ---
 
@@ -138,43 +143,63 @@ XCommandRegistry.AddCommand("my-dynamic", argument => $"received: {argument}", X
 | :--- | :----- | :--- | :--- |
 | `clear` | 清空 XCommand | Both | 清空当前终端显示内容，不删除 Hub 历史（不记录执行） |
 | `load_history` | 加载 XCommand 历史 | Both | 在当前终端重新加载 Hub 历史（不记录执行） |
+| `help` | 查看 XCommand 帮助 | Both | 查看全部命令分类，或查看指定分类下的全部命令（不记录执行） |
 | `log` | 输出 Unity 日志 | Both | 向 Unity Console 输出一条日志 |
 | `enable_hunter` / `disable_hunter` | 连接 / 断开 Hunter | Runtime | 连接或断开远程 UDP 调试端 |
+
+> 以上内置命令均为 `displayType = Hidden`：不会出现在 CLI `commands` 结果中，但 `help` 仍会展示，`exec` 仍可直接执行。
 
 ### 4.2 运行时与自动化命令（`XCommandCommands`）
 
 | 命令 | Mode | 用途 |
 | :--- | :--- | :--- |
-| `play-stop` | Runtime | Editor 中退出 Play Mode；Development Player 中请求退出 |
+| `play-stop` | Runtime | Editor 中异步退出 Play Mode 并等待 `EnteredEditMode`；Development Player 中返回退出请求回执 |
 | `go-list` | Both | 列出 GameObject，支持 `name` / `path` / `component` / `tag` / `layer` / `active` 筛选 |
 | `go-state` | Both | 按 `instance-id` / `name` / `path` / `indexed-path` / `component` 查询状态，默认要求唯一匹配 |
 | `ui-list` | Runtime | 列出射线可达且存在事件处理器的 UGUI 元素，支持采样与增量快照 |
 | `ui-act` | Runtime | 重新定位唯一稳定元素并注入 `click` / `down` / `up` / `scroll`，返回 operation ID |
-| `wait-for` | Runtime | 等待 `ui` / `go` / `log` 条件满足，返回 operation ID |
+| `wait-for-ui` | Runtime | 等待 UGUI 出现、消失或内容稳定，返回 operation ID |
+| `wait-for-go` | Runtime | 等待 GameObject 出现、消失、激活、失活或变换稳定，返回 operation ID |
+| `wait-for-log` | Runtime | 等待日志条数满足条件，返回 operation ID |
 | `wait` | Runtime | 按真实时间 / 游戏时间 / 帧数等待，返回 operation ID |
 | `logs` | Both | 查询 50MB 环形日志缓冲，支持级别、正文、条数与堆栈筛选 |
 | `input-state` / `input-reset` | Both / Runtime | 查询或重置自动化键盘、鼠标、触摸保持状态 |
-| `ui-input` | Runtime | 通过 Input System 注入键鼠 / 多点触控 JSON 序列 |
+| `ui-input` | Runtime | 通过 Input System 注入键鼠 / 多点触控 JSON 序列；**注入前建议先执行 `window-focus`**（见 4.3），把 Unity / GameView 提到前台 |
 | `screenshot` | Runtime | 帧末截图，支持输出尺寸、屏幕区域与仅 UI 模式 |
 | `operation-list` / `operation-status` / `operation-cancel` | Both / Both / Runtime | 列出、查询、取消异步 operation（`all` 取消全部） |
 | `scene-state` | Both | 当前已加载场景、活动场景、Dirty 状态与根物体摘要 |
 | `app-state` | Both | 应用、时间、屏幕、设备与常用路径状态 |
+
+> **模拟输入前先前置窗口**：`ui-input` 注入的是 Input System 层的设备事件，但真实点击能否被 GameView 接收还取决于窗口是否在前台。建议在任何 `ui-input` 之前先执行一次 `window-focus`（见 4.3），并用 `app-state.isFocused` 复核；否则可能出现“命令返回 OK 但点击被吞、对象无变化”的现象。
 
 ### 4.3 编辑器命令（`XCommandEditorCommands`）
 
 | 命令 | Mode | 说明 |
 | :--- | :--- | :--- |
 | `editor_selection` | Editor | 返回当前选择对象的名称、类型与资源路径 |
-| `recompile` | Editor | 刷新 AssetDatabase 并请求重新编译脚本（延迟 0.5 秒执行） |
-| `play-start` | Editor | 让 Unity 进入 Play Mode |
+| `editor-menu` | Both | 按完整路径执行 Unity Editor 菜单命令，例如 `XFramework/Tools/XCommand`；菜单不存在、被禁用或执行失败时返回错误 |
+| `recompile` | Editor | 异步刷新 AssetDatabase 并重新编译脚本；CLI 默认等待编译成功或失败，operation 不可取消 |
+| `play-start` | Editor | 异步进入 Play Mode，等待 `EnteredPlayMode` 和 CLI Server 恢复；operation 不可取消 |
 | `preview-prefab` | Editor | 在临时场景离屏渲染 UI / 模型 Prefab 并导出 PNG，完成后恢复活动场景 |
 | `gameview-screenshot` | Editor | 非 Play 模式下把当前场景视图相机离屏渲染成 PNG；仅含相机渲染内容，Screen Space Overlay 的 UI 不含在内 |
+| `gameview-size` | Editor | 调整 GameView 渲染尺寸：`--maximize` / `--restore`，或 `--width/--height` 切换固定分辨率 |
 | `font_bake` | Editor | 扫描 TMP 文本用字并补齐字体图集缺字，默认 dry-run，加 `--apply` 才写入 |
 | `record` | Both | 调用 ffmpeg 录制屏幕指定秒数后自动停止并输出 MP4，默认录 GameView 区域 |
 | `record-start` / `record-stop` | Both | 开始 / 停止录屏，用于录不确定时长的过程（可在 Play 模式中录制游戏画面） |
-| `record-offscreen` | Both | 离屏逐帧录制 GameView 并输出 MP4，用 Unity 内置 `MediaEncoder`（硬件 H.264），不落 PNG、不依赖物理桌面是否可见；需要 Play 模式。返回 operation ID |
+| `record-offscreen` | Both | 离屏逐帧录制 GameView 并输出 MP4，用 Unity 内置 `MediaEncoder`；需要 Play 模式，返回 operation ID |
+| `record-offscreen-stop` | Both | 请求提前结束当前离屏录制；编码器在下一帧收尾并写出可播放的分片 MP4 |
+| `record-offscreen-status` | Both | 返回最近一次 / 当前离屏录制的状态、已录帧数、编码器与最终文件信息 |
+| `editor-window-list` | Editor | 列出当前已打开的 EditorWindow 标题、类型、聚焦和停靠状态，支持 `--query` 过滤 |
+| `editor-window-screenshot` | Editor | 从指定 EditorWindow 的 GUIView 渲染面截取内容区并保存为 PNG；不依赖桌面可见性，不含 Dock 标签栏与标题栏 |
+| `window-focus` | Both | 把 Unity Editor 主窗口恢复到前台并聚焦 GameView（Windows）；`ui-input` 注入前建议先执行。返回 `broughtToFront` / `gameViewFocused` / `isFocused` 供判定 |
 
-> 上表中 `font_bake`、`record` / `record-start` / `record-stop`、`record-offscreen`、`gameview-screenshot` 的入口在 `XCommandEditorCommands`，参数解析与实现分别位于 `Runtime/XCommandUtility.FontBake.cs`、`XCommandUtility.ScreenRecord.cs`、`XCommandUtility.OffscreenRecord.cs`、`XCommandUtility.GameViewCapture.cs`。字体烘焙的无头批处理入口 `-executeMethod XFramework.Editor.XCommandEditorCommands.BakeFontAtlasInBatchMode` 保持不变。
+> 上表中 `editor_selection` / `recompile` / `play-start` / `preview-prefab` / `record*` / `gameview-screenshot` / `window-focus` / `font_bake` / `gameview-size` 为 `displayType = Hidden`，不出现在 CLI `commands` 结果中；`editor-menu` / `editor-window-list` / `editor-window-screenshot` 保持可见。
+>
+> `recompile` / `play-start` / `play-stop` 的实现分别位于 `Editor/XCommandCompileOperation.cs` 与 `Editor/XCommandPlayModeOperation.cs`；`editor-window-*` 的实现位于 `Editor/XCommandEditorWindowCapture.cs`；`font_bake` / `record*` / `gameview-*` 的参数解析与实现仍位于 `Runtime/XCommandUtility.*.cs`。
+
+> `window-focus` 定义在编辑器程序集内，因此 Edit 模式与 Play 模式都可用（`Mode = Both`），但生成的 Player 里不会注册；Windows 前台锁可能拒绝抢占，失败时以返回值为准，必要时人工点一下 Game 窗口。
+
+> 字体烘焙的无头批处理入口 `-executeMethod XFramework.Editor.XCommandEditorCommands.BakeFontAtlasInBatchMode` 保持不变。
 
 > [!IMPORTANT]
 > `record` / `record-start` 依赖外部 **ffmpeg**。使用前请先安装，未安装时命令会返回安装提示：
@@ -222,7 +247,7 @@ XCommandRegistry.AddCommand("my-dynamic", argument => $"received: {argument}", X
 
 ### 5.2 编辑器窗口
 
-菜单：**`XFramework/Debug/XCommand`**
+菜单：**`XFramework/Tools/XCommand`**
 
 - **终端面板**：`Enter` 执行、`Tab` 预测补全、`↑↓` 候选 / 历史、`Esc` 关闭 / 清空；支持「自动滚动」「复制全部」「清空输出」「刷新命令」「显示隐藏命令」。
 - **命令手册（Command Reference）**：搜索、模式筛选（全部 / 当前可用 / Runtime / Editor / Both）、分类筛选、仅收藏、双击填入命令、查看用法与声明信息；底部为诊断折叠区。
@@ -291,7 +316,7 @@ xcli.ps1 exec '<完整命令行>' [--no-wait] [--timeout SECONDS] [--confirm] [-
 | `--pid N` | 指定目标进程 ID |
 | `--port N` | 指定端口，跳过注册文件发现流程 |
 | `--target editor\|player` | 按进程类型筛选 Server |
-| `--timeout S` | 等待异步 operation 的秒数，默认 60 |
+| `--timeout S` | 等待异步 operation 的秒数，默认 60；`recompile`、`play-start`、`play-stop` 默认 300 |
 | `--no-wait` | 命令返回 operation 后立即返回，不等待完成 |
 | `--confirm` | 对 `requireConfirmation` 命令确认执行 |
 | `--available` | `commands` 只列出当前环境可执行的命令 |
@@ -315,8 +340,11 @@ Server 选择规则：指定 `--port` 直接使用；否则先按 `--target` 过
 ```powershell
 $cli = '.\UnityClient\Packages\com.xdedzl.xframework\Modules\XCommand\Tools\cli\xcli.ps1'
 
-& $cli exec 'recompile' --target editor
+& $cli exec 'recompile' --target editor --timeout 300
 & $cli exec 'play-start'
+& $cli exec 'editor-window-list --query Console'
+& $cli exec 'editor-window-screenshot temp:/window.png --window Console'
+& $cli exec 'editor-menu XFramework/Tools/XCommand'
 & $cli exec 'ui-list --compact'
 & $cli exec 'ui-act --name StartButton click'
 & $cli exec 'screenshot temp:/xcommand.png'
@@ -328,20 +356,67 @@ $cli = '.\UnityClient\Packages\com.xdedzl.xframework\Modules\XCommand\Tools\cli\
 
 ### 6.5 operation 等待语义
 
-`exec` 默认 `waitForOperation = true`：如果命令返回值是可解析为带整型 `id` 的 JSON 字符串（即 operation 序列化结果），Server 会把它转换为 operation 并轮询到结束再返回。
+`exec` 默认 `waitForOperation = true`：如果命令返回值是可解析为带整型 `id` 的 JSON 字符串（即 operation 序列化结果），Server 会直接等待 operation 到终态再返回。`recompile`、`play-start`、`play-stop` 会触发 Domain Reload，CLI 改用内部协议 `wait-operation`，不再反复执行 `operation-status`。
 
 - 使用 `--no-wait` 时只返回 operation 的初始状态（`Queued` / `Running`），需要自行用 `operation-status` 轮询。
 - 超时返回 `124` 与 `Timeout` 状态，**不会**取消该操作；如需中止请显式执行 `exec 'operation-cancel <id>'`。
 - 命令返回非 operation 结果时，`waitForOperation` 不生效，直接返回执行结果。
+- `recompile`、`play-start`、`play-stop` 会触发 Domain Reload。CLI 先取得 operation，再按 PID 重新发现 Server 并提交内部 `wait-operation` 请求；成功和失败都以最终 operation 状态为准。重连不会重置总超时，等待期间也不会产生 `operation-status` 命令记录。
+- `play-start` 在 `EnteredPlayMode` 且 CLI Server 恢复后成功；Editor 内的 `play-stop` 在 `EnteredEditMode` 且 CLI Server 恢复后成功。Development Player 的 `play-stop` 仍是同步退出请求回执。
+- `recompile`、`play-start`、`play-stop` 均实现 `IXCommandAsyncOperation` 且 `CanCancel=false`，开始后不能用 `operation-cancel` 中止。新 Server 最多等待 5 秒恢复 operation，超过后返回失败。`operation-status` 仍可用于手工查询，并会正常产生命令记录。
+
+### 6.6 CLI、Agent 与模型的数据流
+
+XCommand 不直接调用大模型，也不向大模型发送回调。数据流为：
+
+```text
+模型生成工具调用
+    |
+    v
+Agent 工具运行时启动 PowerShell
+    |
+    v
+xcli.ps1 通过 loopback TCP 向 XFramework CLI Server 发请求
+    |
+    v
+Server 在 Unity 主线程执行命令，并通过 TCP 返回 JSON
+    |
+    v
+xcli.ps1 将最终 JSON 写入 stdout，并以 exitCode 退出
+    |
+    v
+Agent 工具运行时捕获 stdout / stderr / exitCode，并作为 tool result 放回模型上下文
+```
+
+职责边界：
+
+| 组件 | 职责 |
+| :--- | :--- |
+| XFramework CLI Server | 执行命令、维护 operation、收集结果，通过 TCP 返回 JSON |
+| `xcli.ps1` | 发现 Server、发送请求、等待 operation、处理 Domain Reload 后重连，把最终 JSON 写到 stdout |
+| Agent 工具运行时 | 启动和监控 CLI 进程，捕获 stdout / stderr / exitCode，并把结果作为 tool result 交给模型 |
+| 模型 | 发起工具调用；收到 tool result 后读取 JSON 并决定后续动作 |
+
+需要区分三个标识：
+
+| 标识 | 所属层 | 含义 | 生命周期 |
+| --- | --- | --- | --- |
+| `session_id` | Agent 工具运行时 | 跟踪仍在运行的 PowerShell / CLI 进程 | 临时工具会话，不落盘 |
+| operation ID | XCommand | 跟踪 Unity 中的异步命令状态 | 当前 Editor 会话；`recompile` 可跨 Domain Reload 恢复 |
+| PID | 操作系统 | 标识 Unity Editor、PowerShell 等进程 | 进程存活期间 |
+
+- **默认等待**：`xcli.ps1` 持续等待 operation，直到成功、失败或超时后输出最终 JSON 并退出。
+- **`--no-wait`**：取得 operation 后立即输出初始 JSON 并退出，后续必须主动执行 `operation-status`。
 
 ---
 
 ## 7. 自动化管道（`XCommandPipeline`）
 
 - **状态机**：`Queued → Running → Succeeded` / `Failed` / `Cancelled`。
-- **驱动方式**：由隐藏的 `[XFramework XCommand Pipeline]` GameObject 上的协程串行驱动，队列 FIFO；保留最近 100 条已完成操作。
+- **驱动方式**：Play Mode 由隐藏的 `[XFramework XCommand Pipeline]` GameObject 上的协程串行驱动；Edit Mode 下的 Editor operation 由 `EditorApplication.update` 驱动；队列 FIFO，保留最近 100 条已完成操作。
 - **操作字段**：`Id` / `Name` / `State` / `Output` / `Error` / `DurationMilliseconds` / `CreatedTimeUtc` / `StartedTimeUtc` / `CompletedTimeUtc`。
-- **主要接口**：`ActOnUI`、`WaitForUI`、`WaitForGameObject`、`WaitForLog`、`Wait`、`RunInput`、`CaptureScreenshot`、`TryGetOperation`、`CancelOperation`、`CancelAllOperations`。
+- **主要接口**：`RunOperation(IXCommandAsyncOperation)`、`TryGetOperation`、`CancelOperation`、`CancelAllOperations`、`Operations`；`IXCommandAsyncOperation.CanCancel` 决定是否允许取消；`XCommandPipeline.DelegateOperation` 供业务程序集快速接入。
+- **Editor operation**：`recompile` / `play-start` / `play-stop` 通过 `SessionState` 持久化，Domain Reload 后由 `XCommandPipeline.RestoreOperation(...)` 恢复；`CanCancel=false`。
 - **取消语义**：取消 `ui-act` / `ui-input` 时会自动调用 `ResetInterruptedInput()`，释放可能残留的按键 / 指针状态。
 
 ### 7.1 选择器（UGUI 与 GameObject）
@@ -416,14 +491,14 @@ $cli = '.\UnityClient\Packages\com.xdedzl.xframework\Modules\XCommand\Tools\cli\
 
 ## 8. 日志与记录
 
-### 8.1 运行时日志缓冲（`logs` / `wait-for log`）
+### 8.1 运行时日志缓冲（`logs` / `wait-for-log`）
 
 - 通过 `Application.logMessageReceivedThreaded` 采集，**环形缓冲上限 50MB**，超出后逐条淘汰最旧条目。
 - 每一条包含 `sequence` / `timestampUtc` / `threadId` / `level` / `message` / `stackTrace`。
 - 查询结果包含 `cursor`（下次增量查询用）、`latestSequence`、`oldestSequence`、`dropped`、`hasMore`、`bufferBytes` / `capacityBytes`。
 - 级别语义：`all` / `log` / `info` → `warn` / `warning` → `error` / `exception` / `assert`，按最小严重度过滤。
 - 可用 `--message-limit` / `--stack-limit` 截断长文本；需要堆栈时加 `--stack`。
-- `wait-for log` 的 `--since` 默认 `-1`，含义是「等待命令开始之后产生的新日志」，因此不会被历史日志立即满足。
+- `wait-for-log` 的 `--since` 默认 `-1`，含义是「等待命令开始之后产生的新日志」，因此不会被历史日志立即满足。
 
 ### 8.2 执行记录与历史（`XCommandHub`）
 
@@ -443,5 +518,5 @@ $cli = '.\UnityClient\Packages\com.xdedzl.xframework\Modules\XCommand\Tools\cli\
 - `requireConfirmation = true` 的命令在 CLI 下必须带 `--confirm`，否则返回 `ConfirmationRequired` 且不执行。
 - 命令 `displayType = Hidden` 只影响 CLI `commands` 的枚举结果，不影响执行。
 - `XCommand` 静态类在编辑器下通过 `RuntimeInitializeOnLoadMethod(SubsystemRegistration)` 与 `Application.exitCancellationToken` 重置静态状态，用于兼容「关闭 Reload Domain」。如果你也在 `XCommand` 相关类型上添加静态缓存，请在同样的时机重置。
-- `XCommandPipeline` 会在同一时机清空操作队列、销毁 runner GameObject，并重置输入与 UGUI 快照状态。
+- `XCommandPipeline` 会在同一时机清空操作队列、销毁 runner GameObject，并重置输入与 UGUI 快照状态；`recompile` / `play-start` / `play-stop` 的 operation 由 `XCommandCompileOperation` / `XCommandPlayModeOperation` 通过 `SessionState` 自行恢复。
 - Hunter 的远端地址是硬编码常量，更换调试端需要修改源码。
