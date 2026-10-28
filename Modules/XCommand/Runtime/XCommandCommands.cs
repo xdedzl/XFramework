@@ -13,6 +13,7 @@ namespace XFramework.Command
     {
         private const string Category = "XCommand";
         private const string StateCategory = "State";
+        private const string PerfCategory = "Perf";
 
         #region 内置命令
 
@@ -391,6 +392,34 @@ namespace XFramework.Command
                 timeoutSeconds = args.GetFloat("timeout", 10f),
             };
             return XCommandPipeline.RunOperation(new ScreenshotOperation(request));
+        }
+
+        #endregion
+
+        #region 性能采样
+
+        [XCommandEntry("perf-start", name = "开始帧采样", order = 200, mode = XCommandMode.Runtime, category = PerfCategory,
+            description = "开始逐帧采样帧间隔、GC、FrameTiming 与 Profiler 标记；可指定采样时长、自定义标记与位置追踪目标。",
+            usage = XCommandUtility.Performance.StartUsage, displayType = XCommandDisplayType.Hidden)]
+        private static object StartPerformanceSampling(string argument)
+        {
+            return XCommandUtility.Performance.ExecuteStart(argument);
+        }
+
+        [XCommandEntry("perf-status", name = "查询帧采样状态", order = 201, mode = XCommandMode.Runtime, category = PerfCategory,
+            description = "返回当前采样会话的样本数量、已采样时长与超阈值帧数。",
+            usage = XCommandUtility.Performance.StatusUsage, displayType = XCommandDisplayType.Hidden)]
+        private static object GetPerformanceSamplingStatus(string argument)
+        {
+            return XCommandUtility.Performance.ExecuteStatus(argument);
+        }
+
+        [XCommandEntry("perf-stop", name = "结束帧采样", order = 202, mode = XCommandMode.Runtime, category = PerfCategory,
+            description = "结束采样并返回统计报告（单行 JSON，包含帧耗时分位、直方图、尖峰、GC、FrameTiming、Profiler 标记与最差帧）。",
+            usage = XCommandUtility.Performance.StopUsage, displayType = XCommandDisplayType.Hidden)]
+        private static object StopPerformanceSampling(string argument)
+        {
+            return XCommandUtility.Performance.ExecuteStop(argument);
         }
 
         #endregion

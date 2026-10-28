@@ -15,6 +15,7 @@ namespace XFramework.Editor
     public sealed class XCommandEditorCommands : XCommandGroup
     {
         private const string Category = "Editor";
+        private const string PerfCategory = "Perf";
 
         static XCommandEditorCommands()
         {
@@ -74,6 +75,42 @@ namespace XFramework.Editor
         private static object StartPlayMode()
         {
             return XCommandPlayModeOperation.StartStart();
+        }
+
+        #endregion
+
+        #region Profiler
+
+        [XCommandEntry("prof-on", name = "开启 Profiler 采样", order = 220, mode = XCommandMode.Both, category = PerfCategory,
+            description = "开启 Unity Profiler 采集；--deep 开启 Deep Profile（逐方法耗时，会显著拖慢运行），--editor 同时采集编辑器帧，--reset 先清空已捕获的帧。",
+            usage = XCommandProfiler.EnableUsage, displayType = XCommandDisplayType.Hidden)]
+        private static object EnableProfiler(string argument)
+        {
+            return XCommandProfiler.ExecuteEnable(argument);
+        }
+
+        [XCommandEntry("prof-off", name = "停止 Profiler 采样", order = 221, mode = XCommandMode.Both, category = PerfCategory,
+            description = "停止 Profiler 采集，返回已捕获的帧范围。",
+            usage = XCommandProfiler.DisableUsage, displayType = XCommandDisplayType.Hidden)]
+        private static object DisableProfiler(string argument)
+        {
+            return XCommandProfiler.ExecuteDisable(argument);
+        }
+
+        [XCommandEntry("prof-mark", name = "标记当前帧", order = 222, mode = XCommandMode.Both, category = PerfCategory,
+            description = "记录当前 Profiler 帧号；执行两次后 prof-report 默认只分析这两点之间的帧。",
+            usage = XCommandProfiler.MarkUsage, displayType = XCommandDisplayType.Hidden)]
+        private static object MarkProfilerFrame(string argument)
+        {
+            return XCommandProfiler.ExecuteMark(argument);
+        }
+
+        [XCommandEntry("prof-report", name = "Profiler 最差帧报告", order = 223, mode = XCommandMode.Both, category = PerfCategory,
+            description = "找出主线程耗时最长 / GC 分配最多的帧，并按自身耗时或分配量列出热点函数；默认分析最近一次 prof-mark 两点之间的帧。",
+            usage = XCommandProfiler.ReportUsage, displayType = XCommandDisplayType.Hidden)]
+        private static object ReportProfilerFrames(string argument)
+        {
+            return XCommandProfiler.ExecuteReport(argument);
         }
 
         #endregion

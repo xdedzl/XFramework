@@ -64,8 +64,8 @@ namespace XFramework.Resource
             /// <param name="position">位置</param>
             /// <param name="quaternion">方向</param>
             /// <param name="parent">父物体</param>
-            /// <param name="callBack">实例化完成回调</param>
-            public void InstantiateAsync<T>(string assetName, Vector3 position, Quaternion quaternion, Transform parent, Action<T> callBack) where T : UObject
+            /// <param name="callBack">实例化完成回调，success 表示是否成功</param>
+            public void InstantiateAsync<T>(string assetName, Vector3 position, Quaternion quaternion, Transform parent, LoadAssetDelegate<T> callBack) where T : UObject
             {
                 m_LoadHelper.LoadAsync<T>(assetName, (success, asset) =>
                 {
@@ -73,11 +73,12 @@ namespace XFramework.Resource
                     {
                         T obj = UObject.Instantiate(asset, position, quaternion, parent ?? NormalInstanceRoot);
                         RecordInstance(assetName, asset, obj, false);
-                        callBack?.Invoke(obj);
+                        callBack?.Invoke(true, obj);
                     }
                     else
                     {
                         Debug.LogError("[Resource] There is no resource which path is " + assetName);
+                        callBack?.Invoke(false, null);
                     }
                 });
             }
@@ -88,9 +89,9 @@ namespace XFramework.Resource
             public XAwaitableTask<T> InstantiateAsync<T>(string assetName, Vector3 position, Quaternion quaternion, Transform parent) where T : UObject
             {
                 var task = new XAwaitableTask<T>(null);
-                InstantiateAsync<T>(assetName, position, quaternion, parent, (instance) =>
+                InstantiateAsync<T>(assetName, position, quaternion, parent, (success, instance) =>
                 {
-                    task.SetResult(instance);
+                    task.SetResult(success ? instance : null);
                 });
                 return task;
             }
@@ -158,8 +159,8 @@ namespace XFramework.Resource
             /// <param name="position">位置</param>
             /// <param name="quaternion">方向</param>
             /// <param name="parent">父物体</param>
-            /// <param name="callBack">实例化完成回调</param>
-            public void InstantiateAsyncByPool<T>(string assetName, Vector3 position, Quaternion quaternion, Transform parent, Action<T> callBack) where T : UObject
+            /// <param name="callBack">实例化完成回调，success 表示是否成功</param>
+            public void InstantiateAsyncByPool<T>(string assetName, Vector3 position, Quaternion quaternion, Transform parent, LoadAssetDelegate<T> callBack) where T : UObject
             {
                 // 先尝试从空闲池中获取
                 if (m_FreeInstances.TryGetValue(assetName, out var queue) && queue.Count > 0)
@@ -188,7 +189,7 @@ namespace XFramework.Resource
                         comp.gameObject.SetActive(true);
                     }
                     
-                    callBack?.Invoke(instance as T);
+                    callBack?.Invoke(true, instance as T);
                     return;
                 }
                 
@@ -206,11 +207,12 @@ namespace XFramework.Resource
                             m_FreeInstances[assetName] = new Queue<UObject>();
                         }
                         
-                        callBack?.Invoke(obj);
+                        callBack?.Invoke(true, obj);
                     }
                     else
                     {
                         Debug.LogError("[Resource] There is no resource which path is " + assetName);
+                        callBack?.Invoke(false, null);
                     }
                 });
             }
@@ -221,9 +223,9 @@ namespace XFramework.Resource
             public XAwaitableTask<T> InstantiateAsyncByPool<T>(string assetName, Vector3 position, Quaternion quaternion, Transform parent) where T : UObject
             {
                 var task = new XAwaitableTask<T>(null);
-                InstantiateAsyncByPool<T>(assetName, position, quaternion, parent, (instance) =>
+                InstantiateAsyncByPool<T>(assetName, position, quaternion, parent, (success, instance) =>
                 {
-                    task.SetResult(instance);
+                    task.SetResult(success ? instance : null);
                 });
                 return task;
             }
@@ -651,22 +653,22 @@ namespace XFramework.Resource
         }
         
         
-        public void InstantiateAsync<T>(string assetName, Action<T> callBack) where T : UObject
+        public void InstantiateAsync<T>(string assetName, LoadAssetDelegate<T> callBack) where T : UObject
         {
             m_InstantiateHelper.InstantiateAsync<T>(assetName, default, default, null, callBack);
         }
             
-        public void InstantiateAsync<T>(string assetName, Transform parent, Action<T> callBack) where T : UObject
+        public void InstantiateAsync<T>(string assetName, Transform parent, LoadAssetDelegate<T> callBack) where T : UObject
         {
             m_InstantiateHelper.InstantiateAsync<T>(assetName, default, default, parent, callBack);
         }
             
-        public void InstantiateAsync<T>(string assetName, Vector3 position, Quaternion quaternion, Action<T> callBack) where T : UObject
+        public void InstantiateAsync<T>(string assetName, Vector3 position, Quaternion quaternion, LoadAssetDelegate<T> callBack) where T : UObject
         {
             m_InstantiateHelper.InstantiateAsync<T>(assetName, position, quaternion, null, callBack);
         }
         
-        public void InstantiateAsync<T>(string assetName, Vector3 position, Quaternion quaternion, Transform parent, Action<T> callBack) where T : UObject
+        public void InstantiateAsync<T>(string assetName, Vector3 position, Quaternion quaternion, Transform parent, LoadAssetDelegate<T> callBack) where T : UObject
         {
             m_InstantiateHelper.InstantiateAsync<T>(assetName, position, quaternion, parent, callBack);
         }
@@ -714,22 +716,22 @@ namespace XFramework.Resource
         }
         
         
-        public void InstantiateAsyncByPool<T>(string assetName, Action<T> callBack) where T : UObject
+        public void InstantiateAsyncByPool<T>(string assetName, LoadAssetDelegate<T> callBack) where T : UObject
         {
             m_InstantiateHelper.InstantiateAsyncByPool<T>(assetName, default, default, null, callBack);
         }
         
-        public void InstantiateAsyncByPool<T>(string assetName, Transform parent, Action<T> callBack) where T : UObject
+        public void InstantiateAsyncByPool<T>(string assetName, Transform parent, LoadAssetDelegate<T> callBack) where T : UObject
         {
             m_InstantiateHelper.InstantiateAsyncByPool<T>(assetName, default, default, parent, callBack);
         }
         
-        public void InstantiateAsyncByPool<T>(string assetName, Vector3 position, Quaternion quaternion, Action<T> callBack) where T : UObject
+        public void InstantiateAsyncByPool<T>(string assetName, Vector3 position, Quaternion quaternion, LoadAssetDelegate<T> callBack) where T : UObject
         {
             m_InstantiateHelper.InstantiateAsyncByPool<T>(assetName, position, quaternion, null, callBack);
         }
         
-        public void InstantiateAsyncByPool<T>(string assetName, Vector3 position, Quaternion quaternion, Transform parent, Action<T> callBack) where T : UObject
+        public void InstantiateAsyncByPool<T>(string assetName, Vector3 position, Quaternion quaternion, Transform parent, LoadAssetDelegate<T> callBack) where T : UObject
         {
             m_InstantiateHelper.InstantiateAsyncByPool<T>(assetName, position, quaternion, parent, callBack);
         }

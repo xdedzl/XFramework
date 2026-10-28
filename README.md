@@ -110,7 +110,9 @@ flowchart TB
 | **工具库 (Unity)** | [Runtime/Tools/](./Runtime/Tools/)                       | [引擎工具 (`UUtility`)](#52-引擎特定高级工具-uutility)                            |
 | **检查面板**       | [Modules/XInspector/](./Modules/XInspector/)             | [XInspector 数据检查面板](#46-xinspector-数据检查面板)                            |
 | **动画工具**       | [XAnimation/Runtime/](./XAnimation/Runtime/)             | [XAnimation 播放系统](./XAnimation/Doc/XAnimation.md)                             |
+| **类型工厂**       | [Core/TypeSystem/](./Core/TypeSystem/)                   | [类型别名与实例构造 (`XType`)](#48-类型别名与实例构造-xtype)                      |
 | **控制台**         | [Modules/XCommand/](./Modules/XCommand/)                 | [XCommand 控制台与自动化调试](./Modules/XCommand/README.md)                       |
+| **编码规范**       | [Doc/](./Doc/)                                           | [XFramework 编码规范](./Doc/CodingStandards.md)                                   |
 
 ---
 
@@ -791,6 +793,26 @@ Scene 句柄当前内置：
 - 完整专题文档：[`XAnimation/Doc/XAnimation.md`](./XAnimation/Doc/XAnimation.md)
 
 适合用于代码显式控制动画状态、多通道混合、1D Blend、2D Directional Blend、Cue 事件分发以及 Override Asset 复用。XAnimation Cue 在 `Manual` 与 `GameTime` 下都由内部 `PlayableBehaviour` 跟随 `PlayableGraph` 采集，`Step` / `SyncFrame` 仍仅支持 `Manual`；Unity 原生 `AnimationEvent` 默认通过 `Animator.fireEvents = false` 关闭，但仍可从 `AnimationClip.events` 派生 XAnimation Cue；编辑器预览窗口始终固定 `Manual`，保证 Seek、单帧步进、Cue Log 和调试显示稳定。2D Blend 支持 `Blend2DSimpleDirectional` 与 `Blend2DFreeformDirectional`，后者可表达同方向 walk/run 这类方向 + 半径混合。详细的资源结构、运行时示例、播放接口、打断规则和 Root Motion 约定，请直接阅读专题文档。
+
+### 4.8 类型别名与实例构造 (XType)
+
+`XType` 是类型系统的唯一对外入口。普通 C# 类标记 `[XTypeAlias("别名")]` 后，即可用字符串查询类型并创建实例，无需在业务代码里散落 `Type.GetType`、程序集扫描与 `Activator.CreateInstance`。
+
+```csharp
+using XFramework.TypeSystem;
+
+[XTypeAlias("task.condition.hasItem")]
+public sealed class HasItemCondition : ITaskCondition { }
+
+ITaskCondition condition = XType.Create<ITaskCondition>("task.condition.hasItem");
+```
+
+- 仅标记 `[XTypeAlias]` 的类会进入索引，别名全局唯一且区分大小写。
+- 别名重复、空别名、抽象类或泛型类型定义会在构建索引时抛出 `XFrameworkException`。
+- `XType.TryGet` / `XType.Get` 查询，`XType.GetAliases` 枚举，`XType.Refresh` 在动态加载程序集后重建索引。
+- 仅支持普通 C# 类；IL2CPP 下需用 `[Preserve]` 或 `link.xml` 防止裁剪。
+
+完整说明见 [类型系统文档](./Doc/TypeSystem.md)。
 
 ---
 

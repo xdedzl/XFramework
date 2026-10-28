@@ -73,7 +73,7 @@ namespace XFramework.Resource
             xTask.Start();
             xTask.ContinueWith<T>((r) =>
             {
-                callBack.Invoke(true, r);
+                callBack.Invoke(r != null, r);
             });
         }
         

@@ -43,6 +43,8 @@
 | `Editor/XCommandCompileOperation.cs` | `recompile` 异步 operation；跨 Domain Reload 恢复并收集编译诊断 |
 | `Editor/XCommandPlayModeOperation.cs` | `play-start` / `play-stop` 异步 operation |
 | `Editor/XCommandEditorWindowCapture.cs` | `editor-window-list` / `editor-window-screenshot` 的窗口枚举与离屏截图实现 |
+| `Runtime/XCommandUtility.Performance.cs` / `Runtime/XCommandPerformanceSampler.cs` | 帧性能采样（`perf-*`）的参数解析与逐帧采样宿主 |
+| `Editor/XCommandProfiler.cs` | Profiler 采样控制、帧标记与最差帧报告（`prof-*`） |
 | `Tools/cli/xcli.ps1` | 外部命令行客户端（含 Domain Reload 重连） |
 
 ---
@@ -224,7 +226,23 @@ XCommandRegistry.AddCommand("my-dynamic", argument => $"received: {argument}", X
 > - 默认优先用 Unity 内置 `MediaEncoder`（平台硬件编码，不含音频）；创建失败时自动回退到 ffmpeg rawvideo 管道，可用 `--no-fallback` 禁止回退。
 > - 返回 operation ID，用 `operation-status ID` 查结果，`operation-cancel ID` 可提前结束录制（已写入的分片仍可播放）。
 
-### 4.4 其他模块贡献的命令
+### 4.4 性能分析命令（`Perf`）
+
+| 命令 | Mode | 说明 |
+| :--- | :--- | :--- |
+| `perf-start` | Runtime | 开始逐帧采样帧间隔、GC、FrameTiming 与 Profiler 标记；支持 `--threshold-ms` / `--label` / `--timeline` / `--duration-seconds` / `--markers NAME1,NAME2` / `--track-tag TAG` |
+| `perf-status` | Runtime | 查询采样会话的样本数、已采样时长与超阈值帧数 |
+| `perf-stop` | Runtime | 结束采样并返回单行 JSON 报告（帧耗时分位、直方图、尖峰、GC、FrameTiming、标记与最差帧） |
+| `prof-on` / `prof-off` | Both | 开启 / 停止 `ProfilerDriver` 采集；`prof-on` 支持 `--deep` / `--editor` / `--reset` |
+| `prof-mark` | Both | 记录当前 Profiler 帧号，执行两次后 `prof-report` 默认只分析两点之间的帧 |
+| `prof-report` | Both | 按自身耗时或 GC 分配列出最差帧与热点函数，支持调用栈、合并同名样本与隐藏编辑器样本 |
+
+> 以上命令均为 `displayType = Hidden`。运行时采样默认只采集引擎级 Profiler 标记，项目自定义标记用 `--markers` 传入；位置追踪需显式指定 `--track-tag`。
+
+> [!TIP]
+> 典型流程：`prof-on --reset` 后运行游戏，`prof-mark` 圈定区间，`prof-off` 后 `prof-report` 看最差帧与热点函数；需要逐帧曲线与 GC / FrameTiming 统计时用 `perf-start` / `perf-stop`。
+
+### 4.5 其他模块贡献的命令
 
 命令注册会扫描全部程序集，因此各功能模块可以自带命令：
 
@@ -520,3 +538,48 @@ Agent 工具运行时捕获 stdout / stderr / exitCode，并作为 tool result �
 - `XCommand` 静态类在编辑器下通过 `RuntimeInitializeOnLoadMethod(SubsystemRegistration)` 与 `Application.exitCancellationToken` 重置静态状态，用于兼容「关闭 Reload Domain」。如果你也在 `XCommand` 相关类型上添加静态缓存，请在同样的时机重置。
 - `XCommandPipeline` 会在同一时机清空操作队列、销毁 runner GameObject，并重置输入与 UGUI 快照状态；`recompile` / `play-start` / `play-stop` 的 operation 由 `XCommandCompileOperation` / `XCommandPlayModeOperation` 通过 `SessionState` 自行恢复。
 - Hunter 的远端地址是硬编码常量，更换调试端需要修改源码。
+
+---
+
+## 10. Workflow 测试约定
+
+> 本节是本仓库的测试产物约定。Agent 测试流程放在 `.agents/workflows/<workflow-name>.md`，通过 `xcli.ps1` 驱动 Unity；测试产物统一写入 `.agents/workflows/runs/`。
+
+### 10.1 目录结构
+
+每次执行 workflow 都新建一个独立运行目录，不覆盖历史结果：
+
+```text
+.agents/workflows/runs/
+  <yyyyMMdd-HHmmss>_<workflow-name>/
+    report.md          # 必填：测试报告
+    logs/              # 可选：xcli 输出、错误日志、perf JSON
+    screenshots/       # 可选：截图
+    recordings/        # 可选：录屏 / GIF
+    artifacts/         # 可选：Profiler 导出、构建日志等
+```
+
+- `report.md` 必填；其余目录只在确实有内容时创建，不建空目录。
+- 截图、录屏不是每次都有，没有就省略，并在报告中写「未录制」。
+- 大文件（长录屏、Profiler 数据）默认只保留在本地，不提交仓库。
+- 完整约定与模板见 `.agents/workflows/runs/README.md`。
+
+### 10.2 测试报告格式
+
+`report.md` 至少包含以下部分：
+
+1. **结论**：`PASS` / `FAIL` / `BLOCKED`，以及一句话摘要。
+2. **环境**：时间、项目/场景、Git 分支与 commit、未提交改动、Unity 版本与运行方式（Editor Play Mode / Development Build）。
+3. **测试范围**：本次覆盖的 workflow 步骤。
+4. **步骤与结果**：表格列出操作/命令、期望、实际、结果；未执行的步骤标 `SKIP` 并说明原因。
+5. **指标**：编译 error/warning、关键 Profiler 标记耗时、主线程同步读盘、运行时 error 数等。
+6. **问题与失败**：失败项必须给出复现步骤或日志位置。
+7. **产物**：实际保存的日志、截图、录屏、Profiler 文件路径。
+8. **备注**：限制、未覆盖项、后续待办。
+
+### 10.3 编写建议
+
+- 命令统一使用 `xcli.ps1 exec '<command>' --target editor`，并在报告中保留关键命令原文。
+- 先 `recompile`，再 `play-start`，结束时 `play-stop`；采样期间不要插入其它 xcli 命令。
+- 需要堆栈时使用 `logs --level error --stack --compact`；按关键字筛选用 `--contains`。
+- 失败结论必须能仅凭 `report.md` + `logs/` 复现或定位，不依赖口头描述。

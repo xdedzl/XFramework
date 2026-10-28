@@ -76,7 +76,9 @@ namespace XFramework
                 xTask?.Stop();
                 xTask = null;
                 source.Stop();
-                source.clip = null;
+                // 刻意不清空 source.clip：清空会让 AudioSource 额外释放一次音频实例，
+                // 实测回收阶段单次 SoundHandle 析构在主线程可达 6~10ms。
+                // 下次 Play 会直接覆盖 clip，不需要在这里释放。
                 source.pitch = 1f;
                 source.spatialBlend = 0f;
             }
@@ -354,7 +356,6 @@ namespace XFramework
             {
                 var audioEntity = EntityManager.Instance.Allocate<AudioEntity>("SoundManager_Audio");
                 audioEntity.Play(clip, volume, pitch);
-                LogPlaySound(clip, volume, pitch);
                 return audioEntity;
             }
         }
@@ -376,7 +377,6 @@ namespace XFramework
             {
                 var audioEntity = EntityManager.Instance.Allocate<AudioEntity>("SoundManager_Audio");
                 audioEntity.Play3D(clip, position, minDistance, maxDistance, volume, pitch);
-                LogPlaySound(clip, volume, pitch);
                 return audioEntity;
             }
         }
@@ -666,13 +666,6 @@ namespace XFramework
             {
                 m_ActiveBGM.volume = m_BgmVolume;
             }
-        }
-
-        private static void LogPlaySound(AudioClip clip, float volume, float pitch)
-        {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            Debug.Log($"[SoundManager] Play sound '{clip.name}'. volume={volume}, pitch={pitch}");
-#endif
         }
     }
 }

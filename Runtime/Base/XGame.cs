@@ -54,15 +54,20 @@ namespace XFramework
                 DontDestroyOnLoad(this);
             }
 
-            OnInit();
-
+            Init();
             EnterFirstProcedure();
         }
 
-        private void OnInit()
+        private void Init()
         {
             XJson.SetUnityDefaultSetting();
             GameEntry.InitializeModules(ModuleLifecycle.Persistent, ModuleLifecycle.RuntimePersistent);
+            OnInit();
+        }
+        
+        protected virtual void OnInit()
+        {
+
         }
 
         private void EnterFirstProcedure()
