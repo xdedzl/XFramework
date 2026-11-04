@@ -6,8 +6,8 @@ using UnityEngine;
 namespace XFramework.Command
 {
     /// <summary>
-    /// Runtime 程序集内的全部命令入口：内置命令、运行时与自动化命令。
-    /// 按功能使用 #region 分类，不再拆分到多个文件。
+    /// Runtime 程序集中的非核心命令入口：内置命令、运行时与自动化能力。
+    /// 核心 operation 管理命令由 XCommandCoreCommands 提供。
     /// </summary>
     public sealed class XCommandCommands : XCommandGroup
     {
@@ -15,22 +15,28 @@ namespace XFramework.Command
         private const string StateCategory = "State";
         private const string PerfCategory = "Perf";
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterAssembliesLoaded)]
+        private static void RegisterCommandGroup()
+        {
+            XCommandRegistry.RegisterGroup(typeof(XCommandCommands));
+        }
+
         #region 内置命令
 
         [XCommandEntry("clear", name = "清空 XCommand", order = 0, mode = XCommandMode.Both, displayType = XCommandDisplayType.Hidden, category = Category, description = "清空当前 XCommand 终端的显示内容，不删除 Hub 历史。", usage = "clear", recordExecution = false)]
-        public static void ClearConsole()
+        private static void ClearConsole()
         {
             XCommandHub.RequestDisplayClear();
         }
 
         [XCommandEntry("load_history", name = "加载 XCommand 历史", order = 1, mode = XCommandMode.Both, displayType = XCommandDisplayType.Hidden, category = Category, description = "在当前 XCommand 终端重新加载 Hub 历史。", usage = "load_history", recordExecution = false)]
-        public static void LoadHistory()
+        private static void LoadHistory()
         {
             XCommandHub.RequestDisplayHistory();
         }
 
         [XCommandEntry("help", name = "查看 XCommand 帮助", order = 2, mode = XCommandMode.Both, displayType = XCommandDisplayType.Hidden, category = Category, description = "查看全部命令分类，或查看指定分类下的全部命令。", usage = "help [--category CATEGORY] [--all]", recordExecution = false)]
-        public static string GetHelp(string argument)
+        private static string GetHelp(string argument)
         {
             XCommandArguments args = XCommandArguments.Parse(argument, new[] { "category" }, new[] { "all" });
             args.RequireValueCount(0, "help 不接受位置参数。usage: help [--category CATEGORY] [--all]");
@@ -140,22 +146,8 @@ namespace XFramework.Command
             public string description;
         }
 
-        [XCommandEntry("enable_hunter", name = "连接 Hunter", order = 10, mode = XCommandMode.Runtime, displayType = XCommandDisplayType.Hidden, category = Category, description = "连接远程 Hunter 调试端。", usage = "enable_hunter")]
-        public static void StartHunter()
-        {
-            XCommand.Log("已成功连接 Hunter");
-            XCommand.ConnetHunter();
-        }
-
-        [XCommandEntry("disable_hunter", name = "断开 Hunter", order = 20, mode = XCommandMode.Runtime, displayType = XCommandDisplayType.Hidden, category = Category, description = "断开远程 Hunter 调试端。", usage = "disable_hunter")]
-        public static void StopHunter()
-        {
-            XCommand.Log("已成功断开 Hunter");
-            XCommand.DisConnetHunter();
-        }
-
         [XCommandEntry("log", name = "输出 Unity 日志", order = 30, mode = XCommandMode.Both, displayType = XCommandDisplayType.Hidden, category = Category, description = "向 Unity Console 输出一条日志。", usage = "log <content>")]
-        public static void UnityLog(string content)
+        private static void UnityLog(string content)
         {
             Debug.Log(content);
         }
@@ -164,7 +156,7 @@ namespace XFramework.Command
 
         #region 运行控制
 
-        [XCommandEntry("play-stop", name = "结束运行", order = 10, mode = XCommandMode.Runtime, category = Category, description = "Editor 中异步退出 Play Mode 并等待 EnteredEditMode；Development Player 中返回退出请求回执。", usage = "play-stop", displayType = XCommandDisplayType.Hidden)]
+        [XCommandEntry("play-stop", name = "结束运行", order = 10, mode = XCommandMode.Runtime, category = Category, description = "Editor 中异步退出 Play Mode 并等待 EnteredEditMode；Development Player 中返回退出请求回执。", usage = "play-stop")]
         private static object StopRunning()
         {
             return XCommandPipeline.StopRunning();
@@ -424,42 +416,6 @@ namespace XFramework.Command
 
         #endregion
 
-        #region 异步操作
-
-        [XCommandEntry("operation-list", name = "列出自动化操作", order = 80, mode = XCommandMode.Both, category = Category, description = "列出最近的 XCommand 异步操作及其状态。", usage = "operation-list [--limit N] [--compact]", displayType = XCommandDisplayType.Hidden)]
-        private static object ListOperations(string argument)
-        {
-            XCommandArguments args = XCommandArguments.Parse(argument, new[] { "limit" }, new[] { "compact" });
-            args.RequireValueCount(0, "operation-list 不接受位置参数。");
-            return XCommandPipeline.SerializeOperations(args.GetInt("limit", 20), !args.HasFlag("compact"));
-        }
-
-        [XCommandEntry("operation-status", name = "查询自动化操作", order = 90, mode = XCommandMode.Both, category = Category, description = "查询指定 XCommand 操作的状态、输出和错误。", usage = "operation-status [--compact] ID", displayType = XCommandDisplayType.Hidden)]
-        private static object GetOperationStatus(string argument)
-        {
-            XCommandArguments args = XCommandArguments.Parse(argument, Array.Empty<string>(), new[] { "compact" });
-            args.RequireValueCount(1, "usage: operation-status [--compact] ID");
-            long operationId = ParseLong(args.Values[0], "operation ID");
-            if (!XCommandPipeline.TryGetOperation(operationId, out XCommandOperationInfo operation))
-                throw new ArgumentException($"找不到 XCommand 操作：{operationId}");
-            return XCommandPipeline.SerializeOperation(operation, !args.HasFlag("compact"));
-        }
-
-        [XCommandEntry("operation-cancel", name = "取消自动化操作", order = 100, mode = XCommandMode.Runtime, category = Category, description = "取消指定 XCommand 操作，或使用 all 取消全部等待和排队操作。", usage = "operation-cancel ID|all", displayType = XCommandDisplayType.Hidden)]
-        private static object CancelOperation(string argument)
-        {
-            string value = argument?.Trim() ?? string.Empty;
-            if (string.Equals(value, "all", StringComparison.OrdinalIgnoreCase))
-                return $"Cancelled operations: {XCommandPipeline.CancelAllOperations()}";
-            long operationId = ParseLong(value, "operation ID");
-            if (!XCommandPipeline.CancelOperation(operationId))
-                throw new InvalidOperationException($"操作 {operationId} 不存在或已经结束。");
-            XCommandPipeline.TryGetOperation(operationId, out XCommandOperationInfo operation);
-            return XCommandPipeline.SerializeOperation(operation);
-        }
-
-        #endregion
-
         #region 状态查询
 
         [XCommandEntry("scene-state", name = "查询场景状态", order = 15, mode = XCommandMode.Both, category = StateCategory, description = "返回当前已加载场景、活动场景、Dirty 状态以及根 GameObject 摘要。", usage = "scene-state [--compact]", displayType = XCommandDisplayType.Hidden)]
@@ -511,11 +467,5 @@ namespace XFramework.Command
             return result;
         }
 
-        private static long ParseLong(string value, string name)
-        {
-            if (!long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out long result))
-                throw new ArgumentException($"{name} 不是有效整数：{value}");
-            return result;
-        }
     }
 }

@@ -53,6 +53,7 @@ namespace XFramework.Editor
         private bool consoleStructureDirty;
         private bool consoleScrollPending;
         private TextField m_CommandLineField;
+        private VisualElement m_CommandLineTextInput;
         private Button m_ExecuteButton;
         private Label m_PromptHintLabel;
         private VisualElement m_SuggestionPanel;
@@ -240,7 +241,7 @@ namespace XFramework.Editor
             string endpoint = running ? $"127.0.0.1:{XFrameworkCliServer.Port}" : "未监听";
             m_CliServerMenuButton.text = running ? $"CLI ● :{XFrameworkCliServer.Port}" : "CLI ○ 已停止";
             m_CliServerMenuButton.style.color = running ? PromptColor : new Color(0.85f, 0.48f, 0.40f);
-            m_CliServerMenuButton.tooltip = $"{(running ? "运行中" : "已停止")}  ·  {endpoint}\nPID {processId}  ·  Editor  ·  {(Application.isPlaying ? "Play Mode" : "Edit Mode")}\nLoopback Only\n\n点击管理 Server";
+            m_CliServerMenuButton.tooltip = $"{(running ? "运行中" : "已停止")}  ·  {endpoint}\nPID {processId}  ·  Editor  ·  {(Application.isPlaying ? "Play Mode" : "Edit Mode")}\n局域网监听 0.0.0.0；仅限可信内网开发调试\n\n点击管理 Server";
         }
 
         private void ShowCliServerMenu()
@@ -400,6 +401,7 @@ namespace XFramework.Editor
             m_CommandLineField.RegisterValueChangedCallback(_ => OnCommandLineChanged());
             m_CommandLineField.RegisterCallback<KeyDownEvent>(OnCommandLineKeyDown, TrickleDown.TrickleDown);
             VisualElement textInput = m_CommandLineField.Q<VisualElement>("unity-text-input");
+            m_CommandLineTextInput = textInput;
             textInput.style.backgroundColor = new Color(0.045f, 0.05f, 0.055f);
             textInput.style.borderLeftWidth = 0f;
             textInput.style.borderRightWidth = 0f;
@@ -1189,7 +1191,7 @@ namespace XFramework.Editor
 
         private void FocusCommandLine()
         {
-            m_CommandLineField.schedule.Execute(() => m_CommandLineField.Focus());
+            m_CommandLineField.schedule.Execute(() => m_CommandLineTextInput.Focus());
         }
 
         private void NavigateCommandHistory(int direction)

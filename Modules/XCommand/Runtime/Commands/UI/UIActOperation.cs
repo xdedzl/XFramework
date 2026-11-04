@@ -20,6 +20,21 @@ namespace XFramework.Command
 
         public IEnumerator Run(XCommandOperationContext context)
         {
+            try
+            {
+                yield return RunCore(context);
+            }
+            finally
+            {
+                if (context.IsCancellationRequested)
+                {
+                    XCommandUtility.Input.ResetInterruptedInput();
+                }
+            }
+        }
+
+        private IEnumerator RunCore(XCommandOperationContext context)
+        {
             XCommandUISelector selector = request.selector ?? new XCommandUISelector();
             if (string.IsNullOrEmpty(selector.name) && string.IsNullOrEmpty(selector.path) && string.IsNullOrEmpty(selector.indexedPath) && string.IsNullOrEmpty(selector.text))
                 throw new ArgumentException("ui-act 至少需要 name、path、indexed-path 或 text 选择器之一。");

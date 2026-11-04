@@ -5,6 +5,12 @@ namespace XFramework.Fsm
 {
     public class FsmConsoleCommands : XCommandGroup
     {
+        [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.AfterAssembliesLoaded)]
+        private static void RegisterCommandGroup()
+        {
+            XCommandRegistry.RegisterGroup(typeof(FsmConsoleCommands));
+        }
+
         [XCommandEntry("fsm_list", mode = XCommandMode.Both)]
         public static string ListFsms()
         {

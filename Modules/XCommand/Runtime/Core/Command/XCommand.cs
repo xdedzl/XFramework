@@ -79,7 +79,6 @@ namespace XFramework.Command
 
         private static void ResetStaticState()
         {
-            DisConnetHunter();
             (console as UGUIConsole)?.Dispose();
             LogMessageReceived = null;
             m_CurrentExecuteKey = "Auto";

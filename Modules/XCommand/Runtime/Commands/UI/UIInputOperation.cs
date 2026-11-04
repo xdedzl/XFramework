@@ -19,7 +19,17 @@ namespace XFramework.Command
 
         public IEnumerator Run(XCommandOperationContext context)
         {
-            return XCommandUtility.Input.Run(sequence, () => context.IsCancellationRequested, context.SetOutput);
+            try
+            {
+                yield return XCommandUtility.Input.Run(sequence, () => context.IsCancellationRequested, context.SetOutput);
+            }
+            finally
+            {
+                if (context.IsCancellationRequested)
+                {
+                    XCommandUtility.Input.ResetInterruptedInput();
+                }
+            }
         }
     }
 }

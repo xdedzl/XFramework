@@ -62,6 +62,17 @@ namespace XFramework.Command
     {
         internal static class Input
         {
+            static Input()
+            {
+                XCommandHub.CommandRuntimeResetRequested += ResetState;
+            }
+
+            [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+            private static void ResetOnSubsystemRegistration()
+            {
+                ResetState();
+            }
+
             private const int DefaultSettleFrames = 3;
             private const string AutomationMouseLayout = "XFrameworkAutomationMouse";
             private const string AutomationKeyboardLayout = "XFrameworkAutomationKeyboard";

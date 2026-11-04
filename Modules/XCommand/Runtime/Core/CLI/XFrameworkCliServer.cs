@@ -24,6 +24,9 @@ namespace XFramework.Command
     {
         private const int ProtocolVersion = 1;
         private const int MaxRequestBytes = 4 * 1024 * 1024;
+        private const int MaxHistoryPageBytes = 4 * 1024 * 1024;
+        private const int MaxHistoryPageSize = 100;
+        private const int MaxHistoryTextCharacters = 65536;
         private const double DefaultOperationTimeoutSeconds = 60d;
         private const double OperationRestoreGraceSeconds = 5d;
         private static readonly object s_StateLock = new object();
@@ -42,8 +45,9 @@ namespace XFramework.Command
         private static int s_Port;
         private static XFrameworkCliProcessType s_ProcessType;
         private static string s_ProjectPath;
-        private static string s_ProcessStartTimeUtc;
-        private static long s_ProcessStartTimeUtcTicks;
+        private static volatile string s_InstanceId;
+        private static volatile XFrameworkCliServerInfo s_ServerSnapshot;
+        private static XFrameworkLanDiscovery s_LanDiscovery;
         private static string s_RegistrationPath;
         private static IXFrameworkCliOperationProvider s_OperationProvider;
 
@@ -68,20 +72,22 @@ namespace XFramework.Command
                 if (s_IsRunning)
                     return;
 
-                var listener = new TcpListener(IPAddress.Loopback, 0);
+                var listener = new TcpListener(IPAddress.Any, 0);
                 listener.Start();
                 try
                 {
-                    Process process = Process.GetCurrentProcess();
-                    DateTime processStartTimeUtc = process.StartTime.ToUniversalTime();
                     s_Listener = listener;
                     s_Port = ((IPEndPoint)listener.LocalEndpoint).Port;
                     s_ProcessType = processType;
                     s_ProjectPath = Path.GetFullPath(projectPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                    s_ProcessStartTimeUtc = processStartTimeUtc.ToString("O", CultureInfo.InvariantCulture);
-                    s_ProcessStartTimeUtcTicks = processStartTimeUtc.Ticks;
+                    s_InstanceId = CreateInstanceId();
                     s_IsRunning = true;
-                    WriteRegistration();
+                    RefreshServerSnapshot();
+                    if (Application.isEditor || IsStandalonePlatform())
+                    {
+                        WriteRegistration();
+                    }
+                    StartLanDiscovery();
                     s_ListenerThread = new Thread(ListenLoop) {
                         IsBackground = true,
                         Name = "XFramework CLI Server",
@@ -90,9 +96,12 @@ namespace XFramework.Command
                 }
                 catch
                 {
+                    s_LanDiscovery?.Stop();
+                    s_LanDiscovery = null;
                     s_IsRunning = false;
                     s_Listener = null;
                     s_Port = 0;
+                    s_ServerSnapshot = null;
                     listener.Stop();
                     throw;
                 }
@@ -118,6 +127,9 @@ namespace XFramework.Command
                 s_Port = 0;
             }
 
+            s_LanDiscovery?.Stop();
+            s_LanDiscovery = null;
+            s_ServerSnapshot = null;
             listener.Stop();
             if (listenerThread != null && listenerThread != Thread.CurrentThread)
                 listenerThread.Join(1000);
@@ -146,6 +158,11 @@ namespace XFramework.Command
 
         public static void Pump()
         {
+            if (s_IsRunning && s_ServerSnapshot != null && s_ServerSnapshot.isPlaying != Application.isPlaying)
+            {
+                RefreshServerSnapshot();
+            }
+
             while (s_BackgroundErrors.TryDequeue(out Exception backgroundError))
                 UnityEngine.Debug.LogException(backgroundError);
 
@@ -204,12 +221,22 @@ namespace XFramework.Command
                     string requestJson = ReadRequest(stream);
                     var request = JsonConvert.DeserializeObject<XFrameworkCliRequest>(requestJson, s_JsonSettings);
                     pendingRequest = new PendingRequest(request);
-                    lock (s_StateLock)
+                    if (request != null
+                        && request.protocolVersion == ProtocolVersion
+                        && !string.IsNullOrWhiteSpace(request.requestId)
+                        && string.Equals(request.action?.Trim(), "ping", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (s_IsRunning)
-                            s_PendingRequests.Enqueue(pendingRequest);
-                        else
-                            CompleteRequest(pendingRequest, CreateErrorResponse(request?.requestId, 4, "ServerStopped", "XFramework CLI Server has stopped."));
+                        CompleteRequest(pendingRequest, CreateSuccessResponse(request.requestId, "XFramework CLI Server is ready."));
+                    }
+                    else
+                    {
+                        lock (s_StateLock)
+                        {
+                            if (s_IsRunning)
+                                s_PendingRequests.Enqueue(pendingRequest);
+                            else
+                                CompleteRequest(pendingRequest, CreateErrorResponse(request?.requestId, 4, "ServerStopped", "XFramework CLI Server has stopped."));
+                        }
                     }
                     pendingRequest.Completed.Wait();
                     WriteResponse(stream, pendingRequest.Response);
@@ -287,6 +314,11 @@ namespace XFramework.Command
                 CompleteRequest(pendingRequest, CreateErrorResponse(null, 4, "ProtocolError", "requestId cannot be empty."));
                 return;
             }
+            if (!string.IsNullOrEmpty(request.instanceId) && !string.Equals(request.instanceId, s_InstanceId, StringComparison.Ordinal))
+            {
+                CompleteRequest(pendingRequest, CreateErrorResponse(request.requestId, 4, "TargetChanged", "The target Unity instance has changed."));
+                return;
+            }
 
             switch (request.action?.Trim().ToLowerInvariant())
             {
@@ -305,6 +337,15 @@ namespace XFramework.Command
                 case "wait-operation":
                     WaitOperation(pendingRequest);
                     break;
+                case "history":
+                    CompleteRequest(pendingRequest, CreateHistoryResponse(request));
+                    break;
+                case "history-text":
+                    CompleteRequest(pendingRequest, CreateHistoryTextResponse(request));
+                    break;
+                case "history-input":
+                    CompleteRequest(pendingRequest, CreateHistoryInputResponse(request));
+                    break;
                 default:
                     CompleteRequest(pendingRequest, CreateErrorResponse(request.requestId, 4, "ProtocolError", $"Unsupported action: {request.action}"));
                     break;
@@ -315,7 +356,7 @@ namespace XFramework.Command
         {
             XFrameworkCliResponse response = CreateSuccessResponse(request.requestId, "Commands discovered.");
             response.commands = new List<XFrameworkCliCommandInfo>();
-            IReadOnlyList<XCommandDescriptor> commands = XCommandRegistry.VisibleCommands;
+            IReadOnlyList<XCommandDescriptor> commands = request.includeHidden ? XCommandRegistry.Commands : XCommandRegistry.VisibleCommands;
             for (int i = 0; i < commands.Count; i++)
             {
                 XCommandDescriptor command = commands[i];
@@ -344,6 +385,190 @@ namespace XFramework.Command
             return response;
         }
 
+        private static XFrameworkCliResponse CreateHistoryResponse(XFrameworkCliRequest request)
+        {
+            if (request.afterRecordId < 0 || request.pageSize < 0)
+            {
+                return CreateErrorResponse(request.requestId, 2, "InvalidArguments", "afterRecordId and pageSize cannot be negative.");
+            }
+
+            XFrameworkCliResponse response = CreateSuccessResponse(request.requestId, "Command history discovered.");
+            response.historyVersion = XCommandHub.HistoryVersion;
+            bool sameVersion = string.Equals(request.historyVersion, response.historyVersion, StringComparison.Ordinal);
+            if (request.afterRecordId > 0 && !sameVersion)
+            {
+                return CreateErrorResponse(request.requestId, 4, "HistoryChanged", "Command history changed while reading pages; restart from the first page.");
+            }
+
+            IReadOnlyList<XCommandRecord> records = XCommandHub.Records;
+            response.unchanged = request.afterRecordId == 0 && sameVersion;
+            response.recordLimit = XCommandHub.RecordLimit;
+            response.recordCount = records.Count;
+            response.commandHistoryCount = XCommandHub.CommandHistory.Count;
+            response.nextRecordId = request.afterRecordId;
+            if (response.unchanged)
+            {
+                return response;
+            }
+
+            int pageSize = request.pageSize == 0 ? MaxHistoryPageSize : Math.Min(request.pageSize, MaxHistoryPageSize);
+            response.records = new List<XFrameworkCliRecordInfo>(pageSize);
+            if (request.afterRecordId == 0)
+            {
+                IReadOnlyList<string> commandHistory = XCommandHub.CommandHistory;
+                int historyBytes = 2;
+                for (int i = 0; i < commandHistory.Count; i++)
+                {
+                    historyBytes += Encoding.UTF8.GetByteCount(JsonConvert.SerializeObject(commandHistory[i], Formatting.None, s_JsonSettings)) + (i == 0 ? 0 : 1);
+                    if (historyBytes > MaxHistoryPageBytes / 2)
+                    {
+                        break;
+                    }
+                }
+                if (historyBytes <= MaxHistoryPageBytes / 2)
+                {
+                    response.commandHistory = new List<string>(commandHistory);
+                }
+            }
+            response.nextRecordId = long.MaxValue;
+            int pageBytes = Encoding.UTF8.GetByteCount(JsonConvert.SerializeObject(response, Formatting.None, s_JsonSettings));
+            response.nextRecordId = request.afterRecordId;
+            for (int i = 0; i < records.Count; i++)
+            {
+                XCommandRecord record = records[i];
+                if (record.Id <= request.afterRecordId)
+                {
+                    continue;
+                }
+                if (response.records.Count == pageSize)
+                {
+                    response.hasMore = true;
+                    break;
+                }
+
+                XFrameworkCliRecordInfo info = CreateHistoryRecordInfo(record);
+                int recordBytes = Encoding.UTF8.GetByteCount(JsonConvert.SerializeObject(info, Formatting.None, s_JsonSettings)) + (response.records.Count == 0 ? 0 : 1);
+                if (response.records.Count > 0 && pageBytes + recordBytes > MaxHistoryPageBytes)
+                {
+                    response.hasMore = true;
+                    break;
+                }
+                response.records.Add(info);
+                response.nextRecordId = record.Id;
+                pageBytes += recordBytes;
+            }
+            return response;
+        }
+
+        private static XFrameworkCliRecordInfo CreateHistoryRecordInfo(XCommandRecord record)
+        {
+            return new XFrameworkCliRecordInfo {
+                id = record.Id,
+                createdTimeUtc = record.ExecutedAtUtc.ToString("O", CultureInfo.InvariantCulture),
+                completedTimeUtc = record.CompletedAtUtc?.ToString("O", CultureInfo.InvariantCulture) ?? string.Empty,
+                source = record.Source.ToString(),
+                state = record.State.ToString(),
+                commandLine = GetHistoryTextChunk(record.CommandLine ?? string.Empty, 0),
+                commandLineLength = record.CommandLine?.Length ?? 0,
+                status = record.Status.ToString(),
+                durationMilliseconds = record.DurationMilliseconds,
+                message = GetHistoryTextChunk(record.Message ?? string.Empty, 0),
+                messageLength = record.Message?.Length ?? 0,
+                output = GetHistoryTextChunk(record.Output ?? string.Empty, 0),
+                outputLength = record.Output?.Length ?? 0,
+                exception = GetHistoryTextChunk(record.Exception ?? string.Empty, 0),
+                exceptionLength = record.Exception?.Length ?? 0,
+            };
+        }
+
+        private static XFrameworkCliResponse CreateHistoryTextResponse(XFrameworkCliRequest request)
+        {
+            if (!string.Equals(request.historyVersion, XCommandHub.HistoryVersion, StringComparison.Ordinal))
+            {
+                return CreateErrorResponse(request.requestId, 4, "HistoryChanged", "Command history changed; refresh history before reading the full text.");
+            }
+            if (request.recordId <= 0 || request.textOffset < 0 || (request.recordField != "output" && request.recordField != "exception" && request.recordField != "commandLine" && request.recordField != "message"))
+            {
+                return CreateErrorResponse(request.requestId, 2, "InvalidArguments", "A positive recordId, a commandLine, message, output or exception recordField, and a nonnegative textOffset are required.");
+            }
+
+            IReadOnlyList<XCommandRecord> records = XCommandHub.Records;
+            for (int i = 0; i < records.Count; i++)
+            {
+                XCommandRecord record = records[i];
+                if (record.Id != request.recordId)
+                {
+                    continue;
+                }
+
+                string text;
+                switch (request.recordField)
+                {
+                    case "commandLine":
+                        text = record.CommandLine;
+                        break;
+                    case "message":
+                        text = record.Message;
+                        break;
+                    case "output":
+                        text = record.Output;
+                        break;
+                    default:
+                        text = record.Exception;
+                        break;
+                }
+                text = text ?? string.Empty;
+                if (request.textOffset > text.Length)
+                {
+                    return CreateErrorResponse(request.requestId, 2, "InvalidArguments", "textOffset exceeds the record text length.");
+                }
+                XFrameworkCliResponse response = CreateSuccessResponse(request.requestId, "Command record text discovered.");
+                response.historyVersion = XCommandHub.HistoryVersion;
+                response.recordId = record.Id;
+                response.recordText = GetHistoryTextChunk(text, request.textOffset);
+                response.textLength = text.Length;
+                return response;
+            }
+            return CreateErrorResponse(request.requestId, 4, "RecordNotFound", "The command record is no longer retained by XCommandHub.");
+        }
+
+        private static XFrameworkCliResponse CreateHistoryInputResponse(XFrameworkCliRequest request)
+        {
+            if (!string.Equals(request.historyVersion, XCommandHub.HistoryVersion, StringComparison.Ordinal))
+            {
+                return CreateErrorResponse(request.requestId, 4, "HistoryChanged", "Command history changed; refresh history before reading the input history.");
+            }
+
+            IReadOnlyList<string> commandHistory = XCommandHub.CommandHistory;
+            if (request.historyIndex < 0 || request.historyIndex >= commandHistory.Count || request.textOffset < 0)
+            {
+                return CreateErrorResponse(request.requestId, 2, "InvalidArguments", "A retained historyIndex and a nonnegative textOffset are required.");
+            }
+            string text = commandHistory[request.historyIndex];
+            if (request.textOffset > text.Length)
+            {
+                return CreateErrorResponse(request.requestId, 2, "InvalidArguments", "textOffset exceeds the input history text length.");
+            }
+
+            XFrameworkCliResponse response = CreateSuccessResponse(request.requestId, "Command input history text discovered.");
+            response.historyVersion = XCommandHub.HistoryVersion;
+            response.historyIndex = request.historyIndex;
+            response.recordText = GetHistoryTextChunk(text, request.textOffset);
+            response.textLength = text.Length;
+            return response;
+        }
+
+        private static string GetHistoryTextChunk(string text, int offset)
+        {
+            int length = Math.Min(MaxHistoryTextCharacters, text.Length - offset);
+            int end = offset + length;
+            if (length > 0 && end < text.Length && char.IsHighSurrogate(text[end - 1]) && char.IsLowSurrogate(text[end]))
+            {
+                length--;
+            }
+            return offset == 0 && length == text.Length ? text : text.Substring(offset, length);
+        }
+
         private static void ExecuteCommand(PendingRequest pendingRequest)
         {
             XFrameworkCliRequest request = pendingRequest.Request;
@@ -361,18 +586,24 @@ namespace XFramework.Command
                 return;
             }
 
-            XCommandExecutionResult result = XCommandHub.Execute(request.commandLine, XCommandSource.Cli);
+            XCommandSource source = string.Equals(request.source, "Web", StringComparison.Ordinal) ? XCommandSource.Web : XCommandSource.Cli;
+            XCommandExecutionResult result = XCommandHub.Execute(request.commandLine, source, out long recordId);
             XFrameworkCliResponse response = CreateExecutionResponse(request.requestId, result);
+            response.recordId = recordId;
             IXFrameworkCliOperationProvider operationProvider = s_OperationProvider;
-            if (!result.Succeeded || !request.waitForOperation || !TryGetOperation(operationProvider, result.Value, out XFrameworkCliOperationInfo operation))
+            if (!result.Succeeded || !TryGetOperation(operationProvider, result.Value, out XFrameworkCliOperationInfo operation))
             {
                 CompleteRequest(pendingRequest, response);
                 return;
             }
 
-            if (IsOperationCompleted(operation.State))
+            response.operation = CreateOperationResponse(operation);
+            if (!request.waitForOperation || IsOperationCompleted(operation.State))
             {
-                ApplyOperation(response, operation);
+                if (IsOperationCompleted(operation.State))
+                {
+                    ApplyOperation(response, operation);
+                }
                 CompleteRequest(pendingRequest, response);
                 return;
             }
@@ -600,6 +831,7 @@ namespace XFramework.Command
                 declaringType = command.DeclaringTypeName,
                 method = command.MethodName,
                 assembly = command.AssemblyName,
+                displayType = command.DisplayType.ToString(),
             };
         }
 
@@ -629,16 +861,60 @@ namespace XFramework.Command
 
         private static XFrameworkCliServerInfo CreateServerInfo()
         {
-            return new XFrameworkCliServerInfo {
+            return s_ServerSnapshot ?? new XFrameworkCliServerInfo();
+        }
+
+        private static void RefreshServerSnapshot()
+        {
+            s_ServerSnapshot = new XFrameworkCliServerInfo {
                 pid = Process.GetCurrentProcess().Id,
                 port = s_Port,
-                processStartTimeUtc = s_ProcessStartTimeUtc,
-                processStartTimeUtcTicks = s_ProcessStartTimeUtcTicks,
+                processStartTimeUtc = string.Empty,
+                processStartTimeUtcTicks = 0,
                 processType = s_ProcessType.ToString(),
                 projectPath = s_ProjectPath,
                 dataPath = Application.dataPath,
                 isPlaying = Application.isPlaying,
+                instanceId = s_InstanceId,
+                deviceId = SystemInfo.deviceUniqueIdentifier,
             };
+        }
+
+        private static string CreateInstanceId()
+        {
+#if UNITY_EDITOR
+            const string key = "XFramework.Command.InstanceId";
+            string existing = UnityEditor.SessionState.GetString(key, string.Empty);
+            if (!string.IsNullOrEmpty(existing))
+            {
+                return existing;
+            }
+            string created = Guid.NewGuid().ToString("N");
+            UnityEditor.SessionState.SetString(key, created);
+            return created;
+#else
+            return Guid.NewGuid().ToString("N");
+#endif
+        }
+
+        private static bool IsStandalonePlatform()
+        {
+            return Application.platform == RuntimePlatform.WindowsPlayer
+                || Application.platform == RuntimePlatform.OSXPlayer
+                || Application.platform == RuntimePlatform.LinuxPlayer;
+        }
+
+        private static void StartLanDiscovery()
+        {
+            string announcement = JsonConvert.SerializeObject(new {
+                type = "XFrameworkDiscovery",
+                discoveryVersion = 1,
+                instanceId = s_InstanceId,
+                pid = Process.GetCurrentProcess().Id,
+                port = s_Port,
+            }, Formatting.None, s_JsonSettings);
+            s_LanDiscovery = new XFrameworkLanDiscovery(announcement, exception => s_BackgroundErrors.Enqueue(exception));
+            s_LanDiscovery.Start();
         }
 
         private static void CompleteRequest(PendingRequest pendingRequest, XFrameworkCliResponse response)
@@ -702,6 +978,16 @@ namespace XFramework.Command
             public double timeoutSeconds;
             public bool confirm;
             public bool availableOnly;
+            public bool includeHidden;
+            public string instanceId;
+            public string source;
+            public string historyVersion;
+            public long afterRecordId;
+            public int pageSize;
+            public long recordId;
+            public int textOffset;
+            public string recordField;
+            public int historyIndex;
         }
 
         private sealed class XFrameworkCliResponse
@@ -719,6 +1005,19 @@ namespace XFramework.Command
             public XFrameworkCliServerInfo server;
             public List<XFrameworkCliCommandInfo> commands;
             public List<XFrameworkCliDiagnosticInfo> diagnostics;
+            public long recordId;
+            public string historyVersion;
+            public bool unchanged;
+            public int recordLimit;
+            public int recordCount;
+            public int commandHistoryCount;
+            public long nextRecordId;
+            public bool hasMore;
+            public List<string> commandHistory;
+            public List<XFrameworkCliRecordInfo> records;
+            public string recordText;
+            public int textLength;
+            public int historyIndex;
         }
 
         private sealed class XFrameworkCliServerInfo
@@ -731,6 +1030,8 @@ namespace XFramework.Command
             public string projectPath;
             public string dataPath;
             public bool isPlaying;
+            public string instanceId;
+            public string deviceId;
         }
 
         private sealed class XFrameworkCliCommandInfo
@@ -749,6 +1050,26 @@ namespace XFramework.Command
             public string declaringType;
             public string method;
             public string assembly;
+            public string displayType;
+        }
+
+        private sealed class XFrameworkCliRecordInfo
+        {
+            public long id;
+            public string createdTimeUtc;
+            public string completedTimeUtc;
+            public string source;
+            public string state;
+            public string commandLine;
+            public int commandLineLength;
+            public string status;
+            public double durationMilliseconds;
+            public string message;
+            public int messageLength;
+            public string output;
+            public int outputLength;
+            public string exception;
+            public int exceptionLength;
         }
 
         private sealed class XFrameworkCliDiagnosticInfo

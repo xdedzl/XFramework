@@ -5,6 +5,12 @@ namespace XFramework.UI
 {
     public sealed class UIConsoleCommands : XCommandGroup
     {
+        [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.AfterAssembliesLoaded)]
+        private static void RegisterCommandGroup()
+        {
+            XCommandRegistry.RegisterGroup(typeof(UIConsoleCommands));
+        }
+
         [XCommandEntry("ui-open", name = "打开界面", order = 0, mode = XCommandMode.Runtime, category = "UI", description = "按 PanelInfo 名称打开面板；带 Request 的面板使用默认 Request。", usage = "ui-open PANEL_NAME", displayType = XCommandDisplayType.Hidden)]
         private static object OpenPanel(string argument)
         {

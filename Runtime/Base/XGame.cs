@@ -151,18 +151,6 @@ namespace XFramework
                 XCommand.IsOpen = !XCommand.IsOpen;
             }
 
-            string buttonName = XCommand.IsHunterEnable ? "关闭Hunter" : "打开Hunter";
-            if (GUI.Button(new Rect(120, Screen.height - 60, 100, 50), buttonName))
-            {
-                if (XCommand.IsHunterEnable)
-                {
-                    XCommand.Execute("disable_hunter");
-                }
-                else
-                {
-                    XCommand.Execute("enable_hunter");
-                }
-            }
         }
 
         private void OnApplicationQuit()

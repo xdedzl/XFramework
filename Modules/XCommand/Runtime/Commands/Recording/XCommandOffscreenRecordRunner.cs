@@ -19,10 +19,7 @@ namespace XFramework.Command
         private XCommandOffscreenRecordStatus m_Status;
         private Action m_OnCompleted;
 
-        internal void Begin(
-            XCommandOffscreenRecordRequest request,
-            XCommandOffscreenRecordStatus status,
-            Action onCompleted)
+        internal void Begin(XCommandOffscreenRecordRequest request, XCommandOffscreenRecordStatus status, Action onCompleted)
         {
             m_Request = request;
             m_Status = status;

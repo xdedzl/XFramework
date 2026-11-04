@@ -46,6 +46,17 @@ namespace XFramework.Command
 
     public static class XCommandUI
     {
+        static XCommandUI()
+        {
+            XCommandHub.CommandRuntimeResetRequested += ResetSnapshots;
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetOnSubsystemRegistration()
+        {
+            ResetSnapshots();
+        }
+
         [Serializable]
         private sealed class UIElementList
         {

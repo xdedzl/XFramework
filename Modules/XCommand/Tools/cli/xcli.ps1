@@ -129,17 +129,6 @@ function Get-LiveCliServers {
             Remove-StaleRegistration $file.FullName
             continue
         }
-        try {
-            $processStartTimeUtcTicks = $process.StartTime.ToUniversalTime().Ticks
-        }
-        catch {
-            Remove-StaleRegistration $file.FullName
-            continue
-        }
-        if ($processStartTimeUtcTicks -ne [long]$registration.processStartTimeUtcTicks) {
-            Remove-StaleRegistration $file.FullName
-            continue
-        }
         $registration | Add-Member -NotePropertyName registrationPath -NotePropertyValue $file.FullName -Force
         $servers.Add($registration)
     }
@@ -220,14 +209,14 @@ function New-CliRequest {
 }
 
 function Invoke-CliRequest {
-    param([object]$Server, [object]$Request, [double]$TimeoutSeconds, [double]$ReceiveTimeoutSeconds = 0)
+    param([object]$Server, [object]$Request, [double]$TimeoutSeconds, [double]$ReceiveTimeoutSeconds = 0, [int]$ConnectTimeoutMilliseconds = 5000)
     $client = $null
     $reader = $null
     $writer = $null
     try {
         $client = [Net.Sockets.TcpClient]::new()
         $connectTask = $client.ConnectAsync('127.0.0.1', [int]$Server.port)
-        if (-not $connectTask.Wait(5000)) {
+        if (-not $connectTask.Wait([Math]::Max(1, $ConnectTimeoutMilliseconds))) {
             throw "Timed out connecting to XFramework CLI Server on port $($Server.port)."
         }
         $effectiveReceiveTimeout = if ($ReceiveTimeoutSeconds -gt 0) { $ReceiveTimeoutSeconds } else { $TimeoutSeconds + 5.0 }
@@ -255,6 +244,64 @@ function Invoke-CliRequest {
         if ($null -ne $reader) { $reader.Dispose() }
         if ($null -ne $client) { $client.Dispose() }
     }
+}
+
+function Wait-CliServerReady {
+    param([object]$Options)
+
+    if ($null -ne $Options.processId -and $null -ne $Options.port) {
+        Exit-CliError 2 'InvalidArguments' '--pid and --port cannot be used together.' $Options.pretty
+    }
+
+    $startedAtUtc = [DateTime]::UtcNow
+    $deadline = $startedAtUtc.AddSeconds([double]$Options.timeoutSeconds)
+    $processId = $Options.processId
+
+    if ($null -ne $processId) {
+        $process = Get-Process -Id ([int]$processId) -ErrorAction SilentlyContinue
+        if ($null -eq $process) {
+            Exit-CliError 3 'ProcessNotFound' "Unity process $processId is not running." $Options.pretty
+        }
+    }
+
+    while ([DateTime]::UtcNow -lt $deadline) {
+        $server = Select-CliServer $Options -AllowMissing
+        if ($null -ne $server) {
+            $remaining = [Math]::Max(0.001, ($deadline - [DateTime]::UtcNow).TotalSeconds)
+            try {
+                $pingTimeout = [Math]::Min(1.0, $remaining)
+                $connectTimeoutMilliseconds = [int][Math]::Max(1.0, [Math]::Min(250.0, $remaining * 1000.0))
+                $pingResult = Invoke-CliRequest $server (New-CliRequest 'ping' $null $Options) $pingTimeout -ConnectTimeoutMilliseconds $connectTimeoutMilliseconds
+                if ([int]$pingResult.Response.exitCode -eq 0 -and [string]$pingResult.Response.status -eq 'Succeeded') {
+                    $elapsedMilliseconds = [long]([DateTime]::UtcNow - $startedAtUtc).TotalMilliseconds
+                    $response = [ordered]@{
+                        protocolVersion = $script:ProtocolVersion
+                        requestId = $pingResult.Response.requestId
+                        exitCode = 0
+                        status = 'Succeeded'
+                        message = 'XFramework CLI Server is ready.'
+                        durationMilliseconds = $elapsedMilliseconds
+                        server = $server
+                    }
+                    $responseObject = [pscustomobject]$response
+                    return [pscustomobject]@{
+                        Json = ConvertTo-CliJson $responseObject $Options.pretty
+                        Response = $responseObject
+                    }
+                }
+            }
+            catch {
+            }
+        }
+
+        if ($null -ne $processId -and $null -eq (Get-Process -Id ([int]$processId) -ErrorAction SilentlyContinue)) {
+            Exit-CliError 3 'ProcessExited' "Unity process $processId exited before XFramework CLI Server became ready." $Options.pretty
+        }
+
+        Start-Sleep -Milliseconds 250
+    }
+
+    Exit-CliError 124 'Timeout' "Timed out waiting for XFramework CLI Server after $($Options.timeoutSeconds) seconds." $Options.pretty
 }
 
 function Invoke-CliWaitOperation {
@@ -521,11 +568,13 @@ function Write-CliHelp {
             'xcli.ps1 help',
             'xcli.ps1 servers [--pretty]',
             'xcli.ps1 ping [--pid PID|--port PORT] [--target editor|player] [--pretty]',
+            'xcli.ps1 wait-server [--pid PID|--port PORT] [--target editor|player] [--timeout SECONDS] [--pretty]',
             'xcli.ps1 commands [--available] [--pid PID|--port PORT] [--target editor|player] [--pretty]',
             'xcli.ps1 diagnostics [--pid PID|--port PORT] [--target editor|player] [--pretty]',
             "xcli.ps1 exec '<complete GM command line>' [--no-wait] [--timeout SECONDS] [--confirm] [--pid PID|--port PORT] [--target editor|player] [--pretty]"
         )
         examples = @(
+            'xcli.ps1 wait-server --target editor --pid 47764 --timeout 180',
             "xcli.ps1 exec 'recompile' --target editor --timeout 300",
             "xcli.ps1 exec 'play-start'",
             "xcli.ps1 exec 'ui-list --compact'",
@@ -596,6 +645,12 @@ switch ($verb) {
         }
         Write-CliResponse $result $options.pretty
     }
+    'wait-server' {
+        $optionTokens = if ($cliArguments.Count -gt 1) { @($cliArguments[1..($cliArguments.Count - 1)]) } else { @() }
+        $options = Get-CliOptions $optionTokens @('--pid', '--port', '--target', '--timeout', '--pretty')
+        $result = Wait-CliServerReady $options
+        Write-CliResponse $result $options.pretty
+    }
     'exec' {
         if ($cliArguments.Count -lt 2 -or [string]::IsNullOrWhiteSpace($cliArguments[1])) {
             Exit-CliError 2 'InvalidArguments' 'exec requires the complete GM command line as one quoted argument.' $false
@@ -612,7 +667,7 @@ switch ($verb) {
         if ($isReloadingOperation -and -not $options.noWait) {
             $request['waitForOperation'] = $false
         }
-        $initialTimeout = if ($isReloadingOperation) { [Math]::Min(10.0, [double]$options.timeoutSeconds) } else { [double]$options.timeoutSeconds }
+        $initialTimeout = [Math]::Min(10.0, [double]$options.timeoutSeconds)
         try {
             $result = Invoke-CliRequest $server $request $initialTimeout
         }

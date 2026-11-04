@@ -145,8 +145,7 @@ namespace XFramework.Command
             s_PendingOperations.Clear();
             s_Operations.Clear();
             s_NextOperationId = 1;
-            XCommandUtility.Input.ResetState();
-            XCommandUI.ResetSnapshots();
+            XCommandHub.RequestCommandRuntimeReset();
         }
 
         /// <summary>提交一个跨帧操作，返回包含 operation id 与初始状态的 JSON。</summary>
@@ -477,16 +476,9 @@ namespace XFramework.Command
                     if (operation.CancellationRequested)
                     {
                         string cancellationError = "操作已取消。";
-                        if (operation.Name == "ui-act" || operation.Name == "ui-input")
+                        if (failure != null)
                         {
-                            try
-                            {
-                                XCommandUtility.Input.ResetInterruptedInput();
-                            }
-                            catch (Exception exception)
-                            {
-                                cancellationError += $" 输入重置失败：{exception}";
-                            }
+                            cancellationError += $" 取消清理失败：{failure}";
                         }
                         CompleteOperation(operation, XCommandOperationState.Cancelled, cancellationError);
                     }

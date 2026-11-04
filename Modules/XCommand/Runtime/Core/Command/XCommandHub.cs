@@ -9,7 +9,8 @@ namespace XFramework.Command
         Editor,
         Ugui,
         Cli,
-        Hunter
+        Hunter,
+        Web
     }
 
     public enum XCommandRecordState
@@ -118,12 +119,15 @@ namespace XFramework.Command
 
         private static readonly List<XCommandRecord> s_Records = new List<XCommandRecord>();
         private static readonly List<string> s_CommandHistory = new List<string>();
+        private static readonly string s_HistoryEpoch = Guid.NewGuid().ToString("N");
         private static long s_NextRecordId = 1;
+        private static long s_HistoryRevision;
         private static XCommandSource s_CurrentExecutionSource = XCommandSource.Api;
 
         public static IReadOnlyList<XCommandRecord> Records => s_Records;
         public static IReadOnlyList<string> CommandHistory => s_CommandHistory;
         public static long LatestRecordId => s_NextRecordId - 1;
+        public static string HistoryVersion => s_HistoryEpoch + ":" + s_HistoryRevision;
 
         public static event Action<XCommandRecord> RecordAdded;
         public static event Action<XCommandRecord> RecordUpdated;
@@ -131,10 +135,17 @@ namespace XFramework.Command
         public static event Action CommandHistoryChanged;
         public static event Action<XCommandSource> DisplayClearRequested;
         public static event Action<XCommandSource> DisplayHistoryRequested;
+        public static event Action CommandRuntimeResetRequested;
 
         public static XCommandExecutionResult Execute(string commandLine, XCommandSource source = XCommandSource.Api)
         {
+            return Execute(commandLine, source, out _);
+        }
+
+        public static XCommandExecutionResult Execute(string commandLine, XCommandSource source, out long recordId)
+        {
             string normalizedCommandLine = commandLine?.Trim() ?? string.Empty;
+            recordId = 0;
             if (normalizedCommandLine.Length == 0)
             {
                 return XCommandRegistry.ExecuteCore(normalizedCommandLine);
@@ -142,6 +153,7 @@ namespace XFramework.Command
 
             bool recordExecution = !XCommandRegistry.TryGetCommand(normalizedCommandLine, out XCommandDescriptor command) || command.RecordExecution;
             XCommandRecord record = recordExecution ? BeginExecution(normalizedCommandLine, source) : null;
+            recordId = record?.Id ?? 0;
             XCommandSource previousSource = s_CurrentExecutionSource;
             s_CurrentExecutionSource = source;
             try
@@ -150,6 +162,7 @@ namespace XFramework.Command
                 if (recordExecution)
                 {
                     record.Complete(result);
+                    s_HistoryRevision++;
                     RecordUpdated?.Invoke(record);
                 }
                 return result;
@@ -158,6 +171,11 @@ namespace XFramework.Command
             {
                 s_CurrentExecutionSource = previousSource;
             }
+        }
+
+        internal static void RequestCommandRuntimeReset()
+        {
+            CommandRuntimeResetRequested?.Invoke();
         }
 
         internal static void RequestDisplayClear()
@@ -184,6 +202,7 @@ namespace XFramework.Command
                     s_CommandHistory.Add(commandLine.Trim());
                 }
             }
+            s_HistoryRevision++;
             CommandHistoryChanged?.Invoke();
         }
 
@@ -229,6 +248,7 @@ namespace XFramework.Command
                 }
             }
             s_NextRecordId = latestRecordId + 1;
+            s_HistoryRevision++;
         }
 
         internal static bool ExecuteLegacy(string commandLine, XCommandSource source, CommandDelegate execute, out object value)
@@ -247,6 +267,7 @@ namespace XFramework.Command
                 bool succeeded = execute(normalizedCommandLine, out value);
                 stopwatch.Stop();
                 record.CompleteLegacy(succeeded, value, null, stopwatch.Elapsed.TotalMilliseconds);
+                s_HistoryRevision++;
                 RecordUpdated?.Invoke(record);
                 return succeeded;
             }
@@ -254,6 +275,7 @@ namespace XFramework.Command
             {
                 stopwatch.Stop();
                 record.CompleteLegacy(false, null, exception, stopwatch.Elapsed.TotalMilliseconds);
+                s_HistoryRevision++;
                 RecordUpdated?.Invoke(record);
                 throw;
             }
@@ -276,6 +298,7 @@ namespace XFramework.Command
                 RecordsTrimmed?.Invoke(removedRecordId);
             }
 
+            s_HistoryRevision++;
             CommandHistoryChanged?.Invoke();
             RecordAdded?.Invoke(record);
             return record;

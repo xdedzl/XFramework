@@ -71,7 +71,7 @@ namespace XFramework.Editor
 
         #region Play 模式
 
-        [XCommandEntry("play-start", name = "开始运行", order = 0, mode = XCommandMode.Editor, category = Category, description = "异步进入 Play Mode；CLI 默认等待 EnteredPlayMode 和 XFramework 服务恢复，--no-wait 返回 operation。", usage = "play-start", displayType = XCommandDisplayType.Hidden)]
+        [XCommandEntry("play-start", name = "开始运行", order = 0, mode = XCommandMode.Editor, category = Category, description = "异步进入 Play Mode；CLI 默认等待 EnteredPlayMode 和 XFramework 服务恢复，--no-wait 返回 operation。", usage = "play-start")]
         private static object StartPlayMode()
         {
             return XCommandPlayModeOperation.StartStart();
@@ -304,6 +304,9 @@ namespace XFramework.Editor
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
         [DllImport("user32.dll")]
+        private static extern bool IsIconic(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
         private static extern bool BringWindowToTop(IntPtr hWnd);
 
         [DllImport("user32.dll")]
@@ -339,7 +342,10 @@ namespace XFramework.Editor
                 return $"前置窗口失败：未取得 Unity 主窗口句柄。{gameViewDetail}";
             }
 
-            ShowWindow(hwnd, SW_RESTORE);
+            if (IsIconic(hwnd))
+            {
+                ShowWindow(hwnd, SW_RESTORE);
+            }
 
             IntPtr foreground = GetForegroundWindow();
             uint foregroundThread = foreground == IntPtr.Zero ? 0u : GetWindowThreadProcessId(foreground, out _);

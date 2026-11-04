@@ -2,6 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace XFramework.Command
 {
@@ -121,6 +124,8 @@ namespace XFramework.Command
         private static readonly List<XCommandDescriptor> s_CommandList = new List<XCommandDescriptor>();
         private static readonly List<XCommandDescriptor> s_VisibleCommandList = new List<XCommandDescriptor>();
         private static readonly List<XCommandDiagnostic> s_Diagnostics = new List<XCommandDiagnostic>();
+        private static readonly HashSet<Type> s_CommandGroupTypes = new HashSet<Type>();
+        private static Func<XCommandDescriptor, bool> s_AvailabilityPredicate;
 
         static XCommandRegistry()
         {
@@ -176,9 +181,38 @@ namespace XFramework.Command
             RebuildCommandRegistry();
         }
 
+        /// <summary>显式注册一个命令组并重新发现其中的命令方法。Player 平台只加载显式注册的命令组。</summary>
+        public static void RegisterGroup(Type commandGroupType)
+        {
+            if (commandGroupType == null)
+            {
+                throw new ArgumentNullException(nameof(commandGroupType));
+            }
+            if (!typeof(XCommandGroup).IsAssignableFrom(commandGroupType) || commandGroupType.IsAbstract)
+            {
+                throw new ArgumentException($"命令组必须是非抽象 XCommandGroup 子类：{commandGroupType.FullName}", nameof(commandGroupType));
+            }
+            if (!s_CommandGroupTypes.Add(commandGroupType))
+            {
+                return;
+            }
+            Refresh();
+        }
+
+        public static void SetAvailabilityPredicate(Func<XCommandDescriptor, bool> predicate)
+        {
+            s_AvailabilityPredicate = predicate;
+            RebuildCommandRegistry();
+        }
+
+        public static void RefreshAvailability()
+        {
+            RebuildCommandRegistry();
+        }
+
         public static bool CanExecute(XCommandDescriptor command)
         {
-            if (command == null)
+            if (command == null || (s_AvailabilityPredicate != null && !s_AvailabilityPredicate(command)))
             {
                 return false;
             }
@@ -279,16 +313,23 @@ namespace XFramework.Command
 
         private static IEnumerable<Type> GetCommandTypes()
         {
-            var typeBase = typeof(XCommandGroup);
-            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            var types = new HashSet<Type>();
+            foreach (Type type in s_CommandGroupTypes)
             {
-                foreach (var type in assembly.GetTypes())
+                types.Add(type);
+            }
+#if UNITY_EDITOR
+            foreach (Type type in TypeCache.GetTypesDerivedFrom<XCommandGroup>())
+            {
+                if (type != null && !type.IsAbstract)
                 {
-                    if (type.IsSubclassOf(typeBase) && !type.IsAbstract)
-                    {
-                        yield return type;
-                    }
+                    types.Add(type);
                 }
+            }
+#endif
+            foreach (Type type in types)
+            {
+                yield return type;
             }
         }
 
@@ -308,11 +349,18 @@ namespace XFramework.Command
             s_Commands.Clear();
             foreach (var pair in s_AttributedCommands)
             {
-                s_Commands.Add(pair.Key, pair.Value);
+                if (s_AvailabilityPredicate == null || s_AvailabilityPredicate(pair.Value))
+                {
+                    s_Commands.Add(pair.Key, pair.Value);
+                }
             }
 
             foreach (var pair in s_DynamicCommands)
             {
+                if (s_AvailabilityPredicate != null && !s_AvailabilityPredicate(pair.Value))
+                {
+                    continue;
+                }
                 if (s_Commands.TryGetValue(pair.Key, out XCommandDescriptor existing))
                 {
                     AddDiagnostic(pair.Key, $"动态 XCommand 命令与 Attribute 命令重复，保留 {existing.DeclaringTypeName}.{existing.MethodName}。", pair.Value.DeclaringTypeName, pair.Value.MethodName);
