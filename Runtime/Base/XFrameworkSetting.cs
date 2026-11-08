@@ -37,6 +37,9 @@ namespace XFramework
         [Tooltip("允许框架接管导航与提交的 ActionMap 列表。")]
         public string[] inputMenuNavigationActionMaps = { "UI", "WorldMap" };
 
+        [Tooltip("交互提示读取的 Action 名称；ActionMap 使用 inputDefaultActionMap。")]
+        public string inputInteractActionName = "Interact";
+
         [Header("Scene")]
         [Tooltip("项目补充的场景类型。Main 和 Sub 由框架内置，无需重复配置。")]
         [SerializeField] private XSceneType[] sceneTypes = Array.Empty<XSceneType>();
