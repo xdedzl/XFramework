@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 
 namespace XFramework
@@ -21,6 +22,20 @@ namespace XFramework
         [Tooltip("UI 根节点预制体路径。")]
         [AssetPath(typeof(GameObject))]
         public string UIRootPrefabPath;
+
+        [Header("Input")]
+        [Tooltip("InputSystem 输入配置文件（.inputactions）的资源路径。")]
+        [AssetPath(typeof(InputActionAsset))]
+        public string inputActionsPath;
+
+        [Tooltip("PlayerInput 默认启用的 ActionMap 名称。")]
+        public string inputDefaultActionMap = "Gameplay";
+
+        [Tooltip("框架 UI 输入使用的 ActionMap 名称。")]
+        public string inputUIActionMap = "UI";
+
+        [Tooltip("允许框架接管导航与提交的 ActionMap 列表。")]
+        public string[] inputMenuNavigationActionMaps = { "UI", "WorldMap" };
 
         [Header("Scene")]
         [Tooltip("项目补充的场景类型。Main 和 Sub 由框架内置，无需重复配置。")]
