@@ -45,6 +45,7 @@
 | `Editor/XCommandCompileOperation.cs` | `recompile` 异步 operation；跨 Domain Reload 恢复并收集编译诊断 |
 | `Editor/XCommandPlayModeOperation.cs` | `play-start` / `play-stop` 异步 operation |
 | `Editor/XCommandEditorWindowCapture.cs` | `editor-window-list` / `editor-window-screenshot` 的窗口枚举与离屏截图实现 |
+| `Editor/XCommandSceneViewCamera.cs` | `sceneview-camera` 的 SceneView 相机读写、六方向吸附与状态 JSON 实现 |
 | `Runtime/Utility/XCommandUtility.Performance.cs` / `Runtime/XCommandPerformanceSampler.cs` | 帧性能采样（`perf-*`）的参数解析与逐帧采样宿主 |
 | `Editor/XCommandProfiler.cs` | Profiler 采样控制、帧标记与最差帧报告（`prof-*`） |
 | `Tools/cli/xcli.ps1` | 外部命令行客户端（含 `wait-server`、Domain Reload 重连） |
@@ -204,11 +205,12 @@ XCommandRegistry.AddCommand("my-dynamic", argument => $"received: {argument}", X
 | `record-offscreen-status` | Both | 返回最近一次 / 当前离屏录制的状态、已录帧数、编码器与最终文件信息 |
 | `editor-window-list` | Editor | 列出当前已打开的 EditorWindow 标题、类型、聚焦和停靠状态，支持 `--query` 过滤 |
 | `editor-window-screenshot` | Editor | 从指定 EditorWindow 的 GUIView 渲染面截取内容区并保存为 PNG；不依赖桌面可见性，不含 Dock 标签栏与标题栏 |
+| `sceneview-camera` | Editor | 读写 SceneView 相机：`--pivot`/`--position`/`--rotation`/`--snap`（六方向吸附）/`--size`/`--orthographic`/`--2d`/`--lock-rotation`；不带选项返回当前状态 JSON |
 | `window-focus` | Both | 把 Unity Editor 主窗口恢复到前台并聚焦 GameView（Windows）；`ui-input` 注入前建议先执行。返回 `broughtToFront` / `gameViewFocused` / `isFocused` 供判定 |
 
-> 上表中 `editor_selection` / `recompile` / `preview-prefab` / `record*` / `gameview-screenshot` / `window-focus` / `font_bake` / `gameview-size` 为 `displayType = Hidden`，默认不出现在 CLI `commands` 结果中；`editor-menu` / `editor-window-list` / `editor-window-screenshot` / `play-start` 保持可见，`play-stop` 也已恢复可见。
+> 上表中 `editor_selection` / `recompile` / `preview-prefab` / `record*` / `gameview-screenshot` / `window-focus` / `font_bake` / `gameview-size` 为 `displayType = Hidden`，默认不出现在 CLI `commands` 结果中；`editor-menu` / `editor-window-list` / `editor-window-screenshot` / `sceneview-camera` / `play-start` 保持可见，`play-stop` 也已恢复可见。
 >
-> `recompile` / `play-start` / `play-stop` 的实现分别位于 `Editor/XCommandCompileOperation.cs` 与 `Editor/XCommandPlayModeOperation.cs`；`editor-window-*` 的实现位于 `Editor/XCommandEditorWindowCapture.cs`；`font_bake` / `record*` / `gameview-*` 的参数解析与实现仍位于 `Runtime/Utility/XCommandUtility.*.cs`。
+> `recompile` / `play-start` / `play-stop` 的实现分别位于 `Editor/XCommandCompileOperation.cs` 与 `Editor/XCommandPlayModeOperation.cs`；`editor-window-*` 的实现位于 `Editor/XCommandEditorWindowCapture.cs`；`sceneview-camera` 的实现位于 `Editor/XCommandSceneViewCamera.cs`；`font_bake` / `record*` / `gameview-*` 的参数解析与实现仍位于 `Runtime/Utility/XCommandUtility.*.cs`。
 
 > `window-focus` 定义在编辑器程序集内，因此 Edit 模式与 Play 模式都可用（`Mode = Both`），但生成的 Player 里不会注册；Windows 前台锁可能拒绝抢占，失败时以返回值为准，必要时人工点一下 Game 窗口。
 

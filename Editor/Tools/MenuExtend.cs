@@ -19,8 +19,13 @@ namespace XFramework.Editor
         private const string kSnapToGroundOptionsMenuPath = "GameObject/XFramework/Snap To Ground...";
         private const string kTransformSnapToGroundMenuPath = "CONTEXT/Transform/XFramework/Snap To Ground";
         private const string kTransformSnapToGroundOptionsMenuPath = "CONTEXT/Transform/XFramework/Snap To Ground...";
+        private const string kGroupToBottomCenterMenuPath = "GameObject/Group To Bottom Center Parent";
+        private const string kCreateParentMenuPath = "GameObject/CreateParent";
+        private const string kGroupParentName = "new parent";
         private const float kSnapRayStartOffset = 1000f;
         private const float kSnapRayDistance = 20000f;
+
+        private static System.Action s_PendingMenuAction;
 
         internal enum SnapToGroundMode
         {
@@ -28,31 +33,71 @@ namespace XFramework.Editor
             Mesh
         }
 
-        [MenuItem("GameObject/CreateParent", priority = 0)]
-        public static void CreateParent()
+        [MenuItem(kCreateParentMenuPath, true)]
+        public static bool ValidateCreateParent()
         {
+            return HasValidSceneTransformSelection(Selection.transforms);
+        }
+
+        [MenuItem(kCreateParentMenuPath, priority = 0)]
+        public static void CreateParent(MenuCommand command)
+        {
+            if (command.context != null)
+            {
+                RunMenuActionOnce(() => CreateParent(new MenuCommand(null)));
+                return;
+            }
+
+            // 父物体和子物体同时选中时，只处理顶层物体，避免子物体被二次换父
+            Transform[] targets = GetTopLevelSelectedTransforms();
+            if (targets.Length == 0)
+            {
+                Debug.LogWarning("请先选择至少一个场景中的GameObject");
+                return;
+            }
+
             Vector3 avg_pos = Vector3.zero;
-            foreach (var trans in Selection.transforms)
+            foreach (var trans in targets)
             {
                 avg_pos += trans.position;
             }
-            avg_pos /= Selection.transforms.Length;
+            avg_pos /= targets.Length;
 
-            Transform parent = new GameObject("new parent").transform;
+            Undo.SetCurrentGroupName("Create Parent");
+            int undoGroup = Undo.GetCurrentGroup();
+
+            Transform parent = new GameObject(kGroupParentName).transform;
+            Undo.RegisterCreatedObjectUndo(parent.gameObject, "Create Parent");
             parent.position = avg_pos;
 
-            foreach (var trans in Selection.transforms)
+            foreach (var trans in targets)
             {
-                trans.SetParent(parent, true);
+                Undo.SetTransformParent(trans, parent, true, "Reparent " + trans.name);
             }
+
+            Undo.CollapseUndoOperations(undoGroup);
         }
 
-        [MenuItem("GameObject/Group To Bottom Center Parent", priority = 0)]
-        public static void GroupToBottomCenterParent()
+        [MenuItem(kGroupToBottomCenterMenuPath, true)]
+        public static bool ValidateGroupToBottomCenterParent()
         {
-            if (Selection.transforms.Length == 0)
+            return HasValidSceneTransformSelection(Selection.transforms);
+        }
+
+        [MenuItem(kGroupToBottomCenterMenuPath, priority = 0)]
+        public static void GroupToBottomCenterParent(MenuCommand command)
+        {
+            if (command.context != null)
             {
-                Debug.LogWarning("请先选择至少一个GameObject");
+                RunMenuActionOnce(() => GroupToBottomCenterParent(new MenuCommand(null)));
+                return;
+            }
+
+            // 父物体和子物体同时选中时，只处理顶层物体，避免子物体被二次换父
+            Transform[] targets = GetTopLevelSelectedTransforms();
+            if (targets.Length == 0)
+            {
+                Debug.LogWarning("请先选择至少一个场景中的GameObject");
                 return;
             }
 
@@ -60,7 +105,7 @@ namespace XFramework.Editor
             Bounds totalBounds = new Bounds();
             bool boundsInitialized = false;
 
-            foreach (var trans in Selection.transforms)
+            foreach (var trans in targets)
             {
                 Renderer[] renderers = trans.GetComponentsInChildren<Renderer>(true);
                 foreach (var renderer in renderers)
@@ -88,30 +133,84 @@ namespace XFramework.Editor
                 // 没有Renderer时，退化为所有物体position的平均值，Y取最低
                 Vector3 avg = Vector3.zero;
                 float minY = float.MaxValue;
-                foreach (var trans in Selection.transforms)
+                foreach (var trans in targets)
                 {
                     avg += trans.position;
                     if (trans.position.y < minY) minY = trans.position.y;
                 }
-                avg /= Selection.transforms.Length;
+                avg /= targets.Length;
                 parentPos = new Vector3(avg.x, minY, avg.z);
+            }
+
+            // 选择已经是上一次生成的分组（或该分组下的同一批物体）时，只更新位置，不再套一层
+            Transform existingGroup = null;
+            if (targets.Length == 1 && targets[0].name == kGroupParentName)
+            {
+                existingGroup = targets[0];
+            }
+            else
+            {
+                Transform commonParent = targets[0].parent;
+                for (int i = 1; i < targets.Length && commonParent != null; i++)
+                {
+                    if (targets[i].parent != commonParent)
+                    {
+                        commonParent = null;
+                    }
+                }
+
+                if (commonParent != null && commonParent.name == kGroupParentName && commonParent.childCount == targets.Length)
+                {
+                    existingGroup = commonParent;
+                }
             }
 
             // 记录Undo
             Undo.SetCurrentGroupName("Group To Bottom Center Parent");
             int undoGroup = Undo.GetCurrentGroup();
 
-            GameObject parentGo = new GameObject("new parent");
+            if (existingGroup != null)
+            {
+                Undo.RecordObject(existingGroup, "Group To Bottom Center Parent");
+                existingGroup.position = parentPos;
+                Undo.CollapseUndoOperations(undoGroup);
+                Selection.activeGameObject = existingGroup.gameObject;
+                return;
+            }
+
+            GameObject parentGo = new GameObject(kGroupParentName);
             Undo.RegisterCreatedObjectUndo(parentGo, "Create Parent");
             parentGo.transform.position = parentPos;
 
-            foreach (var trans in Selection.transforms)
+            foreach (var trans in targets)
             {
-                Undo.SetTransformParent(trans, parentGo.transform, "Reparent " + trans.name);
+                Undo.SetTransformParent(trans, parentGo.transform, true, "Reparent " + trans.name);
             }
 
             Undo.CollapseUndoOperations(undoGroup);
             Selection.activeGameObject = parentGo;
+        }
+
+        /// <summary>
+        /// Hierarchy 右键菜单触发时，Unity 会按选中物体数量逐个调用一次菜单方法（选 7 个调 7 次）。
+        /// 统一推迟到下一次 Editor update 只执行一次，避免一次点击生成多个对象。
+        /// </summary>
+        private static void RunMenuActionOnce(System.Action action)
+        {
+            s_PendingMenuAction = action;
+            EditorApplication.update -= RunPendingMenuAction;
+            EditorApplication.update += RunPendingMenuAction;
+        }
+
+        private static void RunPendingMenuAction()
+        {
+            EditorApplication.update -= RunPendingMenuAction;
+            System.Action action = s_PendingMenuAction;
+            s_PendingMenuAction = null;
+            if (action != null)
+            {
+                action();
+            }
         }
 
         [Shortcut("XFramework/Snap To Ground", KeyCode.G, ShortcutModifiers.Action | ShortcutModifiers.Shift)]

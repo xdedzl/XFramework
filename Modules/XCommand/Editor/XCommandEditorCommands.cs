@@ -9,7 +9,7 @@ using Object = UnityEngine.Object;
 namespace XFramework.Editor
 {
     /// <summary>XCommand 编辑器命令集合（XFramework CLI）。按 #region 分类组织编辑器选择、重编译、Play 模式、
-    /// TMP 字体图集烘焙、Prefab 预览、屏幕录制和截图等命令；复杂命令只保留入口，
+    /// TMP 字体图集烘焙、Prefab 预览、屏幕录制、截图和 SceneView 相机等命令；复杂命令只保留入口，
     /// 具体实现位于 Runtime 侧的 XCommandUtility.* partial 或 Editor 侧的 Operation/Capture 文件。</summary>
     [InitializeOnLoad]
     public sealed class XCommandEditorCommands : XCommandGroup
@@ -287,6 +287,18 @@ namespace XFramework.Editor
         private static object CaptureEditorWindow(string argument)
         {
             return XCommandEditorWindowCapture.ExecuteScreenshot(argument);
+        }
+
+        #endregion
+
+        #region SceneView 相机
+
+        [XCommandEntry("sceneview-camera", name = "控制 SceneView 相机", order = 34, mode = XCommandMode.Editor, category = Category,
+            description = "读写 SceneView 相机：--pivot/--position 设置 orbit 中心或相机世界位置，--rotation/--snap 设置朝向（六方向轴对齐吸附），--size/--orthographic/--2d/--lock-rotation 调整缩放与模式；不带选项时返回当前状态 JSON。",
+            usage = XCommandSceneViewCamera.Usage)]
+        private static object ControlSceneViewCamera(string argument)
+        {
+            return XCommandSceneViewCamera.Execute(argument);
         }
 
         #endregion

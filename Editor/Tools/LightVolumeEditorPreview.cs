@@ -181,7 +181,7 @@ namespace XFramework.Editor
             }
         }
 
-        [MenuItem("TheWar/Tools/Rendering/Refresh Light Volume Preview", false, 1200)]
+        [MenuItem("XFramework/Tools/Rendering/Refresh Light Volume Preview", false, 1200)]
         private static void RefreshPreviewMenu()
         {
             UpdatePreviewBySceneCamera();
