@@ -18,7 +18,7 @@ namespace XFramework.Command
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterAssembliesLoaded)]
         private static void RegisterCommandGroup()
         {
-            XCommandRegistry.RegisterGroup(typeof(XCommandCommands));
+            XCommand.Registry.RegisterGroup(typeof(XCommandCommands));
         }
 
         #region 内置命令
@@ -26,13 +26,13 @@ namespace XFramework.Command
         [XCommandEntry("clear", name = "清空 XCommand", order = 0, mode = XCommandMode.Both, displayType = XCommandDisplayType.Hidden, category = Category, description = "清空当前 XCommand 终端的显示内容，不删除 Hub 历史。", usage = "clear", recordExecution = false)]
         private static void ClearConsole()
         {
-            XCommandHub.RequestDisplayClear();
+            XCommand.Hub.RequestDisplayClear();
         }
 
         [XCommandEntry("load_history", name = "加载 XCommand 历史", order = 1, mode = XCommandMode.Both, displayType = XCommandDisplayType.Hidden, category = Category, description = "在当前 XCommand 终端重新加载 Hub 历史。", usage = "load_history", recordExecution = false)]
         private static void LoadHistory()
         {
-            XCommandHub.RequestDisplayHistory();
+            XCommand.Hub.RequestDisplayHistory();
         }
 
         [XCommandEntry("help", name = "查看 XCommand 帮助", order = 2, mode = XCommandMode.Both, displayType = XCommandDisplayType.Hidden, category = Category, description = "查看全部命令分类，或查看指定分类下的全部命令。", usage = "help [--category CATEGORY] [--all]", recordExecution = false)]
@@ -52,7 +52,7 @@ namespace XFramework.Command
                 throw new ArgumentException("--category 和 --all 不能同时使用。");
             }
 
-            IReadOnlyList<XCommandDescriptor> commands = XCommandRegistry.Commands;
+            IReadOnlyList<XCommandDescriptor> commands = XCommand.Registry.Commands;
             string category = FindHelpCategory(commands, requestedCategory);
             var result = new XCommandHelpResult {
                 category = category ?? string.Empty,
@@ -159,7 +159,7 @@ namespace XFramework.Command
         [XCommandEntry("play-stop", name = "结束运行", order = 10, mode = XCommandMode.Runtime, category = Category, description = "Editor 中异步退出 Play Mode 并等待 EnteredEditMode；Development Player 中返回退出请求回执。", usage = "play-stop")]
         private static object StopRunning()
         {
-            return XCommandPipeline.StopRunning();
+            return XCommand.Pipeline.StopRunning();
         }
 
         #endregion
@@ -219,7 +219,7 @@ namespace XFramework.Command
                 changedSince = args.GetLong("changed-since", 0),
                 compact = args.HasFlag("compact"),
             };
-            return XCommandUI.List(query);
+            return XCommand.UI.List(query);
         }
 
         [XCommandEntry("ui-act", name = "操作 UGUI", order = 30, mode = XCommandMode.Runtime, category = Category, description = "重新定位唯一且稳定的 UGUI 元素，通过 Input System 注入 click、down、up 或 scroll。返回 operation ID。", usage = "ui-act [--name NAME|--path PATH|--indexed-path PATH|--text TEXT] [--button BUTTON] [--scroll-x X] [--scroll-y Y] [--sample-grid N] [--stable-frames N] [--timeout S] click|down|up|scroll", displayType = XCommandDisplayType.Hidden)]
@@ -237,7 +237,7 @@ namespace XFramework.Command
                 stableFrames = args.GetInt("stable-frames", 2),
                 timeoutSeconds = args.GetFloat("timeout", 10f),
             };
-            return XCommandPipeline.RunOperation(new UIActOperation(request));
+            return XCommand.Pipeline.RunOperation(new UIActOperation(request));
         }
 
         #endregion
@@ -250,7 +250,7 @@ namespace XFramework.Command
             const string usage = "usage: wait-for-ui [--state visible|hidden|stable] [--interactable] [--name NAME|--path PATH|--indexed-path PATH|--text TEXT|--action ACTION] [--sample-grid N] [--stable-frames N] [--timeout S] [--compact]";
             XCommandArguments args = XCommandArguments.Parse(argument, new[] { "state", "name", "path", "indexed-path", "text", "action", "sample-grid", "stable-frames", "timeout" }, new[] { "interactable", "compact" });
             args.RequireValueCount(0, usage);
-            return XCommandPipeline.RunOperation(new WaitOperation("wait-for-ui", new XCommandUIWaitRequest {
+            return XCommand.Pipeline.RunOperation(new WaitOperation("wait-for-ui", new XCommandUIWaitRequest {
                 state = args.GetString("state", "visible"),
                 interactable = args.HasFlag("interactable"),
                 selector = CreateSelector(args),
@@ -267,7 +267,7 @@ namespace XFramework.Command
             const string usage = "usage: wait-for-go [--state exists|missing|active|inactive|stable] [--instance-id ID|--name NAME|--path PATH|--indexed-path PATH|--component TYPE] [--stable-frames N] [--position-epsilon N] [--rotation-epsilon N] [--timeout S] [--compact]";
             XCommandArguments args = XCommandArguments.Parse(argument, new[] { "state", "instance-id", "name", "path", "indexed-path", "component", "stable-frames", "position-epsilon", "rotation-epsilon", "timeout" }, new[] { "compact" });
             args.RequireValueCount(0, usage);
-            return XCommandPipeline.RunOperation(new WaitOperation("wait-for-go", new XCommandGameObjectWaitRequest {
+            return XCommand.Pipeline.RunOperation(new WaitOperation("wait-for-go", new XCommandGameObjectWaitRequest {
                 state = args.GetString("state", "exists"),
                 query = new XCommandGameObjectQuery {
                     instanceId = args.GetInt("instance-id", 0),
@@ -291,7 +291,7 @@ namespace XFramework.Command
             const string usage = "usage: wait-for-log [--since CURSOR] [--level all|log|warning|error] [--contains TEXT] [--count N] [--message-limit N] [--stack-limit N] [--stack] [--timeout S] [--compact]";
             XCommandArguments args = XCommandArguments.Parse(argument, new[] { "since", "level", "contains", "count", "message-limit", "stack-limit", "timeout" }, new[] { "stack", "compact" });
             args.RequireValueCount(0, usage);
-            return XCommandPipeline.RunOperation(new WaitOperation("wait-for-log", new XCommandLogWaitRequest {
+            return XCommand.Pipeline.RunOperation(new WaitOperation("wait-for-log", new XCommandLogWaitRequest {
                 since = args.GetLong("since", -1),
                 level = args.GetString("level", "all"),
                 contains = args.GetString("contains"),
@@ -309,7 +309,7 @@ namespace XFramework.Command
         {
             XCommandArguments args = XCommandArguments.Parse(argument, new[] { "real-seconds", "game-seconds", "frames" }, new[] { "compact" });
             args.RequireValueCount(0, "wait 不接受位置参数。");
-            return XCommandPipeline.RunOperation(new WaitOperation("wait", new XCommandWaitRequest {
+            return XCommand.Pipeline.RunOperation(new WaitOperation("wait", new XCommandWaitRequest {
                 realSeconds = args.GetFloat("real-seconds", 0f),
                 gameSeconds = args.GetFloat("game-seconds", 0f),
                 frames = args.GetInt("frames", 0),
@@ -326,7 +326,7 @@ namespace XFramework.Command
         {
             XCommandArguments args = XCommandArguments.Parse(argument, new[] { "since", "level", "contains", "limit", "message-limit", "stack-limit" }, new[] { "stack", "compact" });
             args.RequireValueCount(0, "logs 不接受位置参数。");
-            return XCommandUtility.Logs.Query(new XCommandLogQuery {
+            return XCommand.Logs.Query(new XCommandLogQuery {
                 since = args.GetLong("since", 0),
                 level = args.GetString("level", "all"),
                 contains = args.GetString("contains"),
@@ -347,14 +347,14 @@ namespace XFramework.Command
         {
             XCommandArguments args = XCommandArguments.Parse(argument, Array.Empty<string>(), new[] { "compact" });
             args.RequireValueCount(0, "input-state 不接受位置参数。");
-            return XCommandUtility.Input.GetState(args.HasFlag("compact"));
+            return XCommand.Input.GetState(args.HasFlag("compact"));
         }
 
         [XCommandEntry("input-reset", name = "重置自动化输入", order = 56, mode = XCommandMode.Runtime, category = Category, description = "立即释放自动化键盘、鼠标和触摸的所有保持状态，并返回重置后的输入状态。", usage = "input-reset", displayType = XCommandDisplayType.Hidden)]
         private static object ResetInput()
         {
-            XCommandUtility.Input.ResetInterruptedInput();
-            return XCommandUtility.Input.GetState(true);
+            XCommand.Input.ResetInterruptedInput();
+            return XCommand.Input.GetState(true);
         }
 
         [XCommandEntry("ui-input", name = "注入输入序列", order = 60, mode = XCommandMode.Runtime, category = Category, description = "通过 Unity Input System 注入键盘、鼠标和多点触控 JSON 序列。返回 operation ID。", usage = "ui-input {\"steps\":[{\"type\":\"mouse|key|touch|wait|reset\",...}],\"resetAfter\":false}", displayType = XCommandDisplayType.Hidden)]
@@ -363,7 +363,7 @@ namespace XFramework.Command
             if (string.IsNullOrWhiteSpace(argument))
                 throw new ArgumentException("输入序列 JSON 不能为空。", nameof(argument));
             XCommandInputSequence sequence = JsonUtility.FromJson<XCommandInputSequence>(argument);
-            return XCommandPipeline.RunOperation(new UIInputOperation(sequence));
+            return XCommand.Pipeline.RunOperation(new UIInputOperation(sequence));
         }
 
         #endregion
@@ -383,7 +383,7 @@ namespace XFramework.Command
                 uiOnly = args.HasFlag("ui-only"),
                 timeoutSeconds = args.GetFloat("timeout", 10f),
             };
-            return XCommandPipeline.RunOperation(new ScreenshotOperation(request));
+            return XCommand.Pipeline.RunOperation(new ScreenshotOperation(request));
         }
 
         #endregion

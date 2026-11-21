@@ -15,13 +15,9 @@ namespace XFramework.Editor
                 return;
             }
 
-            EditorApplication.update += Update;
-            AssemblyReloadEvents.beforeAssemblyReload += Shutdown;
-            EditorApplication.quitting += Shutdown;
             try
             {
-                string projectPath = Directory.GetParent(Application.dataPath).FullName;
-                XFrameworkCliServer.Start(XFrameworkCliProcessType.Editor, projectPath);
+                Start();
             }
             catch (System.Exception exception)
             {
@@ -29,17 +25,34 @@ namespace XFramework.Editor
             }
         }
 
-        private static void Update()
+        internal static void Start()
         {
-            XFrameworkCliServer.Pump();
+            string projectPath = Directory.GetParent(Application.dataPath).FullName;
+            XCommand.Enable(XFrameworkCliProcessType.Editor, projectPath);
+            EditorApplication.update -= Update;
+            EditorApplication.update += Update;
+            AssemblyReloadEvents.beforeAssemblyReload -= Shutdown;
+            AssemblyReloadEvents.beforeAssemblyReload += Shutdown;
+            EditorApplication.quitting -= Shutdown;
+            EditorApplication.quitting += Shutdown;
         }
 
-        private static void Shutdown()
+        internal static void Stop()
         {
             EditorApplication.update -= Update;
             AssemblyReloadEvents.beforeAssemblyReload -= Shutdown;
             EditorApplication.quitting -= Shutdown;
-            XFrameworkCliServer.Stop();
+            XCommand.Disable();
+        }
+
+        private static void Update()
+        {
+            XCommand.Pump();
+        }
+
+        private static void Shutdown()
+        {
+            Stop();
         }
     }
 }

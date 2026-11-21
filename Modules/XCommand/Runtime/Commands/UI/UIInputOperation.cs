@@ -21,13 +21,13 @@ namespace XFramework.Command
         {
             try
             {
-                yield return XCommandUtility.Input.Run(sequence, () => context.IsCancellationRequested, context.SetOutput);
+                yield return XCommand.Input.Run(sequence, () => context.IsCancellationRequested, context.SetOutput);
             }
             finally
             {
                 if (context.IsCancellationRequested)
                 {
-                    XCommandUtility.Input.ResetInterruptedInput();
+                    XCommand.Input.ResetInterruptedInput();
                 }
             }
         }

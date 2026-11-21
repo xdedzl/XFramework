@@ -89,7 +89,7 @@ namespace XFramework.Editor
                 throw new InvalidOperationException("Unity 当前正在编译脚本，未提交新的重新编译请求。");
             }
 
-            return XCommandPipeline.RunOperation(new XCommandCompileOperation());
+            return XCommand.Pipeline.RunOperation(new XCommandCompileOperation());
         }
 
         public IEnumerator Run(XCommandOperationContext context)
@@ -101,7 +101,7 @@ namespace XFramework.Editor
 
         private static void InitializeStorage(long operationId)
         {
-            if (!XCommandPipeline.TryGetOperation(operationId, out XCommandOperationInfo operation))
+            if (!XCommand.Pipeline.TryGetOperation(operationId, out XCommandOperationInfo operation))
             {
                 throw new InvalidOperationException($"找不到重编译操作：{operationId}");
             }
@@ -192,13 +192,13 @@ namespace XFramework.Editor
                 return false;
             }
 
-            if (!XCommandPipeline.TryGetOperation(storage.operation.id, out operation))
+            if (!XCommand.Pipeline.TryGetOperation(storage.operation.id, out operation))
             {
                 string operationJson = JsonUtility.ToJson(storage.operation);
-                XCommandPipeline.RestoreOperation(operationJson, false);
+                XCommand.Pipeline.RestoreOperation(operationJson, false);
             }
 
-            return XCommandPipeline.TryGetOperation(storage.operation.id, out operation);
+            return XCommand.Pipeline.TryGetOperation(storage.operation.id, out operation);
         }
 
         private static void OnAssemblyCompilationFinished(string assemblyPath, CompilerMessage[] messages)
@@ -342,7 +342,7 @@ namespace XFramework.Editor
                 warningCount = storage.warningCount;
                 errors.Clear();
                 errors.AddRange(storage.errors);
-                XCommandPipeline.RestoreOperation(JsonUtility.ToJson(storage.operation), false);
+                XCommand.Pipeline.RestoreOperation(JsonUtility.ToJson(storage.operation), false);
             }
             catch (Exception exception)
             {

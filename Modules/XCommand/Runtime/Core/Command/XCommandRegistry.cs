@@ -116,27 +116,38 @@ namespace XFramework.Command
     {
     }
 
-    public static class XCommandRegistry
+    public sealed class XCommandRegistry
     {
-        private static readonly Dictionary<string, XCommandDescriptor> s_AttributedCommands = new Dictionary<string, XCommandDescriptor>(StringComparer.Ordinal);
-        private static readonly Dictionary<string, XCommandDescriptor> s_DynamicCommands = new Dictionary<string, XCommandDescriptor>(StringComparer.Ordinal);
-        private static readonly Dictionary<string, XCommandDescriptor> s_Commands = new Dictionary<string, XCommandDescriptor>(StringComparer.Ordinal);
-        private static readonly List<XCommandDescriptor> s_CommandList = new List<XCommandDescriptor>();
-        private static readonly List<XCommandDescriptor> s_VisibleCommandList = new List<XCommandDescriptor>();
-        private static readonly List<XCommandDiagnostic> s_Diagnostics = new List<XCommandDiagnostic>();
-        private static readonly HashSet<Type> s_CommandGroupTypes = new HashSet<Type>();
-        private static Func<XCommandDescriptor, bool> s_AvailabilityPredicate;
-
-        static XCommandRegistry()
+        internal XCommandRegistry()
         {
+        }
+
+        private readonly Dictionary<string, XCommandDescriptor> s_AttributedCommands = new Dictionary<string, XCommandDescriptor>(StringComparer.Ordinal);
+        private readonly Dictionary<string, XCommandDescriptor> s_DynamicCommands = new Dictionary<string, XCommandDescriptor>(StringComparer.Ordinal);
+        private readonly Dictionary<string, XCommandDescriptor> s_Commands = new Dictionary<string, XCommandDescriptor>(StringComparer.Ordinal);
+        private readonly List<XCommandDescriptor> s_CommandList = new List<XCommandDescriptor>();
+        private readonly List<XCommandDescriptor> s_VisibleCommandList = new List<XCommandDescriptor>();
+        private readonly List<XCommandDiagnostic> s_Diagnostics = new List<XCommandDiagnostic>();
+        private readonly HashSet<Type> s_CommandGroupTypes = new HashSet<Type>();
+        private Func<XCommandDescriptor, bool> s_AvailabilityPredicate;
+        private bool s_IsRunning;
+
+        internal void Start()
+        {
+            s_IsRunning = true;
             Refresh();
         }
 
-        public static IReadOnlyList<XCommandDescriptor> Commands => s_CommandList;
-        public static IReadOnlyList<XCommandDescriptor> VisibleCommands => s_VisibleCommandList;
-        public static IReadOnlyList<XCommandDiagnostic> Diagnostics => s_Diagnostics;
+        internal void Stop()
+        {
+            s_IsRunning = false;
+        }
 
-        public static void Refresh()
+        public IReadOnlyList<XCommandDescriptor> Commands => s_CommandList;
+        public IReadOnlyList<XCommandDescriptor> VisibleCommands => s_VisibleCommandList;
+        public IReadOnlyList<XCommandDiagnostic> Diagnostics => s_Diagnostics;
+
+        public void Refresh()
         {
             s_AttributedCommands.Clear();
             s_Diagnostics.Clear();
@@ -181,36 +192,44 @@ namespace XFramework.Command
             RebuildCommandRegistry();
         }
 
-        /// <summary>显式注册一个命令组并重新发现其中的命令方法。Player 平台只加载显式注册的命令组。</summary>
-        public static void RegisterGroup(Type commandGroupType)
+        /// <summary>
+        /// Editor 使用 TypeCache 发现命令组，不执行注册；Player 显式登记命令组，并在已启动时重新发现命令方法。
+        /// 同一类型重复注册会被忽略。
+        /// </summary>
+        public void RegisterGroup(Type commandGroupType)
         {
+#if !UNITY_EDITOR
             if (commandGroupType == null)
             {
-                throw new ArgumentNullException(nameof(commandGroupType));
+                return;
             }
             if (!typeof(XCommandGroup).IsAssignableFrom(commandGroupType) || commandGroupType.IsAbstract)
             {
-                throw new ArgumentException($"命令组必须是非抽象 XCommandGroup 子类：{commandGroupType.FullName}", nameof(commandGroupType));
+                return;
             }
             if (!s_CommandGroupTypes.Add(commandGroupType))
             {
                 return;
             }
-            Refresh();
+            if (s_IsRunning)
+            {
+                Refresh();
+            }
+#endif
         }
 
-        public static void SetAvailabilityPredicate(Func<XCommandDescriptor, bool> predicate)
+        public void SetAvailabilityPredicate(Func<XCommandDescriptor, bool> predicate)
         {
             s_AvailabilityPredicate = predicate;
             RebuildCommandRegistry();
         }
 
-        public static void RefreshAvailability()
+        public void RefreshAvailability()
         {
             RebuildCommandRegistry();
         }
 
-        public static bool CanExecute(XCommandDescriptor command)
+        public bool CanExecute(XCommandDescriptor command)
         {
             if (command == null || (s_AvailabilityPredicate != null && !s_AvailabilityPredicate(command)))
             {
@@ -228,7 +247,7 @@ namespace XFramework.Command
             }
         }
 
-        public static bool TryGetCommand(string commandLine, out XCommandDescriptor command)
+        public bool TryGetCommand(string commandLine, out XCommandDescriptor command)
         {
             command = null;
             if (!TryParseCommandLine(commandLine, out string commandName, out _))
@@ -239,12 +258,12 @@ namespace XFramework.Command
             return s_Commands.TryGetValue(commandName, out command);
         }
 
-        public static XCommandExecutionResult ExecuteDetailed(string commandLine)
+        public XCommandExecutionResult ExecuteDetailed(string commandLine)
         {
-            return XCommandHub.Execute(commandLine);
+            return XCommand.Hub.Execute(commandLine);
         }
 
-        internal static XCommandExecutionResult ExecuteCore(string commandLine)
+        internal XCommandExecutionResult ExecuteCore(string commandLine)
         {
             string normalizedCommandLine = commandLine?.Trim() ?? string.Empty;
             if (!TryParseCommandLine(normalizedCommandLine, out string commandName, out string commandArgument))
@@ -283,7 +302,7 @@ namespace XFramework.Command
             }
         }
 
-        public static bool Execute(string cmd, out object result)
+        public bool Execute(string cmd, out object result)
         {
             XCommandExecutionResult executionResult = ExecuteDetailed(cmd);
             result = executionResult.Value;
@@ -294,7 +313,7 @@ namespace XFramework.Command
             return executionResult.Succeeded;
         }
 
-        public static void AddCommand(string cmd, Func<string, object> fun, XCommandMode mode = XCommandMode.Runtime, XCommandDisplayType displayType = XCommandDisplayType.Visible)
+        public void AddCommand(string cmd, Func<string, object> fun, XCommandMode mode = XCommandMode.Runtime, XCommandDisplayType displayType = XCommandDisplayType.Visible)
         {
             if (s_Commands.ContainsKey(cmd))
             {
@@ -311,7 +330,7 @@ namespace XFramework.Command
             RebuildCommandRegistry();
         }
 
-        private static IEnumerable<Type> GetCommandTypes()
+        private IEnumerable<Type> GetCommandTypes()
         {
             var types = new HashSet<Type>();
             foreach (Type type in s_CommandGroupTypes)
@@ -333,7 +352,7 @@ namespace XFramework.Command
             }
         }
 
-        private static void RegisterAttributedCommand(XCommandDescriptor descriptor)
+        private void RegisterAttributedCommand(XCommandDescriptor descriptor)
         {
             if (s_AttributedCommands.TryGetValue(descriptor.Command, out XCommandDescriptor existing))
             {
@@ -344,7 +363,7 @@ namespace XFramework.Command
             s_AttributedCommands.Add(descriptor.Command, descriptor);
         }
 
-        private static void RebuildCommandRegistry()
+        private void RebuildCommandRegistry()
         {
             s_Commands.Clear();
             foreach (var pair in s_AttributedCommands)
@@ -397,7 +416,7 @@ namespace XFramework.Command
             return result != 0 ? result : string.Compare(left.Command, right.Command, StringComparison.OrdinalIgnoreCase);
         }
 
-        private static bool TryParseCommandLine(string commandLine, out string commandName, out string commandArgument)
+        private bool TryParseCommandLine(string commandLine, out string commandName, out string commandArgument)
         {
             commandName = string.Empty;
             commandArgument = string.Empty;
@@ -419,7 +438,7 @@ namespace XFramework.Command
             return true;
         }
 
-        private static void AddDiagnostic(string command, string message, string declaringTypeName, string methodName)
+        private void AddDiagnostic(string command, string message, string declaringTypeName, string methodName)
         {
             s_Diagnostics.Add(new XCommandDiagnostic(command, message, declaringTypeName, methodName));
             Debug.LogWarning(message);

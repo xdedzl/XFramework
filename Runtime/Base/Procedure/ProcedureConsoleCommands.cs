@@ -9,7 +9,7 @@ namespace XFramework
         [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.AfterAssembliesLoaded)]
         private static void RegisterCommandGroup()
         {
-            XCommandRegistry.RegisterGroup(typeof(ProcedureConsoleCommands));
+            XCommand.Registry.RegisterGroup(typeof(ProcedureConsoleCommands));
         }
 
         [XCommandEntry("procedure-switch", name = "切换主流程", order = 0, mode = XCommandMode.Runtime, category = "Procedure", description = "按类型名或完整类型名切换到唯一的 MainProcedure，带 Request 的流程使用默认 Request。", usage = "procedure-switch PROCEDURE_TYPE", displayType = XCommandDisplayType.Hidden)]

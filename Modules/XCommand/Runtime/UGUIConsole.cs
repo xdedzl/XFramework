@@ -378,7 +378,7 @@ namespace XFramework.Command
         public void OnInit()
         {
             CreateConsoleWindow();
-            m_VisibleAfterRecordId = XCommandHub.LatestRecordId;
+            m_VisibleAfterRecordId = XCommand.Hub.LatestRecordId;
         }
 
         public void OnOpen()
@@ -465,11 +465,11 @@ namespace XFramework.Command
             {
                 return;
             }
-            XCommandHub.RecordAdded += OnCommandRecordAdded;
-            XCommandHub.RecordUpdated += OnCommandRecordUpdated;
-            XCommandHub.RecordsTrimmed += OnCommandRecordTrimmed;
-            XCommandHub.DisplayClearRequested += OnDisplayClearRequested;
-            XCommandHub.DisplayHistoryRequested += OnDisplayHistoryRequested;
+            XCommand.Hub.RecordAdded += OnCommandRecordAdded;
+            XCommand.Hub.RecordUpdated += OnCommandRecordUpdated;
+            XCommand.Hub.RecordsTrimmed += OnCommandRecordTrimmed;
+            XCommand.Hub.DisplayClearRequested += OnDisplayClearRequested;
+            XCommand.Hub.DisplayHistoryRequested += OnDisplayHistoryRequested;
             m_IsSubscribed = true;
         }
 
@@ -479,11 +479,11 @@ namespace XFramework.Command
             {
                 return;
             }
-            XCommandHub.RecordAdded -= OnCommandRecordAdded;
-            XCommandHub.RecordUpdated -= OnCommandRecordUpdated;
-            XCommandHub.RecordsTrimmed -= OnCommandRecordTrimmed;
-            XCommandHub.DisplayClearRequested -= OnDisplayClearRequested;
-            XCommandHub.DisplayHistoryRequested -= OnDisplayHistoryRequested;
+            XCommand.Hub.RecordAdded -= OnCommandRecordAdded;
+            XCommand.Hub.RecordUpdated -= OnCommandRecordUpdated;
+            XCommand.Hub.RecordsTrimmed -= OnCommandRecordTrimmed;
+            XCommand.Hub.DisplayClearRequested -= OnDisplayClearRequested;
+            XCommand.Hub.DisplayHistoryRequested -= OnDisplayHistoryRequested;
             m_IsSubscribed = false;
         }
 
@@ -534,7 +534,7 @@ namespace XFramework.Command
 
         private void ResetVisibleOutput()
         {
-            m_VisibleAfterRecordId = XCommandHub.LatestRecordId;
+            m_VisibleAfterRecordId = XCommand.Hub.LatestRecordId;
             m_DisplayEntries.Clear();
             m_DisplayedCommandIds.Clear();
             RenderOutput();
@@ -543,7 +543,7 @@ namespace XFramework.Command
         private void LoadHistory()
         {
             var history = new List<DisplayEntry>();
-            IReadOnlyList<XCommandRecord> records = XCommandHub.Records;
+            IReadOnlyList<XCommandRecord> records = XCommand.Hub.Records;
             for (int i = 0; i < records.Count; i++)
             {
                 XCommandRecord record = records[i];
@@ -553,7 +553,7 @@ namespace XFramework.Command
                 }
             }
             m_DisplayEntries.InsertRange(0, history);
-            m_VisibleAfterRecordId = records.Count == 0 ? XCommandHub.LatestRecordId : records[0].Id - 1;
+            m_VisibleAfterRecordId = records.Count == 0 ? XCommand.Hub.LatestRecordId : records[0].Id - 1;
             RenderOutput();
         }
 

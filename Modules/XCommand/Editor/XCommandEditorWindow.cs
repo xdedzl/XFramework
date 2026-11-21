@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
@@ -115,7 +114,7 @@ namespace XFramework.Editor
         {
             XCommandEditorHistory.EnsureInitialized();
             LoadPreferences();
-            XCommandRegistry.Refresh();
+            XCommand.Registry.Refresh();
             EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
         }
 
@@ -236,19 +235,19 @@ namespace XFramework.Editor
 
         private void RefreshCliServerStatus()
         {
-            bool running = XFrameworkCliServer.IsRunning;
+            bool running = XCommand.Server.IsRunning;
             int processId = System.Diagnostics.Process.GetCurrentProcess().Id;
-            string endpoint = running ? $"127.0.0.1:{XFrameworkCliServer.Port}" : "未监听";
-            m_CliServerMenuButton.text = running ? $"CLI ● :{XFrameworkCliServer.Port}" : "CLI ○ 已停止";
+            string endpoint = running ? $"127.0.0.1:{XCommand.Server.Port}" : "未监听";
+            m_CliServerMenuButton.text = running ? $"CLI ● :{XCommand.Server.Port}" : "CLI ○ 已停止";
             m_CliServerMenuButton.style.color = running ? PromptColor : new Color(0.85f, 0.48f, 0.40f);
             m_CliServerMenuButton.tooltip = $"{(running ? "运行中" : "已停止")}  ·  {endpoint}\nPID {processId}  ·  Editor  ·  {(Application.isPlaying ? "Play Mode" : "Edit Mode")}\n局域网监听 0.0.0.0；仅限可信内网开发调试\n\n点击管理 Server";
         }
 
         private void ShowCliServerMenu()
         {
-            bool running = XFrameworkCliServer.IsRunning;
+            bool running = XCommand.Server.IsRunning;
             var menu = new GenericMenu();
-            menu.AddDisabledItem(new GUIContent(running ? $"运行中 · PID {System.Diagnostics.Process.GetCurrentProcess().Id} · 127.0.0.1:{XFrameworkCliServer.Port}" : "Server 已停止"));
+            menu.AddDisabledItem(new GUIContent(running ? $"运行中 · PID {System.Diagnostics.Process.GetCurrentProcess().Id} · 127.0.0.1:{XCommand.Server.Port}" : "Server 已停止"));
             menu.AddSeparator(string.Empty);
             if (running)
             {
@@ -274,26 +273,25 @@ namespace XFramework.Editor
 
         private void StopCliServer()
         {
-            XFrameworkCliServer.Stop();
+            XFrameworkCliServerBootstrap.Stop();
             RefreshCliServerStatus();
         }
 
         private void RestartCliServer()
         {
-            XFrameworkCliServer.Stop();
+            XFrameworkCliServerBootstrap.Stop();
             StartCliServer();
         }
 
         private void StartCliServer()
         {
-            string projectPath = Directory.GetParent(Application.dataPath).FullName;
-            XFrameworkCliServer.Start(XFrameworkCliProcessType.Editor, projectPath);
+            XFrameworkCliServerBootstrap.Start();
             RefreshCliServerStatus();
         }
 
         private static void CopyCliServerConnection()
         {
-            EditorGUIUtility.systemCopyBuffer = $"--port {XFrameworkCliServer.Port}";
+            EditorGUIUtility.systemCopyBuffer = $"--port {XCommand.Server.Port}";
         }
 
         private void SetCommandReferenceVisible(bool visible)
@@ -732,7 +730,7 @@ namespace XFramework.Editor
         private void BindCommandSuggestionItem(VisualElement element, int index)
         {
             XCommandDescriptor command = m_CommandSuggestions[index];
-            bool available = XCommandRegistry.CanExecute(command);
+            bool available = XCommand.Registry.CanExecute(command);
             element.Q<Label>("command").text = command.Command;
             element.Q<Label>("displayName").text = command.Name;
             element.Q<Label>("description").text = string.IsNullOrEmpty(command.Description) ? command.Usage : command.Description;
@@ -815,7 +813,7 @@ namespace XFramework.Editor
         private void BindCommandItem(VisualElement element, int index)
         {
             XCommandDescriptor command = m_FilteredCommands[index];
-            bool available = XCommandRegistry.CanExecute(command);
+            bool available = XCommand.Registry.CanExecute(command);
             element.userData = command;
             Button favoriteButton = element.Q<Button>("favorite");
             bool isFavorite = m_Favorites.Contains(command.Command);
@@ -843,7 +841,7 @@ namespace XFramework.Editor
 
         private void RefreshCommands()
         {
-            XCommandRegistry.Refresh();
+            XCommand.Registry.Refresh();
             RefreshRegistry();
             RefreshWorkflows();
             ApplyReferenceTabState();
@@ -853,15 +851,15 @@ namespace XFramework.Editor
         {
             string selectedCommandName = m_SelectedCommand?.Command ?? m_SelectedCommandName;
             m_AllCommands.Clear();
-            for (int i = 0; i < XCommandRegistry.VisibleCommands.Count; i++)
+            for (int i = 0; i < XCommand.Registry.VisibleCommands.Count; i++)
             {
-                m_AllCommands.Add(XCommandRegistry.VisibleCommands[i]);
+                m_AllCommands.Add(XCommand.Registry.VisibleCommands[i]);
             }
 
             m_Diagnostics.Clear();
-            for (int i = 0; i < XCommandRegistry.Diagnostics.Count; i++)
+            for (int i = 0; i < XCommand.Registry.Diagnostics.Count; i++)
             {
-                m_Diagnostics.Add(XCommandRegistry.Diagnostics[i]);
+                m_Diagnostics.Add(XCommand.Registry.Diagnostics[i]);
             }
 
             m_SelectedCommand = FindCommandByName(selectedCommandName);
@@ -950,7 +948,7 @@ namespace XFramework.Editor
         {
             if (modeFilter == AvailableModeFilter)
             {
-                return XCommandRegistry.CanExecute(command);
+                return XCommand.Registry.CanExecute(command);
             }
             if (modeFilter == AllModeFilter)
             {
@@ -1003,7 +1001,7 @@ namespace XFramework.Editor
             }
 
             XCommandDescriptor command = m_SelectedCommand;
-            bool available = XCommandRegistry.CanExecute(command);
+            bool available = XCommand.Registry.CanExecute(command);
             m_DetailTitleLabel.text = $"{command.Name}  ({command.Command})";
             m_DetailAvailabilityLabel.text = available ? "● 当前环境可执行" : $"○ {GetUnavailableReason(command)}";
             m_DetailAvailabilityLabel.style.color = available ? PromptColor : new Color(0.95f, 0.55f, 0.40f);
@@ -1077,9 +1075,9 @@ namespace XFramework.Editor
                 return;
             }
 
-            if (XCommandRegistry.TryGetCommand(commandLine, out XCommandDescriptor command))
+            if (XCommand.Registry.TryGetCommand(commandLine, out XCommandDescriptor command))
             {
-                bool available = XCommandRegistry.CanExecute(command);
+                bool available = XCommand.Registry.CanExecute(command);
                 if (command.DisplayType == XCommandDisplayType.Hidden)
                 {
                     m_PromptHintLabel.text = available ? "按 Enter 执行命令。" : GetUnavailableReason(command);
@@ -1111,12 +1109,12 @@ namespace XFramework.Editor
 
             CloseCommandSuggestions(false);
 
-            if (XCommandRegistry.TryGetCommand(commandLine, out XCommandDescriptor command) && XCommandRegistry.CanExecute(command) && command.RequireConfirmation && !EditorUtility.DisplayDialog("确认执行命令", $"确定执行以下命令？\n\n{commandLine}", "执行", "取消"))
+            if (XCommand.Registry.TryGetCommand(commandLine, out XCommandDescriptor command) && XCommand.Registry.CanExecute(command) && command.RequireConfirmation && !EditorUtility.DisplayDialog("确认执行命令", $"确定执行以下命令？\n\n{commandLine}", "执行", "取消"))
             {
                 return;
             }
 
-            XCommandExecutionResult result = XCommandHub.Execute(commandLine, XCommandSource.Editor);
+            XCommandExecutionResult result = XCommand.Hub.Execute(commandLine, XCommandSource.Editor);
             if (result.Command != null && result.Command.DisplayType == XCommandDisplayType.Visible)
             {
                 SelectCommand(result.Command);
@@ -1196,7 +1194,7 @@ namespace XFramework.Editor
 
         private void NavigateCommandHistory(int direction)
         {
-            IReadOnlyList<string> commandHistory = XCommandHub.CommandHistory;
+            IReadOnlyList<string> commandHistory = XCommand.Hub.CommandHistory;
             if (commandHistory.Count == 0)
             {
                 return;
@@ -1226,7 +1224,7 @@ namespace XFramework.Editor
             var matches = new List<XCommandDescriptor>();
             for (int i = 0; i < m_AllCommands.Count; i++)
             {
-                if (XCommandRegistry.CanExecute(m_AllCommands[i]) && m_AllCommands[i].Command.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                if (XCommand.Registry.CanExecute(m_AllCommands[i]) && m_AllCommands[i].Command.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                 {
                     matches.Add(m_AllCommands[i]);
                 }
@@ -1253,8 +1251,8 @@ namespace XFramework.Editor
 
         private static int CompareCommandSuggestions(XCommandDescriptor left, XCommandDescriptor right)
         {
-            bool leftAvailable = XCommandRegistry.CanExecute(left);
-            bool rightAvailable = XCommandRegistry.CanExecute(right);
+            bool leftAvailable = XCommand.Registry.CanExecute(left);
+            bool rightAvailable = XCommand.Registry.CanExecute(right);
             if (leftAvailable != rightAvailable)
             {
                 return leftAvailable ? -1 : 1;
@@ -1312,8 +1310,8 @@ namespace XFramework.Editor
             m_CommandLineField.SetValueWithoutNotify(command.Command + (command.HasArgument ? " " : string.Empty));
             string executionHint = command.HasArgument ? "输入参数后 Enter 执行" : "Enter 执行";
             m_SuggestionSummaryLabel.text = $"{m_CommandSuggestionIndex + 1}/{m_CommandSuggestions.Count}  ·  Tab/Shift+Tab 或 ↑↓ 切换  ·  {executionHint}";
-            m_PromptHintLabel.text = $"{command.Usage}  ·  {command.Name}  ·  {(XCommandRegistry.CanExecute(command) ? "当前可执行" : GetUnavailableReason(command))}";
-            m_PromptHintLabel.style.color = XCommandRegistry.CanExecute(command) ? new Color(0.55f, 0.76f, 0.60f) : new Color(0.85f, 0.56f, 0.40f);
+            m_PromptHintLabel.text = $"{command.Usage}  ·  {command.Name}  ·  {(XCommand.Registry.CanExecute(command) ? "当前可执行" : GetUnavailableReason(command))}";
+            m_PromptHintLabel.style.color = XCommand.Registry.CanExecute(command) ? new Color(0.55f, 0.76f, 0.60f) : new Color(0.85f, 0.56f, 0.40f);
             RefreshExecuteButton();
             SelectCommand(command);
         }
@@ -1414,7 +1412,7 @@ namespace XFramework.Editor
             CancelPendingConsoleWork();
             loadedCommandRecords.Clear();
             loadedCommandRecordIds.Clear();
-            IReadOnlyList<XCommandRecord> records = XCommandHub.Records;
+            IReadOnlyList<XCommandRecord> records = XCommand.Hub.Records;
             for (int i = 0; i < records.Count; i++)
             {
                 XCommandRecord record = records[i];
@@ -1424,7 +1422,7 @@ namespace XFramework.Editor
                 }
             }
             loadedCommandRecords.Sort(CompareConsoleRecords);
-            m_VisibleAfterRecordId = loadedCommandRecords.Count == 0 ? XCommandHub.LatestRecordId : loadedCommandRecords[0].Id - 1;
+            m_VisibleAfterRecordId = loadedCommandRecords.Count == 0 ? XCommand.Hub.LatestRecordId : loadedCommandRecords[0].Id - 1;
             RequestConsoleRefresh(true);
             FocusCommandLine();
         }
@@ -1432,7 +1430,7 @@ namespace XFramework.Editor
         private void ResetVisibleCommandRecords()
         {
             CancelPendingConsoleWork();
-            m_VisibleAfterRecordId = XCommandHub.LatestRecordId;
+            m_VisibleAfterRecordId = XCommand.Hub.LatestRecordId;
             loadedCommandRecords.Clear();
             loadedCommandRecordIds.Clear();
         }
@@ -1441,8 +1439,8 @@ namespace XFramework.Editor
         {
             loadedCommandRecords.Clear();
             loadedCommandRecordIds.Clear();
-            IReadOnlyList<XCommandRecord> records = XCommandHub.Records;
-            if (records.Count == 0 || m_VisibleAfterRecordId > XCommandHub.LatestRecordId)
+            IReadOnlyList<XCommandRecord> records = XCommand.Hub.Records;
+            if (records.Count == 0 || m_VisibleAfterRecordId > XCommand.Hub.LatestRecordId)
             {
                 m_VisibleAfterRecordId = 0;
             }
@@ -1462,11 +1460,11 @@ namespace XFramework.Editor
             {
                 return;
             }
-            XCommandHub.RecordAdded += OnCommandRecordAdded;
-            XCommandHub.RecordUpdated += OnCommandRecordUpdated;
-            XCommandHub.RecordsTrimmed += OnCommandRecordTrimmed;
-            XCommandHub.DisplayClearRequested += OnDisplayClearRequested;
-            XCommandHub.DisplayHistoryRequested += OnDisplayHistoryRequested;
+            XCommand.Hub.RecordAdded += OnCommandRecordAdded;
+            XCommand.Hub.RecordUpdated += OnCommandRecordUpdated;
+            XCommand.Hub.RecordsTrimmed += OnCommandRecordTrimmed;
+            XCommand.Hub.DisplayClearRequested += OnDisplayClearRequested;
+            XCommand.Hub.DisplayHistoryRequested += OnDisplayHistoryRequested;
             m_CommandHubSubscribed = true;
         }
 
@@ -1476,11 +1474,11 @@ namespace XFramework.Editor
             {
                 return;
             }
-            XCommandHub.RecordAdded -= OnCommandRecordAdded;
-            XCommandHub.RecordUpdated -= OnCommandRecordUpdated;
-            XCommandHub.RecordsTrimmed -= OnCommandRecordTrimmed;
-            XCommandHub.DisplayClearRequested -= OnDisplayClearRequested;
-            XCommandHub.DisplayHistoryRequested -= OnDisplayHistoryRequested;
+            XCommand.Hub.RecordAdded -= OnCommandRecordAdded;
+            XCommand.Hub.RecordUpdated -= OnCommandRecordUpdated;
+            XCommand.Hub.RecordsTrimmed -= OnCommandRecordTrimmed;
+            XCommand.Hub.DisplayClearRequested -= OnDisplayClearRequested;
+            XCommand.Hub.DisplayHistoryRequested -= OnDisplayHistoryRequested;
             m_CommandHubSubscribed = false;
         }
 
@@ -1542,7 +1540,7 @@ namespace XFramework.Editor
         {
             if (m_TerminalSummaryLabel != null)
             {
-                m_TerminalSummaryLabel.text = $"visible {displayedCommandRecords.Count}  ·  retained {XCommandHub.Records.Count}/{XCommandHub.RecordLimit}  ·  diagnostics {m_Diagnostics.Count}";
+                m_TerminalSummaryLabel.text = $"visible {displayedCommandRecords.Count}  ·  retained {XCommand.Hub.Records.Count}/{XCommand.Hub.RecordLimit}  ·  diagnostics {m_Diagnostics.Count}";
             }
         }
 
@@ -1554,7 +1552,7 @@ namespace XFramework.Editor
             }
 
             XCommandDescriptor command = record.Command;
-            if (command == null && !XCommandRegistry.TryGetCommand(record.CommandLine, out command))
+            if (command == null && !XCommand.Registry.TryGetCommand(record.CommandLine, out command))
             {
                 return true;
             }
@@ -1870,7 +1868,7 @@ namespace XFramework.Editor
             int favoriteCount = 0;
             for (int i = 0; i < m_AllCommands.Count; i++)
             {
-                if (XCommandRegistry.CanExecute(m_AllCommands[i]))
+                if (XCommand.Registry.CanExecute(m_AllCommands[i]))
                 {
                     availableCount++;
                 }
@@ -2009,7 +2007,7 @@ namespace XFramework.Editor
 
         private void QuickRunCommand(XCommandDescriptor command)
         {
-            if (command == null || !XCommandRegistry.CanExecute(command))
+            if (command == null || !XCommand.Registry.CanExecute(command))
             {
                 return;
             }

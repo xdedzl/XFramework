@@ -59,7 +59,7 @@ namespace XFramework.Command
             Message = snapshot.Message;
             Output = snapshot.Output;
             Exception = snapshot.Exception;
-            XCommandRegistry.TryGetCommand(CommandLine, out XCommandDescriptor command);
+            XCommand.Registry.TryGetCommand(CommandLine, out XCommandDescriptor command);
             Command = command;
 
             if (State == XCommandRecordState.Running)
@@ -112,53 +112,69 @@ namespace XFramework.Command
         }
     }
 
-    public static class XCommandHub
+    public sealed class XCommandHub
     {
-        public const int RecordLimit = 2000;
-        public const int CommandHistoryLimit = 50;
+        internal XCommandHub()
+        {
+        }
 
-        private static readonly List<XCommandRecord> s_Records = new List<XCommandRecord>();
-        private static readonly List<string> s_CommandHistory = new List<string>();
-        private static readonly string s_HistoryEpoch = Guid.NewGuid().ToString("N");
-        private static long s_NextRecordId = 1;
-        private static long s_HistoryRevision;
-        private static XCommandSource s_CurrentExecutionSource = XCommandSource.Api;
+        private const int RECORD_LIMIT = 2000;
+        private const int COMMAND_HISTORY_LIMIT = 50;
 
-        public static IReadOnlyList<XCommandRecord> Records => s_Records;
-        public static IReadOnlyList<string> CommandHistory => s_CommandHistory;
-        public static long LatestRecordId => s_NextRecordId - 1;
-        public static string HistoryVersion => s_HistoryEpoch + ":" + s_HistoryRevision;
+        /// <summary>Hub 保留的命令执行记录上限。</summary>
+        public int RecordLimit => RECORD_LIMIT;
 
-        public static event Action<XCommandRecord> RecordAdded;
-        public static event Action<XCommandRecord> RecordUpdated;
-        public static event Action<long> RecordsTrimmed;
-        public static event Action CommandHistoryChanged;
-        public static event Action<XCommandSource> DisplayClearRequested;
-        public static event Action<XCommandSource> DisplayHistoryRequested;
-        public static event Action CommandRuntimeResetRequested;
+        /// <summary>Hub 保留的命令输入历史上限。</summary>
+        public int CommandHistoryLimit => COMMAND_HISTORY_LIMIT;
 
-        public static XCommandExecutionResult Execute(string commandLine, XCommandSource source = XCommandSource.Api)
+        private readonly List<XCommandRecord> s_Records = new List<XCommandRecord>();
+        private readonly List<string> s_CommandHistory = new List<string>();
+        private readonly string s_HistoryEpoch = Guid.NewGuid().ToString("N");
+        private long s_NextRecordId = 1;
+        private long s_HistoryRevision;
+        private XCommandSource s_CurrentExecutionSource = XCommandSource.Api;
+
+        public IReadOnlyList<XCommandRecord> Records => s_Records;
+        public IReadOnlyList<string> CommandHistory => s_CommandHistory;
+        public long LatestRecordId => s_NextRecordId - 1;
+        public string HistoryVersion => s_HistoryEpoch + ":" + s_HistoryRevision;
+
+        public event Action<XCommandRecord> RecordAdded;
+        public event Action<XCommandRecord> RecordUpdated;
+        public event Action<long> RecordsTrimmed;
+        public event Action CommandHistoryChanged;
+        public event Action<XCommandSource> DisplayClearRequested;
+        public event Action<XCommandSource> DisplayHistoryRequested;
+        internal event Action CommandRuntimeResetRequested;
+
+        public XCommandExecutionResult Execute(string commandLine, XCommandSource source = XCommandSource.Api)
         {
             return Execute(commandLine, source, out _);
         }
 
-        public static XCommandExecutionResult Execute(string commandLine, XCommandSource source, out long recordId)
+        public XCommandExecutionResult Execute(string commandLine, XCommandSource source, out long recordId)
         {
             string normalizedCommandLine = commandLine?.Trim() ?? string.Empty;
             recordId = 0;
             if (normalizedCommandLine.Length == 0)
             {
-                return XCommandRegistry.ExecuteCore(normalizedCommandLine);
+                return XCommand.Registry.ExecuteCore(normalizedCommandLine);
             }
 
-            bool recordExecution = !XCommandRegistry.TryGetCommand(normalizedCommandLine, out XCommandDescriptor command) || command.RecordExecution;
+            bool commandFound = XCommand.Registry.TryGetCommand(normalizedCommandLine, out XCommandDescriptor command);
+            if (!XCommand.IsEnabled)
+            {
+                return new XCommandExecutionResult(XCommandExecutionStatus.Unavailable, normalizedCommandLine, command, null, null, 0d, "XCommand 已关闭。");
+            }
+
+            bool recordExecution = !commandFound || command.RecordExecution;
             XCommandRecord record = recordExecution ? BeginExecution(normalizedCommandLine, source) : null;
             recordId = record?.Id ?? 0;
             XCommandSource previousSource = s_CurrentExecutionSource;
             s_CurrentExecutionSource = source;
             try
             {
-                XCommandExecutionResult result = XCommandRegistry.ExecuteCore(normalizedCommandLine);
+                XCommandExecutionResult result = XCommand.Registry.ExecuteCore(normalizedCommandLine);
                 if (recordExecution)
                 {
                     record.Complete(result);
@@ -173,27 +189,27 @@ namespace XFramework.Command
             }
         }
 
-        internal static void RequestCommandRuntimeReset()
+        internal void RequestCommandRuntimeReset()
         {
             CommandRuntimeResetRequested?.Invoke();
         }
 
-        internal static void RequestDisplayClear()
+        internal void RequestDisplayClear()
         {
             DisplayClearRequested?.Invoke(s_CurrentExecutionSource);
         }
 
-        internal static void RequestDisplayHistory()
+        internal void RequestDisplayHistory()
         {
             DisplayHistoryRequested?.Invoke(s_CurrentExecutionSource);
         }
 
-        public static void RestoreCommandHistory(IEnumerable<string> commandHistory)
+        public void RestoreCommandHistory(IEnumerable<string> commandHistory)
         {
             s_CommandHistory.Clear();
             foreach (string commandLine in commandHistory)
             {
-                if (s_CommandHistory.Count == CommandHistoryLimit)
+                if (s_CommandHistory.Count == COMMAND_HISTORY_LIMIT)
                 {
                     break;
                 }
@@ -206,7 +222,7 @@ namespace XFramework.Command
             CommandHistoryChanged?.Invoke();
         }
 
-        public static IReadOnlyList<XCommandRecordSnapshot> CaptureRecordSnapshots()
+        public IReadOnlyList<XCommandRecordSnapshot> CaptureRecordSnapshots()
         {
             var snapshots = new List<XCommandRecordSnapshot>(s_Records.Count);
             for (int i = 0; i < s_Records.Count; i++)
@@ -230,7 +246,7 @@ namespace XFramework.Command
             return snapshots;
         }
 
-        public static void RestoreRecords(IEnumerable<XCommandRecordSnapshot> snapshots)
+        public void RestoreRecords(IEnumerable<XCommandRecordSnapshot> snapshots)
         {
             s_Records.Clear();
             long latestRecordId = 0;
@@ -238,7 +254,7 @@ namespace XFramework.Command
             {
                 var record = new XCommandRecord(snapshot);
                 s_Records.Add(record);
-                if (s_Records.Count > RecordLimit)
+                if (s_Records.Count > RECORD_LIMIT)
                 {
                     s_Records.RemoveAt(0);
                 }
@@ -251,8 +267,14 @@ namespace XFramework.Command
             s_HistoryRevision++;
         }
 
-        internal static bool ExecuteLegacy(string commandLine, XCommandSource source, CommandDelegate execute, out object value)
+        internal bool ExecuteHandler(string commandLine, XCommandSource source, CommandDelegate execute, out object value)
         {
+            if (!XCommand.IsEnabled)
+            {
+                value = "XCommand 已关闭。";
+                return false;
+            }
+
             string normalizedCommandLine = commandLine?.Trim() ?? string.Empty;
             if (normalizedCommandLine.Length == 0)
             {
@@ -281,17 +303,17 @@ namespace XFramework.Command
             }
         }
 
-        private static XCommandRecord BeginExecution(string commandLine, XCommandSource source)
+        private XCommandRecord BeginExecution(string commandLine, XCommandSource source)
         {
             var record = new XCommandRecord(s_NextRecordId++, DateTime.UtcNow, source, commandLine);
             s_Records.Add(record);
             s_CommandHistory.Insert(0, commandLine);
-            if (s_CommandHistory.Count > CommandHistoryLimit)
+            if (s_CommandHistory.Count > COMMAND_HISTORY_LIMIT)
             {
                 s_CommandHistory.RemoveAt(s_CommandHistory.Count - 1);
             }
 
-            if (s_Records.Count > RecordLimit)
+            if (s_Records.Count > RECORD_LIMIT)
             {
                 long removedRecordId = s_Records[0].Id;
                 s_Records.RemoveAt(0);

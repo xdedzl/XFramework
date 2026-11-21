@@ -8,7 +8,7 @@ namespace XFramework.Fsm
         [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.AfterAssembliesLoaded)]
         private static void RegisterCommandGroup()
         {
-            XCommandRegistry.RegisterGroup(typeof(FsmConsoleCommands));
+            XCommand.Registry.RegisterGroup(typeof(FsmConsoleCommands));
         }
 
         [XCommandEntry("fsm_list", mode = XCommandMode.Both)]

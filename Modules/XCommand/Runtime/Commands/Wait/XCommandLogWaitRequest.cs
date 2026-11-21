@@ -28,17 +28,16 @@ namespace XFramework.Command
 
         void IXCommandWaitRequest.Validate()
         {
-            XCommandUtility.Logs.EnsureCapture();
             if (count < 1 || count > 1000)
                 throw new ArgumentOutOfRangeException(nameof(count), "count 必须在 1 到 1000 之间。");
-            minimumSeverity = XCommandUtility.Logs.ParseMinimumSeverity(level);
-            startCursor = since >= 0 ? since : XCommandUtility.Logs.GetLatestSequence();
+            minimumSeverity = XCommand.Logs.ParseMinimumSeverity(level);
+            startCursor = since >= 0 ? since : XCommand.Logs.GetLatestSequence();
             matchedCount = 0;
         }
 
         bool IXCommandWaitRequest.Evaluate()
         {
-            matchedCount = XCommandUtility.Logs.CountMatches(startCursor, minimumSeverity, contains);
+            matchedCount = XCommand.Logs.CountMatches(startCursor, minimumSeverity, contains);
             return matchedCount >= count;
         }
 
@@ -53,8 +52,8 @@ namespace XFramework.Command
                 matchedCount = matchedCount,
                 elapsedSeconds = elapsedSeconds,
                 cursor = startCursor,
-                latestSequence = XCommandUtility.Logs.GetLatestSequence(),
-                entries = XCommandUtility.Logs.CaptureMatches(startCursor, minimumSeverity, contains, count, messageLimit, stackLimit, includeStack),
+                latestSequence = XCommand.Logs.GetLatestSequence(),
+                entries = XCommand.Logs.CaptureMatches(startCursor, minimumSeverity, contains, count, messageLimit, stackLimit, includeStack),
             };
             return JsonUtility.ToJson(receipt, !compact);
         }
@@ -71,7 +70,7 @@ namespace XFramework.Command
             public float elapsedSeconds;
             public long cursor;
             public long latestSequence;
-            public List<XCommandUtility.Logs.RuntimeLogEntry> entries = new List<XCommandUtility.Logs.RuntimeLogEntry>();
+            public List<LogStore.RuntimeLogEntry> entries = new List<LogStore.RuntimeLogEntry>();
         }
     }
 }

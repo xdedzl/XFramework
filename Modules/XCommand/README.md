@@ -13,7 +13,7 @@
 ## 1. 能力总览
 
 - **声明式命令注册**：静态方法标记 `[XCommandEntry]`，所在类继承 `XCommandGroup`；Editor 下由 `TypeCache` 自动发现，Player 下必须在 `AfterAssembliesLoaded` 时显式 `RegisterGroup`。
-- **统一执行链路**：所有入口最终都走 `XCommandHub.Execute(...)`，产出统一的 `XCommandExecutionResult`。
+- **统一执行链路**：所有入口最终都走 `XCommand.Hub.Execute(...)`，产出统一的 `XCommandExecutionResult`。
 - **执行记录与历史**：环形记录（上限 2000 条）+ 命令历史（上限 50 条），编辑器下可跨脚本重载保留；`history` / `history-text` / `history-input` 支持分页读取。
 - **来源可追溯**：`Api` / `Editor` / `Ugui` / `Cli` / `Web` 五种来源会被写入记录；`Hunter` 枚举值仅为历史记录兼容保留。
 - **异步操作管道**：UI 操作、条件等待、输入注入、截图和 Editor 重新编译 / Play Mode 切换以 operation 形式排队执行，返回 operation ID，可查询 / 取消 / 超时。
@@ -26,11 +26,12 @@
 
 | 类 / 文件 | 职责 |
 | :-------- | :--- |
-| `XCommand`（`Runtime/Core/Command/XCommand.cs`） | 终端门面；`IConsole` 接口、`Message` 消息与着色、执行器（Command Key）管理 |
-| `XCommandHub`（`Runtime/Core/Command/XCommandHub.cs`） | 执行记录、命令历史与版本号、来源标记、显示清空 / 历史请求、运行时重置事件 |
-| `XCommandRegistry`（`Runtime/Core/Command/XCommandRegistry.cs`） | 命令发现与注册（`RegisterGroup`、Editor `TypeCache`、动态注册）、可用性谓词、执行内核、诊断收集 |
+| `XCommand`（`Runtime/Core/Command/XCommand.cs`） | 终端门面；`IConsole` 接口、`Message` 消息与着色、执行器（Command Key）管理；持有 `Server / Registry / Hub / Pipeline / UI / Input / Logs` 的唯一实例与 `Enable / Disable / Pump` 生命周期 |
+| `XCommand.Hub`（由 `XCommandHub` 实例提供，`Runtime/Core/Command/XCommandHub.cs`） | 执行记录、命令历史与版本号、来源标记、显示清空 / 历史请求、运行时重置事件 |
+| `XCommand.Registry`（由 `XCommandRegistry` 实例提供，`Runtime/Core/Command/XCommandRegistry.cs`） | 命令发现与注册（`RegisterGroup`、Editor `TypeCache`、动态注册）、可用性谓词、执行内核、诊断收集 |
 | `XCommandCoreCommands`（`Runtime/Core/Command/XCommandCoreCommands.cs`） | `operation-list` / `operation-status` / `operation-cancel` 核心命令组 |
-| `XCommandPipeline`（`Runtime/Core/AsyncOperation/XCommandPipeline.cs`） | 协程 / `EditorApplication.update` 驱动的异步操作队列；`RunOperation(IXCommandAsyncOperation)` 统一入口，支持 `CanCancel`、operation 恢复与 EditMode 执行 |
+| `XCommand.Pipeline`（由 `XCommandPipeline` 实例提供，`Runtime/Core/AsyncOperation/XCommandPipeline.cs`） | 协程 / `EditorApplication.update` 驱动的异步操作队列；`RunOperation(IXCommandAsyncOperation)` 统一入口，支持 `CanCancel`、operation 恢复与 EditMode 执行 |
+| `XCommand.UI` / `XCommand.Input` / `XCommand.Logs` | UGUI 查询与快照、自动化输入、运行时日志采集；由 `XCommand` 持有唯一实例 |
 | `Runtime/Core/Wait/*` | `IXCommandWaitRequest` 契约、`XCommandWaitRequest` 与 `WaitOperation` |
 | `Runtime/Commands/Wait/*` | `wait-for-ui` / `wait-for-go` / `wait-for-log` 的请求实现 |
 | `Runtime/Commands/Screenshot/*`、`Runtime/Commands/UI/*`、`Runtime/Commands/Recording/*` | 截图、UGUI 操作 / 输入注入、离屏录制的 operation 实现 |
@@ -81,7 +82,7 @@ public sealed class MyGameCommands : XCommandGroup
     [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.AfterAssembliesLoaded)]
     private static void RegisterCommandGroup()
     {
-        XCommandRegistry.RegisterGroup(typeof(MyGameCommands));
+        XCommand.Registry.RegisterGroup(typeof(MyGameCommands));
     }
 }
 ```
@@ -118,19 +119,19 @@ public sealed class MyGameCommands : XCommandGroup
 
 不可用时执行结果为 `Unavailable`，并附带当前环境描述。
 
-`XCommandRegistry.SetAvailabilityPredicate(predicate)` 可在不重新扫描命令方法的情况下按谓词过滤命令，配合 `RefreshAvailability()` 生效；谓词返回 `false` 的命令不会出现在 `commands` 中，也无法执行。
+`XCommand.Registry.SetAvailabilityPredicate(predicate)` 可在不重新扫描命令方法的情况下按谓词过滤命令，配合 `RefreshAvailability()` 生效；谓词返回 `false` 的命令不会出现在 `commands` 中，也无法执行。
 
 ### 3.4 动态注册
 
 ```csharp
-XCommandRegistry.AddCommand("my-dynamic", argument => $"received: {argument}", XCommandMode.Runtime);
+XCommand.Registry.AddCommand("my-dynamic", argument => $"received: {argument}", XCommandMode.Runtime);
 ```
 
 动态命令与特性命令重名时，**保留特性命令** 并产生诊断（`Debug.LogWarning`）。
 
 ### 3.5 诊断信息
 
-`XCommandRegistry.Diagnostics` 会列出所有注册期问题（命令重复、签名不合法、动态命令冲突等）。可通过 CLI `diagnostics` 或编辑器窗口的「诊断」折叠区查看，`AddDiagnostic` 同时会输出 `Debug.LogWarning`。
+`XCommand.Registry.Diagnostics` 会列出所有注册期问题（命令重复、签名不合法、动态命令冲突等）。可通过 CLI `diagnostics` 或编辑器窗口的「诊断」折叠区查看，`AddDiagnostic` 同时会输出 `Debug.LogWarning`。
 
 ### 3.6 参数解析约定
 
@@ -257,7 +258,7 @@ XCommandRegistry.AddCommand("my-dynamic", argument => $"received: {argument}", X
 
 ### 4.5 其他模块贡献的命令
 
-各功能模块可以自带命令组；这些命令组必须在自身类型内声明 `RegisterCommandGroup`（`[RuntimeInitializeOnLoadMethod(AfterAssembliesLoaded)]` + `XCommandRegistry.RegisterGroup`），否则 Player 下不会注册：
+各功能模块可以自带命令组；这些命令组必须在自身类型内声明 `RegisterCommandGroup`（`[RuntimeInitializeOnLoadMethod(AfterAssembliesLoaded)]` + `XCommand.Registry.RegisterGroup`），否则 Player 下不会注册：
 
 | 命令 | 来源 | 说明 |
 | :--- | :--- | :--- |
@@ -295,8 +296,8 @@ bool ok = XCommand.Execute("app-state");
 XCommand.Execute("ui-list --compact", out object value);
 
 // 带来源与详细结果
-XCommandExecutionResult result = XCommandHub.Execute("screenshot temp:/shot.png", XCommandSource.Api);
-// 等价写法：XCommandRegistry.ExecuteDetailed("screenshot temp:/shot.png");
+XCommandExecutionResult result = XCommand.Hub.Execute("screenshot temp:/shot.png", XCommandSource.Api);
+// 等价写法：XCommand.Registry.ExecuteDetailed("screenshot temp:/shot.png");
 ```
 
 `XCommandExecutionResult` 字段：`Status`（`Succeeded` / `NotFound` / `Unavailable` / `Failed`）、`CommandLine`、`Command`（`XCommandDescriptor`）、`Value`、`Exception`、`DurationMilliseconds`、`Message`。
@@ -327,9 +328,11 @@ XCommandExecutionResult result = XCommandHub.Execute("screenshot temp:/shot.png"
 ### 6.1 构成与生命周期
 
 - **启动时机**：Editor 侧由 `XFrameworkCliServerBootstrap`（`[InitializeOnLoad]`）自动启动，进程类型为 `Editor`；Development Player 侧由 `XFrameworkCliPlayerBootstrap` 在 `DEVELOPMENT_BUILD` 下自动启动，进程类型为 `DevelopmentPlayer`。
+- **启用策略**：XCommand 默认启用，`isEnabled` 初值为 `true`。Editor 由 `XFrameworkCliServerBootstrap` 自动 `Enable`，Development Player 由 `XFrameworkCliPlayerBootstrap` 自动 `Enable`；Release Player 不启动 CLI Server，但会在 `AfterAssembliesLoaded` 初始化 `Registry / Pipeline / Input / UI / Logs`，UGUI 控制台与 C# API 保持可用。
+- **手动启停**：编辑器窗口的 CLI 启停会调用 `XCommand.Enable / Disable`，停用期间命令返回 `XCommand 已关闭。`；再次启动后恢复。
 - **监听方式**：`TcpListener` 绑定 `IPAddress.Any` 的随机端口，允许同一网段的主机连接；**只应在可信内网使用，命令没有鉴权**。
-- **实例发现**：启动后生成 `instanceId`（Editor 用 `SessionState` 跨 Domain Reload 保留），Editor / Standalone 把自身信息写入 `%LocalAppData%/XFrameworkCLI/servers/<pid>-<port>.json`；同时每 2 秒向 UDP `48733` 广播 `{"type":"XFrameworkDiscovery","discoveryVersion":1,"instanceId","pid","port"}`。客户端以「进程存在」判定注册文件是否有效，不再校验进程启动时间。
-- **请求处理**：Editor / Player 每帧调用 `XFrameworkCliServer.Pump()`，在 **Unity 主线程** 处理请求；`ping` 在 TCP 工作线程直接回包，读取缓存的 Server 快照，不占用主线程。
+- **实例发现**：启动后生成 `instanceId`（Editor 用 `SessionState` 跨 Domain Reload 保留），Editor / Standalone 把自身信息写入 `%LocalAppData%/XFrameworkCLI/servers/<pid>-<port>.json`；Windows Editor / Windows Player / Android 还会每 2 秒向 UDP `48733` 广播 `{"type":"XFrameworkDiscovery","discoveryVersion":1,"instanceId","pid","port"}`。客户端以「进程存在」判定注册文件是否有效，不再校验进程启动时间。
+- **请求处理**：Editor / Player 每帧调用 `XCommand.Pump()`，在 **Unity 主线程** 处理请求；`ping` 在 TCP 工作线程直接回包，读取缓存的 Server 快照，不占用主线程；`ping` 与其他请求一样校验 `instanceId`，不一致时返回 `TargetChanged`，服务器停止后返回 `ServerStopped`。
 - **报文格式**：请求与响应都是单行 JSON，必须以换行结尾。请求体上限 4MB。
 
 ### 6.2 客户端命令
@@ -453,9 +456,9 @@ Agent 工具运行时捕获 stdout / stderr / exitCode，并作为 tool result �
 - **驱动方式**：Play Mode 由隐藏的 `[XFramework XCommand Pipeline]` GameObject 上的协程串行驱动；Edit Mode 下的 Editor operation 由 `EditorApplication.update` 驱动；队列 FIFO，保留最近 100 条已完成操作。
 - **操作字段**：`Id` / `Name` / `State` / `Output` / `Error` / `DurationMilliseconds` / `CreatedTimeUtc` / `StartedTimeUtc` / `CompletedTimeUtc`。
 - **主要接口**：`RunOperation(IXCommandAsyncOperation)`、`TryGetOperation`、`CancelOperation`、`CancelAllOperations`、`Operations`；`IXCommandAsyncOperation.CanCancel` 决定是否允许取消；`XCommandPipeline.DelegateOperation` 供业务程序集快速接入。
-- **Editor operation**：`recompile` / `play-start` / `play-stop` 通过 `SessionState` 持久化，Domain Reload 后由 `XCommandPipeline.RestoreOperation(...)` 恢复；`CanCancel=false`。
-- **取消语义**：取消 `ui-act` / `ui-input` 时，由 operation 自身的 `finally` 调用 `ResetInterruptedInput()`，释放可能残留的按键 / 指针状态；`XCommandPipeline` 不再按操作名做特殊处理。
-- **运行时重置**：`XCommandPipeline.ResetOperations()` 只触发 `XCommandHub.CommandRuntimeResetRequested`；`XCommandUI` 与 `XCommandUtility.Input` 订阅该事件并各自清理快照 / 输入状态。
+- **Editor operation**：`recompile` / `play-start` / `play-stop` 通过 `SessionState` 持久化，Domain Reload 后由 `XCommand.Pipeline.RestoreOperation(...)` 恢复；`CanCancel=false`。
+- **取消语义**：取消 `ui-act` / `ui-input` 时，由 operation 自身的 `finally` 调用 `ResetInterruptedInput()`，释放可能残留的按键 / 指针状态；`XCommand.Pipeline` 不再按操作名做特殊处理。
+- **运行时重置**：`XCommand.Pipeline.ResetOperations()` 只触发 `XCommand.Hub.CommandRuntimeResetRequested`；`XCommand.UI` 与 `XCommand.Input` 订阅该事件并各自清理快照 / 输入状态。
 
 ### 7.1 选择器（UGUI 与 GameObject）
 
@@ -572,8 +575,9 @@ Agent 工具运行时捕获 stdout / stderr / exitCode，并作为 tool result �
 - `ui-*` 系列依赖 Unity Input System 注入事件，被取消时由对应 operation 在 `finally` 中重置输入状态。
 - `requireConfirmation = true` 的命令在 CLI 下必须带 `--confirm`，否则返回 `ConfirmationRequired` 且不执行。
 - 命令 `displayType = Hidden` 只影响 CLI `commands` 的枚举结果，不影响执行。
-- `XCommand` 静态类在编辑器下通过 `RuntimeInitializeOnLoadMethod(SubsystemRegistration)` 与 `Application.exitCancellationToken` 重置静态状态，用于兼容「关闭 Reload Domain」。如果你也在 `XCommand` 相关类型上添加静态缓存，请在同样的时机重置。
-- `XCommandPipeline` 会在同一时机清空操作队列、销毁 runner GameObject，并通过 `CommandRuntimeResetRequested` 通知 `XCommandUI` / `XCommandUtility.Input` 清理自身状态；`recompile` / `play-start` / `play-stop` 的 operation 由 `XCommandCompileOperation` / `XCommandPlayModeOperation` 通过 `SessionState` 自行恢复。
+- `XCommand` 在编辑器下通过 `RuntimeInitializeOnLoadMethod(SubsystemRegistration)` 与 `Application.exitCancellationToken` 重置静态状态，用于兼容「关闭 Reload Domain」。如果你也在 `XCommand` 相关类型上添加静态缓存，请在同样的时机重置。
+- `XCommand.Pipeline` 会在同一时机清空操作队列、销毁 runner GameObject，并通过 `XCommand.Hub.CommandRuntimeResetRequested` 通知 `XCommand.UI` / `XCommand.Input` 清理自身状态；`recompile` / `play-start` / `play-stop` 的 operation 由 `XCommandCompileOperation` / `XCommandPlayModeOperation` 通过 `SessionState` 自行恢复。
+- `XCommand.Disable()` 会同时停止 CLI Server 与命令子系统，停用期间 UGUI 控制台执行命令返回 `XCommand 已关闭。`；`XCommand.IsEnabled` 表示命令子系统总开关，`XCommand.Server.IsRunning` 表示 CLI 监听状态。
 - CLI Server 绑定 `IPAddress.Any` 且命令无鉴权，只应在可信内网开发环境使用；`instanceId` 只用于防止串实例，不是访问令牌。
 - XHunter 依赖系统 Python 3.9+，固定使用 `127.0.0.1:5182`，Web 资源与启停脚本位于 `C:\Projects\XDEDZL\XHunter`。
 

@@ -94,7 +94,7 @@ namespace XFramework.Editor
                 throw new InvalidOperationException("Unity 当前正在编译、导入资源、运行或进入 Play Mode，无法提交 play-start。");
             }
 
-            return XCommandPipeline.RunOperation(new XCommandPlayModeOperation(action, expectedState.ToString()));
+            return XCommand.Pipeline.RunOperation(new XCommandPlayModeOperation(action, expectedState.ToString()));
         }
 
         public IEnumerator Run(XCommandOperationContext context)
@@ -165,7 +165,7 @@ namespace XFramework.Editor
 
         private void InitializeStorage(long operationId)
         {
-            if (!XCommandPipeline.TryGetOperation(operationId, out XCommandOperationInfo operation))
+            if (!XCommand.Pipeline.TryGetOperation(operationId, out XCommandOperationInfo operation))
             {
                 throw new InvalidOperationException($"找不到播放模式 operation：{operationId}");
             }
@@ -225,7 +225,7 @@ namespace XFramework.Editor
         private static void ResetPipelineRunner()
         {
             EditorApplication.delayCall -= ResetPipelineRunner;
-            XCommandPipeline.ResetRunner();
+            XCommand.Pipeline.ResetRunner();
         }
 
         private static void OnEditorUpdate()
@@ -240,7 +240,7 @@ namespace XFramework.Editor
                 return;
             }
 
-            if (!XFrameworkCliServer.IsRunning)
+            if (!XCommand.IsEnabled)
             {
                 return;
             }
@@ -263,7 +263,7 @@ namespace XFramework.Editor
                 state = finalState,
                 isPlaying = EditorApplication.isPlaying,
                 isPlayingOrWillChangePlaymode = EditorApplication.isPlayingOrWillChangePlaymode,
-                serverPort = XFrameworkCliServer.IsRunning ? XFrameworkCliServer.Port : 0,
+                serverPort = XCommand.Server.IsRunning ? XCommand.Server.Port : 0,
             };
 
             DateTime completedTimeUtc = DateTime.UtcNow;
@@ -290,7 +290,7 @@ namespace XFramework.Editor
             storage.operation.error = error ?? string.Empty;
             storage.requestSubmitted = false;
             Save();
-            XCommandPipeline.RestoreOperation(JsonUtility.ToJson(storage.operation), false);
+            XCommand.Pipeline.RestoreOperation(JsonUtility.ToJson(storage.operation), false);
         }
 
         private static bool TryGetCurrentOperation(out XCommandOperationInfo operation)
@@ -301,12 +301,12 @@ namespace XFramework.Editor
                 return false;
             }
 
-            if (!XCommandPipeline.TryGetOperation(storage.operation.id, out operation))
+            if (!XCommand.Pipeline.TryGetOperation(storage.operation.id, out operation))
             {
-                XCommandPipeline.RestoreOperation(JsonUtility.ToJson(storage.operation), false);
+                XCommand.Pipeline.RestoreOperation(JsonUtility.ToJson(storage.operation), false);
             }
 
-            return XCommandPipeline.TryGetOperation(storage.operation.id, out operation);
+            return XCommand.Pipeline.TryGetOperation(storage.operation.id, out operation);
         }
 
         private static string GetCurrentStateName()
@@ -352,7 +352,7 @@ namespace XFramework.Editor
                 }
 
                 storage = restoredStorage;
-                XCommandPipeline.RestoreOperation(JsonUtility.ToJson(storage.operation), false);
+                XCommand.Pipeline.RestoreOperation(JsonUtility.ToJson(storage.operation), false);
                 OnEditorUpdate();
             }
             catch (Exception exception)

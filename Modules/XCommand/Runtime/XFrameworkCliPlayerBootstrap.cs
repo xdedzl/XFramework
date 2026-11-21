@@ -21,7 +21,7 @@ namespace XFramework.Command
             string projectPath = Path.GetDirectoryName(Application.dataPath);
             try
             {
-                XFrameworkCliServer.Start(XFrameworkCliProcessType.DevelopmentPlayer, projectPath);
+                XCommand.Enable(XFrameworkCliProcessType.DevelopmentPlayer, projectPath);
             }
             catch (System.Exception exception)
             {
@@ -31,17 +31,17 @@ namespace XFramework.Command
 
         private void Update()
         {
-            XFrameworkCliServer.Pump();
+            XCommand.Pump();
         }
 
         private void OnApplicationQuit()
         {
-            XFrameworkCliServer.Stop();
+            XCommand.Disable();
         }
 
         private void OnDestroy()
         {
-            XFrameworkCliServer.Stop();
+            XCommand.Disable();
         }
     }
 }

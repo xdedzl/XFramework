@@ -54,19 +54,19 @@ namespace XFramework.Command
         {
             if (interactable || normalizedState == "stable")
             {
-                XCommandUI.UISnapshot snapshot = XCommandUI.CaptureSnapshot(sampleGrid);
+                XCommandUI.UISnapshot snapshot = XCommand.UI.CaptureSnapshot(sampleGrid);
                 snapshotId = snapshot.Id;
-                List<XCommandUI.UIElementInfo> matches = snapshot.Elements.Where(element => XCommandUI.MatchesSelector(element, actualSelector)).ToList();
+                List<XCommandUI.UIElementInfo> matches = snapshot.Elements.Where(element => XCommand.UI.MatchesSelector(element, actualSelector)).ToList();
                 matchCount = matches.Count;
                 matchedPaths = matches.Select(element => element.path).Take(16).ToArray();
-                contentHash = XCommandUI.ComputeHash(matches.Select(element => snapshot.Fingerprints[element.indexedPath]));
+                contentHash = XCommand.UI.ComputeHash(matches.Select(element => snapshot.Fingerprints[element.indexedPath]));
             }
             else
             {
-                List<XCommandUI.RenderedUITarget> matches = XCommandUI.FindRenderedUITargets(actualSelector);
+                List<XCommandUI.RenderedUITarget> matches = XCommand.UI.FindRenderedUITargets(actualSelector);
                 matchCount = matches.Count;
                 matchedPaths = matches.Select(target => target.Path).Take(16).ToArray();
-                contentHash = XCommandUI.ComputeHash(matches.Select(target => target.IndexedPath));
+                contentHash = XCommand.UI.ComputeHash(matches.Select(target => target.IndexedPath));
             }
 
             bool conditionMet;

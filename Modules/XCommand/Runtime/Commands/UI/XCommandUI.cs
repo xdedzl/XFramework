@@ -44,16 +44,21 @@ namespace XFramework.Command
         public float timeoutSeconds = 10f;
     }
 
-    public static class XCommandUI
+    public sealed class XCommandUI
     {
-        static XCommandUI()
+        internal XCommandUI()
         {
-            XCommandHub.CommandRuntimeResetRequested += ResetSnapshots;
         }
 
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetOnSubsystemRegistration()
+        internal void Start()
         {
+            XCommand.Hub.CommandRuntimeResetRequested -= ResetSnapshots;
+            XCommand.Hub.CommandRuntimeResetRequested += ResetSnapshots;
+        }
+
+        internal void Stop()
+        {
+            XCommand.Hub.CommandRuntimeResetRequested -= ResetSnapshots;
             ResetSnapshots();
         }
 
@@ -165,23 +170,23 @@ namespace XFramework.Command
         }
 
         private const int SnapshotHistoryLimit = 32;
-        private static readonly Dictionary<long, UISnapshot> s_SnapshotHistory = new Dictionary<long, UISnapshot>();
-        private static readonly Queue<long> s_SnapshotOrder = new Queue<long>();
-        private static long s_NextSnapshotId = 1;
+        private readonly Dictionary<long, UISnapshot> snapshotHistory = new Dictionary<long, UISnapshot>();
+        private readonly Queue<long> snapshotOrder = new Queue<long>();
+        private long nextSnapshotId = 1;
 
-        internal static void ResetSnapshots()
+        internal void ResetSnapshots()
         {
-            s_SnapshotHistory.Clear();
-            s_SnapshotOrder.Clear();
-            s_NextSnapshotId = 1;
+            snapshotHistory.Clear();
+            snapshotOrder.Clear();
+            nextSnapshotId = 1;
         }
 
-        internal static string List(XCommandUIQuery query)
+        internal string List(XCommandUIQuery query)
         {
             XCommandUISelector selector = query.selector ?? new XCommandUISelector();
             UISnapshot snapshot = CaptureSnapshot(query.sampleGrid);
             UISnapshot baseSnapshot = null;
-            if (query.changedSince > 0 && !s_SnapshotHistory.TryGetValue(query.changedSince, out baseSnapshot))
+            if (query.changedSince > 0 && !snapshotHistory.TryGetValue(query.changedSince, out baseSnapshot))
                 throw new ArgumentException($"找不到 UI 快照：{query.changedSince}", nameof(query.changedSince));
 
             IEnumerable<UIElementInfo> elements = snapshot.Elements;
@@ -215,24 +220,24 @@ namespace XFramework.Command
             return JsonUtility.ToJson(result, !query.compact);
         }
 
-        public static UISnapshot CaptureSnapshot(int sampleGrid)
+        public UISnapshot CaptureSnapshot(int sampleGrid)
         {
             UIElementList captured = CaptureInteractableUI(sampleGrid);
             var fingerprints = captured.elements.ToDictionary(element => element.indexedPath, CreateElementFingerprint, StringComparer.Ordinal);
             var snapshot = new UISnapshot {
-                Id = s_NextSnapshotId++,
+                Id = nextSnapshotId++,
                 Elements = captured.elements,
                 Fingerprints = fingerprints,
                 ContentHash = ComputeHash(fingerprints.OrderBy(pair => pair.Key).Select(pair => pair.Value)),
             };
-            s_SnapshotHistory.Add(snapshot.Id, snapshot);
-            s_SnapshotOrder.Enqueue(snapshot.Id);
-            while (s_SnapshotOrder.Count > SnapshotHistoryLimit)
-                s_SnapshotHistory.Remove(s_SnapshotOrder.Dequeue());
+            snapshotHistory.Add(snapshot.Id, snapshot);
+            snapshotOrder.Enqueue(snapshot.Id);
+            while (snapshotOrder.Count > SnapshotHistoryLimit)
+                snapshotHistory.Remove(snapshotOrder.Dequeue());
             return snapshot;
         }
 
-        private static UIElementList CaptureInteractableUI(int sampleGrid)
+        private UIElementList CaptureInteractableUI(int sampleGrid)
         {
             EventSystem eventSystem = EventSystem.current;
             if (eventSystem == null)
@@ -263,7 +268,7 @@ namespace XFramework.Command
             return result;
         }
 
-        private static List<UIElementCandidate> FindCandidates()
+        private List<UIElementCandidate> FindCandidates()
         {
             var candidates = new List<UIElementCandidate>();
             foreach (RectTransform rectTransform in UnityEngine.Object.FindObjectsOfType<RectTransform>())
@@ -279,7 +284,7 @@ namespace XFramework.Command
             return candidates;
         }
 
-        private static void AddComponentActions(Component component, UIElementCandidate candidate)
+        private void AddComponentActions(Component component, UIElementCandidate candidate)
         {
             if (component == null || component is Behaviour behaviour && !behaviour.isActiveAndEnabled)
                 return;
@@ -304,7 +309,7 @@ namespace XFramework.Command
             AddAction<IUpdateSelectedHandler>(component, candidate, "textInput");
         }
 
-        private static void AddAction<T>(Component component, UIElementCandidate candidate, string action) where T : IEventSystemHandler
+        private void AddAction<T>(Component component, UIElementCandidate candidate, string action) where T : IEventSystemHandler
         {
             if (!(component is T))
                 return;
@@ -312,7 +317,7 @@ namespace XFramework.Command
             candidate.HandlerTypes.Add(component.GetType().FullName ?? component.GetType().Name);
         }
 
-        private static UIElementExposure FindExposure(EventSystem eventSystem, UIElementCandidate candidate, Rect visibleRect, int sampleGrid, List<RaycastResult> raycastResults)
+        private UIElementExposure FindExposure(EventSystem eventSystem, UIElementCandidate candidate, Rect visibleRect, int sampleGrid, List<RaycastResult> raycastResults)
         {
             var exposure = new UIElementExposure();
             foreach (Vector2 point in EnumerateSamplePoints(visibleRect, sampleGrid))
@@ -375,7 +380,7 @@ namespace XFramework.Command
             }
         }
 
-        private static UIElementInfo CreateElementInfo(UIElementCandidate candidate, UIElementExposure exposure, Rect screenRect, Rect visibleRect, EventSystem eventSystem)
+        private UIElementInfo CreateElementInfo(UIElementCandidate candidate, UIElementExposure exposure, Rect screenRect, Rect visibleRect, EventSystem eventSystem)
         {
             GameObject gameObject = candidate.RectTransform.gameObject;
             Canvas canvas = candidate.RectTransform.GetComponentInParent<Canvas>();
@@ -407,7 +412,7 @@ namespace XFramework.Command
             };
         }
 
-        private static UIActionPoint[] CreateActionPoints(UIElementExposure exposure)
+        private UIActionPoint[] CreateActionPoints(UIElementExposure exposure)
         {
             var points = new List<UIActionPoint>();
             foreach (KeyValuePair<string, UIActionExposure> pair in exposure.Actions.OrderBy(pair => pair.Key, StringComparer.Ordinal))
@@ -432,7 +437,7 @@ namespace XFramework.Command
             return points.ToArray();
         }
 
-        private static UIActionPoint GetPrimaryActionPoint(UIActionPoint[] actionPoints)
+        private UIActionPoint GetPrimaryActionPoint(UIActionPoint[] actionPoints)
         {
             string[] preferred = { "pointerClick", "pointerDown", "scroll" };
             for (int i = 0; i < preferred.Length; i++)
@@ -444,7 +449,7 @@ namespace XFramework.Command
             return actionPoints[0];
         }
 
-        private static string GetElementText(RectTransform rectTransform)
+        private string GetElementText(RectTransform rectTransform)
         {
             TMP_InputField tmpInputField = rectTransform.GetComponent<TMP_InputField>();
             if (tmpInputField != null)
@@ -457,7 +462,7 @@ namespace XFramework.Command
             return NormalizeText(string.Join(" | ", legacyTexts.Concat(tmpTexts).Distinct()));
         }
 
-        public static List<RenderedUITarget> FindRenderedUITargets(XCommandUISelector selector)
+        public List<RenderedUITarget> FindRenderedUITargets(XCommandUISelector selector)
         {
             var results = new List<RenderedUITarget>();
             foreach (RectTransform rectTransform in UnityEngine.Object.FindObjectsOfType<RectTransform>())
@@ -479,7 +484,7 @@ namespace XFramework.Command
             return results;
         }
 
-        private static bool IsRenderedUI(RectTransform rectTransform)
+        private bool IsRenderedUI(RectTransform rectTransform)
         {
             if (!TryGetScreenRect(rectTransform, out Rect screenRect))
                 return false;
@@ -500,7 +505,7 @@ namespace XFramework.Command
             return false;
         }
 
-        public static bool MatchesSelector(UIElementInfo element, XCommandUISelector selector)
+        public bool MatchesSelector(UIElementInfo element, XCommandUISelector selector)
         {
             return (string.IsNullOrEmpty(selector.name) || string.Equals(element.name, selector.name, StringComparison.Ordinal)) &&
                    (string.IsNullOrEmpty(selector.path) || string.Equals(element.path, selector.path, StringComparison.Ordinal)) &&
@@ -509,7 +514,7 @@ namespace XFramework.Command
                    (string.IsNullOrEmpty(selector.action) || element.actions.Any(action => string.Equals(action, selector.action, StringComparison.OrdinalIgnoreCase)));
         }
 
-        private static string CreateElementFingerprint(UIElementInfo element)
+        private string CreateElementFingerprint(UIElementInfo element)
         {
             return string.Join("\n", new[] {
                 element.indexedPath,
@@ -535,7 +540,7 @@ namespace XFramework.Command
             });
         }
 
-        public static string ComputeHash(IEnumerable<string> values)
+        public string ComputeHash(IEnumerable<string> values)
         {
             const ulong offset = 14695981039346656037UL;
             const ulong prime = 1099511628211UL;
@@ -553,7 +558,7 @@ namespace XFramework.Command
             return hash.ToString("x16", CultureInfo.InvariantCulture);
         }
 
-        private static UIElementInfo CloneForOutput(UIElementInfo source, int textLimit)
+        private UIElementInfo CloneForOutput(UIElementInfo source, int textLimit)
         {
             textLimit = Mathf.Clamp(textLimit, 0, 16384);
             string outputText = source.text;

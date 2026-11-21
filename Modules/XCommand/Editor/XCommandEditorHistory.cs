@@ -20,9 +20,9 @@ namespace XFramework.Editor
                 return;
             }
 
-            XCommandHub.RestoreRecords(LoadRecordSnapshots());
-            XCommandHub.RestoreCommandHistory(LoadCommandHistory());
-            XCommandHub.CommandHistoryChanged += SaveCommandHistory;
+            XCommand.Hub.RestoreRecords(LoadRecordSnapshots());
+            XCommand.Hub.RestoreCommandHistory(LoadCommandHistory());
+            XCommand.Hub.CommandHistoryChanged += SaveCommandHistory;
             AssemblyReloadEvents.beforeAssemblyReload += BeforeAssemblyReload;
             EditorApplication.quitting += OnEditorQuitting;
         }
@@ -66,14 +66,14 @@ namespace XFramework.Editor
         private static void SaveCommandHistory()
         {
             var storage = new StringListStorage();
-            storage.values.AddRange(XCommandHub.CommandHistory);
+            storage.values.AddRange(XCommand.Hub.CommandHistory);
             EditorPrefs.SetString(s_HistoryKey, JsonUtility.ToJson(storage));
         }
 
         private static void SaveRecordSnapshots()
         {
             var storage = new RecordListStorage();
-            storage.records.AddRange(XCommandHub.CaptureRecordSnapshots());
+            storage.records.AddRange(XCommand.Hub.CaptureRecordSnapshots());
             SessionState.SetString(s_RecordsKey, JsonUtility.ToJson(storage));
         }
 
@@ -93,7 +93,7 @@ namespace XFramework.Editor
 
         private static void Unsubscribe()
         {
-            XCommandHub.CommandHistoryChanged -= SaveCommandHistory;
+            XCommand.Hub.CommandHistoryChanged -= SaveCommandHistory;
             AssemblyReloadEvents.beforeAssemblyReload -= BeforeAssemblyReload;
             EditorApplication.quitting -= OnEditorQuitting;
         }

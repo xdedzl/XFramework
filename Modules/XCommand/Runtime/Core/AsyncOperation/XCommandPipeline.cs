@@ -89,28 +89,44 @@ namespace XFramework.Command
         IEnumerator Run(XCommandOperationContext context);
     }
 
-    public static class XCommandPipeline
+    public sealed class XCommandPipeline
     {
+        internal XCommandPipeline()
+        {
+        }
+
         private const int OperationHistoryLimit = 100;
-        private static readonly Queue<XCommandOperationInfo> s_PendingOperations = new Queue<XCommandOperationInfo>();
-        private static readonly List<XCommandOperationInfo> s_Operations = new List<XCommandOperationInfo>();
-        private static long s_NextOperationId = 1;
-        private static XCommandPipelineRunner s_Runner;
-        private static Coroutine s_OperationCoroutine;
-        private static bool s_IsRunnerActive;
+        private readonly Queue<XCommandOperationInfo> s_PendingOperations = new Queue<XCommandOperationInfo>();
+        private readonly List<XCommandOperationInfo> s_Operations = new List<XCommandOperationInfo>();
+        private long s_NextOperationId = 1;
+        private XCommandPipelineRunner s_Runner;
+        private Coroutine s_OperationCoroutine;
+        private bool s_IsRunnerActive;
+        private bool s_IsRunning;
 #if UNITY_EDITOR
-        private static IEnumerator s_EditorOperationEnumerator;
+        private IEnumerator s_EditorOperationEnumerator;
 #endif
-        private static Func<object> s_EditorStopHandler;
+        private Func<object> s_EditorStopHandler;
 
-        public static IReadOnlyList<XCommandOperationInfo> Operations => s_Operations;
+        public IReadOnlyList<XCommandOperationInfo> Operations => s_Operations;
 
-        public static void SetEditorStopHandler(Func<object> handler)
+        public void SetEditorStopHandler(Func<object> handler)
         {
             s_EditorStopHandler = handler;
         }
 
-        public static object StopRunning()
+        internal void Start()
+        {
+            s_IsRunning = true;
+        }
+
+        internal void Stop()
+        {
+            s_IsRunning = false;
+            CancelAllOperations();
+        }
+
+        public object StopRunning()
         {
             if (Application.isEditor)
             {
@@ -122,7 +138,7 @@ namespace XFramework.Command
             return "Quit requested.";
         }
 
-        internal static void ResetRunner()
+        internal void ResetRunner()
         {
 #if UNITY_EDITOR
             StopEditorOperations();
@@ -138,31 +154,37 @@ namespace XFramework.Command
             s_IsRunnerActive = false;
         }
 
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetOperations()
+        internal void ResetOperations()
         {
             ResetRunner();
             s_PendingOperations.Clear();
             s_Operations.Clear();
             s_NextOperationId = 1;
-            XCommandHub.RequestCommandRuntimeReset();
+            XCommand.Hub.RequestCommandRuntimeReset();
         }
 
         /// <summary>提交一个跨帧操作，返回包含 operation id 与初始状态的 JSON。</summary>
-        public static string RunOperation(IXCommandAsyncOperation operation)
+        public string RunOperation(IXCommandAsyncOperation operation)
         {
+            if (!s_IsRunning)
+            {
+                DateTime now = DateTime.UtcNow;
+                var disabledOperation = new XCommandOperationInfo(0, operation?.Name ?? string.Empty, XCommandOperationState.Failed, now, null, now, 0d, string.Empty, "XCommand 已关闭。", false);
+                return SerializeOperation(disabledOperation);
+            }
+
             long operationId = EnqueueOperation(operation);
             TryGetOperation(operationId, out XCommandOperationInfo info);
             return SerializeOperation(info);
         }
 
-        public static bool TryGetOperation(long operationId, out XCommandOperationInfo operation)
+        public bool TryGetOperation(long operationId, out XCommandOperationInfo operation)
         {
             operation = s_Operations.Find(item => item.Id == operationId);
             return operation != null;
         }
 
-        public static bool CancelOperation(long operationId)
+        public bool CancelOperation(long operationId)
         {
             if (!TryGetOperation(operationId, out XCommandOperationInfo operation) || IsCompleted(operation.State))
                 return false;
@@ -176,7 +198,7 @@ namespace XFramework.Command
             return true;
         }
 
-        public static int CancelAllOperations()
+        public int CancelAllOperations()
         {
             int cancelled = 0;
             for (int i = 0; i < s_Operations.Count; i++)
@@ -188,7 +210,7 @@ namespace XFramework.Command
         }
 
         /// <summary>恢复跨程序集重载保留的 operation；仅供 Editor 侧编译/播放模式 operation 使用。</summary>
-        internal static void RestoreOperation(string operationJson, bool canCancel)
+        internal void RestoreOperation(string operationJson, bool canCancel)
         {
             if (string.IsNullOrWhiteSpace(operationJson))
             {
@@ -249,12 +271,12 @@ namespace XFramework.Command
             TrimOperationHistory();
         }
 
-        internal static string SerializeOperation(XCommandOperationInfo operation, bool prettyPrint = false)
+        internal string SerializeOperation(XCommandOperationInfo operation, bool prettyPrint = false)
         {
             return JsonUtility.ToJson(XCommandOperationJson.From(operation), prettyPrint);
         }
 
-        internal static string SerializeOperations(int limit, bool prettyPrint = false)
+        internal string SerializeOperations(int limit, bool prettyPrint = false)
         {
             int count = Mathf.Clamp(limit, 1, OperationHistoryLimit);
             var output = new XCommandOperationListJson();
@@ -264,7 +286,7 @@ namespace XFramework.Command
             return JsonUtility.ToJson(output, prettyPrint);
         }
 
-        internal static long EnqueueOperation(IXCommandAsyncOperation operation)
+        internal long EnqueueOperation(IXCommandAsyncOperation operation)
         {
             if (operation == null)
                 throw new ArgumentNullException(nameof(operation));
@@ -338,7 +360,7 @@ namespace XFramework.Command
             }
         }
 #if UNITY_EDITOR
-        private static void StartEditorOperations()
+        private void StartEditorOperations()
         {
             if (s_IsRunnerActive)
             {
@@ -352,7 +374,7 @@ namespace XFramework.Command
             TickEditorOperations();
         }
 
-        private static void TickEditorOperations()
+        private void TickEditorOperations()
         {
             if (!s_IsRunnerActive || s_EditorOperationEnumerator == null)
             {
@@ -377,7 +399,7 @@ namespace XFramework.Command
             }
         }
 
-        private static void StopEditorOperations()
+        private void StopEditorOperations()
         {
             EditorApplication.update -= TickEditorOperations;
             if (s_EditorOperationEnumerator is IDisposable disposable)
@@ -388,7 +410,7 @@ namespace XFramework.Command
         }
 #endif
 
-        private static void EnsureRunner()
+        private void EnsureRunner()
         {
             if (s_Runner != null)
                 return;
@@ -402,7 +424,7 @@ namespace XFramework.Command
             s_Runner = gameObject.AddComponent<XCommandPipelineRunner>();
         }
 
-        private static IEnumerator RunOperations()
+        private IEnumerator RunOperations()
         {
             try
             {
@@ -495,7 +517,7 @@ namespace XFramework.Command
             }
         }
 
-        private static void CompleteOperation(XCommandOperationInfo operation, XCommandOperationState state, string error)
+        private void CompleteOperation(XCommandOperationInfo operation, XCommandOperationState state, string error)
         {
             if (IsCompleted(operation.State))
                 return;
@@ -508,13 +530,13 @@ namespace XFramework.Command
             TrimOperationHistory();
         }
 
-        private static void TrimOperationHistory()
+        private void TrimOperationHistory()
         {
             while (s_Operations.Count > OperationHistoryLimit && IsCompleted(s_Operations[0].State))
                 s_Operations.RemoveAt(0);
         }
 
-        private static bool IsCompleted(XCommandOperationState state)
+        private bool IsCompleted(XCommandOperationState state)
         {
             return state == XCommandOperationState.Succeeded || state == XCommandOperationState.Failed || state == XCommandOperationState.Cancelled;
         }

@@ -19,8 +19,7 @@ namespace XFramework.Editor
 
         static XCommandEditorCommands()
         {
-            XCommandPipeline.SetEditorStopHandler(XCommandPlayModeOperation.StartStop);
-            XCommandUtility.Logs.InitializeCapture();
+            XCommand.Pipeline.SetEditorStopHandler(XCommandPlayModeOperation.StartStop);
         }
 
         #region 编辑器

@@ -26,6 +26,36 @@ namespace XFramework.Command
         private static XCommandSource s_CurrentCommandSource = XCommandSource.Api;
         private static int s_CommandHistoryIndex = -1;
 
+        private static readonly XFrameworkCliServer server = new XFrameworkCliServer(new XCommandCliOperationProvider());
+        private static readonly XCommandRegistry registry = new XCommandRegistry();
+        private static readonly XCommandHub hub = new XCommandHub();
+        private static readonly XCommandInput input = new XCommandInput();
+        private static readonly XCommandUI ui = new XCommandUI();
+        private static readonly XCommandPipeline pipeline = new XCommandPipeline();
+        private static readonly LogStore logStore = new LogStore();
+        private static bool isEnabled = true;
+        private static bool subsystemsStarted;
+
+        /// <summary>XCommand CLI Server 的唯一实例。</summary>
+        public static XFrameworkCliServer Server => server;
+        /// <summary>XCommand 命令发现与注册的唯一实例。</summary>
+        public static XCommandRegistry Registry => registry;
+        /// <summary>XCommand 命令执行、历史记录与显示事件的唯一实例。</summary>
+        public static XCommandHub Hub => hub;
+        /// <summary>XCommand 自动化输入状态与注入的唯一实例。</summary>
+        internal static XCommandInput Input => input;
+        /// <summary>XCommand UGUI 查询与快照管理的唯一实例。</summary>
+        public static XCommandUI UI => ui;
+        /// <summary>XCommand 异步 operation 队列的唯一实例。</summary>
+        public static XCommandPipeline Pipeline => pipeline;
+        /// <summary>XCommand 运行时日志采集与查询的唯一实例。</summary>
+        public static LogStore Logs => logStore;
+        /// <summary>XCommand 当前是否处于启用状态。</summary>
+        public static bool IsEnabled => isEnabled;
+
+        /// <summary>XCommand 启用状态变更时触发。</summary>
+        public static event Action<bool> EnabledChanged;
+
         public static bool IsOpen
         {
             get
@@ -64,17 +94,91 @@ namespace XFramework.Command
         {
             AddCommand("Auto", ExecuteAutoCommand);
             AddCommand("Command", s_CommandRegistryDelegate, true);
-            XCommandHub.CommandHistoryChanged += ResetCommandHistoryNavigation;
+            hub.CommandHistoryChanged += ResetCommandHistoryNavigation;
         }
 
-        
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterAssembliesLoaded)]
+        private static void InitializeDefaultEnabled()
+        {
+            if (isEnabled)
+            {
+                EnsureSubsystems();
+            }
+        }
+
+        private static void EnsureSubsystems()
+        {
+            if (subsystemsStarted)
+            {
+                return;
+            }
+
+            subsystemsStarted = true;
+            registry.Start();
+            pipeline.Start();
+            input.Start();
+            ui.Start();
+            logStore.Start();
+        }
+
+        /// <summary>启用 XCommand：启动命令子系统与 CLI 监听。</summary>
+        public static void Enable(XFrameworkCliProcessType processType, string projectPath)
+        {
+            bool changed = !isEnabled;
+            EnsureSubsystems();
+            server.Start(processType, projectPath);
+            isEnabled = true;
+            if (changed)
+            {
+                EnabledChanged?.Invoke(true);
+            }
+        }
+
+        /// <summary>停用 XCommand：停止 CLI 监听并撤销命令子系统订阅。</summary>
+        public static void Disable()
+        {
+            if (!isEnabled)
+            {
+                return;
+            }
+
+            isEnabled = false;
+            registry.Stop();
+            input.Stop();
+            ui.Stop();
+            logStore.Stop();
+            pipeline.Stop();
+            server.Stop();
+            subsystemsStarted = false;
+            EnabledChanged?.Invoke(false);
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetPipelineOperations()
+        {
+            pipeline.ResetOperations();
+        }
+
+        /// <summary>在主线程推进 CLI 请求和异步操作完成状态。</summary>
+        public static void Pump()
+        {
+            if (isEnabled)
+            {
+                server.Pump();
+            }
+        }
+
 #if UNITY_EDITOR // 编辑器下应对关闭 Reload Domain
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void OnSubsystemRegistration()
+        private static void InitializeSwitchListener()
         {
             s_ExitRegistration.Dispose();
             ResetStaticState();
-            s_ExitRegistration = Application.exitCancellationToken.Register(ResetStaticState);
+            if (isEnabled)
+            {
+                logStore.Reset();
+                s_ExitRegistration = Application.exitCancellationToken.Register(ResetStaticState);
+            }
         }
 
         private static void ResetStaticState()
@@ -213,17 +317,18 @@ namespace XFramework.Command
             s_CurrentCommandSource = source;
             try
             {
+                bool succeeded;
                 if (m_CurrentExecuteKey == "Command" || m_CurrentExecuteKey == "Auto")
                 {
-                    executeFun(cmd, out result);
+                    succeeded = executeFun(cmd, out result);
                 }
                 else
                 {
-                    XCommandHub.ExecuteLegacy(cmd, source, executeFun, out result);
+                    succeeded = hub.ExecuteHandler(cmd, source, executeFun, out result);
                 }
                 console.OnExecuteCmd(cmd, result);
                 s_CommandHistoryIndex = -1;
-                return true;
+                return succeeded;
             }
             finally
             {
@@ -233,7 +338,7 @@ namespace XFramework.Command
 
         private static bool ExecuteRegisteredCommand(string cmd, out object result)
         {
-            XCommandExecutionResult executionResult = XCommandHub.Execute(cmd, s_CurrentCommandSource);
+            XCommandExecutionResult executionResult = hub.Execute(cmd, s_CurrentCommandSource);
             result = executionResult.Value;
             if (executionResult.Status == XCommandExecutionStatus.Failed)
             {
@@ -244,12 +349,12 @@ namespace XFramework.Command
 
         private static bool ExecuteAutoCommand(string cmd, out object result)
         {
-            if (XCommandRegistry.TryGetCommand(cmd, out _))
+            if (registry.TryGetCommand(cmd, out _))
             {
                 return ExecuteRegisteredCommand(cmd, out result);
             }
 
-            return XCommandHub.ExecuteLegacy(cmd, s_CurrentCommandSource, ExecuteRegisteredAutoCommand, out result);
+            return hub.ExecuteHandler(cmd, s_CurrentCommandSource, ExecuteRegisteredAutoCommand, out result);
         }
 
         private static bool ExecuteRegisteredAutoCommand(string cmd, out object result)
@@ -272,7 +377,7 @@ namespace XFramework.Command
         
         public static void JumpToPreviousCmd()
         {
-            IReadOnlyList<string> commandHistory = XCommandHub.CommandHistory;
+            IReadOnlyList<string> commandHistory = hub.CommandHistory;
             if (commandHistory.Count == 0)
             {
                 return;
@@ -290,7 +395,7 @@ namespace XFramework.Command
             if (s_CommandHistoryIndex > 0)
             {
                 s_CommandHistoryIndex--;
-                console.OnCurrentCmdChanged(XCommandHub.CommandHistory[s_CommandHistoryIndex]);
+                console.OnCurrentCmdChanged(hub.CommandHistory[s_CommandHistoryIndex]);
                 return;
             }
 

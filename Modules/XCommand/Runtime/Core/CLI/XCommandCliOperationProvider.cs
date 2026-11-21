@@ -7,17 +7,6 @@ namespace XFramework.Command
 {
     internal sealed class XCommandCliOperationProvider : IXFrameworkCliOperationProvider
     {
-        private static readonly XCommandCliOperationProvider s_Instance = new XCommandCliOperationProvider();
-
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterAssembliesLoaded)]
-#if UNITY_EDITOR
-        [UnityEditor.InitializeOnLoadMethod]
-#endif
-        private static void Register()
-        {
-            XFrameworkCliServer.SetOperationProvider(s_Instance);
-        }
-
         public bool TryResolveOperation(object commandResult, out long operationId)
         {
             operationId = 0;
@@ -29,7 +18,7 @@ namespace XFramework.Command
                 if (idToken == null || idToken.Type != JTokenType.Integer)
                     return false;
                 operationId = idToken.Value<long>();
-                return XCommandPipeline.TryGetOperation(operationId, out _);
+                return XCommand.Pipeline.TryGetOperation(operationId, out _);
             }
             catch (JsonException)
             {
@@ -40,7 +29,7 @@ namespace XFramework.Command
         public bool TryGetOperation(long operationId, out XFrameworkCliOperationInfo operation)
         {
             operation = null;
-            if (!XCommandPipeline.TryGetOperation(operationId, out XCommandOperationInfo pipelineOperation))
+            if (!XCommand.Pipeline.TryGetOperation(operationId, out XCommandOperationInfo pipelineOperation))
                 return false;
             operation = new XFrameworkCliOperationInfo(pipelineOperation.Id, pipelineOperation.Name, ConvertState(pipelineOperation.State), pipelineOperation.CreatedTimeUtc, pipelineOperation.StartedTimeUtc, pipelineOperation.CompletedTimeUtc, pipelineOperation.DurationMilliseconds, pipelineOperation.Output, pipelineOperation.Error);
             return true;

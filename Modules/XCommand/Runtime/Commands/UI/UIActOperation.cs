@@ -28,7 +28,7 @@ namespace XFramework.Command
             {
                 if (context.IsCancellationRequested)
                 {
-                    XCommandUtility.Input.ResetInterruptedInput();
+                    XCommand.Input.ResetInterruptedInput();
                 }
             }
         }
@@ -52,8 +52,8 @@ namespace XFramework.Command
             {
                 if (context.IsCancellationRequested)
                     yield break;
-                lastSnapshot = XCommandUI.CaptureSnapshot(request.sampleGrid);
-                List<XCommandUI.UIElementInfo> matches = lastSnapshot.Elements.Where(element => XCommandUI.MatchesSelector(element, selector)).ToList();
+                lastSnapshot = XCommand.UI.CaptureSnapshot(request.sampleGrid);
+                List<XCommandUI.UIElementInfo> matches = lastSnapshot.Elements.Where(element => XCommand.UI.MatchesSelector(element, selector)).ToList();
                 lastMatchCount = matches.Count;
                 if (matches.Count == 1)
                 {
@@ -119,7 +119,7 @@ namespace XFramework.Command
                     },
                 },
             };
-            return XCommandUtility.Input.Run(sequence, () => false, _ => { });
+            return XCommand.Input.Run(sequence, () => false, _ => { });
         }
 
         private static string GetRequiredUIAction(string pointerAction)
