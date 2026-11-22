@@ -68,6 +68,18 @@ namespace XFramework.Editor
 
         #endregion
 
+        #region 临时脚本
+
+        [XCommandEntry("cs-run", name = "执行临时 C# 代码", order = 2, mode = XCommandMode.Both, displayType = XCommandDisplayType.Hidden, category = Category,
+            description = "编译并执行一段完整 C# 代码并返回入口的 return 值，不触发脚本域重载。代码自带 using，需定义 public static 无参 Run 方法；自动引用 UnityEngine、UnityEditor 与项目脚本程序集。",
+            usage = XCommandScriptRunner.Usage)]
+        private static object RunCSharpScript(string argument)
+        {
+            return XCommandScriptRunner.Execute(argument);
+        }
+
+        #endregion
+
         #region Play 模式
 
         [XCommandEntry("play-start", name = "开始运行", order = 0, mode = XCommandMode.Editor, category = Category, description = "异步进入 Play Mode；CLI 默认等待 EnteredPlayMode 和 XFramework 服务恢复，--no-wait 返回 operation。", usage = "play-start")]

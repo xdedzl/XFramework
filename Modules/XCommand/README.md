@@ -192,6 +192,7 @@ XCommand.Registry.AddCommand("my-dynamic", argument => $"received: {argument}", 
 | 命令 | Mode | 说明 |
 | :--- | :--- | :--- |
 | `editor_selection` | Editor | 返回当前选择对象的名称、类型与资源路径 |
+| `cs-run` | Both | 编译并执行一段完整 C# 代码（自带 `using`，需定义 `public static` 无参 `Run` 方法），返回 `return` 值；不触发脚本域重载 |
 | `editor-menu` | Both | 按完整路径执行 Unity Editor 菜单命令，例如 `XFramework/Tools/XCommand`；菜单不存在、被禁用或执行失败时返回错误 |
 | `recompile` | Editor | 异步刷新 AssetDatabase 并重新编译脚本；CLI 默认等待编译成功或失败，operation 不可取消 |
 | `play-start` | Editor | 异步进入 Play Mode，等待 `EnteredPlayMode` 和 CLI Server 恢复；operation 不可取消 |
@@ -209,11 +210,43 @@ XCommand.Registry.AddCommand("my-dynamic", argument => $"received: {argument}", 
 | `sceneview-camera` | Editor | 读写 SceneView 相机：`--pivot`/`--position`/`--rotation`/`--snap`（六方向吸附）/`--size`/`--orthographic`/`--2d`/`--lock-rotation`；不带选项返回当前状态 JSON |
 | `window-focus` | Both | 把 Unity Editor 主窗口恢复到前台并聚焦 GameView（Windows）；`ui-input` 注入前建议先执行。返回 `broughtToFront` / `gameViewFocused` / `isFocused` 供判定 |
 
-> 上表中 `editor_selection` / `recompile` / `preview-prefab` / `record*` / `gameview-screenshot` / `window-focus` / `font_bake` / `gameview-size` 为 `displayType = Hidden`，默认不出现在 CLI `commands` 结果中；`editor-menu` / `editor-window-list` / `editor-window-screenshot` / `sceneview-camera` / `play-start` 保持可见，`play-stop` 也已恢复可见。
+> 上表中 `editor_selection` / `cs-run` / `recompile` / `preview-prefab` / `record*` / `gameview-screenshot` / `window-focus` / `font_bake` / `gameview-size` 为 `displayType = Hidden`，默认不出现在 CLI `commands` 结果中；`editor-menu` / `editor-window-list` / `editor-window-screenshot` / `sceneview-camera` / `play-start` 保持可见，`play-stop` 也已恢复可见。
 >
-> `recompile` / `play-start` / `play-stop` 的实现分别位于 `Editor/XCommandCompileOperation.cs` 与 `Editor/XCommandPlayModeOperation.cs`；`editor-window-*` 的实现位于 `Editor/XCommandEditorWindowCapture.cs`；`sceneview-camera` 的实现位于 `Editor/XCommandSceneViewCamera.cs`；`font_bake` / `record*` / `gameview-*` 的参数解析与实现仍位于 `Runtime/Utility/XCommandUtility.*.cs`。
+> `recompile` / `play-start` / `play-stop` 的实现分别位于 `Editor/XCommandCompileOperation.cs` 与 `Editor/XCommandPlayModeOperation.cs`；`editor-window-*` 的实现位于 `Editor/XCommandEditorWindowCapture.cs`；`sceneview-camera` 的实现位于 `Editor/XCommandSceneViewCamera.cs`；`cs-run` 的实现位于 `Editor/XCommandScriptRunner.cs`；`font_bake` / `record*` / `gameview-*` 的参数解析与实现仍位于 `Runtime/Utility/XCommandUtility.*.cs`。
 
 > `window-focus` 定义在编辑器程序集内，因此 Edit 模式与 Play 模式都可用（`Mode = Both`），但生成的 Player 里不会注册；Windows 前台锁可能拒绝抢占，失败时以返回值为准，必要时人工点一下 Game 窗口。
+
+> [!TIP]
+> 当现有命令无法满足需求时，按以下规则选择：
+>
+> - **常用能力**：直接新增正式命令（`[XCommandEntry]`），后续可反复使用。
+> - **临时 / 一次性调试**：用 `cs-run` 执行临时 C# 代码，不必新增正式命令。
+> - **无法判断是否常用**：先问用户，不要自行决定。
+> - **已在 Play 模式**：即使是常用能力也先用 `cs-run`，避免新增命令触发重编译和域重载打断当前运行；等运行结束后再补正式命令。
+>
+> `cs-run` 传入完整 C# 代码（自带 `using`），入口为任意类型上的 `public static` 无参 `Run` 方法，返回值即命令输出：
+>
+> ```csharp
+> using UnityEngine;
+>
+> public static class TempProbe
+> {
+>     public static object Run()
+>     {
+>         GameObject go = GameObject.Find("Main Camera");
+>         return go != null ? go.transform.position.ToString() : "not found";
+>     }
+> }
+> ```
+>
+> ```text
+> cs-run --file Temp/scripts/probe.cs
+> ```
+>
+> - 编译引用 `netstandard.dll`、`Data/Managed/UnityEngine/*.dll`（跳过类型重复的 `UnityEditor.dll`）与 `Library/ScriptAssemblies/*.dll`，可直接访问项目脚本；每次执行会同步拉起一次 Unity 自带的 `dotnet + csc`，主线程会短暂阻塞。
+> - 生成的源码与 DLL 位于 `Temp/XCommandScripts/`；不触发域重载，Play 模式中可直接使用，但动态程序集里的类型不能被场景或资产序列化引用。
+> - 每次执行都是全新的程序集，静态字段和类型状态不会跨执行保留。
+> - 代码中出现多个 `Run` 入口会报错；`--code` 适合单行代码，多行代码建议用 `--file`。
 
 > 字体烘焙的无头批处理入口 `-executeMethod XFramework.Editor.XCommandEditorCommands.BakeFontAtlasInBatchMode` 保持不变。
 
