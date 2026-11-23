@@ -425,7 +425,7 @@ function Get-CliOperationErrorMessage {
     return 'Operation failed.'
 }
 
-function New-CliReloadingWaitResult {
+function New-CliOperationWaitResult {
     param([object]$InitialResult, [object]$Operation, [object]$Server, [int]$ExitCode, [string]$Status, [string]$Message, [bool]$Pretty)
     $Operation = Convert-CliOperationOutput $Operation
     $response = [ordered]@{
@@ -446,7 +446,7 @@ function New-CliReloadingWaitResult {
     }
 }
 
-function Wait-CliReloadingOperation {
+function Wait-CliOperation {
     param([object]$InitialResult, [object]$InitialOperation, [object]$Options)
     $operation = Convert-CliOperationOutput $InitialOperation
     $server = Get-CliObjectProperty $InitialResult.Response 'server'
@@ -455,14 +455,14 @@ function Wait-CliReloadingOperation {
 
     $initialState = [string](Get-CliObjectProperty $operation 'state')
     if ($initialState -eq 'Succeeded') {
-        return New-CliReloadingWaitResult $InitialResult $operation $server 0 'Succeeded' 'Operation succeeded.' $Options.pretty
+        return New-CliOperationWaitResult $InitialResult $operation $server 0 'Succeeded' 'Operation succeeded.' $Options.pretty
     }
     if ($initialState -eq 'Failed') {
         $message = Get-CliOperationErrorMessage $operation
-        return New-CliReloadingWaitResult $InitialResult $operation $server 1 'Failed' $message $Options.pretty
+        return New-CliOperationWaitResult $InitialResult $operation $server 1 'Failed' $message $Options.pretty
     }
     if ($initialState -eq 'Cancelled') {
-        return New-CliReloadingWaitResult $InitialResult $operation $server 1 'Cancelled' 'Operation cancelled.' $Options.pretty
+        return New-CliOperationWaitResult $InitialResult $operation $server 1 'Cancelled' 'Operation cancelled.' $Options.pretty
     }
 
     while ([DateTime]::UtcNow -lt $deadline) {
@@ -508,7 +508,7 @@ function Wait-CliReloadingOperation {
             $status = [string](Get-CliObjectProperty $waitResult.Response 'status')
             $message = [string](Get-CliObjectProperty $waitResult.Response 'message')
             if ($status -eq 'ProtocolError' -and $message -like '*Unsupported action: wait-operation*') {
-                return New-CliReloadingWaitResult $InitialResult $operation $server 4 'ProtocolError' $message $Options.pretty
+                return New-CliOperationWaitResult $InitialResult $operation $server 4 'ProtocolError' $message $Options.pretty
             }
 
             $polledOperation = Get-CliOperation $waitResult.Response
@@ -518,20 +518,20 @@ function Wait-CliReloadingOperation {
 
             $state = [string](Get-CliObjectProperty $operation 'state')
             if ($state -eq 'Succeeded') {
-                return New-CliReloadingWaitResult $InitialResult $operation $server 0 'Succeeded' 'Operation succeeded.' $Options.pretty
+                return New-CliOperationWaitResult $InitialResult $operation $server 0 'Succeeded' 'Operation succeeded.' $Options.pretty
             }
             if ($state -eq 'Failed') {
                 $message = Get-CliOperationErrorMessage $operation
-                return New-CliReloadingWaitResult $InitialResult $operation $server 1 'Failed' $message $Options.pretty
+                return New-CliOperationWaitResult $InitialResult $operation $server 1 'Failed' $message $Options.pretty
             }
             if ($state -eq 'Cancelled') {
-                return New-CliReloadingWaitResult $InitialResult $operation $server 1 'Cancelled' 'Operation cancelled.' $Options.pretty
+                return New-CliOperationWaitResult $InitialResult $operation $server 1 'Cancelled' 'Operation cancelled.' $Options.pretty
             }
             if ($status -eq 'Timeout') {
-                return New-CliReloadingWaitResult $InitialResult $operation $server 124 'Timeout' $message $Options.pretty
+                return New-CliOperationWaitResult $InitialResult $operation $server 124 'Timeout' $message $Options.pretty
             }
             if ([int]$waitResult.Response.exitCode -ne 0 -and $status -ne 'ServerStopped' -and $status -ne 'ServerNotReady') {
-                return New-CliReloadingWaitResult $InitialResult $operation $server ([int]$waitResult.Response.exitCode) $status $message $Options.pretty
+                return New-CliOperationWaitResult $InitialResult $operation $server ([int]$waitResult.Response.exitCode) $status $message $Options.pretty
             }
         }
         catch {
@@ -542,7 +542,7 @@ function Wait-CliReloadingOperation {
     }
 
     $timeoutMessage = "Timed out waiting for operation $([long](Get-CliObjectProperty $operation 'id')). The operation was not cancelled."
-    return New-CliReloadingWaitResult $InitialResult $operation $server 124 'Timeout' $timeoutMessage $Options.pretty
+    return New-CliOperationWaitResult $InitialResult $operation $server 124 'Timeout' $timeoutMessage $Options.pretty
 }
 
 function Write-CliResponse {
@@ -664,23 +664,20 @@ switch ($verb) {
         }
         $server = Select-CliServer $options
         $request = New-CliRequest 'execute' $commandLine $options
-        if ($isReloadingOperation -and -not $options.noWait) {
+        if (-not $options.noWait) {
             $request['waitForOperation'] = $false
         }
-        $initialTimeout = [Math]::Min(10.0, [double]$options.timeoutSeconds)
+        $initialTimeout = if ($isReloadingOperation) { [Math]::Min(10.0, [double]$options.timeoutSeconds) } else { [double]$options.timeoutSeconds }
         try {
             $result = Invoke-CliRequest $server $request $initialTimeout
         }
         catch {
             Exit-CliError 4 'TransportError' $_.Exception.Message $options.pretty
         }
-        if ($isReloadingOperation -and -not $options.noWait -and [int]$result.Response.exitCode -eq 0) {
+        if (-not $options.noWait -and [int]$result.Response.exitCode -eq 0) {
             $operation = Get-CliOperation $result.Response
             if ($null -ne $operation) {
-                $operationName = [string](Get-CliObjectProperty $operation 'name')
-                if ($operationName -eq 'recompile' -or $operationName -eq 'play-start' -or $operationName -eq 'play-stop') {
-                    $result = Wait-CliReloadingOperation $result $operation $options
-                }
+                $result = Wait-CliOperation $result $operation $options
             }
         }
         Write-CliResponse $result $options.pretty
